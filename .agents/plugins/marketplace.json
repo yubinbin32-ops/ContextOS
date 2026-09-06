@@ -1,0 +1,20 @@
+{
+  "name": "mdflow-development",
+  "interface": {
+    "displayName": "Mdflow Development"
+  },
+  "plugins": [
+    {
+      "name": "mdflow",
+      "source": {
+        "source": "local",
+        "path": "./plugins/mdflow"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

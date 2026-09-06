@@ -1,0 +1,15 @@
+.DS_Store
+node_modules/
+apps/desktop/.build/
+apps/desktop/.swiftpm/
+dist/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+!.mdflow/mdflow.sqlite
+!benchmarks/open-source/express/.mdflow/
+!benchmarks/open-source/express/.mdflow/mdflow.sqlite
+
+# Local capture sources; the curated README uses stable English asset names.
+assets/录屏*.mov
+assets/截屏*.png

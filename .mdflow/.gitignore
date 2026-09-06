@@ -1,0 +1,7 @@
+*
+!.gitignore
+!project.json
+!mdflow.sqlite
+mdflow.sqlite-wal
+mdflow.sqlite-shm
+mdflow.sqlite-journal

@@ -1,0 +1,23 @@
+{
+  "name": "mdflow",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "mcp": "node packages/mcp/src/server.mjs",
+    "plugin:build": "esbuild packages/mcp/src/server.mjs --bundle --platform=node --format=esm --target=node22 --outfile=plugins/mdflow/server/mdflow-mcp.mjs",
+    "desktop:build": "swift build --package-path apps/desktop",
+    "desktop:run": "swift run --package-path apps/desktop mdflow-desktop"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "mdflow": {
+      "command": "node",
+      "args": [
+        "--no-warnings=ExperimentalWarning",
+        "./server/mdflow-mcp.mjs"
+      ],
+      "cwd": ".",
+      "env_vars": [
+        "MDFLOW_PROJECT_ROOT",
+        "MDFLOW_DATA_DIR"
+      ],
+      "startup_timeout_sec": 20
+    }
+  }
+}
