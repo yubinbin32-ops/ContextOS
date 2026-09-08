@@ -4,10 +4,10 @@ import path from "node:path";
 import { registerProject, resolveProjectPaths } from "./paths.mjs";
 import { exportGraphToJson, importGraphFromJson } from "./database.mjs";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 const HELP = `
-Mdflow v${VERSION}: The living architecture graph for AI coding.
+mdflow v${VERSION}: A context operating system for AI coding agents.
 
 Usage:
   mdflow [command] [options]

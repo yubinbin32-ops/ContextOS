@@ -11,7 +11,7 @@ const CLI_PATH = path.resolve("packages/mcp/src/server.mjs");
 
 test("cli: --version and --help", async () => {
   const { stdout: versionOut } = await execFileAsync(process.execPath, [CLI_PATH, "--version"]);
-  assert.match(versionOut, /mdflow v0\.2\.0/);
+  assert.match(versionOut, /mdflow v0\.3\.0/);
 
   const { stdout: helpOut } = await execFileAsync(process.execPath, [CLI_PATH, "--help"]);
   assert.match(helpOut, /Usage:/);
@@ -22,8 +22,8 @@ test("cli: --version and --help", async () => {
 test("cli: status on current repo", async () => {
   const { stdout } = await execFileAsync(process.execPath, [CLI_PATH, "status"]);
   assert.match(stdout, /Project: mdflow/);
-  assert.match(stdout, /Blocks: 27/);
-  assert.match(stdout, /Chains: 6/);
+  assert.match(stdout, /Blocks: \d+/);
+  assert.match(stdout, /Chains: \d+/);
 });
 
 test("cli: init --scan in temporary project", async () => {

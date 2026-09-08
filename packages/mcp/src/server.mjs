@@ -4,10 +4,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { ProjectServiceRouter } from "./project-router.mjs";
 import { runCli } from "./cli.mjs";
+import { sanitizeTerminalOutput } from "./sanitizer.mjs";
 
 const router = new ProjectServiceRouter();
 const server = new McpServer(
-  { name: "mdflow", version: "0.2.0" },
+  { name: "mdflow", version: "0.3.0" },
   {
     instructions:
       "mdflow is project-scoped. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block does not need to belong to a Chain or have a checkpoint until a requirement, Plan, Chain gate, or explicit verification request requires one. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools.",
@@ -130,6 +131,82 @@ server.registerTool(
   async (input) => {
     const data = withProject(input, (service, payload) => service.entityOpen({ ...payload, type: "decision" }));
     return readResult(data, data.markdown, input.includeStructured);
+  },
+);
+
+server.registerTool(
+  "chain_code_stream",
+  {
+    description: "Extract an end-to-end code stream along an architectural Chain. Returns only targeted AST symbol slices and interfaces for each node, saving ~90% tokens compared to full file reads.",
+    inputSchema: {
+      ...projectRootInput,
+      chainId: z.string().min(1),
+      maxTotalChars: z.number().int().min(100).max(20000).optional(),
+      includeStructured: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const data = withProject(input, (service, payload) => service.chainCodeStream(payload));
+    return readResult(data, data.markdown, input.includeStructured);
+  },
+);
+
+server.registerTool(
+  "log_sanitize",
+  {
+    description: "Sanitize build, test, or terminal command outputs. Strips ANSI noise, collapses routine compiler stdout, and isolates actionable failure stack traces to protect context window from token flooding.",
+    inputSchema: {
+      rawOutput: z.string().min(1),
+      exitCode: z.number().int().optional(),
+      maxChars: z.number().int().min(100).max(10000).optional(),
+      includeStructured: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const data = sanitizeTerminalOutput(input.rawOutput, {
+      exitCode: input.exitCode,
+      maxChars: input.maxChars,
+    });
+    const markdown = [
+      `# Sanitized Output (${data.reductionRatio} noise reduced)`,
+      `- Original: ${data.originalLength} chars | Cleaned: ${data.sanitizedLength} chars`,
+      `- State: ${data.hasErrors ? "Failures detected" : "Clean routine output"}`,
+      "",
+      "```text",
+      data.text,
+      "```",
+    ].join("\n");
+    return readResult(data, markdown, input.includeStructured);
+  },
+);
+
+server.registerTool(
+  "block_code_mutate",
+  {
+    description:
+      "Atomically mutate a specific AST symbol's implementation bound to an architecture Block. Replaces only the targeted symbol body, runs automated verification with terminal log sanitization, and automatically rolls back if tests fail.",
+    inputSchema: {
+      ...projectRootInput,
+      blockId: z.string().min(1),
+      symbol: z.string().min(1),
+      newCode: z.string().min(1),
+      verifyCommand: z.string().optional(),
+      includeStructured: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const data = withProject(input, (service, payload) => service.mutateBlockCode(payload));
+    const status = data.success ? "Successfully updated" : "Failed to update (rolled back)";
+    const md = [
+      `# Block Code Mutation: ${status}`,
+      `- Block: ${data.blockId}`,
+      `- Symbol: ${data.symbol}`,
+      `- File: ${data.filePath ?? "?"}`,
+      ...(data.replacedLines ? [`- Lines: ${data.replacedLines.startLine} - ${data.replacedLines.newEndLine}`] : []),
+      ...(data.error ? [`\n## Error\n${data.error}`] : []),
+      ...(data.verification ? [`\n## Verification (${data.verification.passed ? "PASSED" : "FAILED"})\n\`\`\`text\n${data.verification.output}\n\`\`\``] : []),
+    ].join("\n");
+    return writeResult(data, md, input.includeStructured);
   },
 );
 

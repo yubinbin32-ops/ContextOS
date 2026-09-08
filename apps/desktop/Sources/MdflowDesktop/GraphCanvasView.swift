@@ -403,33 +403,96 @@ struct GraphCanvasView: View {
         let typeColor = MdflowTheme.blockKindColor(block.kind)
         let stateColor = MdflowTheme.deliveryColor(block.deliveryState)
         let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+        let isGhost = block.isGhost
+        let sources = store.sourceReferences(for: block.id)
+        let hasFacade = sources.contains { $0.symbol != nil }
+
         return Button { store.select(GraphSelection(type: .block, id: block.id)) } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 7) {
-                    Image(systemName: blockSymbol(block.kind)).font(.system(size: 10, weight: .semibold)).foregroundStyle(typeColor)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 6) {
+                    Image(systemName: blockSymbol(block.kind))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(typeColor)
                     Text(block.kind.uppercased())
-                        .font(.system(size: 8, weight: .bold, design: .monospaced)).tracking(0.9).foregroundStyle(typeColor)
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .tracking(0.9)
+                        .foregroundStyle(typeColor)
                     Spacer()
-                    Image(systemName: deliverySymbol(block.deliveryState)).font(.system(size: 9, weight: .bold)).foregroundStyle(stateColor)
+                    if isGhost {
+                        HStack(spacing: 3) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 7.5, weight: .bold))
+                            Text("GHOST")
+                                .font(.system(size: 7, weight: .black, design: .monospaced))
+                        }
+                        .foregroundStyle(stateColor)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1.5)
+                        .background(stateColor.opacity(0.12), in: Capsule())
+                    } else if hasFacade {
+                        HStack(spacing: 3) {
+                            Image(systemName: "curlybraces")
+                                .font(.system(size: 7, weight: .bold))
+                            Text("AST")
+                                .font(.system(size: 7, weight: .black, design: .monospaced))
+                        }
+                        .foregroundStyle(MdflowTheme.focus)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1.5)
+                        .background(MdflowTheme.focus.opacity(0.12), in: Capsule())
+                    }
+                    Image(systemName: deliverySymbol(block.deliveryState))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(stateColor)
                     if !["unknown", "healthy"].contains(block.healthState) {
-                        Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(MdflowTheme.healthColor(block.healthState))
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(MdflowTheme.healthColor(block.healthState))
                     }
                 }
                 Text(store.blockText(block, field: "title"))
-                    .font(.system(size: 13.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(MdflowTheme.ink).lineLimit(2)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(MdflowTheme.ink)
+                    .lineLimit(2)
                 Text(store.blockText(block, field: "summary"))
-                    .font(.system(size: 10, design: .rounded)).foregroundStyle(MdflowTheme.muted).lineLimit(3)
+                    .font(.system(size: 9.5, design: .rounded))
+                    .foregroundStyle(MdflowTheme.muted)
+                    .lineLimit(2)
                 Spacer(minLength: 0)
-                Text(block.deliveryState.uppercased())
-                    .font(.system(size: 7.5, weight: .bold, design: .monospaced)).tracking(0.6).foregroundStyle(stateColor)
+                HStack {
+                    Text(block.deliveryState.uppercased())
+                        .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                        .tracking(0.6)
+                        .foregroundStyle(stateColor)
+                    Spacer()
+                    if let first = sources.first(where: { $0.symbol != nil }), let sym = first.symbol {
+                        Text(sym)
+                            .font(.system(size: 7.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(MdflowTheme.muted)
+                            .lineLimit(1)
+                    }
+                }
             }
             .padding(11)
             .frame(width: scene.cardSize.width, height: scene.cardSize.height, alignment: .topLeading)
             .background(
-                shape.fill(MdflowTheme.surface)
-                    .overlay(alignment: .leading) { Rectangle().fill(typeColor).frame(width: 4).padding(.vertical, 12) }
-                    .overlay(shape.stroke(changed ? MdflowTheme.focus : selected ? typeColor : typeColor.opacity(0.28), lineWidth: changed ? 3 : selected ? 2 : 1))
+                shape.fill(isGhost ? MdflowTheme.surface.opacity(0.72) : MdflowTheme.surface)
+                    .overlay(alignment: .leading) {
+                        Rectangle()
+                            .fill(typeColor)
+                            .frame(width: 4)
+                            .padding(.vertical, 12)
+                            .opacity(isGhost ? 0.6 : 1.0)
+                    }
+                    .overlay(
+                        shape.stroke(
+                            changed ? MdflowTheme.focus : selected ? typeColor : typeColor.opacity(isGhost ? 0.38 : 0.28),
+                            style: StrokeStyle(
+                                lineWidth: changed ? 3 : selected ? 2 : 1.1,
+                                dash: isGhost ? [5, 3] : []
+                            )
+                        )
+                    )
                     .shadow(color: Color.black.opacity(selected ? 0.10 : 0.045), radius: selected ? 10 : 4, y: 2)
             )
         }

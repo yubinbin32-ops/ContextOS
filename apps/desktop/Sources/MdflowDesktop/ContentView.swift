@@ -61,19 +61,21 @@ struct ContentView: View {
                         }
                     }
 
-                    sidebarSection(.decisions, title: store.text("decisions")) {
-                        ForEach(store.snapshot.decisions) { decision in
-                            sidebarButton(
-                                title: decision.title,
-                                subtitle: "\(decision.status.uppercased()) · \(store.decisionScopeLabel(decision.id))",
-                                color: MdflowTheme.blockKindColor("principle"),
-                                selected: store.selection == GraphSelection(type: .decision, id: decision.id)
-                            ) { store.select(GraphSelection(type: .decision, id: decision.id)) }
+                    if !store.snapshot.decisions.isEmpty {
+                        sidebarSection(.decisions, title: store.text("decisions")) {
+                            ForEach(store.snapshot.decisions) { decision in
+                                sidebarButton(
+                                    title: decision.title,
+                                    subtitle: "\(decision.status.uppercased()) · \(store.decisionScopeLabel(decision.id))",
+                                    color: MdflowTheme.blockKindColor("principle"),
+                                    selected: store.selection == GraphSelection(type: .decision, id: decision.id)
+                                ) { store.select(GraphSelection(type: .decision, id: decision.id)) }
+                            }
                         }
                     }
 
                     sidebarSection(.plans, title: store.text("plans")) {
-                        ForEach(store.plans) { plan in
+                        ForEach(store.plans.filter { $0.derivedStatus != "cancelled" }) { plan in
                             sidebarButton(
                                 title: "\(plan.phase.uppercased()) \(plan.order) · \(store.planText(plan, field: "title"))",
                                 subtitle: "\(plan.priority.uppercased()) · \(plan.derivedStatus.uppercased()) · \(plan.progress.completedSteps)/\(plan.progress.totalSteps)",
@@ -94,15 +96,16 @@ struct ContentView: View {
                         }
                     }
 
-                    if !store.unassignedCheckpoints.isEmpty {
+                    let pendingUnassigned = store.unassignedCheckpoints.filter {
+                        $0.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "passed"
+                    }
+                    if !pendingUnassigned.isEmpty {
                         sidebarSection(.verification, title: store.text("verification")) {
-                            Text(store.text("unassigned"))
+                            Text("\(store.text("unassigned")) (\(pendingUnassigned.count))")
                                 .font(.system(size: 8, weight: .bold, design: .monospaced))
                                 .foregroundStyle(MdflowTheme.muted)
                                 .padding(.horizontal, 18).padding(.top, 4).padding(.bottom, 4)
-                            ForEach(store.unassignedCheckpoints.filter {
-                                $0.status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "passed"
-                            }) { checkpoint in
+                            ForEach(pendingUnassigned.prefix(5)) { checkpoint in
                                 if let type = GraphSelection.EntityType(rawValue: checkpoint.targetType) {
                                     sidebarButton(
                                         title: checkpoint.title,
@@ -151,17 +154,34 @@ struct ContentView: View {
 
     private var projectHeader: some View {
         HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(store.snapshot.project.name)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(MdflowTheme.ink).lineLimit(1)
-                Text("\(store.snapshot.blocks.count) BLOCKS · \(store.snapshot.chains.count) CHAINS · \(store.snapshot.decisions.count) DECISIONS")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced)).tracking(0.8)
-                    .foregroundStyle(MdflowTheme.muted)
+                HStack(spacing: 6) {
+                    Text("\(store.snapshot.blocks.count) BLOCKS")
+                    Text("·")
+                    Text("\(store.snapshot.chains.count) CHAINS")
+                    if !store.snapshot.decisions.isEmpty {
+                        Text("·")
+                        Text("\(store.snapshot.decisions.count) DECISIONS")
+                    }
+                }
+                .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                .tracking(0.6)
+                .foregroundStyle(MdflowTheme.muted)
+
                 let coverage = store.architectureCoverage
-                Text("\(coverage.verifiedBlocks)/\(coverage.totalBlocks) \(store.text("verified").uppercased()) · \(coverage.unplannedIDs.count) \(store.text("unplanned").uppercased()) · \(coverage.withoutCheckpointIDs.count) \(store.text("checkpointFree").uppercased()) · \(coverage.requiredCheckpointMissingIDs.count) REQUIRED · \(coverage.checkpointUnboundIDs.count) UNBOUND · \(coverage.chainGateMissingIDs.count) NO GATE")
-                    .font(.system(size: 7.5, weight: .bold, design: .monospaced)).tracking(0.45)
-                    .foregroundStyle(coverage.unplannedIDs.isEmpty && coverage.requiredCheckpointMissingIDs.isEmpty && coverage.checkpointUnboundIDs.isEmpty && coverage.chainGateMissingIDs.isEmpty ? MdflowTheme.success : MdflowTheme.pending)
+                let pct = coverage.totalBlocks > 0 ? Int(Double(coverage.verifiedBlocks) / Double(coverage.totalBlocks) * 100) : 0
+                HStack(spacing: 7) {
+                    ProgressView(value: Double(coverage.verifiedBlocks), total: Double(max(1, coverage.totalBlocks)))
+                        .progressViewStyle(.linear)
+                        .frame(width: 70)
+                    Text("\(coverage.verifiedBlocks)/\(coverage.totalBlocks) \(store.text("verified")) (\(pct)%)")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(pct >= 80 ? MdflowTheme.success : MdflowTheme.pending)
+                }
+                .padding(.top, 2)
             }
             Spacer()
             Menu {
@@ -553,9 +573,9 @@ private struct EditorPlatformRow: View {
 
     private func iconName(for id: String) -> String {
         switch id {
-        case "claude": return "sparkles"
+        case "claude": return "bubble.left.and.text.bubble.right"
         case "cursor": return "chevron.left.forwardslash.chevron.right"
-        case "vscode": return "curlybraces.square"
+        case "antigravity": return "sparkles"
         case "opencode": return "cube.transparent"
         case "codex": return "terminal"
         default: return "cpu"

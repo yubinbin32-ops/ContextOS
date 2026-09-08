@@ -33,6 +33,10 @@ struct BlockItem: Identifiable, Equatable {
     let healthState: String
     let priority: String
     let revision: Int
+
+    var isGhost: Bool {
+        deliveryState == "proposed" || deliveryState == "planned"
+    }
 }
 
 struct ChainItem: Identifiable, Equatable {

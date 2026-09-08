@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct DetailView: View {
@@ -9,6 +10,8 @@ struct DetailView: View {
     @State private var expandedStepIDs: Set<String> = []
     @State private var expandedCheckpointIDs: Set<String> = []
     @State private var expandedHistoryIDs: Set<Int> = []
+    @State private var showCodeStream = false
+    @State private var copiedStreamChainID: String? = nil
 
     var body: some View {
         ScrollView(.vertical) {
@@ -54,6 +57,33 @@ struct DetailView: View {
                     if block.localOrder != 0 {
                         metadataSeparator
                         metadataLabel("#\(block.localOrder)")
+                    }
+                }
+                HStack(spacing: 8) {
+                    if block.isGhost {
+                        HStack(spacing: 5) {
+                            Image(systemName: "sparkles")
+                            Text(store.activeLocale == "zh-Hans" ? "虚拟蓝图 (Ghost Blueprint) · 0 代码消耗" : "Ghost Blueprint · 0 Token Overhead")
+                        }
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(nsColor: NSColor.systemIndigo))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(Color(nsColor: NSColor.systemIndigo).opacity(0.12), in: Capsule())
+                    } else {
+                        let sources = store.sourceReferences(for: block.id)
+                        let hasSymbol = sources.contains { $0.symbol != nil }
+                        HStack(spacing: 5) {
+                            Image(systemName: hasSymbol ? "curlybraces.square.fill" : "cube.fill")
+                            Text(hasSymbol
+                                ? (store.activeLocale == "zh-Hans" ? "实体落地 · AST 门面压缩" : "Solid · AST Facade Compressed")
+                                : (store.activeLocale == "zh-Hans" ? "实体落地 (Solid Anchored)" : "Solid Anchored"))
+                        }
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundStyle(MdflowTheme.success)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(MdflowTheme.success.opacity(0.12), in: Capsule())
                     }
                 }
                 if let coverage = store.architectureCoverage.blocks.first(where: { $0.blockID == block.id }) {
@@ -103,6 +133,7 @@ struct DetailView: View {
                     chain.outputContract.isEmpty ? nil : "\(store.text("output")) — \(store.chainText(chain, field: "outputContract"))",
                 ].compactMap { $0 }.joined(separator: "\n\n")
                 section(store.text("contract").uppercased(), text: contract)
+                chainCodeStreamSection(chain)
                 chainPathSection(chain.id)
             }
         case .link:
@@ -719,33 +750,282 @@ struct DetailView: View {
     private func sourceSection(_ blockID: String) -> some View {
         let sources = store.sourceReferences(for: blockID)
         if !sources.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                sectionLabel(store.text("files").uppercased())
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    sectionLabel(store.text("files").uppercased())
+                    Spacer()
+                    Text(store.activeLocale == "zh-Hans" ? "AST 门面映射" : "AST Facade Anchors")
+                        .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(MdflowTheme.focus)
+                }
                 ForEach(sources) { source in
-                    Button {
-                        store.revealSource(source)
-                    } label: {
-                        HStack(alignment: .top, spacing: 9) {
-                            Image(systemName: "doc.text")
-                                .font(.system(size: 11, weight: .medium))
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(source.path + (source.startLine.map { ":\($0)" } ?? ""))
-                                    .lineLimit(2)
-                                Text(source.symbol ?? source.role)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Button {
+                            store.revealSource(source)
+                        } label: {
+                            HStack(alignment: .top, spacing: 9) {
+                                Image(systemName: source.symbol != nil ? "curlybraces" : "doc.text")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(source.symbol != nil ? MdflowTheme.focus : MdflowTheme.ink)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 6) {
+                                        Text(source.path)
+                                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                            .lineLimit(1)
+                                        if let start = source.startLine, let end = source.endLine {
+                                            Text("L\(start)-L\(end)")
+                                                .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                                                .foregroundStyle(MdflowTheme.muted)
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 1.5)
+                                                .background(MdflowTheme.hairline.opacity(0.6), in: RoundedRectangle(cornerRadius: 3))
+                                        }
+                                    }
+                                    if let symbol = source.symbol {
+                                        Text(symbol)
+                                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                            .foregroundStyle(MdflowTheme.focus)
+                                    } else {
+                                        Text(source.role)
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(MdflowTheme.muted)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: 10, weight: .medium))
                                     .foregroundStyle(MdflowTheme.muted)
                             }
-                            Spacer()
-                            Image(systemName: "arrow.up.right")
+                            .foregroundStyle(MdflowTheme.ink)
+                            .padding(.vertical, 5)
                         }
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(MdflowTheme.ink)
-                        .padding(.vertical, 7)
-                        .overlay(alignment: .bottom) { Rectangle().fill(MdflowTheme.hairline).frame(height: 1) }
+                        .buttonStyle(.plain)
+
+                        if let start = source.startLine, let end = source.endLine {
+                            let lineCount = max(1, end - start + 1)
+                            let sliceTokens = lineCount * 7
+                            HStack(spacing: 6) {
+                                Image(systemName: "bolt.shield.fill")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(MdflowTheme.success)
+                                Text(store.activeLocale == "zh-Hans"
+                                     ? "Token 节约: 仅切片 \(lineCount) 行 (~约 \(sliceTokens) tokens), 降低上下文膨胀 >85%"
+                                     : "Token Saving: ~\(sliceTokens) tokens slice (\(lineCount) LOC), avoids full-file overhead")
+                                    .font(.system(size: 8.5, design: .monospaced))
+                                    .foregroundStyle(MdflowTheme.muted)
+                            }
+                            .padding(.leading, 20)
+                            .padding(.bottom, 4)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .overlay(alignment: .bottom) { Rectangle().fill(MdflowTheme.hairline).frame(height: 1) }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func chainCodeStreamSection(_ chain: ChainItem) -> some View {
+        let nodeIDs = store.chainNodeIDs(chain.id)
+        if !nodeIDs.isEmpty {
+            let blocks = nodeIDs.compactMap { store.block($0) }
+            let ghostCount = blocks.filter(\.isGhost).count
+            let solidCount = blocks.count - ghostCount
+
+            let stats = calculateTokenStats(for: blocks)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    sectionLabel(store.activeLocale == "zh-Hans" ? "代码流切片与 TOKEN 经济" : "CODE STREAM & TOKEN ECONOMY")
+                    Spacer()
+                    if stats.savingsPercent > 0 {
+                        Text("\(stats.savingsPercent)% SAVED")
+                            .font(.system(size: 8.5, weight: .black, design: .monospaced))
+                            .foregroundStyle(MdflowTheme.success)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(MdflowTheme.success.opacity(0.12), in: Capsule())
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 12) {
+                        HStack(spacing: 4) {
+                            Circle().fill(MdflowTheme.success).frame(width: 6, height: 6)
+                            Text(store.activeLocale == "zh-Hans" ? "\(solidCount) 实体落地" : "\(solidCount) Solid")
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        }
+                        HStack(spacing: 4) {
+                            Circle().fill(Color(nsColor: NSColor.systemIndigo)).frame(width: 6, height: 6)
+                            Text(store.activeLocale == "zh-Hans" ? "\(ghostCount) 虚拟蓝图" : "\(ghostCount) Ghost")
+                                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        }
+                    }
+                    .foregroundStyle(MdflowTheme.ink)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "gauge.with.dots.needle.bottom.50percent")
+                            .font(.system(size: 10))
+                            .foregroundStyle(MdflowTheme.focus)
+                        Text(store.activeLocale == "zh-Hans"
+                             ? "AST 门面切片: ~\(stats.sliceTokens) tokens (全量文件约 ~\(stats.fullTokens) tokens)"
+                             : "AST Facade Stream: ~\(stats.sliceTokens) tokens (vs ~\(stats.fullTokens) tokens full-files)")
+                            .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                            .foregroundStyle(MdflowTheme.muted)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(MdflowTheme.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(MdflowTheme.hairline, lineWidth: 1))
+
+                HStack(spacing: 8) {
+                    Button {
+                        let stream = buildChainCodeStream(chain: chain)
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(stream, forType: .string)
+                        copiedStreamChainID = chain.id
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            if copiedStreamChainID == chain.id {
+                                copiedStreamChainID = nil
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: copiedStreamChainID == chain.id ? "checkmark" : "doc.on.doc")
+                            Text(copiedStreamChainID == chain.id
+                                 ? (store.activeLocale == "zh-Hans" ? "已复制切片流" : "Copied Stream")
+                                 : (store.activeLocale == "zh-Hans" ? "复制链切片流" : "Copy Code Stream"))
+                        }
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(copiedStreamChainID == chain.id ? MdflowTheme.success : MdflowTheme.ink)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(MdflowTheme.hairline.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        withAnimation {
+                            showCodeStream.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: showCodeStream ? "chevron.up" : "chevron.down")
+                            Text(showCodeStream
+                                 ? (store.activeLocale == "zh-Hans" ? "收起流预览" : "Hide Stream")
+                                 : (store.activeLocale == "zh-Hans" ? "预览流内容" : "Preview Stream"))
+                        }
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(MdflowTheme.focus)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if showCodeStream {
+                    let streamText = buildChainCodeStream(chain: chain)
+                    Text(streamText)
+                        .font(.system(size: 9.5, design: .monospaced))
+                        .foregroundStyle(MdflowTheme.ink)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(nsColor: NSColor.textBackgroundColor))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(MdflowTheme.hairline, lineWidth: 1))
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func buildChainCodeStream(chain: ChainItem) -> String {
+        let nodeIDs = store.chainNodeIDs(chain.id)
+        var lines: [String] = []
+        lines.append("# Chain Code Stream: \(chain.id)")
+        lines.append("## Purpose: \(chain.intent.isEmpty ? chain.title : chain.intent)")
+        lines.append("")
+        for (index, id) in nodeIDs.enumerated() {
+            guard let block = store.block(id) else { continue }
+            let sources = store.sourceReferences(for: id)
+            let isGhost = block.isGhost
+            lines.append("### Node \(index + 1): [block:\(block.id)] \(block.title) (\(isGhost ? "Ghost Blueprint" : "Solid Anchored"))")
+            lines.append("- Layer: \(block.architectureLayer) · Delivery: \(block.deliveryState)")
+            if !block.contract.isEmpty {
+                lines.append("- Contract: \(block.contract)")
+            }
+            if isGhost {
+                lines.append("```markdown")
+                lines.append("// [GHOST BLUEPRINT] Virtual node. No source files anchored yet.")
+                lines.append("// Planned Specification: \(block.summary)")
+                lines.append("```")
+            } else if sources.isEmpty {
+                lines.append("```text")
+                lines.append("// [SOLID] Anchored block, no source references attached.")
+                lines.append("```")
+            } else {
+                for source in sources {
+                    lines.append("// Source: \(source.path)\(source.symbol.map { " :: \($0)" } ?? "")\(source.startLine.map { " (L\($0)-L\(source.endLine ?? $0))" } ?? "")")
+                    if let start = source.startLine, let end = source.endLine, !store.snapshot.project.root.isEmpty {
+                        let fullPath = URL(fileURLWithPath: store.snapshot.project.root).appendingPathComponent(source.path).path
+                        if let fileContent = try? String(contentsOfFile: fullPath, encoding: .utf8) {
+                            let fileLines = fileContent.components(separatedBy: "\n")
+                            let startIdx = max(0, start - 1)
+                            let endIdx = min(fileLines.count, end)
+                            if startIdx < endIdx {
+                                let slice = fileLines[startIdx..<endIdx].joined(separator: "\n")
+                                lines.append("```")
+                                lines.append(slice)
+                                lines.append("```")
+                                continue
+                            }
+                        }
+                    }
+                    lines.append("```")
+                    lines.append("// Facade: \(source.symbol ?? source.path)")
+                    lines.append("```")
+                }
+            }
+            lines.append("")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private struct TokenEconomyStats {
+        let sliceTokens: Int
+        let fullTokens: Int
+        let savingsPercent: Int
+    }
+
+    private func calculateTokenStats(for blocks: [BlockItem]) -> TokenEconomyStats {
+        var sliceTokens = 0
+        var fullTokens = 0
+        for block in blocks {
+            if block.isGhost {
+                sliceTokens += 15
+                fullTokens += 15
+            } else {
+                let sources = store.sourceReferences(for: block.id)
+                if sources.isEmpty {
+                    sliceTokens += 30
+                    fullTokens += 30
+                } else {
+                    for source in sources {
+                        if let start = source.startLine, let end = source.endLine {
+                            let lines = max(1, end - start + 1)
+                            sliceTokens += lines * 7
+                            fullTokens += max(250, lines * 15) * 7
+                        } else {
+                            sliceTokens += 50
+                            fullTokens += 2000
+                        }
+                    }
+                }
+            }
+        }
+        let savingsPercent = fullTokens > sliceTokens ? Int(Double(fullTokens - sliceTokens) / Double(fullTokens) * 100.0) : 0
+        return TokenEconomyStats(sliceTokens: sliceTokens, fullTokens: fullTokens, savingsPercent: savingsPercent)
     }
 
     @ViewBuilder

@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path5) {
-      let input = path5;
+    function removeDotSegments(path7) {
+      let input = path7;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3668,8 +3668,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path5 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path5 && path5 !== "/" ? path5 : void 0;
+        const path7 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path7 && path7 !== "/" ? path7 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7568,8 +7568,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path5, errorMaps, issueData } = params;
-  const fullPath = [...path5, ...issueData.path || []];
+  const { data, path: path7, errorMaps, issueData } = params;
+  const fullPath = [...path7, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7684,11 +7684,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path5, key) {
+  constructor(parent, value, path7, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path5;
+    this._path = path7;
     this._key = key;
   }
   get path() {
@@ -11270,10 +11270,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path5) {
-  if (!path5)
+function getElementAtPath(obj, path7) {
+  if (!path7)
     return obj;
-  return path5.reduce((acc, key) => acc?.[key], obj);
+  return path7.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11685,11 +11685,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path5, issues) {
+function prefixIssues(path7, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path5);
+    iss.path.unshift(path7);
     return iss;
   });
 }
@@ -12118,16 +12118,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path5 = []) => {
+  const processError = (error3, path7 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path5, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path7, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
       } else {
-        const fullpath = [...path5, ...issue2.path];
+        const fullpath = [...path7, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -16632,11 +16632,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path5) {
-  if (path5.length === 0) {
+function getDotPath(path7) {
+  if (path7.length === 0) {
     return "object root";
   }
-  return path5.reduce((acc, seg, index) => {
+  return path7.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -23203,12 +23203,14 @@ var StdioServerTransport = class {
 };
 
 // packages/mcp/src/project-router.mjs
-import path3 from "node:path";
+import path5 from "node:path";
 import fs4 from "node:fs";
 
 // packages/mcp/src/service.mjs
 import crypto3 from "node:crypto";
 import fs3 from "node:fs";
+import path4 from "node:path";
+import { execSync } from "node:child_process";
 
 // packages/mcp/src/database.mjs
 import crypto from "node:crypto";
@@ -24256,6 +24258,360 @@ function parseGraphPatch(input) {
   return { ...header, operations };
 }
 
+// packages/mcp/src/ast.mjs
+import path3 from "node:path";
+function detectLanguage(filePath = "") {
+  const ext = path3.extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".ts":
+    case ".tsx":
+      return "typescript";
+    case ".js":
+    case ".jsx":
+    case ".mjs":
+    case ".cjs":
+      return "javascript";
+    case ".swift":
+      return "swift";
+    case ".py":
+      return "python";
+    case ".go":
+      return "go";
+    case ".rs":
+      return "rust";
+    case ".kt":
+    case ".kts":
+      return "kotlin";
+    default:
+      return "text";
+  }
+}
+function extractSymbols(sourceCode, { language = "typescript", filePath = "" } = {}) {
+  const lines = sourceCode.split(/\r?\n/);
+  const symbols = [];
+  const lang = language === "text" && filePath ? detectLanguage(filePath) : language;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNum = i + 1;
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("//") || trimmed.startsWith("#") || trimmed.startsWith("/*")) {
+      continue;
+    }
+    if (lang === "typescript" || lang === "javascript") {
+      const fnMatch = trimmed.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*(\([^{]*\))/);
+      if (fnMatch) {
+        symbols.push({
+          name: fnMatch[1],
+          kind: "function",
+          signature: `${fnMatch[1]}${fnMatch[2]}`,
+          startLine: lineNum,
+          endLine: findBlockEnd(lines, i)
+        });
+        continue;
+      }
+      const arrowMatch = trimmed.match(/^(?:export\s+)?const\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s+)?(\([^{=]*\)\s*(?::\s*[^=]+)?)\s*=>/);
+      if (arrowMatch) {
+        symbols.push({
+          name: arrowMatch[1],
+          kind: "function",
+          signature: `${arrowMatch[1]} = ${arrowMatch[2]} =>`,
+          startLine: lineNum,
+          endLine: findBlockEnd(lines, i)
+        });
+        continue;
+      }
+      const classMatch = trimmed.match(/^(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z0-9_$]+)(?:\s+extends\s+[^{]+)?(?:\s+implements\s+[^{]+)?/);
+      if (classMatch) {
+        symbols.push({
+          name: classMatch[1],
+          kind: "class",
+          signature: classMatch[0].replace(/^export\s+/, "").trim(),
+          startLine: lineNum,
+          endLine: findBlockEnd(lines, i)
+        });
+        continue;
+      }
+      const ifaceMatch = trimmed.match(/^(?:export\s+)?interface\s+([A-Za-z0-9_$]+)/);
+      if (ifaceMatch) {
+        symbols.push({
+          name: ifaceMatch[1],
+          kind: "interface",
+          signature: ifaceMatch[0].replace(/^export\s+/, "").trim(),
+          startLine: lineNum,
+          endLine: findBlockEnd(lines, i)
+        });
+        continue;
+      }
+      const typeMatch = trimmed.match(/^(?:export\s+)?type\s+([A-Za-z0-9_$]+)\s*=/);
+      if (typeMatch) {
+        symbols.push({
+          name: typeMatch[1],
+          kind: "type",
+          signature: trimmed.replace(/;$/, ""),
+          startLine: lineNum,
+          endLine: lineNum
+        });
+        continue;
+      }
+    } else if (lang === "swift") {
+      const swiftFuncMatch = trimmed.match(/^(?:public\s+|private\s+|fileprivate\s+|internal\s+|open\s+)?(?:static\s+|class\s+)?(?:mutating\s+)?func\s+([A-Za-z0-9_]+)\s*(\([^{]*\))/);
+      if (swiftFuncMatch) {
+        symbols.push({
+          name: swiftFuncMatch[1],
+          kind: "function",
+          signature: `${swiftFuncMatch[1]}${swiftFuncMatch[2]}`,
+          startLine: lineNum,
+          endLine: findBlockEnd(lines, i)
+        });
+        continue;
+      }
+      const swiftTypeMatch = trimmed.match(/^(?:public\s+|private\s+|fileprivate\s+|internal\s+|open\s+)?(?:final\s+)?(struct|class|enum|protocol)\s+([A-Za-z0-9_]+)/);
+      if (swiftTypeMatch) {
+        symbols.push({
+          name: swiftTypeMatch[2],
+          kind: swiftTypeMatch[1],
+          signature: trimmed.replace(/\{$/, "").trim(),
+          startLine: lineNum,
+          endLine: findBlockEnd(lines, i)
+        });
+        continue;
+      }
+    } else if (lang === "python") {
+      const pyFuncMatch = trimmed.match(/^(?:async\s+)?def\s+([A-Za-z0-9_]+)\s*(\([^)]*\)(?:\s*->\s*[^:]+)?:)/);
+      if (pyFuncMatch) {
+        symbols.push({
+          name: pyFuncMatch[1],
+          kind: "function",
+          signature: `def ${pyFuncMatch[1]}${pyFuncMatch[2]}`,
+          startLine: lineNum,
+          endLine: findPythonBlockEnd(lines, i)
+        });
+        continue;
+      }
+      const pyClassMatch = trimmed.match(/^class\s+([A-Za-z0-9_]+)(?:\([^)]*\))?:/);
+      if (pyClassMatch) {
+        symbols.push({
+          name: pyClassMatch[1],
+          kind: "class",
+          signature: pyClassMatch[0],
+          startLine: lineNum,
+          endLine: findPythonBlockEnd(lines, i)
+        });
+        continue;
+      }
+    }
+  }
+  return symbols;
+}
+function findBlockEnd(lines, startIdx) {
+  let openBraces = 0;
+  let started = false;
+  for (let i = startIdx; i < lines.length; i++) {
+    const line = lines[i];
+    for (const char of line) {
+      if (char === "{") {
+        openBraces++;
+        started = true;
+      } else if (char === "}") {
+        openBraces--;
+      }
+    }
+    if (started && openBraces <= 0) {
+      return i + 1;
+    }
+  }
+  return Math.min(lines.length, startIdx + 30);
+}
+function findPythonBlockEnd(lines, startIdx) {
+  const startIndent = lines[startIdx].search(/\S|$/);
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    const currentIndent = line.search(/\S|$/);
+    if (currentIndent <= startIndent) {
+      return i;
+    }
+  }
+  return lines.length;
+}
+function extractSymbolSlice(sourceCode, { symbol = null, startLine = null, endLine = null, maxLines = 50 } = {}) {
+  const lines = sourceCode.split(/\r?\n/);
+  let targetStart = startLine;
+  let targetEnd = endLine;
+  if (symbol && (!targetStart || !targetEnd)) {
+    const symbols = extractSymbols(sourceCode);
+    const matched = symbols.find((s) => s.name === symbol || s.name.endsWith(`.${symbol}`));
+    if (matched) {
+      targetStart = matched.startLine;
+      targetEnd = matched.endLine;
+    }
+  }
+  if (!targetStart) targetStart = 1;
+  if (!targetEnd) targetEnd = Math.min(lines.length, targetStart + maxLines - 1);
+  const totalLines = targetEnd - targetStart + 1;
+  const sliceLines = lines.slice(targetStart - 1, Math.min(targetEnd, targetStart + maxLines - 1));
+  let result = sliceLines.join("\n");
+  if (totalLines > maxLines) {
+    result += `
+... [${totalLines - maxLines} lines collapsed; use entity_open or editor for full body]`;
+  }
+  return {
+    startLine: targetStart,
+    endLine: targetEnd,
+    totalLines,
+    code: result
+  };
+}
+function buildChainCodeStream(chainNodes = [], { maxTotalChars = 4e3 } = {}) {
+  const sections = [];
+  let currentChars = 0;
+  for (const node2 of chainNodes) {
+    const { blockId, title, filePath, symbol, code, contract } = node2;
+    const header = `// -------------------------------------------------------------
+// [Node: ${blockId}] ${title} ${filePath ? `(${filePath}${symbol ? ` :: ${symbol}` : ""})` : ""}
+// -------------------------------------------------------------`;
+    let body = "";
+    if (code) {
+      body = code;
+    } else if (contract) {
+      body = `// Planned Contract (Unmaterialized Facade):
+// ${contract}`;
+    } else {
+      body = `// Planned Block (No code facade yet)`;
+    }
+    const section = `${header}
+${body}
+`;
+    if (currentChars + section.length > maxTotalChars && sections.length > 0) {
+      sections.push(`// ... [Remaining nodes truncated for context budget]`);
+      break;
+    }
+    sections.push(section);
+    currentChars += section.length;
+  }
+  return sections.join("\n");
+}
+function replaceSymbolSlice(sourceCode, { symbol, newCode, language = null }) {
+  const symbols = extractSymbols(sourceCode, { language: language || "typescript" });
+  const matched = symbols.find((s) => s.name === symbol || s.name.endsWith(`.${symbol}`));
+  if (!matched) {
+    throw new Error(`Symbol "${symbol}" not found in source code`);
+  }
+  const lines = sourceCode.split(/\r?\n/);
+  const before = lines.slice(0, matched.startLine - 1);
+  const after = lines.slice(matched.endLine);
+  const newLines = newCode.split(/\r?\n/);
+  return {
+    updatedCode: [...before, ...newLines, ...after].join("\n"),
+    replacedLines: {
+      startLine: matched.startLine,
+      oldEndLine: matched.endLine,
+      newEndLine: matched.startLine + newLines.length - 1
+    },
+    symbol: matched.name
+  };
+}
+
+// packages/mcp/src/sanitizer.mjs
+var ANSI_REGEX = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g;
+var PROGRESS_REGEX = /(?:\[[=>\-\s]+\]|\b\d{1,3}%\b|[\u2580-\u259F]+|\r\s*)/g;
+var FAILURE_MARKERS = [
+  /\b(?:error|fatal|fail(?:ed|ure)?|exception|panic)\b/i,
+  /\bassert(?:ion)?\s*(?:error|failed)?\b/i,
+  /^\s*(?:not ok|\bFAIL\b|×|\u2717)/i,
+  /\b(?:NullPointer|Undefined|TypeError|ReferenceError|SyntaxError)\b/
+];
+function cleanControlCharacters(text = "") {
+  return text.replace(ANSI_REGEX, "").replace(/\r+/g, "\n").replace(PROGRESS_REGEX, "");
+}
+function isFailureLine(line = "") {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  return FAILURE_MARKERS.some((regex) => regex.test(trimmed));
+}
+function sanitizeTerminalOutput(rawOutput = "", options = {}) {
+  const {
+    maxChars = 3e3,
+    headLines = 5,
+    tailLines = 15,
+    errorContextLines = 3,
+    exitCode = null
+  } = options;
+  const originalLength = rawOutput.length;
+  if (!rawOutput.trim()) {
+    return {
+      text: "(No output)",
+      originalLength: 0,
+      sanitizedLength: 0,
+      reductionRatio: "0%",
+      hasErrors: false
+    };
+  }
+  const cleaned = cleanControlCharacters(rawOutput);
+  const lines = cleaned.split("\n").map((l) => l.trimEnd()).filter((l, idx, arr) => {
+    return l.length > 0 || idx > 0 && arr[idx - 1].length > 0;
+  });
+  const errorIndices = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (isFailureLine(lines[i])) {
+      errorIndices.push(i);
+    }
+  }
+  const hasErrors = errorIndices.length > 0 || exitCode !== null && exitCode !== 0;
+  if (!hasErrors && lines.length > 25) {
+    const summaryHead = lines.slice(0, 3).join("\n");
+    const summaryTail = lines.slice(-5).join("\n");
+    const collapsedCount = lines.length - 8;
+    const text2 = `${summaryHead}
+... [${collapsedCount} lines routine build output collapsed] ...
+${summaryTail}`;
+    return {
+      text: text2,
+      originalLength,
+      sanitizedLength: text2.length,
+      reductionRatio: `${((1 - text2.length / originalLength) * 100).toFixed(1)}%`,
+      hasErrors: false
+    };
+  }
+  const keptIndices = /* @__PURE__ */ new Set();
+  for (let i = 0; i < Math.min(headLines, lines.length); i++) {
+    keptIndices.add(i);
+  }
+  for (let i = Math.max(0, lines.length - tailLines); i < lines.length; i++) {
+    keptIndices.add(i);
+  }
+  for (const idx of errorIndices) {
+    const start = Math.max(0, idx - errorContextLines);
+    const end = Math.min(lines.length - 1, idx + errorContextLines);
+    for (let j = start; j <= end; j++) {
+      keptIndices.add(j);
+    }
+  }
+  const sortedIndices = [...keptIndices].sort((a, b) => a - b);
+  const resultLines = [];
+  let lastIndex = -1;
+  for (const idx of sortedIndices) {
+    if (lastIndex !== -1 && idx > lastIndex + 1) {
+      const skipped = idx - lastIndex - 1;
+      resultLines.push(`... [${skipped} lines non-error output collapsed] ...`);
+    }
+    resultLines.push(lines[idx]);
+    lastIndex = idx;
+  }
+  let text = resultLines.join("\n");
+  if (text.length > maxChars) {
+    text = `${text.slice(0, maxChars - 80)}
+... [truncated for context limit]`;
+  }
+  return {
+    text,
+    originalLength,
+    sanitizedLength: text.length,
+    reductionRatio: `${((1 - text.length / originalLength) * 100).toFixed(1)}%`,
+    hasErrors
+  };
+}
+
 // packages/mcp/src/service.mjs
 var BLOCK_KINDS = /* @__PURE__ */ new Set([
   "principle",
@@ -25244,6 +25600,139 @@ var MdflowService = class {
       localizations
     };
   }
+  chainCodeStream({ chainId, maxTotalChars = 4e3 } = {}) {
+    if (!chainId?.trim()) throw new Error("chainId is required");
+    this.ensureSynced();
+    const snapshot = this.snapshot();
+    const chain = snapshot.chains.find((c) => c.id === chainId);
+    if (!chain) throw new Error(`Chain not found: ${chainId}`);
+    const nodeIds = snapshot.chainNodes.filter((node2) => node2.chainId === chain.id).sort((a, b) => a.position - b.position).map((node2) => node2.blockId);
+    const streamNodes = [];
+    for (const blockId of nodeIds) {
+      const block = snapshot.blocks.find((b) => b.id === blockId);
+      if (!block) continue;
+      const sourceRefs = this.database.prepare("SELECT path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id").all(block.id);
+      let code = null;
+      let filePath = null;
+      let symbol = null;
+      if (sourceRefs.length > 0) {
+        const ref = sourceRefs[0];
+        filePath = ref.path;
+        symbol = ref.symbol;
+        const fullPath = path4.isAbsolute(filePath) ? filePath : path4.resolve(this.paths.projectRoot, filePath);
+        try {
+          if (fs3.existsSync(fullPath)) {
+            const content = fs3.readFileSync(fullPath, "utf8");
+            const slice = extractSymbolSlice(content, {
+              symbol: ref.symbol,
+              startLine: ref.start_line,
+              endLine: ref.end_line,
+              maxLines: 40
+            });
+            code = slice.code;
+          }
+        } catch {
+          code = null;
+        }
+      }
+      streamNodes.push({
+        blockId: block.id,
+        title: block.title,
+        filePath,
+        symbol,
+        code,
+        contract: block.contract || block.summary
+      });
+    }
+    const codeStream = buildChainCodeStream(streamNodes, { maxTotalChars });
+    return {
+      chainId: chain.id,
+      title: chain.title,
+      nodes: streamNodes,
+      codeStream,
+      markdown: [
+        `# Chain Code Stream: ${chain.title} (${chain.id})`,
+        `Nodes: ${streamNodes.length} \xB7 Sliced from AST symbol facades`,
+        "",
+        codeStream
+      ].join("\n")
+    };
+  }
+  sanitizeLog({ rawOutput, maxChars = 3e3, exitCode = null } = {}) {
+    return sanitizeTerminalOutput(rawOutput, { maxChars, exitCode });
+  }
+  mutateBlockCode({ blockId, symbol, newCode, verifyCommand = null } = {}) {
+    if (!blockId?.trim()) throw new Error("blockId is required");
+    if (!symbol?.trim()) throw new Error("symbol is required");
+    if (typeof newCode !== "string") throw new Error("newCode is required");
+    this.ensureSynced();
+    const snapshot = this.snapshot();
+    const block = snapshot.blocks.find((b) => b.id === blockId);
+    if (!block) throw new Error(`Block not found: ${blockId}`);
+    const sourceRefs = snapshot.sourceRefs.filter((ref2) => ref2.blockId === block.id);
+    if (!sourceRefs.length) {
+      throw new Error(`Block "${blockId}" has no bound source files (virtual blueprint)`);
+    }
+    const ref = sourceRefs.find((r) => r.symbol === symbol) || sourceRefs[0];
+    const filePath = ref.path;
+    const fullPath = path4.isAbsolute(filePath) ? filePath : path4.resolve(this.paths.projectRoot, filePath);
+    if (!fs3.existsSync(fullPath)) {
+      throw new Error(`Source file not found at ${fullPath}`);
+    }
+    const originalCode = fs3.readFileSync(fullPath, "utf8");
+    const lang = detectLanguage(fullPath);
+    const { updatedCode, replacedLines } = replaceSymbolSlice(originalCode, {
+      symbol,
+      newCode,
+      language: lang
+    });
+    fs3.writeFileSync(fullPath, updatedCode, "utf8");
+    if (verifyCommand) {
+      try {
+        const rawOutput = execSync(verifyCommand, {
+          cwd: this.paths.projectRoot,
+          encoding: "utf8",
+          stdio: "pipe"
+        });
+        const sanitized = sanitizeTerminalOutput(rawOutput);
+        return {
+          success: true,
+          blockId,
+          symbol,
+          filePath,
+          replacedLines,
+          verification: {
+            passed: true,
+            command: verifyCommand,
+            output: sanitized.text
+          }
+        };
+      } catch (err) {
+        fs3.writeFileSync(fullPath, originalCode, "utf8");
+        const rawError = (err.stdout || "") + "\n" + (err.stderr || "") + "\n" + err.message;
+        const sanitized = sanitizeTerminalOutput(rawError);
+        return {
+          success: false,
+          blockId,
+          symbol,
+          filePath,
+          error: "Verification test failed. Source code automatically rolled back.",
+          verification: {
+            passed: false,
+            command: verifyCommand,
+            output: sanitized.text
+          }
+        };
+      }
+    }
+    return {
+      success: true,
+      blockId,
+      symbol,
+      filePath,
+      replacedLines
+    };
+  }
   projectMap({ locale = "en" } = {}) {
     const snapshot = this.snapshot();
     const coverage = architectureCoverage(snapshot);
@@ -26221,15 +26710,15 @@ ${JSON.stringify(decision.consequences)}`;
       if (selectedPlanIds.has(scope.planId)) selectedChainIds.add(scope.chainId);
     }
     for (const chainId of selectedChainIds) {
-      const path5 = snapshot.chainNodes.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.blockId);
+      const path7 = snapshot.chainNodes.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.blockId);
       if (focusRefs.includes(`chain:${chainId}`)) {
-        for (const blockId of path5.slice(0, 10)) selectedBlockIds.add(blockId);
+        for (const blockId of path7.slice(0, 10)) selectedBlockIds.add(blockId);
         continue;
       }
-      const matchingPositions = path5.flatMap((blockId, index) => selectedBlockIds.has(blockId) ? [index] : []);
+      const matchingPositions = path7.flatMap((blockId, index) => selectedBlockIds.has(blockId) ? [index] : []);
       for (const position of matchingPositions) {
         for (const index of [position - 1, position, position + 1]) {
-          if (path5[index]) selectedBlockIds.add(path5[index]);
+          if (path7[index]) selectedBlockIds.add(path7[index]);
         }
       }
     }
@@ -26360,8 +26849,8 @@ ${JSON.stringify(decision.consequences)}`;
       lines.push("## Target chains");
       for (const chain of relevantChains) {
         const title = localizedValue(translations, "chain", chain.id, locale, "title", chain.title);
-        const path5 = snapshot.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position).map((node2) => `block:${node2.blockId}`).join(" \u2192 ");
-        lines.push(`- [chain:${chain.id}] ${title} \u2014 ${chain.deliveryState}/${chain.healthState}${path5 ? ` \xB7 path ${path5}` : ""}`);
+        const path7 = snapshot.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position).map((node2) => `block:${node2.blockId}`).join(" \u2192 ");
+        lines.push(`- [chain:${chain.id}] ${title} \u2014 ${chain.deliveryState}/${chain.healthState}${path7 ? ` \xB7 path ${path7}` : ""}`);
         const intent = localizedValue(translations, "chain", chain.id, locale, "intent", chain.intent);
         if (intent && (selectedPlanIds.size === 0 || hasExplicitChainFocus)) lines.push(`  ${intent}`);
       }
@@ -26386,7 +26875,14 @@ ${JSON.stringify(decision.consequences)}`;
         const summary = localizedValue(translations, "block", block.id, locale, "summary", block.summary);
         const body = localizedValue(translations, "block", block.id, locale, "body", block.body);
         const contract = localizedValue(translations, "block", block.id, locale, "contract", block.contract);
-        lines.push(`${index + 1}. [block:${block.id}] ${title} \u2014 ${block.architectureLayer}/${block.scope} \xB7 ${block.deliveryState}/${block.healthState}`);
+        const isGhost = block.deliveryState === "proposed" || block.deliveryState === "planned";
+        const stateTag = isGhost ? "Ghost (Virtual Blueprint)" : "Solid (Anchored)";
+        lines.push(`${index + 1}. [block:${block.id}] ${title} \u2014 ${stateTag} \xB7 ${block.architectureLayer}/${block.scope} \xB7 ${block.deliveryState}/${block.healthState}`);
+        const sources = snapshot.sourceRefs?.filter((s) => s.blockId === block.id) ?? [];
+        if (sources.length > 0) {
+          const primary = sources[0];
+          lines.push(`  Facade: ${primary.path}${primary.symbol ? ` :: ${primary.symbol}` : ""}${primary.startLine ? ` (L${primary.startLine}-L${primary.endLine})` : ""}`);
+        }
         if (summary && (selectedPlanIds.size === 0 || explicitBlockFocusIds.size > 0 || contentBlocks.length <= 3)) lines.push(`  ${summary}`);
         if (body && detailedBlockIds.has(block.id)) lines.push(`  Details: ${body}`);
         if (contract && detailedBlockIds.has(block.id)) lines.push(`  Contract: ${contract}`);
@@ -28261,16 +28757,41 @@ ${JSON.stringify(decision.consequences)}`;
     }
     if (!fields.path?.trim()) throw new Error("add_source_ref requires fields.path");
     const sourceId = fields.sourceId ?? identifier("source");
+    let resolvedPath = fields.path.trim();
+    let resolvedSymbol = fields.symbol ?? null;
+    if (resolvedPath.includes(":") && !resolvedSymbol) {
+      const parts = resolvedPath.split(":");
+      resolvedPath = parts[0];
+      resolvedSymbol = parts[1];
+    }
+    let startLine = fields.startLine ?? null;
+    let endLine = fields.endLine ?? null;
+    if ((!startLine || !endLine) && this.paths?.projectRoot) {
+      const fullPath = path4.isAbsolute(resolvedPath) ? resolvedPath : path4.resolve(this.paths.projectRoot, resolvedPath);
+      try {
+        if (fs3.existsSync(fullPath)) {
+          const content = fs3.readFileSync(fullPath, "utf8");
+          const symbols = extractSymbols(content, { filePath: resolvedPath });
+          const matched = resolvedSymbol ? symbols.find((s) => s.name === resolvedSymbol || s.name.endsWith(`.${resolvedSymbol}`)) : symbols[0];
+          if (matched) {
+            startLine = matched.startLine;
+            endLine = matched.endLine;
+            if (!resolvedSymbol) resolvedSymbol = matched.name;
+          }
+        }
+      } catch {
+      }
+    }
     this.database.prepare(
       `INSERT INTO source_refs(id, block_id, path, start_line, end_line, symbol, role, git_commit, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       sourceId,
       operation.id,
-      fields.path,
-      fields.startLine ?? null,
-      fields.endLine ?? null,
-      fields.symbol ?? null,
+      resolvedPath,
+      startLine,
+      endLine,
+      resolvedSymbol,
       fields.role ?? "implementation",
       fields.gitCommit ?? null,
       timestamp
@@ -28638,7 +29159,7 @@ var ProjectServiceRouter = class {
   }
   serviceFor(input = {}) {
     const paths = resolveProjectPaths({ projectRoot: this.projectRoot(input), dataRoot: this.dataRoot });
-    const key = path3.resolve(paths.projectRoot);
+    const key = path5.resolve(paths.projectRoot);
     this.activeProjectRoot = key;
     const cached2 = this.services.get(key);
     if (cached2) {
@@ -28681,10 +29202,10 @@ var ProjectServiceRouter = class {
 // packages/mcp/src/cli.mjs
 import fs5 from "node:fs";
 import os from "node:os";
-import path4 from "node:path";
-var VERSION = "0.2.0";
+import path6 from "node:path";
+var VERSION = "0.3.0";
 var HELP = `
-Mdflow v${VERSION}: The living architecture graph for AI coding.
+mdflow v${VERSION}: A context operating system for AI coding agents.
 
 Usage:
   mdflow [command] [options]
@@ -28736,7 +29257,7 @@ async function runCli(args, router2) {
     const projectRoot = process.cwd();
     const shouldScan = args.includes("--scan") || args.includes("-s");
     try {
-      const reg = registerProject({ projectRoot, name: path4.basename(projectRoot) });
+      const reg = registerProject({ projectRoot, name: path6.basename(projectRoot) });
       console.log(`\u2713 ${reg.created ? "Initialized new" : "Opened existing"} mdflow project at ${projectRoot}`);
       const service = router2.serviceFor({ projectRoot });
       if (shouldScan && reg.created) {
@@ -28789,7 +29310,7 @@ async function runCli(args, router2) {
 }
 function bootstrapProject(service, projectRoot) {
   const operations = [];
-  const pkgPath = path4.join(projectRoot, "package.json");
+  const pkgPath = path6.join(projectRoot, "package.json");
   let pkg = {};
   if (fs5.existsSync(pkgPath)) {
     try {
@@ -28797,7 +29318,7 @@ function bootstrapProject(service, projectRoot) {
     } catch {
     }
   }
-  const projectName = pkg.name || path4.basename(projectRoot);
+  const projectName = pkg.name || path6.basename(projectRoot);
   const coreBlockId = "core-application";
   operations.push({
     action: "create_block",
@@ -28870,8 +29391,8 @@ function bootstrapProject(service, projectRoot) {
 function setupEditors() {
   const cwd = process.cwd();
   console.log("=== Setting up Mdflow MCP Server ===");
-  const cursorDir = path4.join(cwd, ".cursor");
-  const cursorMcpFile = path4.join(cursorDir, "mcp.json");
+  const cursorDir = path6.join(cwd, ".cursor");
+  const cursorMcpFile = path6.join(cursorDir, "mcp.json");
   try {
     fs5.mkdirSync(cursorDir, { recursive: true });
     let cursorConfig = { mcpServers: {} };
@@ -28891,9 +29412,9 @@ function setupEditors() {
   } catch (err) {
     console.log(`- Cursor setup skipped: ${err.message}`);
   }
-  const claudeConfigPath = path4.join(os.homedir(), "Library/Application Support/Claude/claude_desktop_config.json");
+  const claudeConfigPath = path6.join(os.homedir(), "Library/Application Support/Claude/claude_desktop_config.json");
   try {
-    if (fs5.existsSync(path4.dirname(claudeConfigPath))) {
+    if (fs5.existsSync(path6.dirname(claudeConfigPath))) {
       let claudeConfig = { mcpServers: {} };
       if (fs5.existsSync(claudeConfigPath)) {
         try {
@@ -28924,7 +29445,7 @@ function setupEditors() {
 // packages/mcp/src/server.mjs
 var router = new ProjectServiceRouter();
 var server = new McpServer(
-  { name: "mdflow", version: "0.2.0" },
+  { name: "mdflow", version: "0.3.0" },
   {
     instructions: "mdflow is project-scoped. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block does not need to belong to a Chain or have a checkpoint until a requirement, Plan, Chain gate, or explicit verification request requires one. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools."
   }
@@ -29028,6 +29549,84 @@ server.registerTool(
   async (input) => {
     const data = withProject(input, (service, payload) => service.entityOpen({ ...payload, type: "decision" }));
     return readResult(data, data.markdown, input.includeStructured);
+  }
+);
+server.registerTool(
+  "chain_code_stream",
+  {
+    description: "Extract an end-to-end code stream along an architectural Chain. Returns only targeted AST symbol slices and interfaces for each node, saving ~90% tokens compared to full file reads.",
+    inputSchema: {
+      ...projectRootInput,
+      chainId: string2().min(1),
+      maxTotalChars: number2().int().min(100).max(2e4).optional(),
+      includeStructured: boolean2().default(false)
+    }
+  },
+  async (input) => {
+    const data = withProject(input, (service, payload) => service.chainCodeStream(payload));
+    return readResult(data, data.markdown, input.includeStructured);
+  }
+);
+server.registerTool(
+  "log_sanitize",
+  {
+    description: "Sanitize build, test, or terminal command outputs. Strips ANSI noise, collapses routine compiler stdout, and isolates actionable failure stack traces to protect context window from token flooding.",
+    inputSchema: {
+      rawOutput: string2().min(1),
+      exitCode: number2().int().optional(),
+      maxChars: number2().int().min(100).max(1e4).optional(),
+      includeStructured: boolean2().default(false)
+    }
+  },
+  async (input) => {
+    const data = sanitizeTerminalOutput(input.rawOutput, {
+      exitCode: input.exitCode,
+      maxChars: input.maxChars
+    });
+    const markdown = [
+      `# Sanitized Output (${data.reductionRatio} noise reduced)`,
+      `- Original: ${data.originalLength} chars | Cleaned: ${data.sanitizedLength} chars`,
+      `- State: ${data.hasErrors ? "Failures detected" : "Clean routine output"}`,
+      "",
+      "```text",
+      data.text,
+      "```"
+    ].join("\n");
+    return readResult(data, markdown, input.includeStructured);
+  }
+);
+server.registerTool(
+  "block_code_mutate",
+  {
+    description: "Atomically mutate a specific AST symbol's implementation bound to an architecture Block. Replaces only the targeted symbol body, runs automated verification with terminal log sanitization, and automatically rolls back if tests fail.",
+    inputSchema: {
+      ...projectRootInput,
+      blockId: string2().min(1),
+      symbol: string2().min(1),
+      newCode: string2().min(1),
+      verifyCommand: string2().optional(),
+      includeStructured: boolean2().default(false)
+    }
+  },
+  async (input) => {
+    const data = withProject(input, (service, payload) => service.mutateBlockCode(payload));
+    const status = data.success ? "Successfully updated" : "Failed to update (rolled back)";
+    const md = [
+      `# Block Code Mutation: ${status}`,
+      `- Block: ${data.blockId}`,
+      `- Symbol: ${data.symbol}`,
+      `- File: ${data.filePath ?? "?"}`,
+      ...data.replacedLines ? [`- Lines: ${data.replacedLines.startLine} - ${data.replacedLines.newEndLine}`] : [],
+      ...data.error ? [`
+## Error
+${data.error}`] : [],
+      ...data.verification ? [`
+## Verification (${data.verification.passed ? "PASSED" : "FAILED"})
+\`\`\`text
+${data.verification.output}
+\`\`\``] : []
+    ].join("\n");
+    return writeResult(data, md, input.includeStructured);
   }
 );
 server.registerTool(

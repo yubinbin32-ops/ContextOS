@@ -1,8 +1,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
+import { execSync } from "node:child_process";
 import { openDatabase, transaction, exportGraphToJson, importGraphFromJson, getSyncMeta, setSyncMeta } from "./database.mjs";
 import { resolveProjectPaths } from "./paths.mjs";
 import { parseGraphPatch } from "./patch.mjs";
+import { extractSymbols, extractSymbolSlice, buildChainCodeStream, replaceSymbolSlice, detectLanguage } from "./ast.mjs";
+import { sanitizeTerminalOutput } from "./sanitizer.mjs";
 
 const BLOCK_KINDS = new Set([
   "principle",
@@ -1085,6 +1089,169 @@ export class MdflowService {
       checkpointBindings,
       checkpointDependencies,
       localizations,
+    };
+  }
+
+  chainCodeStream({ chainId, maxTotalChars = 4000 } = {}) {
+    if (!chainId?.trim()) throw new Error("chainId is required");
+    this.ensureSynced();
+    const snapshot = this.snapshot();
+    const chain = snapshot.chains.find((c) => c.id === chainId);
+    if (!chain) throw new Error(`Chain not found: ${chainId}`);
+
+    const nodeIds = snapshot.chainNodes
+      .filter((node) => node.chainId === chain.id)
+      .sort((a, b) => a.position - b.position)
+      .map((node) => node.blockId);
+
+    const streamNodes = [];
+    for (const blockId of nodeIds) {
+      const block = snapshot.blocks.find((b) => b.id === blockId);
+      if (!block) continue;
+
+      const sourceRefs = this.database
+        .prepare("SELECT path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id")
+        .all(block.id);
+
+      let code = null;
+      let filePath = null;
+      let symbol = null;
+
+      if (sourceRefs.length > 0) {
+        const ref = sourceRefs[0];
+        filePath = ref.path;
+        symbol = ref.symbol;
+        const fullPath = path.isAbsolute(filePath)
+          ? filePath
+          : path.resolve(this.paths.projectRoot, filePath);
+        try {
+          if (fs.existsSync(fullPath)) {
+            const content = fs.readFileSync(fullPath, "utf8");
+            const slice = extractSymbolSlice(content, {
+              symbol: ref.symbol,
+              startLine: ref.start_line,
+              endLine: ref.end_line,
+              maxLines: 40,
+            });
+            code = slice.code;
+          }
+        } catch {
+          code = null;
+        }
+      }
+
+      streamNodes.push({
+        blockId: block.id,
+        title: block.title,
+        filePath,
+        symbol,
+        code,
+        contract: block.contract || block.summary,
+      });
+    }
+
+    const codeStream = buildChainCodeStream(streamNodes, { maxTotalChars });
+    return {
+      chainId: chain.id,
+      title: chain.title,
+      nodes: streamNodes,
+      codeStream,
+      markdown: [
+        `# Chain Code Stream: ${chain.title} (${chain.id})`,
+        `Nodes: ${streamNodes.length} · Sliced from AST symbol facades`,
+        "",
+        codeStream,
+      ].join("\n"),
+    };
+  }
+
+  sanitizeLog({ rawOutput, maxChars = 3000, exitCode = null } = {}) {
+    return sanitizeTerminalOutput(rawOutput, { maxChars, exitCode });
+  }
+
+  mutateBlockCode({ blockId, symbol, newCode, verifyCommand = null } = {}) {
+    if (!blockId?.trim()) throw new Error("blockId is required");
+    if (!symbol?.trim()) throw new Error("symbol is required");
+    if (typeof newCode !== "string") throw new Error("newCode is required");
+
+    this.ensureSynced();
+    const snapshot = this.snapshot();
+    const block = snapshot.blocks.find((b) => b.id === blockId);
+    if (!block) throw new Error(`Block not found: ${blockId}`);
+
+    const sourceRefs = snapshot.sourceRefs.filter((ref) => ref.blockId === block.id);
+    if (!sourceRefs.length) {
+      throw new Error(`Block "${blockId}" has no bound source files (virtual blueprint)`);
+    }
+
+    const ref = sourceRefs.find((r) => r.symbol === symbol) || sourceRefs[0];
+    const filePath = ref.path;
+    const fullPath = path.isAbsolute(filePath)
+      ? filePath
+      : path.resolve(this.paths.projectRoot, filePath);
+
+    if (!fs.existsSync(fullPath)) {
+      throw new Error(`Source file not found at ${fullPath}`);
+    }
+
+    const originalCode = fs.readFileSync(fullPath, "utf8");
+    const lang = detectLanguage(fullPath);
+    const { updatedCode, replacedLines } = replaceSymbolSlice(originalCode, {
+      symbol,
+      newCode,
+      language: lang,
+    });
+
+    // Write modified code to disk
+    fs.writeFileSync(fullPath, updatedCode, "utf8");
+
+    // Optional verification with sanitizer and auto-rollback
+    if (verifyCommand) {
+      try {
+        const rawOutput = execSync(verifyCommand, {
+          cwd: this.paths.projectRoot,
+          encoding: "utf8",
+          stdio: "pipe",
+        });
+        const sanitized = sanitizeTerminalOutput(rawOutput);
+        return {
+          success: true,
+          blockId,
+          symbol,
+          filePath,
+          replacedLines,
+          verification: {
+            passed: true,
+            command: verifyCommand,
+            output: sanitized.text,
+          },
+        };
+      } catch (err) {
+        // Automatic rollback on verification failure!
+        fs.writeFileSync(fullPath, originalCode, "utf8");
+        const rawError = (err.stdout || "") + "\n" + (err.stderr || "") + "\n" + err.message;
+        const sanitized = sanitizeTerminalOutput(rawError);
+        return {
+          success: false,
+          blockId,
+          symbol,
+          filePath,
+          error: "Verification test failed. Source code automatically rolled back.",
+          verification: {
+            passed: false,
+            command: verifyCommand,
+            output: sanitized.text,
+          },
+        };
+      }
+    }
+
+    return {
+      success: true,
+      blockId,
+      symbol,
+      filePath,
+      replacedLines,
     };
   }
 
@@ -2361,7 +2528,14 @@ export class MdflowService {
         const summary = localizedValue(translations, "block", block.id, locale, "summary", block.summary);
         const body = localizedValue(translations, "block", block.id, locale, "body", block.body);
         const contract = localizedValue(translations, "block", block.id, locale, "contract", block.contract);
-        lines.push(`${index + 1}. [block:${block.id}] ${title} — ${block.architectureLayer}/${block.scope} · ${block.deliveryState}/${block.healthState}`);
+        const isGhost = block.deliveryState === "proposed" || block.deliveryState === "planned";
+        const stateTag = isGhost ? "Ghost (Virtual Blueprint)" : "Solid (Anchored)";
+        lines.push(`${index + 1}. [block:${block.id}] ${title} — ${stateTag} · ${block.architectureLayer}/${block.scope} · ${block.deliveryState}/${block.healthState}`);
+        const sources = snapshot.sourceRefs?.filter((s) => s.blockId === block.id) ?? [];
+        if (sources.length > 0) {
+          const primary = sources[0];
+          lines.push(`  Facade: ${primary.path}${primary.symbol ? ` :: ${primary.symbol}` : ""}${primary.startLine ? ` (L${primary.startLine}-L${primary.endLine})` : ""}`);
+        }
         if (summary && (selectedPlanIds.size === 0 || explicitBlockFocusIds.size > 0 || contentBlocks.length <= 3)) lines.push(`  ${summary}`);
         if (body && detailedBlockIds.has(block.id)) lines.push(`  Details: ${body}`);
         if (contract && detailedBlockIds.has(block.id)) lines.push(`  Contract: ${contract}`);
@@ -4218,6 +4392,39 @@ export class MdflowService {
     }
     if (!fields.path?.trim()) throw new Error("add_source_ref requires fields.path");
     const sourceId = fields.sourceId ?? identifier("source");
+
+    let resolvedPath = fields.path.trim();
+    let resolvedSymbol = fields.symbol ?? null;
+    if (resolvedPath.includes(":") && !resolvedSymbol) {
+      const parts = resolvedPath.split(":");
+      resolvedPath = parts[0];
+      resolvedSymbol = parts[1];
+    }
+    let startLine = fields.startLine ?? null;
+    let endLine = fields.endLine ?? null;
+
+    if ((!startLine || !endLine) && this.paths?.projectRoot) {
+      const fullPath = path.isAbsolute(resolvedPath)
+        ? resolvedPath
+        : path.resolve(this.paths.projectRoot, resolvedPath);
+      try {
+        if (fs.existsSync(fullPath)) {
+          const content = fs.readFileSync(fullPath, "utf8");
+          const symbols = extractSymbols(content, { filePath: resolvedPath });
+          const matched = resolvedSymbol
+            ? symbols.find((s) => s.name === resolvedSymbol || s.name.endsWith(`.${resolvedSymbol}`))
+            : symbols[0];
+          if (matched) {
+            startLine = matched.startLine;
+            endLine = matched.endLine;
+            if (!resolvedSymbol) resolvedSymbol = matched.name;
+          }
+        }
+      } catch {
+        // file not created yet or unreadable
+      }
+    }
+
     this.database
       .prepare(
         `INSERT INTO source_refs(id, block_id, path, start_line, end_line, symbol, role, git_commit, created_at)
@@ -4226,10 +4433,10 @@ export class MdflowService {
       .run(
         sourceId,
         operation.id,
-        fields.path,
-        fields.startLine ?? null,
-        fields.endLine ?? null,
-        fields.symbol ?? null,
+        resolvedPath,
+        startLine,
+        endLine,
+        resolvedSymbol,
         fields.role ?? "implementation",
         fields.gitCommit ?? null,
         timestamp,

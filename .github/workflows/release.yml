@@ -95,7 +95,15 @@ jobs:
           body: |
             ## mdflow ${{ github.ref_name }}
 
-            A living architecture graph for AI coding: inspect the whole system on Canvas and give MCP-compatible agents verified, task-scoped context.
+            A context operating system for AI coding agents: map the system on a native Canvas, stream task-scoped AST code, and apply verified mutations with automatic rollback.
+
+            ### Highlights
+
+            - Git-tracked architecture graph with Ghost Blueprints and AST-bound Solid Anchors
+            - Cross-file `chain_code_stream` with 99.2% fewer tokens in the included benchmark
+            - Atomic `block_code_mutate` with verification and failure rollback
+            - `log_sanitize` for compact agent-ready terminal evidence
+            - Native macOS Context Console plus cross-platform headless MCP and CLI
 
             ### Get started
 

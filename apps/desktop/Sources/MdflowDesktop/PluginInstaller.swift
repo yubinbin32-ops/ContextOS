@@ -59,19 +59,22 @@ enum PluginInstaller {
             configPath: cursorConfigURL != nil ? ".cursor/mcp.json" : "~/.cursor/mcp.json"
         ))
 
-        // 3. VS Code / Cline
-        let vscodeAppExists = FileManager.default.fileExists(atPath: "/Applications/Visual Studio Code.app")
-        let clineConfigURL = FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json")
-        let vscodeProjectURL = projectRoot?.appending(path: ".vscode/mcp.json")
-        let vscodeSynced = (vscodeProjectURL != nil && isJsonMcpConfigured(at: vscodeProjectURL!)) || isJsonMcpConfigured(at: clineConfigURL)
+        // 3. Antigravity
+        let antigravityAppExists = FileManager.default.fileExists(atPath: "/Applications/Antigravity.app") ||
+                                   FileManager.default.fileExists(atPath: FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gemini/antigravity").path)
+        let antigravityUserURL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gemini/config/mcp_config.json")
+        var antigravityProjectURL: URL? = nil
+        if let root = projectRoot {
+            antigravityProjectURL = root.appending(path: ".agents/mcp_config.json")
+        }
+        let antigravitySynced = (antigravityProjectURL != nil && isJsonMcpConfigured(at: antigravityProjectURL!)) || isJsonMcpConfigured(at: antigravityUserURL)
         platforms.append(EditorPlatformStatus(
-            id: "vscode",
-            name: "VS Code / Cline",
-            iconSystemName: "terminal.fill",
-            isAppInstalled: vscodeAppExists || vscodeProjectURL != nil,
-            isSynced: vscodeSynced,
-            configPath: vscodeProjectURL != nil ? ".vscode/mcp.json" : "cline_mcp_settings.json"
+            id: "antigravity",
+            name: "Antigravity",
+            iconSystemName: "sparkles",
+            isAppInstalled: antigravityAppExists || antigravityProjectURL != nil,
+            isSynced: antigravitySynced,
+            configPath: antigravityProjectURL != nil ? ".agents/mcp_config.json" : "~/.gemini/config/mcp_config.json"
         ))
 
         // 4. OpenCode
@@ -150,18 +153,17 @@ enum PluginInstaller {
             try? FileManager.default.createDirectory(at: userCursorDir, withIntermediateDirectories: true)
             _ = configureJsonMcp(at: userCursorDir.appending(path: "mcp.json"), serverScript: serverScript)
 
-        case "vscode":
+        case "antigravity":
             if let root = projectRoot {
-                let vscodeDir = root.appending(path: ".vscode")
-                try? FileManager.default.createDirectory(at: vscodeDir, withIntermediateDirectories: true)
-                let vscodeConfig = vscodeDir.appending(path: "mcp.json")
-                _ = configureJsonMcp(at: vscodeConfig, serverScript: serverScript)
+                let agentsDir = root.appending(path: ".agents")
+                try? FileManager.default.createDirectory(at: agentsDir, withIntermediateDirectories: true)
+                let agentsConfig = agentsDir.appending(path: "mcp_config.json")
+                _ = configureJsonMcp(at: agentsConfig, serverScript: serverScript)
             }
-            let clineConfigURL = FileManager.default.homeDirectoryForCurrentUser
-                .appending(path: "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json")
-            if FileManager.default.fileExists(atPath: clineConfigURL.deletingLastPathComponent().path) {
-                _ = configureJsonMcp(at: clineConfigURL, serverScript: serverScript)
-            }
+            let geminiConfigDir = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gemini/config")
+            try? FileManager.default.createDirectory(at: geminiConfigDir, withIntermediateDirectories: true)
+            let userConfig = geminiConfigDir.appending(path: "mcp_config.json")
+            _ = configureJsonMcp(at: userConfig, serverScript: serverScript)
 
         case "opencode":
             if let root = projectRoot {
@@ -186,7 +188,7 @@ enum PluginInstaller {
     }
 
     static func installAll(projectRoot: URL?, marketplaceRoot: URL) throws {
-        let platforms = ["claude", "cursor", "vscode", "opencode", "codex"]
+        let platforms = ["claude", "cursor", "antigravity", "opencode", "codex"]
         for p in platforms {
             try? syncPlatform(id: p, projectRoot: projectRoot, marketplaceRoot: marketplaceRoot)
         }

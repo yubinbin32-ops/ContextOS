@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible problem in the CLI, MCP server, storage, or macOS app.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to provide a focused report. Remove secrets and private source code before submitting.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - macOS app
+        - MCP server
+        - CLI
+        - Graph storage or synchronization
+        - AST slicing or mutation
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: mdflow version
+      placeholder: v0.3.0 or commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest sequence that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized logs
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS 15 / Node.js 22 / Cursor, Claude Desktop, etc.
+    validations:
+      required: true

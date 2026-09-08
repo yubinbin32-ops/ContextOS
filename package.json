@@ -1,9 +1,27 @@
 {
   "name": "mdflow",
-  "version": "0.2.0",
-  "description": "The living architecture graph for AI coding. Replaces rotting .md specs with verified, task-scoped context.",
+  "version": "0.3.0",
+  "description": "A context operating system for AI coding agents: architecture graphs, AST code streams, verified mutation, and rollback.",
   "license": "MIT",
   "type": "module",
+  "homepage": "https://dashend.cn",
+  "bugs": {
+    "url": "https://github.com/yubinbin32-ops/Mdflow-Canvas/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-coding",
+    "context-engineering",
+    "architecture",
+    "ast",
+    "developer-tools",
+    "agent-memory",
+    "local-first"
+  ],
   "bin": {
     "mdflow": "./plugins/mdflow/server/mdflow-mcp.mjs"
   },

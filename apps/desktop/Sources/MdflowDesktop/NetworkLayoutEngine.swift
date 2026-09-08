@@ -30,8 +30,8 @@ enum NetworkLayoutEngine {
     // Streets include room for Link lanes and nested Chain enclosures on both
     // neighboring Blocks. These values keep the current three-membership
     // project readable without turning the overview into a sparse wall.
-    static let horizontalStreetWidth: CGFloat = 88
-    static let verticalStreetWidth: CGFloat = 76
+    static let horizontalStreetWidth: CGFloat = 70
+    static let verticalStreetWidth: CGFloat = 60
 
     /// Creates one stable project map. `focusPaths` contains every ordered Chain,
     /// not merely the selected one: Chain topology owns the primary roads.
@@ -123,16 +123,39 @@ enum NetworkLayoutEngine {
 
         func nextComponentOrigin() -> Cell {
             guard !occupied.isEmpty else { return Cell(x: 0, y: 0) }
-            return Cell(x: occupied.map(\.x).min() ?? 0, y: (occupied.map(\.y).max() ?? 0) + 2)
+            let minX = occupied.map(\.x).min() ?? 0
+            let maxX = occupied.map(\.x).max() ?? 0
+            let minY = occupied.map(\.y).min() ?? 0
+            let maxY = occupied.map(\.y).max() ?? 0
+            let width = maxX - minX
+            let height = maxY - minY
+            if height >= width {
+                return Cell(x: maxX + 1, y: minY)
+            } else {
+                return Cell(x: minX, y: maxY + 1)
+            }
         }
 
         func bestCell(for node: String, pathNeighbors: [String], preferred: Direction?) -> Cell {
             let anchors = pathNeighbors.compactMap { result[$0] }
             let graphAnchors = (adjacency[node] ?? []).compactMap { result[$0] }
-            let origins = anchors.isEmpty ? (graphAnchors.isEmpty ? [nextComponentOrigin()] : graphAnchors) : anchors
+            let origins: [Cell]
+            if !anchors.isEmpty {
+                origins = anchors
+            } else if !graphAnchors.isEmpty {
+                origins = graphAnchors
+            } else if !occupied.isEmpty {
+                let minX = occupied.map(\.x).min() ?? 0
+                let maxX = occupied.map(\.x).max() ?? 0
+                let minY = occupied.map(\.y).min() ?? 0
+                let maxY = occupied.map(\.y).max() ?? 0
+                origins = [Cell(x: (minX + maxX) / 2, y: (minY + maxY) / 2)]
+            } else {
+                origins = [nextComponentOrigin()]
+            }
             var candidates = Set<Cell>()
             for origin in origins {
-                for radius in 1...5 {
+                for radius in 1...6 {
                     for dx in -radius...radius {
                         let dy = radius - abs(dx)
                         candidates.insert(Cell(x: origin.x + dx, y: origin.y + dy))
@@ -217,11 +240,17 @@ enum NetworkLayoutEngine {
     }
 
     private static func preferredDirection(for index: Int, in path: [String], positions: [String: Cell]) -> Direction? {
-        if index >= 2, let a = positions[path[index - 2]], let b = positions[path[index - 1]] {
-            return Direction(from: a, to: b)
+        if index >= 2, let a = positions[path[index - 2]], let b = positions[path[index - 1]],
+           let dir = Direction(from: a, to: b) {
+            if index >= 3, let prevPrev = positions[path[index - 3]],
+               Direction(from: prevPrev, to: a) == dir {
+                return (dir == .down || dir == .up) ? .right : .down
+            }
+            return dir
         }
-        if index + 2 < path.count, let a = positions[path[index + 2]], let b = positions[path[index + 1]] {
-            return Direction(from: a, to: b)
+        if index + 2 < path.count, let a = positions[path[index + 2]], let b = positions[path[index + 1]],
+           let dir = Direction(from: a, to: b) {
+            return dir
         }
         return nil
     }
@@ -238,7 +267,15 @@ enum NetworkLayoutEngine {
         } else {
             directionPenalty = 0
         }
-        return chainDistance + graphDistance + crowding + directionPenalty + abs(candidate.x) + abs(candidate.y)
+        let centerPull: Int
+        if !occupied.isEmpty {
+            let cx = occupied.map(\.x).reduce(0, +) / occupied.count
+            let cy = occupied.map(\.y).reduce(0, +) / occupied.count
+            centerPull = abs(candidate.x - cx) + abs(candidate.y - cy)
+        } else {
+            centerPull = abs(candidate.x) + abs(candidate.y)
+        }
+        return chainDistance + graphDistance + crowding + directionPenalty + centerPull
     }
 
     private static func undirectedAdjacency(nodes: [String], edges: [LayoutEdge]) -> [String: Set<String>] {
