@@ -153,6 +153,17 @@ enum ChainEnvelopeEngine {
     private struct Edge: Hashable {
         let start: CGPoint
         let end: CGPoint
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(start.x)
+            hasher.combine(start.y)
+            hasher.combine(end.x)
+            hasher.combine(end.y)
+        }
+
+        static func == (lhs: Edge, rhs: Edge) -> Bool {
+            lhs.start == rhs.start && lhs.end == rhs.end
+        }
     }
 
     private struct PointKey: Hashable {

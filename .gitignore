@@ -6,9 +6,9 @@ dist/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
-!.mdflow/mdflow.sqlite
-!benchmarks/open-source/express/.mdflow/
-!benchmarks/open-source/express/.mdflow/mdflow.sqlite
+*.sqlite-journal
+*.sqlite3
+*.sqlite3-*
 
 # Local capture sources; the curated README uses stable English asset names.
 assets/录屏*.mov

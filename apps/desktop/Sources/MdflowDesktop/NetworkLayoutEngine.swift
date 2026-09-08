@@ -701,6 +701,17 @@ enum NetworkLayoutEngine {
             else { self.start = end; self.end = start }
         }
 
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(start.x)
+            hasher.combine(start.y)
+            hasher.combine(end.x)
+            hasher.combine(end.y)
+        }
+
+        static func == (lhs: Segment, rhs: Segment) -> Bool {
+            lhs.start == rhs.start && lhs.end == rhs.end
+        }
+
         func overlaps(_ other: Segment) -> Bool {
             if start.x == end.x, other.start.x == other.end.x, start.x == other.start.x {
                 return max(start.y, other.start.y) < min(end.y, other.end.y)

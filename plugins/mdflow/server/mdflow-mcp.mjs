@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path3) {
-      let input = path3;
+    function removeDotSegments(path5) {
+      let input = path5;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3668,8 +3668,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path3 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path3 && path3 !== "/" ? path3 : void 0;
+        const path5 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path5 && path5 !== "/" ? path5 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7181,12 +7181,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs3, exportName) {
+    function addFormats(ajv, list, fs6, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs3[f]);
+        ajv.addFormat(f, fs6[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7568,8 +7568,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path3, errorMaps, issueData } = params;
-  const fullPath = [...path3, ...issueData.path || []];
+  const { data, path: path5, errorMaps, issueData } = params;
+  const fullPath = [...path5, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7684,11 +7684,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path3, key) {
+  constructor(parent, value, path5, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path3;
+    this._path = path5;
     this._key = key;
   }
   get path() {
@@ -11270,10 +11270,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path3) {
-  if (!path3)
+function getElementAtPath(obj, path5) {
+  if (!path5)
     return obj;
-  return path3.reduce((acc, key) => acc?.[key], obj);
+  return path5.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11685,11 +11685,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path3, issues) {
+function prefixIssues(path5, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path3);
+    iss.path.unshift(path5);
     return iss;
   });
 }
@@ -12118,16 +12118,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path3 = []) => {
+  const processError = (error3, path5 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path3, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path5, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path3, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path5, ...issue2.path]);
       } else {
-        const fullpath = [...path3, ...issue2.path];
+        const fullpath = [...path5, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -16632,11 +16632,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path3) {
-  if (path3.length === 0) {
+function getDotPath(path5) {
+  if (path5.length === 0) {
     return "object root";
   }
-  return path3.reduce((acc, seg, index) => {
+  return path5.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -23203,13 +23203,17 @@ var StdioServerTransport = class {
 };
 
 // packages/mcp/src/project-router.mjs
-import path2 from "node:path";
-import fs2 from "node:fs";
+import path3 from "node:path";
+import fs4 from "node:fs";
 
 // packages/mcp/src/service.mjs
-import crypto2 from "node:crypto";
+import crypto3 from "node:crypto";
+import fs3 from "node:fs";
 
 // packages/mcp/src/database.mjs
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 var SCHEMA = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -23257,7 +23261,7 @@ CREATE TABLE IF NOT EXISTS source_refs (
 );
 
 CREATE TABLE IF NOT EXISTS localized_text (
-  entity_type TEXT NOT NULL CHECK(entity_type IN ('block', 'chain', 'link', 'plan')),
+  entity_type TEXT NOT NULL CHECK(entity_type IN ('block', 'chain', 'link', 'plan', 'plan_step', 'chain_scope', 'plan_change', 'checkpoint')),
   entity_id TEXT NOT NULL,
   locale TEXT NOT NULL CHECK(locale IN ('en', 'zh-Hans')),
   field TEXT NOT NULL,
@@ -23569,6 +23573,11 @@ CREATE INDEX IF NOT EXISTS idx_checkpoint_dependencies_parent ON checkpoint_depe
 CREATE INDEX IF NOT EXISTS idx_history_entity ON history(entity_type, entity_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_change_feed_project ON change_feed(project_id, sequence DESC);
 CREATE INDEX IF NOT EXISTS idx_localized_text_entity ON localized_text(entity_type, entity_id, locale);
+
+CREATE TABLE IF NOT EXISTS sync_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 function tableSql(database, name) {
   return database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(name)?.sql ?? "";
@@ -23576,15 +23585,15 @@ function tableSql(database, name) {
 function migratePlanCapableTables(database) {
   const localizedSql = tableSql(database, "localized_text");
   const checkpointSql = tableSql(database, "checkpoints");
-  if (localizedSql.includes("'plan'") && checkpointSql.includes("'plan'")) return;
+  if (localizedSql.includes("'plan_change'") && checkpointSql.includes("'plan'")) return;
   database.exec("PRAGMA foreign_keys = OFF;");
   try {
     database.exec("BEGIN IMMEDIATE;");
-    if (!localizedSql.includes("'plan'")) {
+    if (!localizedSql.includes("'plan_change'")) {
       database.exec(`
         DROP INDEX IF EXISTS idx_localized_text_entity;
         CREATE TABLE localized_text_v2 (
-          entity_type TEXT NOT NULL CHECK(entity_type IN ('block', 'chain', 'link', 'plan')),
+          entity_type TEXT NOT NULL CHECK(entity_type IN ('block', 'chain', 'link', 'plan', 'plan_step', 'chain_scope', 'plan_change', 'checkpoint')),
           entity_id TEXT NOT NULL,
           locale TEXT NOT NULL CHECK(locale IN ('en', 'zh-Hans')),
           field TEXT NOT NULL,
@@ -23831,32 +23840,187 @@ function transaction(database, callback) {
     throw error2;
   }
 }
+var GRAPH_TABLES = [
+  { name: "projects", orderBy: "id" },
+  { name: "blocks", orderBy: "id" },
+  { name: "source_refs", orderBy: "block_id, id" },
+  { name: "chains", orderBy: "id" },
+  { name: "chain_nodes", orderBy: "chain_id, position, block_id" },
+  { name: "chain_edges", orderBy: "chain_id, position, link_id" },
+  { name: "links", orderBy: "id" },
+  { name: "background_scopes", orderBy: "block_id, scope_type, scope_value" },
+  { name: "decisions", orderBy: "id" },
+  { name: "decision_scopes", orderBy: "decision_id, scope_type, scope_value" },
+  { name: "plans", orderBy: "id" },
+  { name: "plan_chain_refs", orderBy: "plan_id, chain_id" },
+  { name: "plan_dependencies", orderBy: "plan_id, depends_on_plan_id" },
+  { name: "plan_steps", orderBy: "plan_id, position, id" },
+  { name: "plan_checkpoint_refs", orderBy: "plan_id, checkpoint_id" },
+  { name: "plan_chain_scopes", orderBy: "plan_id, position, id" },
+  { name: "plan_changes", orderBy: "plan_id, position, id" },
+  { name: "plan_chain_change_refs", orderBy: "chain_scope_id, plan_change_id" },
+  { name: "checkpoints", orderBy: "id" },
+  { name: "checkpoint_bindings", orderBy: "checkpoint_id, position, subject_type, subject_id, role" },
+  { name: "checkpoint_dependencies", orderBy: "parent_checkpoint_id, position, child_checkpoint_id" },
+  { name: "localized_text", orderBy: "entity_type, entity_id, locale, field" }
+];
+function sortObjectKeys(obj) {
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  const sorted = {};
+  for (const key of Object.keys(obj).sort()) {
+    sorted[key] = obj[key];
+  }
+  return sorted;
+}
+function queryRecentHistory(database, limit = 50) {
+  const changeSets = database.prepare(
+    `SELECT * FROM (SELECT * FROM change_sets ORDER BY created_at DESC, id DESC LIMIT ?) ORDER BY created_at ASC, id ASC`
+  ).all(limit);
+  const changeSetIds = changeSets.map((cs) => cs.id);
+  if (changeSetIds.length === 0) {
+    return { changeSets: [], history: [], changeFeed: [] };
+  }
+  const placeholders = changeSetIds.map(() => "?").join(", ");
+  const history = database.prepare(
+    `SELECT * FROM history WHERE change_set_id IN (${placeholders}) ORDER BY id ASC`
+  ).all(...changeSetIds);
+  const changeFeed = database.prepare(
+    `SELECT * FROM change_feed WHERE change_set_id IN (${placeholders}) ORDER BY sequence ASC`
+  ).all(...changeSetIds);
+  return { changeSets, history, changeFeed };
+}
+function exportGraphToJson(database, jsonPath, options = {}) {
+  const limit = options.maxChangeSets ?? 50;
+  const project = database.prepare("SELECT * FROM projects LIMIT 1").get();
+  const exportData = {};
+  for (const { name, orderBy } of GRAPH_TABLES) {
+    const rows = database.prepare(`SELECT * FROM ${name} ORDER BY ${orderBy}`).all();
+    exportData[name] = rows.map(sortObjectKeys);
+  }
+  const { changeSets, history, changeFeed } = queryRecentHistory(database, limit);
+  exportData.change_sets = changeSets.map(sortObjectKeys);
+  exportData.history = history.map(sortObjectKeys);
+  exportData.change_feed = changeFeed.map(sortObjectKeys);
+  const payload = {
+    version: 1,
+    projectId: project?.id ?? "",
+    graphRevision: project?.graph_revision ?? 0,
+    exportedAt: project?.updated_at ?? (/* @__PURE__ */ new Date()).toISOString(),
+    data: exportData
+  };
+  const jsonString = `${JSON.stringify(payload, null, 2)}
+`;
+  const hash = crypto.createHash("sha256").update(jsonString).digest("hex");
+  const directory = path.dirname(jsonPath);
+  fs.mkdirSync(directory, { recursive: true });
+  const temporaryPath = `${jsonPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  fs.writeFileSync(temporaryPath, jsonString, "utf8");
+  fs.renameSync(temporaryPath, jsonPath);
+  const stat = fs.statSync(jsonPath);
+  try {
+    database.prepare(`
+      INSERT INTO sync_meta(key, value) VALUES ('graph_json_hash', ?), ('graph_json_mtime', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(hash, String(stat.mtimeMs));
+  } catch {
+  }
+  return { jsonPath, hash, graphRevision: payload.graphRevision, mtimeMs: stat.mtimeMs };
+}
+function importGraphFromJson(database, jsonPath) {
+  if (!fs.existsSync(jsonPath)) {
+    throw new Error(`graph.json not found at ${jsonPath}`);
+  }
+  const content = fs.readFileSync(jsonPath, "utf8");
+  const payload = JSON.parse(content);
+  if (!payload || !payload.data || typeof payload.data !== "object") {
+    throw new Error(`Invalid graph.json at ${jsonPath}: missing data object`);
+  }
+  const stat = fs.statSync(jsonPath);
+  const hash = crypto.createHash("sha256").update(content).digest("hex");
+  database.exec("PRAGMA foreign_keys = OFF;");
+  try {
+    database.exec("BEGIN IMMEDIATE;");
+    const allTables = [
+      ...GRAPH_TABLES.map((t) => t.name),
+      "change_sets",
+      "history",
+      "change_feed"
+    ];
+    for (const table of allTables) {
+      database.exec(`DELETE FROM ${table};`);
+      const rows = payload.data[table] ?? [];
+      if (rows.length > 0) {
+        const cols = Object.keys(rows[0]);
+        const placeholders = cols.map(() => "?").join(", ");
+        const stmt = database.prepare(
+          `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`
+        );
+        for (const row of rows) {
+          stmt.run(...cols.map((c) => row[c]));
+        }
+      }
+    }
+    database.prepare(`
+      INSERT INTO sync_meta(key, value) VALUES ('graph_json_hash', ?), ('graph_json_mtime', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(hash, String(stat.mtimeMs));
+    database.exec("COMMIT;");
+  } catch (error2) {
+    database.exec("ROLLBACK;");
+    throw error2;
+  } finally {
+    database.exec("PRAGMA foreign_keys = ON;");
+  }
+  return { jsonPath, hash, graphRevision: payload.graphRevision, mtimeMs: stat.mtimeMs };
+}
+function getSyncMeta(database) {
+  try {
+    const rows = database.prepare("SELECT key, value FROM sync_meta").all();
+    const meta2 = {};
+    for (const row of rows) {
+      meta2[row.key] = row.value;
+    }
+    return meta2;
+  } catch {
+    return {};
+  }
+}
+function setSyncMeta(database, key, value) {
+  try {
+    database.prepare(`
+      INSERT INTO sync_meta(key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(key, String(value));
+  } catch {
+  }
+}
 
 // packages/mcp/src/paths.mjs
-import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
+import crypto2 from "node:crypto";
+import fs2 from "node:fs";
+import path2 from "node:path";
 var localDataIgnore = [
   "*",
   "!.gitignore",
   "!project.json",
-  "!mdflow.sqlite",
-  "mdflow.sqlite-wal",
-  "mdflow.sqlite-shm",
-  "mdflow.sqlite-journal",
+  "!graph.json",
+  "*.sqlite",
+  "*.sqlite-*",
+  "*.sqlite3",
+  "*.sqlite3-*",
   ""
 ].join("\n");
 function ensureLocalDataIgnore(descriptorDirectory) {
-  const ignorePath = path.join(descriptorDirectory, ".gitignore");
-  if (!fs.existsSync(ignorePath)) fs.writeFileSync(ignorePath, localDataIgnore, { flag: "wx" });
+  const ignorePath = path2.join(descriptorDirectory, ".gitignore");
+  if (!fs2.existsSync(ignorePath)) fs2.writeFileSync(ignorePath, localDataIgnore, { flag: "wx" });
 }
 function findProjectRoot(startDirectory = process.cwd()) {
-  let current = path.resolve(startDirectory);
+  let current = path2.resolve(startDirectory);
   while (true) {
-    if (fs.existsSync(path.join(current, ".mdflow", "project.json"))) {
+    if (fs2.existsSync(path2.join(current, ".mdflow", "project.json"))) {
       return current;
     }
-    const parent = path.dirname(current);
+    const parent = path2.dirname(current);
     if (parent === current) {
       throw new Error(`No .mdflow/project.json found above ${startDirectory}`);
     }
@@ -23864,8 +24028,8 @@ function findProjectRoot(startDirectory = process.cwd()) {
   }
 }
 function readProjectDescriptor(projectRoot) {
-  const descriptorPath = path.join(projectRoot, ".mdflow", "project.json");
-  const descriptor = JSON.parse(fs.readFileSync(descriptorPath, "utf8"));
+  const descriptorPath = path2.join(projectRoot, ".mdflow", "project.json");
+  const descriptor = JSON.parse(fs2.readFileSync(descriptorPath, "utf8"));
   if (!descriptor.id || !descriptor.name) {
     throw new Error(`${descriptorPath} must contain id and name`);
   }
@@ -23873,28 +24037,28 @@ function readProjectDescriptor(projectRoot) {
 }
 function registerProject(options = {}) {
   if (!options.projectRoot) throw new Error("projectRoot is required to register an mdflow project");
-  const projectRoot = fs.realpathSync(path.resolve(options.projectRoot));
-  if (!fs.statSync(projectRoot).isDirectory()) throw new Error(`${projectRoot} is not a directory`);
-  const descriptorDirectory = path.join(projectRoot, ".mdflow");
-  const descriptorPath = path.join(descriptorDirectory, "project.json");
-  if (fs.existsSync(descriptorPath)) {
+  const projectRoot = fs2.realpathSync(path2.resolve(options.projectRoot));
+  if (!fs2.statSync(projectRoot).isDirectory()) throw new Error(`${projectRoot} is not a directory`);
+  const descriptorDirectory = path2.join(projectRoot, ".mdflow");
+  const descriptorPath = path2.join(descriptorDirectory, "project.json");
+  if (fs2.existsSync(descriptorPath)) {
     ensureLocalDataIgnore(descriptorDirectory);
     return { projectRoot, descriptor: readProjectDescriptor(projectRoot), created: false };
   }
-  const name = String(options.name ?? path.basename(projectRoot)).trim();
+  const name = String(options.name ?? path2.basename(projectRoot)).trim();
   if (!name) throw new Error("Project name must not be empty");
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project";
   const descriptor = {
-    id: String(options.id ?? `${slug}-${crypto.randomUUID().slice(0, 8)}`),
+    id: String(options.id ?? `${slug}-${crypto2.randomUUID().slice(0, 8)}`),
     name,
     schemaVersion: 1
   };
-  fs.mkdirSync(descriptorDirectory, { recursive: true });
+  fs2.mkdirSync(descriptorDirectory, { recursive: true });
   ensureLocalDataIgnore(descriptorDirectory);
-  const temporaryPath = `${descriptorPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
-  fs.writeFileSync(temporaryPath, `${JSON.stringify(descriptor, null, 2)}
+  const temporaryPath = `${descriptorPath}.tmp-${process.pid}-${crypto2.randomUUID()}`;
+  fs2.writeFileSync(temporaryPath, `${JSON.stringify(descriptor, null, 2)}
 `, { flag: "wx" });
-  fs.renameSync(temporaryPath, descriptorPath);
+  fs2.renameSync(temporaryPath, descriptorPath);
   return { projectRoot, descriptor, created: true };
 }
 function resolveProjectPaths(options = {}) {
@@ -23903,15 +24067,16 @@ function resolveProjectPaths(options = {}) {
   );
   const descriptor = readProjectDescriptor(projectRoot);
   const configuredDataRoot = options.dataRoot ?? process.env.MDFLOW_DATA_DIR;
-  const dataRoot = configuredDataRoot ? path.resolve(configuredDataRoot) : path.join(projectRoot, ".mdflow");
-  const projectDataDirectory = configuredDataRoot ? path.join(dataRoot, descriptor.id) : dataRoot;
-  fs.mkdirSync(projectDataDirectory, { recursive: true });
+  const dataRoot = configuredDataRoot ? path2.resolve(configuredDataRoot) : path2.join(projectRoot, ".mdflow");
+  const projectDataDirectory = configuredDataRoot ? path2.join(dataRoot, descriptor.id) : dataRoot;
+  fs2.mkdirSync(projectDataDirectory, { recursive: true });
   return {
     projectRoot,
     descriptor,
     dataRoot,
     projectDataDirectory,
-    databasePath: path.join(projectDataDirectory, "mdflow.sqlite")
+    databasePath: path2.join(projectDataDirectory, "mdflow.sqlite"),
+    graphJsonPath: path2.join(projectDataDirectory, "graph.json")
   };
 }
 
@@ -24274,7 +24439,7 @@ function now() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function identifier(prefix) {
-  return `${prefix}_${crypto2.randomUUID()}`;
+  return `${prefix}_${crypto3.randomUUID()}`;
 }
 function parseJson(value, fallback) {
   try {
@@ -24792,7 +24957,9 @@ function taskTerms(task) {
   const terms = task.toLowerCase().split(/[^\p{L}\p{N}_-]+/u).filter((term) => term.length > 1 && !stopWords.has(term));
   const cjkRuns = task.match(/[\p{Script=Han}]+/gu) ?? [];
   for (const run of cjkRuns) {
+    if (run.length >= 2) terms.push(run);
     for (let index = 0; index < run.length - 1; index += 1) terms.push(run.slice(index, index + 2));
+    if (run.length === 1) terms.push(run);
   }
   return [...new Set(terms)];
 }
@@ -24829,12 +24996,45 @@ function foundationBlockGroups(snapshot, blocks) {
 }
 var MdflowService = class {
   constructor(options = {}) {
-    this.paths = resolveProjectPaths(options);
+    const resolvedOptions = typeof options === "string" ? { projectRoot: options } : options;
+    this.paths = resolveProjectPaths(resolvedOptions);
     this.database = openDatabase(this.paths.databasePath);
     this.ensureProject();
+    this.ensureSynced();
   }
   close() {
     this.database.close();
+  }
+  ensureSynced() {
+    const graphJsonPath = this.paths.graphJsonPath;
+    if (!graphJsonPath) return false;
+    if (!fs3.existsSync(graphJsonPath)) {
+      const hasProject2 = this.database.prepare("SELECT count(*) as count FROM projects").get()?.count > 0;
+      if (hasProject2) {
+        exportGraphToJson(this.database, graphJsonPath);
+        return true;
+      }
+      return false;
+    }
+    const stat = fs3.statSync(graphJsonPath);
+    const meta2 = getSyncMeta(this.database);
+    const hasProject = this.database.prepare("SELECT count(*) as count FROM projects").get()?.count > 0;
+    if (!hasProject) {
+      importGraphFromJson(this.database, graphJsonPath);
+      return true;
+    }
+    if (meta2.graph_json_mtime && Math.abs(stat.mtimeMs - Number(meta2.graph_json_mtime)) < 10) {
+      return false;
+    }
+    const content = fs3.readFileSync(graphJsonPath, "utf8");
+    const currentHash = crypto3.createHash("sha256").update(content).digest("hex");
+    if (meta2.graph_json_hash !== currentHash) {
+      importGraphFromJson(this.database, graphJsonPath);
+      return true;
+    } else {
+      setSyncMeta(this.database, "graph_json_mtime", String(stat.mtimeMs));
+      return false;
+    }
   }
   ensureProject() {
     const timestamp = now();
@@ -24857,9 +25057,11 @@ var MdflowService = class {
     );
   }
   project() {
+    this.ensureSynced();
     return this.database.prepare("SELECT * FROM projects WHERE id = ?").get(this.paths.descriptor.id);
   }
   snapshot() {
+    this.ensureSynced();
     const projectId = this.paths.descriptor.id;
     const blocks = this.database.prepare("SELECT * FROM blocks WHERE project_id = ? AND archived = 0 ORDER BY title").all(projectId).map(normalizeBlock);
     const chains = this.database.prepare("SELECT * FROM chains WHERE project_id = ? AND archived = 0 ORDER BY updated_at DESC").all(projectId).map(normalizeChain);
@@ -24946,7 +25148,7 @@ var MdflowService = class {
       role: row.role,
       gitCommit: row.git_commit
     }));
-    const rawCheckpoints = this.database.prepare("SELECT * FROM checkpoints WHERE project_id = ? ORDER BY updated_at DESC").all(projectId).map((row) => ({
+    const rawCheckpoints = this.database.prepare("SELECT * FROM checkpoints WHERE project_id = ? ORDER BY updated_at DESC, id ASC").all(projectId).map((row) => ({
       id: row.id,
       targetType: row.target_type,
       targetId: row.target_id,
@@ -25797,6 +25999,7 @@ ${JSON.stringify(decision.consequences)}`;
   }
   revertChangeSet({ changeSetId, actor = "agent", reason, task = "", gitHead = null, planId = null, chainScopeId = null }) {
     if (!changeSetId?.trim()) throw new Error("changeSetId is required");
+    this.ensureSynced();
     const changeSet = this.database.prepare(
       "SELECT * FROM change_sets WHERE project_id = ? AND id = ?"
     ).get(this.paths.descriptor.id, changeSetId);
@@ -25824,6 +26027,32 @@ ${JSON.stringify(decision.consequences)}`;
       return { operation: null, planId: null };
     };
     for (const item of history) {
+      if (item.action === "created") {
+        if (["block", "chain", "link", "plan", "decision"].includes(item.entity_type)) {
+          const tableName = item.entity_type === "block" ? "blocks" : item.entity_type === "chain" ? "chains" : item.entity_type === "link" ? "links" : item.entity_type === "decision" ? "decisions" : "plans";
+          const key = `${item.entity_type}:${item.entity_id}`;
+          const revision = expectedRevisions.get(key) ?? this.database.prepare(
+            `SELECT current_revision FROM ${tableName} WHERE project_id = ? AND id = ?`
+          ).get(this.paths.descriptor.id, item.entity_id)?.current_revision;
+          if (!Number.isInteger(revision)) throw new Error(`${item.entity_type}:${item.entity_id} not found`);
+          inverse.push({
+            action: `update_${item.entity_type}`,
+            id: item.entity_id,
+            expectedRevision: revision,
+            fields: { archived: true }
+          });
+          expectedRevisions.set(key, revision + 1);
+          simulatedStates.set(key, { ...simulatedStates.get(key) ?? {}, archived: true });
+          continue;
+        }
+        if (item.entity_type === "checkpoint") {
+          inverse.push({
+            action: "delete_checkpoint",
+            id: item.entity_id
+          });
+          continue;
+        }
+      }
       if (item.action === "updated" && ["block", "chain", "link", "plan"].includes(item.entity_type)) {
         const before = parseJson(item.before_json, {});
         const after = parseJson(item.after_json, {});
@@ -25900,18 +26129,52 @@ ${JSON.stringify(decision.consequences)}`;
     const backgroundRuleIds = new Set(snapshot.backgroundScopes.map((scope) => scope.blockId));
     const planSignals = /* @__PURE__ */ new Set(["plan", "todo", "roadmap", "progress", "status", "next", "blocker", "blocked", "release", "readiness", "\u8BA1\u5212", "\u8FDB\u5EA6", "\u963B\u585E", "\u53D1\u5E03"]);
     const taskMentionsPlan = terms.some((term) => planSignals.has(term));
-    const scoreText = (text) => terms.reduce((score, term) => score + (text.toLowerCase().includes(term) ? 1 : 0), 0);
+    const scoreText = (text, weight = 1) => {
+      if (!text) return 0;
+      const lower = text.toLowerCase();
+      let matchCount = 0;
+      for (const term of terms) {
+        if (lower.includes(term)) {
+          matchCount += weight * (term.length >= 4 ? 2 : 1);
+        }
+      }
+      return matchCount;
+    };
     const scoredBlocks = snapshot.blocks.filter((block) => !backgroundRuleIds.has(block.id) && block.kind !== "decision").map((block) => {
-      const semanticScore = scoreText(`${block.title} ${block.summary} ${block.body} ${block.contract} ${block.scope} ${block.architectureLayer} ${block.tags.join(" ")} ${localizedSearchText(snapshot, "block", block.id)}`);
+      let semanticScore = 0;
+      semanticScore += scoreText(block.title, 5);
+      semanticScore += scoreText(block.summary, 3);
+      semanticScore += scoreText(block.tags.join(" "), 4);
+      semanticScore += scoreText(block.contract, 3);
+      semanticScore += scoreText(block.scope, 2);
+      semanticScore += scoreText(block.architectureLayer, 2);
+      semanticScore += scoreText(block.body, 1);
+      semanticScore += scoreText(localizedSearchText(snapshot, "block", block.id), 3);
       return { block, score: semanticScore + (focusRefs.includes(`block:${block.id}`) ? 100 : 0) };
     }).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score);
-    const scoredChains = snapshot.chains.map((chain) => ({
-      chain,
-      score: scoreText(`${chain.title} ${chain.intent} ${chain.inputContract} ${chain.outputContract} ${localizedSearchText(snapshot, "chain", chain.id)}`) + (focusRefs.includes(`chain:${chain.id}`) ? 100 : 0)
-    })).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score);
+    const scoredChains = snapshot.chains.map((chain) => {
+      let semanticScore = 0;
+      semanticScore += scoreText(chain.title, 5);
+      semanticScore += scoreText(chain.intent, 3);
+      semanticScore += scoreText(chain.inputContract, 3);
+      semanticScore += scoreText(chain.outputContract, 3);
+      semanticScore += scoreText(localizedSearchText(snapshot, "chain", chain.id), 3);
+      return {
+        chain,
+        score: semanticScore + (focusRefs.includes(`chain:${chain.id}`) ? 100 : 0)
+      };
+    }).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score);
     const scoredPlans = snapshot.plans.map((plan) => {
       const focused = focusRefs.includes(`plan:${plan.id}`);
-      const semanticScore = scoreText(`${plan.title} ${plan.summary} ${plan.goal} ${plan.status} ${plan.nextAction} ${JSON.stringify(plan.proposedDelta)} ${JSON.stringify(plan.blockers)} ${localizedSearchText(snapshot, "plan", plan.id)}`);
+      let semanticScore = 0;
+      semanticScore += scoreText(plan.title, 5);
+      semanticScore += scoreText(plan.summary, 3);
+      semanticScore += scoreText(plan.goal, 3);
+      semanticScore += scoreText(plan.status, 2);
+      semanticScore += scoreText(plan.nextAction, 2);
+      semanticScore += scoreText(JSON.stringify(plan.proposedDelta), 1);
+      semanticScore += scoreText(JSON.stringify(plan.blockers), 2);
+      semanticScore += scoreText(localizedSearchText(snapshot, "plan", plan.id), 3);
       return { plan, semanticScore, score: semanticScore + (focused ? 100 : 0), focused };
     }).filter((entry) => entry.focused || entry.semanticScore >= 3 || taskMentionsPlan && entry.semanticScore >= 1).sort((a, b) => b.score - a.score);
     if (scoredBlocks.length === 0 && scoredChains.length === 0 && scoredPlans.length === 0) {
@@ -25958,15 +26221,15 @@ ${JSON.stringify(decision.consequences)}`;
       if (selectedPlanIds.has(scope.planId)) selectedChainIds.add(scope.chainId);
     }
     for (const chainId of selectedChainIds) {
-      const path3 = snapshot.chainNodes.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.blockId);
+      const path5 = snapshot.chainNodes.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.blockId);
       if (focusRefs.includes(`chain:${chainId}`)) {
-        for (const blockId of path3.slice(0, 10)) selectedBlockIds.add(blockId);
+        for (const blockId of path5.slice(0, 10)) selectedBlockIds.add(blockId);
         continue;
       }
-      const matchingPositions = path3.flatMap((blockId, index) => selectedBlockIds.has(blockId) ? [index] : []);
+      const matchingPositions = path5.flatMap((blockId, index) => selectedBlockIds.has(blockId) ? [index] : []);
       for (const position of matchingPositions) {
         for (const index of [position - 1, position, position + 1]) {
-          if (path3[index]) selectedBlockIds.add(path3[index]);
+          if (path5[index]) selectedBlockIds.add(path5[index]);
         }
       }
     }
@@ -26097,8 +26360,8 @@ ${JSON.stringify(decision.consequences)}`;
       lines.push("## Target chains");
       for (const chain of relevantChains) {
         const title = localizedValue(translations, "chain", chain.id, locale, "title", chain.title);
-        const path3 = snapshot.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position).map((node2) => `block:${node2.blockId}`).join(" \u2192 ");
-        lines.push(`- [chain:${chain.id}] ${title} \u2014 ${chain.deliveryState}/${chain.healthState}${path3 ? ` \xB7 path ${path3}` : ""}`);
+        const path5 = snapshot.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position).map((node2) => `block:${node2.blockId}`).join(" \u2192 ");
+        lines.push(`- [chain:${chain.id}] ${title} \u2014 ${chain.deliveryState}/${chain.healthState}${path5 ? ` \xB7 path ${path5}` : ""}`);
         const intent = localizedValue(translations, "chain", chain.id, locale, "intent", chain.intent);
         if (intent && (selectedPlanIds.size === 0 || hasExplicitChainFocus)) lines.push(`  ${intent}`);
       }
@@ -26724,13 +26987,14 @@ ${JSON.stringify(decision.consequences)}`;
     if (!Array.isArray(operations) || operations.length === 0) throw new Error("operations are required");
     if (operations.length > maxOperations) throw new Error(`graph_mutate accepts at most ${maxOperations} operations`);
     if (JSON.stringify(operations).length > maxInputBytes) throw new Error("graph_mutate input exceeds 64 KB");
+    this.ensureSynced();
     const database = this.database;
     const projectId = this.paths.descriptor.id;
     const changeSetId = identifier("change");
     const timestamp = now();
     const receipts = [];
     const historyContext = this.resolveHistoryContext(planId, chainScopeId);
-    return transaction(database, () => {
+    const mutationResult = transaction(database, () => {
       database.prepare(
         `INSERT INTO change_sets(id, project_id, actor, reason, task, git_head, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -26781,6 +27045,13 @@ ${JSON.stringify(decision.consequences)}`;
       const graphRevision = database.prepare("SELECT graph_revision FROM projects WHERE id = ?").get(projectId).graph_revision;
       return { changeSetId, graphRevision, receipts };
     });
+    if (this.paths.graphJsonPath) {
+      try {
+        exportGraphToJson(this.database, this.paths.graphJsonPath);
+      } catch {
+      }
+    }
+    return mutationResult;
   }
   historyStateForOperation(operation, entityType, id) {
     if (operation.action === "update_plan_change") {
@@ -26871,6 +27142,8 @@ ${JSON.stringify(decision.consequences)}`;
         return this.createBlock(operation, context);
       case "create_checkpoint":
         return this.createCheckpoint(operation, context);
+      case "delete_checkpoint":
+        return this.deleteCheckpoint(operation, context);
       case "record_checkpoint":
         return this.recordCheckpointOperation(operation, context);
       case "update_block":
@@ -27774,6 +28047,25 @@ ${JSON.stringify(decision.consequences)}`;
     }
     return { entityType: "checkpoint", id, action: "created", revision: 1, summary: fields.title.trim() };
   }
+  deleteCheckpoint(operation, { timestamp }) {
+    const id = operation.id;
+    if (!id) throw new Error("checkpoint id is required for delete_checkpoint");
+    const checkpoint = this.database.prepare(
+      "SELECT * FROM checkpoints WHERE project_id = ? AND id = ?"
+    ).get(this.paths.descriptor.id, id);
+    if (!checkpoint) throw new Error(`checkpoint:${id} not found`);
+    this.database.prepare("DELETE FROM checkpoint_bindings WHERE checkpoint_id = ?").run(id);
+    this.database.prepare("DELETE FROM checkpoint_dependencies WHERE parent_checkpoint_id = ? OR child_checkpoint_id = ?").run(id, id);
+    this.database.prepare("DELETE FROM plan_checkpoint_refs WHERE checkpoint_id = ?").run(id);
+    this.database.prepare("DELETE FROM checkpoints WHERE id = ?").run(id);
+    return {
+      entityType: "checkpoint",
+      id,
+      action: "deleted",
+      revision: checkpoint.current_revision + 1,
+      summary: `Deleted checkpoint ${id}`
+    };
+  }
   recordCheckpointOperation(operation, { timestamp }) {
     const fields = operation.fields ?? {};
     if (!["block", "chain", "link", "plan"].includes(fields.targetType)) {
@@ -28326,7 +28618,7 @@ function createService(options = {}) {
 // packages/mcp/src/project-router.mjs
 function databaseFileIdentity(databasePath) {
   try {
-    const stat = fs2.statSync(databasePath);
+    const stat = fs4.statSync(databasePath);
     return `${stat.dev}:${stat.ino}`;
   } catch {
     return null;
@@ -28346,7 +28638,7 @@ var ProjectServiceRouter = class {
   }
   serviceFor(input = {}) {
     const paths = resolveProjectPaths({ projectRoot: this.projectRoot(input), dataRoot: this.dataRoot });
-    const key = path2.resolve(paths.projectRoot);
+    const key = path3.resolve(paths.projectRoot);
     this.activeProjectRoot = key;
     const cached2 = this.services.get(key);
     if (cached2) {
@@ -28357,6 +28649,7 @@ var ProjectServiceRouter = class {
         this.services.delete(key);
         this.serviceIdentities.delete(key);
       } else {
+        cached2.ensureSynced();
         this.services.delete(key);
         this.services.set(key, cached2);
         return cached2;
@@ -28384,6 +28677,249 @@ var ProjectServiceRouter = class {
     this.serviceIdentities.clear();
   }
 };
+
+// packages/mcp/src/cli.mjs
+import fs5 from "node:fs";
+import os from "node:os";
+import path4 from "node:path";
+var VERSION = "0.2.0";
+var HELP = `
+Mdflow v${VERSION}: The living architecture graph for AI coding.
+
+Usage:
+  mdflow [command] [options]
+
+Commands:
+  serve                 Start MCP stdio server (default when invoked by AI editors)
+  init [--scan]         Initialize .mdflow project (optionally scan code to seed blocks)
+  status                Show graph revision, blocks, chains, and active plans
+  export                Export .mdflow/graph.json from local SQLite cache
+  import                Import .mdflow/graph.json into local SQLite cache
+  setup                 Configure MCP in Cursor, Claude Desktop, and VS Code
+
+Options:
+  -v, --version         Show version
+  -h, --help            Show this help
+`;
+async function runCli(args, router2) {
+  const command = args[0]?.toLowerCase();
+  if (!command || command === "-h" || command === "--help" || command === "help") {
+    console.log(HELP.trim());
+    return;
+  }
+  if (command === "-v" || command === "--version" || command === "version") {
+    console.log(`mdflow v${VERSION}`);
+    return;
+  }
+  if (command === "status") {
+    const projectRoot = process.cwd();
+    try {
+      const service = router2.serviceFor({ projectRoot });
+      const snap = service.snapshot();
+      console.log(`Project: ${snap.project.name} (${snap.project.id})`);
+      console.log(`Graph Revision: ${snap.project.graphRevision}`);
+      console.log(`Blocks: ${snap.blocks.length} | Chains: ${snap.chains.length} | Plans: ${snap.plans.length} | Checkpoints: ${snap.checkpoints.length}`);
+      const activePlans = snap.plans.filter((p) => p.status === "active");
+      if (activePlans.length > 0) {
+        console.log(`Active Plans (${activePlans.length}):`);
+        for (const p of activePlans) {
+          console.log(`  - [${p.id}] ${p.title} (${p.status})`);
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to read status: ${err.message}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (command === "init") {
+    const projectRoot = process.cwd();
+    const shouldScan = args.includes("--scan") || args.includes("-s");
+    try {
+      const reg = registerProject({ projectRoot, name: path4.basename(projectRoot) });
+      console.log(`\u2713 ${reg.created ? "Initialized new" : "Opened existing"} mdflow project at ${projectRoot}`);
+      const service = router2.serviceFor({ projectRoot });
+      if (shouldScan && reg.created) {
+        console.log("Scanning repository structure to bootstrap initial architecture...");
+        const bootstrapped = bootstrapProject(service, projectRoot);
+        console.log(`\u2713 Created ${bootstrapped.blocks} initial blocks and 1 baseline chain.`);
+      }
+      if (!fs5.existsSync(service.paths.graphJsonPath)) {
+        exportGraphToJson(service.database, service.paths.graphJsonPath);
+        console.log(`\u2713 Created .mdflow/graph.json text source of truth`);
+      }
+      console.log("\nReady! Launch the Mdflow Desktop App or connect your AI editor via MCP.");
+    } catch (err) {
+      console.error(`Failed to initialize project: ${err.message}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (command === "export") {
+    const projectRoot = process.cwd();
+    try {
+      const service = router2.serviceFor({ projectRoot });
+      const res = exportGraphToJson(service.database, service.paths.graphJsonPath);
+      console.log(`\u2713 Exported .mdflow/graph.json (revision ${res.graphRevision}, hash: ${res.hash.slice(0, 12)})`);
+    } catch (err) {
+      console.error(`Export failed: ${err.message}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (command === "import") {
+    const projectRoot = process.cwd();
+    try {
+      const service = router2.serviceFor({ projectRoot });
+      const res = importGraphFromJson(service.database, service.paths.graphJsonPath);
+      console.log(`\u2713 Imported .mdflow/graph.json (revision ${res.graphRevision}, hash: ${res.hash.slice(0, 12)})`);
+    } catch (err) {
+      console.error(`Import failed: ${err.message}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (command === "setup") {
+    setupEditors();
+    return;
+  }
+  console.error(`Unknown command: ${command}`);
+  console.log(HELP.trim());
+  process.exitCode = 1;
+}
+function bootstrapProject(service, projectRoot) {
+  const operations = [];
+  const pkgPath = path4.join(projectRoot, "package.json");
+  let pkg = {};
+  if (fs5.existsSync(pkgPath)) {
+    try {
+      pkg = JSON.parse(fs5.readFileSync(pkgPath, "utf8"));
+    } catch {
+    }
+  }
+  const projectName = pkg.name || path4.basename(projectRoot);
+  const coreBlockId = "core-application";
+  operations.push({
+    action: "create_block",
+    id: coreBlockId,
+    fields: {
+      title: `${projectName} Core`,
+      summary: pkg.description || "Core application logic and entry points",
+      kind: "service",
+      architectureLayer: "application",
+      scope: "general"
+    }
+  });
+  const dirs = fs5.readdirSync(projectRoot, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.name.startsWith(".") && d.name !== "node_modules").map((d) => d.name);
+  if (dirs.some((d) => ["src", "app", "lib"].includes(d))) {
+    operations.push({
+      action: "create_block",
+      id: "domain-services",
+      fields: {
+        title: "Domain Services",
+        summary: "Business domain models, utilities, and core algorithms",
+        kind: "service",
+        architectureLayer: "domain",
+        scope: "general"
+      }
+    });
+  }
+  if (dirs.some((d) => ["api", "routes", "controllers", "server"].includes(d)) || pkg.dependencies?.express || pkg.dependencies?.hono) {
+    operations.push({
+      action: "create_block",
+      id: "api-boundary",
+      fields: {
+        title: "API Gateway & Endpoints",
+        summary: "External API routing, validation, and serialization",
+        kind: "service",
+        architectureLayer: "boundary",
+        scope: "general"
+      }
+    });
+  }
+  if (dirs.some((d) => ["test", "tests", "__tests__"].includes(d))) {
+    operations.push({
+      action: "create_block",
+      id: "verification-suite",
+      fields: {
+        title: "Verification Suite",
+        summary: "Automated unit, integration, and regression tests",
+        kind: "test",
+        architectureLayer: "quality",
+        scope: "general"
+      }
+    });
+  }
+  if (operations.length >= 2) {
+    operations.push({
+      action: "create_chain",
+      id: "baseline-flow",
+      fields: {
+        title: "Main Request Pipeline",
+        purpose: "architecture",
+        intent: "End-to-end execution flow from entry point to domain core"
+      }
+    });
+  }
+  service.mutate({
+    reason: "Bootstrap initial project architecture",
+    operations
+  });
+  return { blocks: operations.filter((op) => op.action === "create_block").length, chains: operations.some((op) => op.action === "create_chain") ? 1 : 0 };
+}
+function setupEditors() {
+  const cwd = process.cwd();
+  console.log("=== Setting up Mdflow MCP Server ===");
+  const cursorDir = path4.join(cwd, ".cursor");
+  const cursorMcpFile = path4.join(cursorDir, "mcp.json");
+  try {
+    fs5.mkdirSync(cursorDir, { recursive: true });
+    let cursorConfig = { mcpServers: {} };
+    if (fs5.existsSync(cursorMcpFile)) {
+      try {
+        cursorConfig = JSON.parse(fs5.readFileSync(cursorMcpFile, "utf8"));
+      } catch {
+      }
+    }
+    cursorConfig.mcpServers = cursorConfig.mcpServers || {};
+    cursorConfig.mcpServers.mdflow = {
+      command: "npx",
+      args: ["-y", "github:yubinbin32-ops/Mdflow-Canvas", "serve"]
+    };
+    fs5.writeFileSync(cursorMcpFile, JSON.stringify(cursorConfig, null, 2));
+    console.log(`\u2713 Configured Cursor: ${cursorMcpFile}`);
+  } catch (err) {
+    console.log(`- Cursor setup skipped: ${err.message}`);
+  }
+  const claudeConfigPath = path4.join(os.homedir(), "Library/Application Support/Claude/claude_desktop_config.json");
+  try {
+    if (fs5.existsSync(path4.dirname(claudeConfigPath))) {
+      let claudeConfig = { mcpServers: {} };
+      if (fs5.existsSync(claudeConfigPath)) {
+        try {
+          claudeConfig = JSON.parse(fs5.readFileSync(claudeConfigPath, "utf8"));
+        } catch {
+        }
+      }
+      claudeConfig.mcpServers = claudeConfig.mcpServers || {};
+      claudeConfig.mcpServers.mdflow = {
+        command: "npx",
+        args: ["-y", "github:yubinbin32-ops/Mdflow-Canvas", "serve"]
+      };
+      fs5.writeFileSync(claudeConfigPath, JSON.stringify(claudeConfig, null, 2));
+      console.log(`\u2713 Configured Claude Desktop: ${claudeConfigPath}`);
+    }
+  } catch (err) {
+    console.log(`- Claude Desktop setup skipped: ${err.message}`);
+  }
+  console.log("\nMCP server configuration for other tools (Windsurf / VS Code / Roo Code):");
+  console.log(JSON.stringify({
+    mdflow: {
+      command: "npx",
+      args: ["-y", "github:yubinbin32-ops/Mdflow-Canvas", "serve"]
+    }
+  }, null, 2));
+}
 
 // packages/mcp/src/server.mjs
 var router = new ProjectServiceRouter();
@@ -28770,6 +29306,11 @@ server.registerTool(
     return writeResult(data, void 0, input.includeStructured);
   }
 );
+var cliArgs = process.argv.slice(2);
+if (cliArgs.length > 0 && cliArgs[0] !== "serve" && !cliArgs[0].startsWith("--mcp")) {
+  await runCli(cliArgs, router);
+  process.exit(0);
+}
 var transport = new StdioServerTransport();
 await server.connect(transport);
 process.on("SIGINT", () => {

@@ -289,45 +289,277 @@ private struct SettingsView: View {
     @AppStorage("mdflow.appearance") private var appearance = AppearancePreference.system.rawValue
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack { Text(store.text("settings")).font(.system(size: 20, weight: .semibold, design: .rounded)); Spacer(); Button(store.text("done")) { dismiss() } }
-            VStack(alignment: .leading, spacing: 8) {
-                label(store.text("language"))
-                Picker(store.text("language"), selection: $store.language) {
-                    Text(store.text("system")).tag(AppLanguage.system); Text(store.text("chinese")).tag(AppLanguage.zhHans); Text(store.text("english")).tag(AppLanguage.english)
-                }.pickerStyle(.segmented)
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                label(store.text("appearance"))
-                Picker(store.text("appearance"), selection: $appearance) {
-                    Text(store.text("system")).tag(AppearancePreference.system.rawValue)
-                    Text(store.text("light")).tag(AppearancePreference.light.rawValue)
-                    Text(store.text("dark")).tag(AppearancePreference.dark.rawValue)
+        VStack(spacing: 0) {
+            // macOS / iOS Sheet Navigation Bar
+            HStack(alignment: .center) {
+                Text(store.text("settings"))
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundStyle(MdflowTheme.ink)
+                Spacer()
+                Button(store.text("done")) {
+                    dismiss()
                 }
-                .pickerStyle(.segmented)
-                .accessibilityLabel(store.text("appearance"))
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .keyboardShortcut(.defaultAction)
             }
-            VStack(alignment: .leading, spacing: 8) {
-                label(store.text("plugin")); Text(store.text("pluginHelp")).font(.system(size: 12, design: .rounded))
-                HStack {
-                    Button(store.pluginInstallStatus == .installing ? store.text("installingPlugin") : store.text("installPlugin")) { store.installPlugin() }
-                        .buttonStyle(.borderedProminent).disabled(store.pluginInstallStatus == .installing)
-                    Button(store.text("revealPlugin")) { store.revealPlugin() }
+            .padding(.horizontal, 22)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 14) {
+                // Group 1: 偏好设置 (PREFERENCES)
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionHeader(store.activeLocale == "zh-Hans" ? "偏好设置" : "PREFERENCES")
+                    VStack(spacing: 0) {
+                        HStack {
+                            Label {
+                                Text(store.text("language"))
+                                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                                    .foregroundStyle(MdflowTheme.ink)
+                            } icon: {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 12.5, weight: .medium))
+                                    .foregroundStyle(MdflowTheme.muted)
+                                    .frame(width: 20)
+                            }
+                            Spacer()
+                            Picker("", selection: $store.language) {
+                                Text(store.text("system")).tag(AppLanguage.system)
+                                Text(store.text("chinese")).tag(AppLanguage.zhHans)
+                                Text(store.text("english")).tag(AppLanguage.english)
+                            }
+                            .pickerStyle(.menu)
+                            .frame(width: 120)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+
+                        Divider().padding(.leading, 38)
+
+                        HStack {
+                            Label {
+                                Text(store.text("appearance"))
+                                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                                    .foregroundStyle(MdflowTheme.ink)
+                            } icon: {
+                                Image(systemName: "circle.righthalf.filled")
+                                    .font(.system(size: 12.5, weight: .medium))
+                                    .foregroundStyle(MdflowTheme.muted)
+                                    .frame(width: 20)
+                            }
+                            Spacer()
+                            Picker("", selection: $appearance) {
+                                Text(store.text("system")).tag(AppearancePreference.system.rawValue)
+                                Text(store.text("light")).tag(AppearancePreference.light.rawValue)
+                                Text(store.text("dark")).tag(AppearancePreference.dark.rawValue)
+                            }
+                            .pickerStyle(.menu)
+                            .frame(width: 120)
+                            .accessibilityLabel(store.text("appearance"))
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                    }
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(MdflowTheme.hairline, lineWidth: 0.8))
                 }
-                if case .installed = store.pluginInstallStatus { Label(store.text("pluginInstalled"), systemImage: "checkmark.circle.fill").foregroundStyle(MdflowTheme.success) }
-                if case .failed(let message) = store.pluginInstallStatus { Text("\(store.text("pluginInstallFailed")): \(message)").foregroundStyle(MdflowTheme.failure) }
+
+                // Group 2: AI 编辑器集成 (AI CLIENT MCP BRIDGES)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        sectionHeader(store.text("plugin").uppercased())
+                        Spacer()
+                        Button(action: { store.syncAllEditors() }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                    .font(.system(size: 9.5, weight: .bold))
+                                Text(store.text("syncAll"))
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(MdflowTheme.focus)
+                        .padding(.trailing, 4)
+                    }
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(store.editorStatuses.enumerated()), id: \.element.id) { index, status in
+                            if index > 0 {
+                                Divider().padding(.leading, 50)
+                            }
+                            EditorPlatformRow(status: status, store: store)
+                        }
+                    }
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(MdflowTheme.hairline, lineWidth: 0.8))
+
+                    Text(store.text("pluginHelp"))
+                        .font(.system(size: 10.5, design: .rounded))
+                        .foregroundStyle(MdflowTheme.muted)
+                        .padding(.horizontal, 6)
+                        .padding(.top, 1)
+                }
+
+                // Group 3: 数据存储与内核 (DATA ENGINE & STORAGE)
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionHeader(store.text("liveData").uppercased())
+
+                    VStack(spacing: 0) {
+                        HStack(alignment: .center) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(store.activeLocale == "zh-Hans" ? "当前数据库" : "DATABASE")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .tracking(0.7)
+                                    .foregroundStyle(MdflowTheme.muted)
+                                Text(store.databasePath)
+                                    .font(.system(size: 10.5, design: .monospaced))
+                                    .foregroundStyle(MdflowTheme.ink)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                            }
+                            Spacer()
+                            Button(store.text("changeProject")) {
+                                store.chooseProject()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+
+                        Divider().padding(.leading, 14)
+
+                        HStack {
+                            HStack(spacing: 5) {
+                                Circle().fill(MdflowTheme.success).frame(width: 5.5, height: 5.5)
+                                Text(store.text("liveHelp"))
+                                    .font(.system(size: 10.5, design: .rounded))
+                                    .foregroundStyle(MdflowTheme.muted)
+                            }
+                            Spacer()
+                            Text("SQLITE · GRAPH.JSON")
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .tracking(0.8)
+                                .foregroundStyle(MdflowTheme.muted)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                    }
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(MdflowTheme.hairline, lineWidth: 0.8))
+                }
             }
-            VStack(alignment: .leading, spacing: 8) {
-                label(store.text("liveData")); Text(store.databasePath).font(.system(size: 10.5, design: .monospaced)).foregroundStyle(MdflowTheme.muted).textSelection(.enabled)
-                Text(store.text("liveHelp")).font(.system(size: 12, design: .rounded)); Button(store.text("changeProject")) { store.chooseProject() }
-            }
-            Spacer()
+            .padding(.horizontal, 22)
+            .padding(.top, 14)
+            .padding(.bottom, 18)
         }
-        .padding(28).frame(width: 480, height: 410)
+        .frame(width: 530)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func label(_ value: String) -> some View {
-        Text(value.uppercased()).font(.system(size: 9, weight: .bold, design: .monospaced)).tracking(1.4).foregroundStyle(MdflowTheme.muted)
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+            .tracking(1.1)
+            .foregroundStyle(MdflowTheme.muted)
+            .padding(.leading, 6)
+    }
+}
+
+private struct EditorPlatformRow: View {
+    let status: EditorPlatformStatus
+    @ObservedObject var store: GraphStore
+
+    var body: some View {
+        HStack(spacing: 11) {
+            // iOS-style Precision Icon Squircle
+            ZStack {
+                RoundedRectangle(cornerRadius: 6.5)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6.5)
+                            .stroke(Color.black.opacity(0.07), lineWidth: 0.75)
+                    )
+
+                Image(systemName: iconName(for: status.id))
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(MdflowTheme.ink)
+            }
+            .frame(width: 26, height: 26)
+
+            // Platform Details
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(status.name)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(MdflowTheme.ink)
+
+                    if !status.isAppInstalled {
+                        Text(store.text("notDetected"))
+                            .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                            .tracking(0.6)
+                            .foregroundStyle(MdflowTheme.muted)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.black.opacity(0.04)))
+                    }
+                }
+
+                Text(status.configPath)
+                    .font(.system(size: 8.5, design: .monospaced))
+                    .foregroundStyle(MdflowTheme.muted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer()
+
+            // Trailing Checkbox & Sync Status
+            HStack(spacing: 8) {
+                // Interactive Checkbox Button
+                Button(action: {
+                    store.syncEditor(id: status.id)
+                }) {
+                    Image(systemName: status.isSynced ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(status.isSynced ? MdflowTheme.success : MdflowTheme.muted.opacity(0.4))
+                }
+                .buttonStyle(.plain)
+                .help(status.isSynced ? store.text("synced") : store.text("syncSingle"))
+
+                if status.isSynced {
+                    Text(store.text("synced"))
+                        .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                        .foregroundStyle(MdflowTheme.muted)
+                        .frame(width: 48, alignment: .trailing)
+                } else {
+                    Button(store.text("syncSingle")) {
+                        store.syncEditor(id: status.id)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+    }
+
+    private func iconName(for id: String) -> String {
+        switch id {
+        case "claude": return "sparkles"
+        case "cursor": return "chevron.left.forwardslash.chevron.right"
+        case "vscode": return "curlybraces.square"
+        case "opencode": return "cube.transparent"
+        case "codex": return "terminal"
+        default: return "cpu"
+        }
     }
 }
 

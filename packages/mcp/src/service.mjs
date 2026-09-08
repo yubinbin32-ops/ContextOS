@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { openDatabase, transaction } from "./database.mjs";
+import { openDatabase, transaction, exportGraphToJson, importGraphFromJson, getSyncMeta, setSyncMeta } from "./database.mjs";
 import { resolveProjectPaths } from "./paths.mjs";
 import { parseGraphPatch } from "./patch.mjs";
 
@@ -738,7 +738,9 @@ function taskTerms(task) {
     .filter((term) => term.length > 1 && !stopWords.has(term));
   const cjkRuns = task.match(/[\p{Script=Han}]+/gu) ?? [];
   for (const run of cjkRuns) {
+    if (run.length >= 2) terms.push(run);
     for (let index = 0; index < run.length - 1; index += 1) terms.push(run.slice(index, index + 2));
+    if (run.length === 1) terms.push(run);
   }
   return [...new Set(terms)];
 }
@@ -780,13 +782,51 @@ function foundationBlockGroups(snapshot, blocks) {
 
 export class MdflowService {
   constructor(options = {}) {
-    this.paths = resolveProjectPaths(options);
+    const resolvedOptions = typeof options === "string" ? { projectRoot: options } : options;
+    this.paths = resolveProjectPaths(resolvedOptions);
     this.database = openDatabase(this.paths.databasePath);
     this.ensureProject();
+    this.ensureSynced();
   }
 
   close() {
     this.database.close();
+  }
+
+  ensureSynced() {
+    const graphJsonPath = this.paths.graphJsonPath;
+    if (!graphJsonPath) return false;
+    if (!fs.existsSync(graphJsonPath)) {
+      const hasProject = this.database.prepare("SELECT count(*) as count FROM projects").get()?.count > 0;
+      if (hasProject) {
+        exportGraphToJson(this.database, graphJsonPath);
+        return true;
+      }
+      return false;
+    }
+
+    const stat = fs.statSync(graphJsonPath);
+    const meta = getSyncMeta(this.database);
+    const hasProject = this.database.prepare("SELECT count(*) as count FROM projects").get()?.count > 0;
+
+    if (!hasProject) {
+      importGraphFromJson(this.database, graphJsonPath);
+      return true;
+    }
+
+    if (meta.graph_json_mtime && Math.abs(stat.mtimeMs - Number(meta.graph_json_mtime)) < 10) {
+      return false;
+    }
+
+    const content = fs.readFileSync(graphJsonPath, "utf8");
+    const currentHash = crypto.createHash("sha256").update(content).digest("hex");
+    if (meta.graph_json_hash !== currentHash) {
+      importGraphFromJson(this.database, graphJsonPath);
+      return true;
+    } else {
+      setSyncMeta(this.database, "graph_json_mtime", String(stat.mtimeMs));
+      return false;
+    }
   }
 
   ensureProject() {
@@ -817,10 +857,12 @@ export class MdflowService {
   }
 
   project() {
+    this.ensureSynced();
     return this.database.prepare("SELECT * FROM projects WHERE id = ?").get(this.paths.descriptor.id);
   }
 
   snapshot() {
+    this.ensureSynced();
     const projectId = this.paths.descriptor.id;
     const blocks = this.database
       .prepare("SELECT * FROM blocks WHERE project_id = ? AND archived = 0 ORDER BY title")
@@ -948,7 +990,7 @@ export class MdflowService {
         gitCommit: row.git_commit,
       }));
     const rawCheckpoints = this.database
-      .prepare("SELECT * FROM checkpoints WHERE project_id = ? ORDER BY updated_at DESC")
+      .prepare("SELECT * FROM checkpoints WHERE project_id = ? ORDER BY updated_at DESC, id ASC")
       .all(projectId)
       .map((row) => ({
         id: row.id,
@@ -1834,6 +1876,7 @@ export class MdflowService {
 
   revertChangeSet({ changeSetId, actor = "agent", reason, task = "", gitHead = null, planId = null, chainScopeId = null }) {
     if (!changeSetId?.trim()) throw new Error("changeSetId is required");
+    this.ensureSynced();
     const changeSet = this.database.prepare(
       "SELECT * FROM change_sets WHERE project_id = ? AND id = ?",
     ).get(this.paths.descriptor.id, changeSetId);
@@ -1866,6 +1909,35 @@ export class MdflowService {
       return { operation: null, planId: null };
     };
     for (const item of history) {
+      if (item.action === "created") {
+        if (["block", "chain", "link", "plan", "decision"].includes(item.entity_type)) {
+          const tableName = item.entity_type === "block" ? "blocks"
+            : item.entity_type === "chain" ? "chains"
+              : item.entity_type === "link" ? "links"
+                : item.entity_type === "decision" ? "decisions" : "plans";
+          const key = `${item.entity_type}:${item.entity_id}`;
+          const revision = expectedRevisions.get(key) ?? this.database.prepare(
+            `SELECT current_revision FROM ${tableName} WHERE project_id = ? AND id = ?`,
+          ).get(this.paths.descriptor.id, item.entity_id)?.current_revision;
+          if (!Number.isInteger(revision)) throw new Error(`${item.entity_type}:${item.entity_id} not found`);
+          inverse.push({
+            action: `update_${item.entity_type}`,
+            id: item.entity_id,
+            expectedRevision: revision,
+            fields: { archived: true },
+          });
+          expectedRevisions.set(key, revision + 1);
+          simulatedStates.set(key, { ...(simulatedStates.get(key) ?? {}), archived: true });
+          continue;
+        }
+        if (item.entity_type === "checkpoint") {
+          inverse.push({
+            action: "delete_checkpoint",
+            id: item.entity_id,
+          });
+          continue;
+        }
+      }
       if (item.action === "updated" && ["block", "chain", "link", "plan"].includes(item.entity_type)) {
         const before = parseJson(item.before_json, {});
         const after = parseJson(item.after_json, {});
@@ -1950,29 +2022,60 @@ export class MdflowService {
     const backgroundRuleIds = new Set(snapshot.backgroundScopes.map((scope) => scope.blockId));
     const planSignals = new Set(["plan", "todo", "roadmap", "progress", "status", "next", "blocker", "blocked", "release", "readiness", "计划", "进度", "阻塞", "发布"]);
     const taskMentionsPlan = terms.some((term) => planSignals.has(term));
-    const scoreText = (text) =>
-      terms.reduce((score, term) => score + (text.toLowerCase().includes(term) ? 1 : 0), 0);
+    const scoreText = (text, weight = 1) => {
+      if (!text) return 0;
+      const lower = text.toLowerCase();
+      let matchCount = 0;
+      for (const term of terms) {
+        if (lower.includes(term)) {
+          matchCount += weight * (term.length >= 4 ? 2 : 1);
+        }
+      }
+      return matchCount;
+    };
     const scoredBlocks = snapshot.blocks
       .filter((block) => !backgroundRuleIds.has(block.id) && block.kind !== "decision")
       .map((block) => {
-        const semanticScore = scoreText(`${block.title} ${block.summary} ${block.body} ${block.contract} ${block.scope} ${block.architectureLayer} ${block.tags.join(" ")} ${localizedSearchText(snapshot, "block", block.id)}`);
+        let semanticScore = 0;
+        semanticScore += scoreText(block.title, 5);
+        semanticScore += scoreText(block.summary, 3);
+        semanticScore += scoreText(block.tags.join(" "), 4);
+        semanticScore += scoreText(block.contract, 3);
+        semanticScore += scoreText(block.scope, 2);
+        semanticScore += scoreText(block.architectureLayer, 2);
+        semanticScore += scoreText(block.body, 1);
+        semanticScore += scoreText(localizedSearchText(snapshot, "block", block.id), 3);
         return { block, score: semanticScore + (focusRefs.includes(`block:${block.id}`) ? 100 : 0) };
       })
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score);
     const scoredChains = snapshot.chains
-      .map((chain) => ({
-        chain,
-        score:
-          scoreText(`${chain.title} ${chain.intent} ${chain.inputContract} ${chain.outputContract} ${localizedSearchText(snapshot, "chain", chain.id)}`) +
-          (focusRefs.includes(`chain:${chain.id}`) ? 100 : 0),
-      }))
+      .map((chain) => {
+        let semanticScore = 0;
+        semanticScore += scoreText(chain.title, 5);
+        semanticScore += scoreText(chain.intent, 3);
+        semanticScore += scoreText(chain.inputContract, 3);
+        semanticScore += scoreText(chain.outputContract, 3);
+        semanticScore += scoreText(localizedSearchText(snapshot, "chain", chain.id), 3);
+        return {
+          chain,
+          score: semanticScore + (focusRefs.includes(`chain:${chain.id}`) ? 100 : 0),
+        };
+      })
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score);
     const scoredPlans = snapshot.plans
       .map((plan) => {
         const focused = focusRefs.includes(`plan:${plan.id}`);
-        const semanticScore = scoreText(`${plan.title} ${plan.summary} ${plan.goal} ${plan.status} ${plan.nextAction} ${JSON.stringify(plan.proposedDelta)} ${JSON.stringify(plan.blockers)} ${localizedSearchText(snapshot, "plan", plan.id)}`);
+        let semanticScore = 0;
+        semanticScore += scoreText(plan.title, 5);
+        semanticScore += scoreText(plan.summary, 3);
+        semanticScore += scoreText(plan.goal, 3);
+        semanticScore += scoreText(plan.status, 2);
+        semanticScore += scoreText(plan.nextAction, 2);
+        semanticScore += scoreText(JSON.stringify(plan.proposedDelta), 1);
+        semanticScore += scoreText(JSON.stringify(plan.blockers), 2);
+        semanticScore += scoreText(localizedSearchText(snapshot, "plan", plan.id), 3);
         return { plan, semanticScore, score: semanticScore + (focused ? 100 : 0), focused };
       })
       .filter((entry) => entry.focused || entry.semanticScore >= 3 || (taskMentionsPlan && entry.semanticScore >= 1))
@@ -2855,6 +2958,8 @@ export class MdflowService {
     if (operations.length > maxOperations) throw new Error(`graph_mutate accepts at most ${maxOperations} operations`);
     if (JSON.stringify(operations).length > maxInputBytes) throw new Error("graph_mutate input exceeds 64 KB");
 
+    this.ensureSynced();
+
     const database = this.database;
     const projectId = this.paths.descriptor.id;
     const changeSetId = identifier("change");
@@ -2862,7 +2967,7 @@ export class MdflowService {
     const receipts = [];
     const historyContext = this.resolveHistoryContext(planId, chainScopeId);
 
-    return transaction(database, () => {
+    const mutationResult = transaction(database, () => {
       database
         .prepare(
           `INSERT INTO change_sets(id, project_id, actor, reason, task, git_head, created_at)
@@ -2928,6 +3033,16 @@ export class MdflowService {
         .graph_revision;
       return { changeSetId, graphRevision, receipts };
     });
+
+    if (this.paths.graphJsonPath) {
+      try {
+        exportGraphToJson(this.database, this.paths.graphJsonPath);
+      } catch {
+        // preserve mutationResult even if export fails
+      }
+    }
+
+    return mutationResult;
   }
 
   historyStateForOperation(operation, entityType, id) {
@@ -3015,6 +3130,8 @@ export class MdflowService {
         return this.createBlock(operation, context);
       case "create_checkpoint":
         return this.createCheckpoint(operation, context);
+      case "delete_checkpoint":
+        return this.deleteCheckpoint(operation, context);
       case "record_checkpoint":
         return this.recordCheckpointOperation(operation, context);
       case "update_block":
@@ -3891,6 +4008,26 @@ export class MdflowService {
         .run(healthState, timestamp, fields.targetId);
     }
     return { entityType: "checkpoint", id, action: "created", revision: 1, summary: fields.title.trim() };
+  }
+
+  deleteCheckpoint(operation, { timestamp }) {
+    const id = operation.id;
+    if (!id) throw new Error("checkpoint id is required for delete_checkpoint");
+    const checkpoint = this.database.prepare(
+      "SELECT * FROM checkpoints WHERE project_id = ? AND id = ?",
+    ).get(this.paths.descriptor.id, id);
+    if (!checkpoint) throw new Error(`checkpoint:${id} not found`);
+    this.database.prepare("DELETE FROM checkpoint_bindings WHERE checkpoint_id = ?").run(id);
+    this.database.prepare("DELETE FROM checkpoint_dependencies WHERE parent_checkpoint_id = ? OR child_checkpoint_id = ?").run(id, id);
+    this.database.prepare("DELETE FROM plan_checkpoint_refs WHERE checkpoint_id = ?").run(id);
+    this.database.prepare("DELETE FROM checkpoints WHERE id = ?").run(id);
+    return {
+      entityType: "checkpoint",
+      id,
+      action: "deleted",
+      revision: checkpoint.current_revision + 1,
+      summary: `Deleted checkpoint ${id}`,
+    };
   }
 
   recordCheckpointOperation(operation, { timestamp }) {

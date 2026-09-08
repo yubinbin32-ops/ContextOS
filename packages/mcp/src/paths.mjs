@@ -6,10 +6,11 @@ const localDataIgnore = [
   "*",
   "!.gitignore",
   "!project.json",
-  "!mdflow.sqlite",
-  "mdflow.sqlite-wal",
-  "mdflow.sqlite-shm",
-  "mdflow.sqlite-journal",
+  "!graph.json",
+  "*.sqlite",
+  "*.sqlite-*",
+  "*.sqlite3",
+  "*.sqlite3-*",
   "",
 ].join("\n");
 
@@ -85,5 +86,6 @@ export function resolveProjectPaths(options = {}) {
     dataRoot,
     projectDataDirectory,
     databasePath: path.join(projectDataDirectory, "mdflow.sqlite"),
+    graphJsonPath: path.join(projectDataDirectory, "graph.json"),
   };
 }

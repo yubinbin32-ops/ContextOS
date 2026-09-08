@@ -45,6 +45,7 @@ export class ProjectServiceRouter {
         this.services.delete(key);
         this.serviceIdentities.delete(key);
       } else {
+        cached.ensureSynced();
         this.services.delete(key);
         this.services.set(key, cached);
         return cached;

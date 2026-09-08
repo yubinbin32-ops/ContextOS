@@ -1,7 +1,8 @@
 *
 !.gitignore
 !project.json
-!mdflow.sqlite
-mdflow.sqlite-wal
-mdflow.sqlite-shm
-mdflow.sqlite-journal
+!graph.json
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*

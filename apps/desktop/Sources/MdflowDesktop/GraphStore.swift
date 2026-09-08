@@ -20,7 +20,8 @@ final class GraphStore: ObservableObject {
     @Published private(set) var recentlyChangedRefs: Set<String> = []
     @Published private(set) var errorMessage: String?
     @Published var settingsPresented = false
-    @Published private(set) var pluginInstallStatus: PluginInstallStatus = .idle
+    @Published private(set) var pluginInstallStatus: PluginInstallStatus = .checking
+    @Published private(set) var editorStatuses: [EditorPlatformStatus] = []
     @Published var canvasScale: CGFloat = 1
     @Published var canvasOffset: CGSize = .zero
     @Published private(set) var hasRestoredCamera = false
@@ -83,6 +84,7 @@ final class GraphStore: ObservableObject {
         }
         restoreProjectViewState(for: snapshot.project.id)
         startLiveUpdates()
+        refreshPluginStatus(autoInstallIfNeeded: true)
     }
 
     func chooseProject() {
@@ -789,9 +791,10 @@ final class GraphStore: ObservableObject {
         let zh: [String: String] = [
             "overview":"整体网络", "plans":"计划", "chains":"链路", "settings":"设置", "done":"完成",
             "summary":"摘要", "details":"详情", "contract":"契约", "files":"文件与代码", "checkpoints":"检查点", "history":"历史",
-            "plugin":"CODEX 插件", "pluginHelp":"开发插件包位于当前项目中。", "revealPlugin":"在访达中显示插件",
-            "installPlugin":"一键安装", "installingPlugin":"正在安装…", "pluginInstalled":"已安装；新任务中即可使用", "pluginInstallFailed":"安装失败",
-            "liveData":"实时数据", "liveHelp":"变化会自动同步，无需刷新。", "language":"语言", "appearance":"外观", "system":"跟随系统", "light":"浅色", "dark":"深色",
+            "plugin":"多平台 AI 编辑器同步", "pluginHelp":"管理各大 AI 客户端（Claude、Cursor、VS Code、OpenCode、Codex）的 MCP 直连配置。",
+            "syncAll":"一键同步全部", "syncSingle":"同步配置", "synced":"已就绪", "notSynced":"未连接", "notDetected":"未检测到客户端", "syncing":"正在同步…",
+            "installPlugin":"一键安装", "installingPlugin":"正在安装…", "checkingPlugin":"正在检查编辑器状态…", "pluginNotInstalled":"尚未安装", "pluginInstalled":"已安装；新任务中即可使用", "pluginInstallFailed":"安装失败",
+            "liveData":"实时数据内核", "liveHelp":"底层图数据变动自动秒级热重载，无需手动刷新。", "language":"界面语言", "appearance":"外观模式", "system":"跟随系统", "light":"浅色", "dark":"深色",
             "english":"English", "chinese":"中文", "link":"关系", "input":"输入", "output":"输出",
             "goal":"目标", "nextAction":"下一步", "targetChains":"目标 Chain", "proposedDelta":"计划中的图变更", "blockers":"阻塞",
             "upstream":"直接上游", "downstream":"直接下游", "memberships":"所在 Chain", "relatedPlans":"关联 Plan", "path":"路径", "revision":"版本",
@@ -802,8 +805,9 @@ final class GraphStore: ObservableObject {
         let en: [String: String] = [
             "overview":"Full Network", "plans":"Plans", "chains":"Chains", "settings":"Settings", "done":"Done",
             "summary":"Summary", "details":"Details", "contract":"Contract", "files":"Files & Code", "checkpoints":"Checkpoints", "history":"History",
-            "plugin":"CODEX PLUGIN", "pluginHelp":"The development plugin bundle is available in this project.", "revealPlugin":"Reveal Plugin",
-            "installPlugin":"Install in Codex", "installingPlugin":"Installing…", "pluginInstalled":"Installed; available in new tasks", "pluginInstallFailed":"Installation failed",
+            "plugin":"AI EDITOR MCP BRIDGES", "pluginHelp":"Sync mdflow architecture context to Claude Desktop, Cursor, VS Code, OpenCode, and Codex.",
+            "syncAll":"Sync All", "syncSingle":"Sync", "synced":"Connected", "notSynced":"Not Connected", "notDetected":"Not Detected", "syncing":"Syncing…",
+            "installPlugin":"Install Plugin", "installingPlugin":"Installing…", "checkingPlugin":"Checking editor statuses…", "pluginNotInstalled":"Not installed", "pluginInstalled":"Installed; available in new tasks", "pluginInstallFailed":"Installation failed",
             "liveData":"LIVE DATA", "liveHelp":"Changes appear automatically; no refresh is required.", "language":"Language", "appearance":"Appearance", "system":"System", "light":"Light", "dark":"Dark",
             "english":"English", "chinese":"中文", "link":"Link", "input":"Input", "output":"Output",
             "goal":"Goal", "nextAction":"Next Action", "targetChains":"Target Chains", "proposedDelta":"Proposed Graph Delta", "blockers":"Blockers",
@@ -965,20 +969,68 @@ final class GraphStore: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
-    func revealPlugin() {
-        guard let location else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([
-            location.root.appending(path: "plugins/mdflow")
-        ])
-    }
-
     func installPlugin() {
         guard pluginInstallStatus != .installing, let marketplaceRoot else { return }
         pluginInstallStatus = .installing
         Task {
             do {
                 try await Task.detached { try PluginInstaller.install(marketplaceRoot: marketplaceRoot) }.value
-                pluginInstallStatus = .installed
+                pluginInstallStatus = .checking
+                refreshPluginStatus(autoInstallIfNeeded: false)
+            } catch {
+                pluginInstallStatus = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    func refreshEditorStatuses() {
+        let root = location?.root
+        editorStatuses = PluginInstaller.detectAllPlatforms(projectRoot: root, marketplaceRoot: marketplaceRoot)
+    }
+
+    func syncEditor(id: String) {
+        guard let marketplaceRoot else { return }
+        let root = location?.root
+        do {
+            try PluginInstaller.syncPlatform(id: id, projectRoot: root, marketplaceRoot: marketplaceRoot)
+            refreshEditorStatuses()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func syncAllEditors() {
+        guard let marketplaceRoot else { return }
+        let root = location?.root
+        do {
+            try PluginInstaller.installAll(projectRoot: root, marketplaceRoot: marketplaceRoot)
+            refreshEditorStatuses()
+            pluginInstallStatus = .installed
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func refreshPluginStatus(autoInstallIfNeeded: Bool) {
+        refreshEditorStatuses()
+        guard pluginInstallStatus != .installing else { return }
+        pluginInstallStatus = .checking
+        Task {
+            do {
+                guard let marketplaceRoot else {
+                    pluginInstallStatus = .notInstalled
+                    return
+                }
+                let installed = try await Task.detached {
+                    try PluginInstaller.isInstalled(marketplaceRoot: marketplaceRoot)
+                }.value
+                if installed {
+                    pluginInstallStatus = .installed
+                } else if autoInstallIfNeeded {
+                    installPlugin()
+                } else {
+                    pluginInstallStatus = .notInstalled
+                }
             } catch {
                 pluginInstallStatus = .failed(error.localizedDescription)
             }

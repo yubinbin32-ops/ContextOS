@@ -1,3 +1,6 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const SCHEMA = `
@@ -46,7 +49,7 @@ CREATE TABLE IF NOT EXISTS source_refs (
 );
 
 CREATE TABLE IF NOT EXISTS localized_text (
-  entity_type TEXT NOT NULL CHECK(entity_type IN ('block', 'chain', 'link', 'plan')),
+  entity_type TEXT NOT NULL CHECK(entity_type IN ('block', 'chain', 'link', 'plan', 'plan_step', 'chain_scope', 'plan_change', 'checkpoint')),
   entity_id TEXT NOT NULL,
   locale TEXT NOT NULL CHECK(locale IN ('en', 'zh-Hans')),
   field TEXT NOT NULL,
@@ -358,6 +361,11 @@ CREATE INDEX IF NOT EXISTS idx_checkpoint_dependencies_parent ON checkpoint_depe
 CREATE INDEX IF NOT EXISTS idx_history_entity ON history(entity_type, entity_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_change_feed_project ON change_feed(project_id, sequence DESC);
 CREATE INDEX IF NOT EXISTS idx_localized_text_entity ON localized_text(entity_type, entity_id, locale);
+
+CREATE TABLE IF NOT EXISTS sync_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
 function tableSql(database, name) {
@@ -367,15 +375,15 @@ function tableSql(database, name) {
 function migratePlanCapableTables(database) {
   const localizedSql = tableSql(database, "localized_text");
   const checkpointSql = tableSql(database, "checkpoints");
-  if (localizedSql.includes("'plan'") && checkpointSql.includes("'plan'")) return;
+  if (localizedSql.includes("'plan_change'") && checkpointSql.includes("'plan'")) return;
   database.exec("PRAGMA foreign_keys = OFF;");
   try {
     database.exec("BEGIN IMMEDIATE;");
-    if (!localizedSql.includes("'plan'")) {
+    if (!localizedSql.includes("'plan_change'")) {
       database.exec(`
         DROP INDEX IF EXISTS idx_localized_text_entity;
         CREATE TABLE localized_text_v2 (
-          entity_type TEXT NOT NULL CHECK(entity_type IN ('block', 'chain', 'link', 'plan')),
+          entity_type TEXT NOT NULL CHECK(entity_type IN ('block', 'chain', 'link', 'plan', 'plan_step', 'chain_scope', 'plan_change', 'checkpoint')),
           entity_id TEXT NOT NULL,
           locale TEXT NOT NULL CHECK(locale IN ('en', 'zh-Hans')),
           field TEXT NOT NULL,
@@ -635,3 +643,184 @@ export function transaction(database, callback) {
     throw error;
   }
 }
+
+export const GRAPH_TABLES = [
+  { name: "projects", orderBy: "id" },
+  { name: "blocks", orderBy: "id" },
+  { name: "source_refs", orderBy: "block_id, id" },
+  { name: "chains", orderBy: "id" },
+  { name: "chain_nodes", orderBy: "chain_id, position, block_id" },
+  { name: "chain_edges", orderBy: "chain_id, position, link_id" },
+  { name: "links", orderBy: "id" },
+  { name: "background_scopes", orderBy: "block_id, scope_type, scope_value" },
+  { name: "decisions", orderBy: "id" },
+  { name: "decision_scopes", orderBy: "decision_id, scope_type, scope_value" },
+  { name: "plans", orderBy: "id" },
+  { name: "plan_chain_refs", orderBy: "plan_id, chain_id" },
+  { name: "plan_dependencies", orderBy: "plan_id, depends_on_plan_id" },
+  { name: "plan_steps", orderBy: "plan_id, position, id" },
+  { name: "plan_checkpoint_refs", orderBy: "plan_id, checkpoint_id" },
+  { name: "plan_chain_scopes", orderBy: "plan_id, position, id" },
+  { name: "plan_changes", orderBy: "plan_id, position, id" },
+  { name: "plan_chain_change_refs", orderBy: "chain_scope_id, plan_change_id" },
+  { name: "checkpoints", orderBy: "id" },
+  { name: "checkpoint_bindings", orderBy: "checkpoint_id, position, subject_type, subject_id, role" },
+  { name: "checkpoint_dependencies", orderBy: "parent_checkpoint_id, position, child_checkpoint_id" },
+  { name: "localized_text", orderBy: "entity_type, entity_id, locale, field" },
+];
+
+export function sortObjectKeys(obj) {
+  if (obj === null || typeof obj !== "object" || Array.isArray(obj)) return obj;
+  const sorted = {};
+  for (const key of Object.keys(obj).sort()) {
+    sorted[key] = obj[key];
+  }
+  return sorted;
+}
+
+export function queryRecentHistory(database, limit = 50) {
+  const changeSets = database.prepare(
+    `SELECT * FROM (SELECT * FROM change_sets ORDER BY created_at DESC, id DESC LIMIT ?) ORDER BY created_at ASC, id ASC`,
+  ).all(limit);
+
+  const changeSetIds = changeSets.map((cs) => cs.id);
+  if (changeSetIds.length === 0) {
+    return { changeSets: [], history: [], changeFeed: [] };
+  }
+
+  const placeholders = changeSetIds.map(() => "?").join(", ");
+  const history = database.prepare(
+    `SELECT * FROM history WHERE change_set_id IN (${placeholders}) ORDER BY id ASC`,
+  ).all(...changeSetIds);
+
+  const changeFeed = database.prepare(
+    `SELECT * FROM change_feed WHERE change_set_id IN (${placeholders}) ORDER BY sequence ASC`,
+  ).all(...changeSetIds);
+
+  return { changeSets, history, changeFeed };
+}
+
+export function exportGraphToJson(database, jsonPath, options = {}) {
+  const limit = options.maxChangeSets ?? 50;
+  const project = database.prepare("SELECT * FROM projects LIMIT 1").get();
+  const exportData = {};
+
+  for (const { name, orderBy } of GRAPH_TABLES) {
+    const rows = database.prepare(`SELECT * FROM ${name} ORDER BY ${orderBy}`).all();
+    exportData[name] = rows.map(sortObjectKeys);
+  }
+
+  const { changeSets, history, changeFeed } = queryRecentHistory(database, limit);
+  exportData.change_sets = changeSets.map(sortObjectKeys);
+  exportData.history = history.map(sortObjectKeys);
+  exportData.change_feed = changeFeed.map(sortObjectKeys);
+
+  const payload = {
+    version: 1,
+    projectId: project?.id ?? "",
+    graphRevision: project?.graph_revision ?? 0,
+    exportedAt: project?.updated_at ?? new Date().toISOString(),
+    data: exportData,
+  };
+
+  const jsonString = `${JSON.stringify(payload, null, 2)}\n`;
+  const hash = crypto.createHash("sha256").update(jsonString).digest("hex");
+
+  const directory = path.dirname(jsonPath);
+  fs.mkdirSync(directory, { recursive: true });
+  const temporaryPath = `${jsonPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  fs.writeFileSync(temporaryPath, jsonString, "utf8");
+  fs.renameSync(temporaryPath, jsonPath);
+
+  const stat = fs.statSync(jsonPath);
+  try {
+    database.prepare(`
+      INSERT INTO sync_meta(key, value) VALUES ('graph_json_hash', ?), ('graph_json_mtime', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(hash, String(stat.mtimeMs));
+  } catch {
+    // If sync_meta doesn't exist yet, ignore
+  }
+
+  return { jsonPath, hash, graphRevision: payload.graphRevision, mtimeMs: stat.mtimeMs };
+}
+
+export function importGraphFromJson(database, jsonPath) {
+  if (!fs.existsSync(jsonPath)) {
+    throw new Error(`graph.json not found at ${jsonPath}`);
+  }
+  const content = fs.readFileSync(jsonPath, "utf8");
+  const payload = JSON.parse(content);
+  if (!payload || !payload.data || typeof payload.data !== "object") {
+    throw new Error(`Invalid graph.json at ${jsonPath}: missing data object`);
+  }
+
+  const stat = fs.statSync(jsonPath);
+  const hash = crypto.createHash("sha256").update(content).digest("hex");
+
+  database.exec("PRAGMA foreign_keys = OFF;");
+  try {
+    database.exec("BEGIN IMMEDIATE;");
+
+    const allTables = [
+      ...GRAPH_TABLES.map((t) => t.name),
+      "change_sets",
+      "history",
+      "change_feed",
+    ];
+
+    for (const table of allTables) {
+      database.exec(`DELETE FROM ${table};`);
+      const rows = payload.data[table] ?? [];
+      if (rows.length > 0) {
+        const cols = Object.keys(rows[0]);
+        const placeholders = cols.map(() => "?").join(", ");
+        const stmt = database.prepare(
+          `INSERT INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`,
+        );
+        for (const row of rows) {
+          stmt.run(...cols.map((c) => row[c]));
+        }
+      }
+    }
+
+    database.prepare(`
+      INSERT INTO sync_meta(key, value) VALUES ('graph_json_hash', ?), ('graph_json_mtime', ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(hash, String(stat.mtimeMs));
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  } finally {
+    database.exec("PRAGMA foreign_keys = ON;");
+  }
+
+  return { jsonPath, hash, graphRevision: payload.graphRevision, mtimeMs: stat.mtimeMs };
+}
+
+export function getSyncMeta(database) {
+  try {
+    const rows = database.prepare("SELECT key, value FROM sync_meta").all();
+    const meta = {};
+    for (const row of rows) {
+      meta[row.key] = row.value;
+    }
+    return meta;
+  } catch {
+    return {};
+  }
+}
+
+export function setSyncMeta(database, key, value) {
+  try {
+    database.prepare(`
+      INSERT INTO sync_meta(key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(key, String(value));
+  } catch {
+    // ignore
+  }
+}
+

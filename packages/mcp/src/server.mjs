@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { ProjectServiceRouter } from "./project-router.mjs";
+import { runCli } from "./cli.mjs";
 
 const router = new ProjectServiceRouter();
 const server = new McpServer(
@@ -431,6 +432,12 @@ server.registerTool(
     return writeResult(data, undefined, input.includeStructured);
   },
 );
+
+const cliArgs = process.argv.slice(2);
+if (cliArgs.length > 0 && cliArgs[0] !== "serve" && !cliArgs[0].startsWith("--mcp")) {
+  await runCli(cliArgs, router);
+  process.exit(0);
+}
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

@@ -1,0 +1,106 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mdflow-release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: Verify and package
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [[ "$GITHUB_REF_NAME" != "$expected" ]]; then
+            echo "Release tag $GITHUB_REF_NAME does not match package version $expected."
+            exit 1
+          fi
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build MCP bundle
+        run: npm run plugin:build
+
+      - name: Build macOS app
+        shell: bash
+        run: |
+          xcodebuild -project apps/desktop/mdflow-desktop.xcodeproj \
+            -scheme mdflow-desktop \
+            -configuration Release \
+            -derivedDataPath dist/build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE="Manual" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            build
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          hdiutil create -volname "mdflow" \
+            -srcfolder dist/build/Build/Products/Release/mdflow.app \
+            -ov -format UDZO \
+            release-assets/mdflow-macos.dmg
+          cp plugins/mdflow/server/mdflow-mcp.mjs release-assets/mdflow-mcp.mjs
+          cd release-assets
+          shasum -a 256 mdflow-macos.dmg mdflow-mcp.mjs > SHA256SUMS
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdflow-${{ github.ref_name }}-${{ github.run_number }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish stable GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## mdflow ${{ github.ref_name }}
+
+            A living architecture graph for AI coding: inspect the whole system on Canvas and give MCP-compatible agents verified, task-scoped context.
+
+            ### Get started
+
+            - **macOS 14+ app:** download `mdflow-macos.dmg`
+            - **MCP / CLI:** `npx -y github:yubinbin32-ops/Mdflow-Canvas@${{ github.ref_name }} init --scan`
+            - **Integrity:** compare your downloads with `SHA256SUMS`
+
+            The macOS build is currently ad-hoc signed. On first launch, Control-click the app and choose **Open** if macOS blocks it.

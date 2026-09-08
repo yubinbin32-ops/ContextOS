@@ -7,7 +7,7 @@
     <key>CFBundleDisplayName</key>
     <string>mdflow</string>
     <key>CFBundleExecutable</key>
-    <string>mdflow-desktop</string>
+    <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
     <string>com.mdflow.desktop</string>
     <key>CFBundleIconFile</key>
@@ -22,6 +22,8 @@
     <string>0.1.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>

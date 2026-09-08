@@ -1,14 +1,23 @@
 {
   "name": "mdflow",
-  "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "The living architecture graph for AI coding. Replaces rotting .md specs with verified, task-scoped context.",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "mdflow": "./plugins/mdflow/server/mdflow-mcp.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yubinbin32-ops/Mdflow-Canvas.git"
+  },
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
     "mcp": "node packages/mcp/src/server.mjs",
+    "test": "node --test packages/mcp/test/*.test.mjs",
+    "benchmark": "node scripts/benchmark.mjs",
     "plugin:build": "esbuild packages/mcp/src/server.mjs --bundle --platform=node --format=esm --target=node22 --outfile=plugins/mdflow/server/mdflow-mcp.mjs",
     "desktop:build": "swift build --package-path apps/desktop",
     "desktop:run": "swift run --package-path apps/desktop mdflow-desktop"
