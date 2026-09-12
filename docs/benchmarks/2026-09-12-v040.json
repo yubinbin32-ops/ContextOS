@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "measuredAt": "2026-09-12T12:17:13.900Z",
+  "measuredAt": "2026-09-12T13:13:29.421Z",
   "environment": {
     "node": "v22.22.1",
     "platform": "darwin",
@@ -8,9 +8,9 @@
     "cpu": "Apple M1"
   },
   "source": {
-    "gitHead": "323c0c1f16261af5efc6372e864a4bedebb67fc6",
-    "graphRevision": 1018,
-    "graphSha256": "db29c364b0a0dd0518c6854f3af85657d43c101332b4088378c2be7e27e0e092",
+    "gitHead": "f6623b5fd484dc76eb42463039ca74d608d822f7",
+    "graphRevision": 1052,
+    "graphSha256": "097aff72ed776eab3f0170d792bb9cf240bd5122cfc9471dc6351b08a53bbf8d",
     "scriptSha256": "5ae4576145fa83da478546f3f05315c24cb548ccbbf2ecd03ac862fbe5ea30ae",
     "sourceManifest": [
       {
@@ -74,6 +74,10 @@
         "sha256": "e38785721037f00999ca665170f7dabea86bedcb7b3deec477c1eb256a3d7622"
       },
       {
+        "path": "packages/mcp/src/chain-topology.mjs",
+        "sha256": "ea9afa859a81fbf9d7752b1aac8d4ee3dabfeb57cf1cf2f27edbf668ed605cfd"
+      },
+      {
         "path": "packages/mcp/src/checkpoint-engine.mjs",
         "sha256": "cc2513c931172ae7fd2f422e8a61daa75c05cecbe7a6925e9fac9342e71ab235"
       },
@@ -103,7 +107,7 @@
       },
       {
         "path": "packages/mcp/src/mutation-engine.mjs",
-        "sha256": "096ad57ec0d896f5fb62184e40ff45fa4595f1bc085e36048b42b6023db8e652"
+        "sha256": "d5afad4ece0f2c99eecd73d7dd05fb5bd50bcb0feec251143a254688bbba0d85"
       },
       {
         "path": "packages/mcp/src/patch.mjs",
@@ -127,11 +131,11 @@
       },
       {
         "path": "packages/mcp/src/query-engine.mjs",
-        "sha256": "cc82ca51066086909c937b4243accaa60914ac8c4b909e53a44eb103a8d7ee0a"
+        "sha256": "24326ec1ae428a90c2bfeba9c5e07acddcd235067342bc7f78a69e262c70b1d8"
       },
       {
         "path": "packages/mcp/src/reconciliation.mjs",
-        "sha256": "c4e135a1973ea08d572c4e886a1fd48d8cc23b9642b667da061e835add54162c"
+        "sha256": "7d375eaf5db47772f647807b4b73c11dc607ede0392b0d4071151b20af4bdbcd"
       },
       {
         "path": "packages/mcp/src/reference.mjs",
@@ -147,11 +151,11 @@
       },
       {
         "path": "packages/mcp/src/server.mjs",
-        "sha256": "4830fdcf7b0fad6cdc1d2ad9958ee7090807a7ac793ff26ad4d7e2a99faca8f0"
+        "sha256": "943691e640eaa7ef12768e378f9a378f26ffb7f168f6f77c962319687ce64fd1"
       },
       {
         "path": "packages/mcp/src/service.mjs",
-        "sha256": "3244d3dd4c185ce03b82bcae6348c9a71b8dc97ddbcd653d34fba5685094fa01"
+        "sha256": "a1e76747da12dd6869f7c48e4b72eb27bb0115171a90fed007ba7196c011734e"
       },
       {
         "path": "packages/mcp/src/source-binding.mjs",
@@ -171,7 +175,7 @@
       },
       {
         "path": "packages/mcp/src/workspace-tools.mjs",
-        "sha256": "57cf22c32e8334c64bae1c9c0f5baa9e3a7b8d622513253ba2f38fbaf677aca6"
+        "sha256": "baa405edb04ad9b5145508195e7b1f0b046ab4c56234994d613ed02804093b8c"
       },
       {
         "path": "plugins/contextos/.codex-plugin/plugin.json",
@@ -179,7 +183,7 @@
       },
       {
         "path": "plugins/contextos/skills/contextos/SKILL.md",
-        "sha256": "f625cc2089cc33e109c57e821a6b3d1debc164aa84e99adddfdeb4ce29657966"
+        "sha256": "1c5a59060f99654d1a897d134ce33e91c0ee0d9a42d77470c0b2b93e7a64e276"
       },
       {
         "path": "scripts/benchmark.mjs",
@@ -190,14 +194,14 @@
     "sourceGraphUnchanged": true
   },
   "scope": {
-    "blocks": 59,
+    "blocks": 60,
     "chains": 10,
-    "links": 85,
-    "checkpoints": 25
+    "links": 89,
+    "checkpoints": 26
   },
   "unit": "JavaScript UTF-16 string length; not model tokens",
   "taskContext": {
-    "fullGraphChars": 850708,
+    "fullGraphChars": 902651,
     "budgetChars": 4000,
     "cases": [
       {
@@ -205,61 +209,61 @@
         "expected": "in-app-plugin-install",
         "chars": 4000,
         "latencyMs": [
-          712.89,
-          672.5,
-          711.12
+          944.04,
+          896.06,
+          901.9
         ],
         "expectedRefReturned": true,
         "expectedRefVisible": true,
         "truncated": true,
-        "versusFullGraphReductionPercent": 99.53
+        "versusFullGraphReductionPercent": 99.56
       },
       {
         "task": "Git Discard 撤回与本地 SQLite 热重载",
         "expected": "sqlite-graph-store",
         "chars": 4000,
         "latencyMs": [
-          659.16,
-          652.95,
-          650.55
+          915.15,
+          894.62,
+          896.94
         ],
         "expectedRefReturned": true,
         "expectedRefVisible": true,
         "truncated": true,
-        "versusFullGraphReductionPercent": 99.53
+        "versusFullGraphReductionPercent": 99.56
       },
       {
         "task": "CJK 中文分词与 BM25 字段加权检索",
         "expected": "context-retrieval",
         "chars": 4000,
         "latencyMs": [
-          656.29,
-          652.13,
-          667.57
+          942.46,
+          960.26,
+          896.97
         ],
         "expectedRefReturned": true,
         "expectedRefVisible": true,
         "truncated": true,
-        "versusFullGraphReductionPercent": 99.53
+        "versusFullGraphReductionPercent": 99.56
       },
       {
         "task": "源码 SourceBinding 路径符号同步",
         "expected": "live-binding-refresh",
         "chars": 4000,
         "latencyMs": [
-          653.38,
-          651.77,
-          655.54
+          927.23,
+          895.67,
+          895.24
         ],
         "expectedRefReturned": true,
         "expectedRefVisible": true,
         "truncated": true,
-        "versusFullGraphReductionPercent": 99.53
+        "versusFullGraphReductionPercent": 99.56
       }
     ],
     "samples": 12,
-    "p50Ms": 655.54,
-    "p95Ms": 712.89
+    "p50Ms": 896.97,
+    "p95Ms": 960.26
   },
   "chain": {
     "chainId": "chain-context-os",
@@ -269,9 +273,9 @@
       "packages/mcp/src/sanitizer.mjs",
       "apps/desktop/Sources/ContextOSDesktop/DetailView.swift"
     ],
-    "fullFileChars": 223360,
+    "fullFileChars": 226522,
     "locatorChars": 2071,
-    "reductionPercent": 99.07,
+    "reductionPercent": 99.09,
     "nodes": [
       {
         "blockId": "ast-facade-engine",

@@ -20,7 +20,7 @@ try {
   await client.connect(transport);
   const listing = await client.listTools();
   const names = new Set(listing.tools.map((tool) => tool.name));
-  for (const required of ["context_for_task", "chain_code_stream", "block_code_stream", "architecture_link_suggest", "architecture_connect", "chain_append", "plan_append_changes", "plan_append_chain_scope", "source_sync", "run_command", "log_sanitize", "document_list", "document_open", "task_begin", "task_scope", "task_reconcile", "task_finish", "runtime_info"]) {
+  for (const required of ["context_for_task", "chain_code_stream", "chain_reconcile", "block_code_stream", "architecture_link_suggest", "architecture_connect", "chain_append", "plan_append_changes", "plan_append_chain_scope", "source_sync", "run_command", "log_sanitize", "document_list", "document_open", "task_begin", "task_scope", "task_reconcile", "task_finish", "runtime_info"]) {
     assert.ok(names.has(required), `missing MCP tool: ${required}`);
   }
 
@@ -52,6 +52,11 @@ try {
     },
   });
   assert.ok(focusedChain.content?.some((item) => typeof item.text === "string"), "focused Chain read failed");
+  const chainReconcile = await client.callTool({
+    name: "chain_reconcile",
+    arguments: { projectRoot, chainId: "chain-mcp-modular-architecture", autoReorder: true, includeStructured: true },
+  });
+  assert.ok(!chainReconcile.isError, "Chain topology reconciliation failed");
   const focusedBlock = await client.callTool({
     name: "block_code_stream",
     arguments: {

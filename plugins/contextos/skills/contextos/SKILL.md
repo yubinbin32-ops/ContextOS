@@ -19,9 +19,9 @@ The graph stores architecture and intent. Source files define implementation beh
 ## Keep the architecture connected
 
 - A Block is an independent architecture unit. A Link is a typed relation such as `calls`, `reads`, `writes`, `validates` or `constrains`.
-- A Chain is an observable feature path. It can contain a serial route or a deliberate branch; every Chain edge must have explicit endpoints in the Chain.
+- A Chain is an observable feature network. It can contain a serial route or a deliberate branch; every Chain edge has explicit endpoints in the Chain and points forward in the declared node order. Forward DAGs are reordered automatically at context, stream and task boundaries. Cycles, disconnected components and missing endpoints remain visible validation issues.
 - Run `architecture_link_suggest` as a review inbox. High-confidence candidates require target-symbol use in the Block's AST slice. Shared files and layer conventions are weak evidence. Do not connect every import, and do not create meaningless Links just to remove an alert.
-- Persist accepted relationships with `architecture_connect` or `graph_flow`, then extend an existing Chain with `chain_append`. `graph_flow` creates or updates Links; it does not automatically make Chain membership.
+- Persist accepted relationships with `architecture_connect` or `graph_flow`, then extend an existing Chain with `chain_append`. `graph_flow` creates or updates Links; it does not automatically make Chain membership. Use `chain_reconcile` to inspect or repair an existing Chain after a Block or Link was added.
 - `graph_status` reports isolated Blocks, ghost implementations, disconnected Chain paths, stale checkpoints and semantic reviews. `linksOutsideChains` is diagnostic: cross-cutting Links may intentionally stay outside feature Chains.
 
 ## Read and edit source precisely
@@ -33,7 +33,7 @@ The graph stores architecture and intent. Source files define implementation beh
 
 ## Synchronize and finish
 
-1. After edits call `task_reconcile`. It indexes changed files, advances a safely anchored ghost Block to implementing, appends explicit task Blocks/Links to a feature Chain when possible, refreshes Plan coverage, and records unresolved issues.
+1. After edits call `task_reconcile`. It indexes changed files, advances a safely anchored ghost Block to implementing, reconciles the feature Chain topology, appends explicit task Blocks/Links even when the Blocks already belong to the Chain, refreshes Plan coverage, and records unresolved issues.
 2. Resolve invalid bindings, missing Links, disconnected Chain paths and required checkpoints. A missing explicit Link is a design decision, not an invitation to invent one from file proximity.
 3. Record evidence with `checkpoint_record`. A fresh passed direct Block checkpoint is required before sealing a source-backed Block. A Chain integration checkpoint is required only when explicitly declared or bound to a Plan ChainScope.
 4. Call `task_finish` with the latest `sourceRevision`, `graphRevision` and a stable `idempotencyKey`. It completes verified Blocks/Chains and advances matching PlanChanges together. Retry the same key after an uncertain response.
@@ -53,7 +53,7 @@ The graph stores architecture and intent. Source files define implementation beh
 |---|---|
 | Orient | `context_for_task`, `project_map`, `plan_context`, `entity_open`, `graph_search` |
 | Knowledge | `document_list`, `document_open`, `document_write`, `document_patch`, `document_import` |
-| Architecture | `graph_mutate`, `graph_patch`, `graph_flow`, `architecture_link_suggest`, `architecture_connect`, `chain_append` |
+| Architecture | `graph_mutate`, `graph_patch`, `graph_flow`, `architecture_link_suggest`, `architecture_connect`, `chain_append`, `chain_reconcile` |
 | Plan growth | `plan_append_changes`, `plan_append_chain_scope`, `task_begin(planId)`, `task_scope(planId)` |
 | Source | `source_sync`, `source_index`, `source_binding_suggest`, `source_binding_accept`, `chain_code_stream`, `block_code_stream` |
 | Task lifecycle | `task_begin`, `task_scope`, `task_reconcile`, `task_finish`, `sync_issues` |

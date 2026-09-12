@@ -6,6 +6,7 @@ import { parseGraphPatch } from "./patch.mjs";
 import { expandArrowFlowOperations } from "./flow.mjs";
 import { extractSymbols } from "./ast.mjs";
 import { executeRecordCheckpointOperation } from "./checkpoint-engine.mjs";
+import { inspectChainTopology, topologyIssueText } from "./chain-topology.mjs";
 import {
   assertAllowed,
   now,
@@ -283,6 +284,17 @@ export function executeMutate(
         if(type==='chain') {
           const nodes=snapshot.chainNodes.filter(n=>n.chainId===target);
           if(!nodes.length || nodes.some(n=>snapshot.blocks.find(b=>b.id===n.blockId)?.deliveryState!=='complete')) throw new Error(`Chain completion requires completed member Blocks: ${target}`);
+          const edges = snapshot.chainEdges
+            .filter((edge) => edge.chainId === target)
+            .map((edge) => {
+              const link = snapshot.links.find((item) => item.id === edge.linkId);
+              return link
+                ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId }
+                : { linkId: edge.linkId, position: edge.position };
+            });
+          const topology = inspectChainTopology({ nodes, edges });
+          const topologyIssues = topology.issues.filter((issue) => issue.hard || ['disconnected', 'no_edges'].includes(issue.code));
+          if (topologyIssues.length) throw new Error(`Chain completion requires an ordered connected topology for ${target}: ${topologyIssueText(target, { issues: topologyIssues })}`);
         }
         if ((checks.length || sourceBacked || op.action === 'update_block') && !checks.some(c => c.status === 'passed' && c.freshness?.status === 'fresh')) {
           throw new Error(`Completion requires a fresh passed Checkpoint for ${type}:${target}; use checkpoint_record and block_seal/task_finish`);
@@ -1001,6 +1013,9 @@ export function setChainPath(service, operation) {
   }
   const nodeIds = operation.fields?.nodeIds ?? [];
   const linkIds = operation.fields?.linkIds ?? [];
+  if (!Array.isArray(nodeIds) || !Array.isArray(linkIds)) throw new Error("set_chain_path nodeIds and linkIds must be arrays");
+  if (new Set(nodeIds).size !== nodeIds.length) throw new Error("Chain nodes must be unique");
+  if (new Set(linkIds).size !== linkIds.length) throw new Error("Chain links must be unique");
   const nodeSet = new Set(nodeIds);
   for (const blockId of nodeIds) {
     if (!entityExists(service.database, service.paths.descriptor.id, "block", blockId)) throw new Error(`block:${blockId} not found`);
@@ -1014,6 +1029,17 @@ export function setChainPath(service, operation) {
     }
     return link;
   });
+  const topology = inspectChainTopology({
+    nodes: nodeIds.map((blockId, position) => ({ blockId, position })),
+    edges: links.map((link, position) => ({
+      linkId: link.id, sourceId: link.source_id, targetId: link.target_id, position,
+    })),
+  });
+  const hardIssues = topology.issues.filter((issue) => issue.hard);
+  if (hardIssues.length) throw new Error(`set_chain_path topology invalid: ${topologyIssueText(operation.id, { issues: hardIssues })}`);
+  if (chain.delivery_state === "complete" && nodeIds.length > 1 && !topology.connected) {
+    throw new Error(`set_chain_path cannot leave complete chain disconnected: ${topologyIssueText(operation.id, topology)}`);
+  }
   service.database.prepare("DELETE FROM chain_nodes WHERE chain_id = ?").run(operation.id);
   service.database.prepare("DELETE FROM chain_edges WHERE chain_id = ?").run(operation.id);
   const insertNode = service.database.prepare("INSERT INTO chain_nodes(chain_id, block_id, position, role) VALUES (?, ?, ?, 'path')");
@@ -1049,8 +1075,10 @@ export function appendChainPath(service, operation) {
   if (nodeIds.length === 0 && linkIds.length === 0) throw new Error("append_chain_path requires a node or link");
   if (new Set(nodeIds).size !== nodeIds.length) throw new Error("Appended Chain nodes must be unique");
   if (new Set(linkIds).size !== linkIds.length) throw new Error("Appended Chain links must be unique");
-  const existingNodes = service.database.prepare("SELECT block_id FROM chain_nodes WHERE chain_id = ? ORDER BY position").all(operation.id).map((row) => row.block_id);
-  const existingLinks = service.database.prepare("SELECT link_id FROM chain_edges WHERE chain_id = ? ORDER BY position").all(operation.id).map((row) => row.link_id);
+  const existingNodeRows = service.database.prepare("SELECT block_id, position FROM chain_nodes WHERE chain_id = ? ORDER BY position").all(operation.id);
+  const existingNodes = existingNodeRows.map((row) => row.block_id);
+  const existingEdgeRows = service.database.prepare("SELECT link_id, position FROM chain_edges WHERE chain_id = ? ORDER BY position").all(operation.id);
+  const existingLinks = existingEdgeRows.map((row) => row.link_id);
   const existingNodeSet = new Set(existingNodes);
   const existingLinkSet = new Set(existingLinks);
   for (const blockId of nodeIds) {
@@ -1070,6 +1098,22 @@ export function appendChainPath(service, operation) {
     }
     return link;
   });
+  const existingLinkRows = existingLinks.map((linkId, position) => {
+    const link = service.database.prepare("SELECT * FROM links WHERE project_id = ? AND id = ?").get(service.paths.descriptor.id, linkId);
+    return link ? { linkId: link.id, sourceId: link.source_id, targetId: link.target_id, position } : null;
+  }).filter(Boolean);
+  const topology = inspectChainTopology({
+    nodes: [...existingNodeRows, ...nodeIds.map((blockId, index) => ({ blockId, position: existingNodes.length + index }))],
+    edges: [
+      ...existingLinkRows,
+      ...links.map((link, index) => ({ linkId: link.id, sourceId: link.source_id, targetId: link.target_id, position: existingLinks.length + index })),
+    ],
+  });
+  const hardIssues = topology.issues.filter((issue) => issue.hard);
+  if (hardIssues.length) throw new Error(`append_chain_path topology invalid: ${topologyIssueText(operation.id, { issues: hardIssues })}`);
+  if (chain.delivery_state === "complete" && topology.nodes.length > 1 && !topology.connected) {
+    throw new Error(`append_chain_path cannot leave complete chain disconnected: ${topologyIssueText(operation.id, topology)}`);
+  }
   const insertNode = service.database.prepare("INSERT INTO chain_nodes(chain_id, block_id, position, role) VALUES (?, ?, ?, 'path')");
   nodeIds.forEach((blockId, index) => insertNode.run(operation.id, blockId, existingNodes.length + index));
   const insertEdge = service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)");

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { pluginRuntimeStatus } from "./plugin-runtime.mjs";
+import { inspectChainTopology } from "./chain-topology.mjs";
 import {
   architectureCoverage,
   assertAllowed,
@@ -558,6 +559,20 @@ export function validateGraph(service) {
         errors.push(`Chain edge leaves referenced nodes: chain:${chain.id} -> link:${edge.linkId}`);
       }
     }
+    const topology = inspectChainTopology({
+      nodes,
+      edges: edges.map((edge) => {
+        const link = snapshot.links.find((item) => item.id === edge.linkId);
+        return link
+          ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId }
+          : { linkId: edge.linkId, position: edge.position };
+      }),
+    });
+    for (const issue of topology.issues) {
+      const message = `Chain topology ${issue.code}: chain:${chain.id}${issue.detail ? ` · ${issue.detail}` : ""}`;
+      if (issue.hard || (chain.deliveryState === "complete" && ["disconnected", "no_edges"].includes(issue.code))) errors.push(message);
+      else warnings.push(message);
+    }
   }
   for (const target of snapshot.planChainRefs) {
     if (!snapshot.plans.some((plan) => plan.id === target.planId)) errors.push(`Missing Plan: plan:${target.planId}`);
@@ -721,37 +736,31 @@ export function analyzeGraphDrift(service, snapshot = service.snapshot()) {
     .map((cp) => ({ id: cp.id, title: cp.title, targetType: cp.targetType, targetId: cp.targetId, status: cp.status }));
 
   const semanticReviews = collectSemanticReviews(service, snapshot);
-  const chainDisconnections = snapshot.chains.flatMap((chain) => {
+  const chainTopologyIssues = snapshot.chains.flatMap((chain) => {
     const nodes = snapshot.chainNodes
       .filter((node) => node.chainId === chain.id)
-      .sort((left, right) => left.position - right.position)
-      .map((node) => node.blockId);
+      .sort((left, right) => left.position - right.position);
     if (nodes.length < 2) return [];
-    const adjacency = new Map(nodes.map((id) => [id, new Set()]));
-    const edges = snapshot.chainEdges.filter((edge) => edge.chainId === chain.id);
-    for (const edge of edges) {
-      const link = snapshot.links.find((item) => item.id === edge.linkId);
-      if (!link || link.sourceType !== "block" || link.targetType !== "block") continue;
-      if (!adjacency.has(link.sourceId) || !adjacency.has(link.targetId)) continue;
-      adjacency.get(link.sourceId).add(link.targetId);
-      adjacency.get(link.targetId).add(link.sourceId);
-    }
-    const visited = new Set();
-    const queue = [nodes[0]];
-    while (queue.length) {
-      const id = queue.shift();
-      if (visited.has(id)) continue;
-      visited.add(id);
-      queue.push(...(adjacency.get(id) ?? []));
-    }
-    return visited.size === nodes.length ? [] : [{
+    const edges = snapshot.chainEdges
+      .filter((edge) => edge.chainId === chain.id)
+      .sort((left, right) => left.position - right.position)
+      .map((edge) => {
+        const link = snapshot.links.find((item) => item.id === edge.linkId);
+        return link
+          ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId }
+          : { linkId: edge.linkId, position: edge.position };
+      });
+    const topology = inspectChainTopology({ nodes, edges });
+    const actionable = topology.issues.filter((issue) => issue.code !== "position_gap" || issue.hard);
+    return actionable.length ? [{
       chainId: chain.id,
       title: chain.title,
-      nodeIds: nodes,
-      reachableNodeIds: [...visited],
-      missingNodeIds: nodes.filter((id) => !visited.has(id)),
+      nodeIds: nodes.map((node) => node.blockId),
+      reachableNodeIds: topology.reachableNodeIds,
+      missingNodeIds: topology.missingNodeIds,
       edgeIds: edges.map((edge) => edge.linkId),
-    }];
+      issues: actionable,
+    }] : [];
   });
   const linksOutsideChains = snapshot.links
     .filter((link) => link.sourceType === "block" && link.targetType === "block")
@@ -764,9 +773,10 @@ export function analyzeGraphDrift(service, snapshot = service.snapshot()) {
     retestRequired,
     pendingCheckpoints,
     semanticReviews,
-    chainDisconnections,
+    chainDisconnections: chainTopologyIssues,
+    chainTopologyIssues,
     linksOutsideChains,
-    hasDrift: isolatedBlocks.length > 0 || ghostDrifts.length > 0 || retestRequired.length > 0 || semanticReviews.length > 0 || chainDisconnections.length > 0,
+    hasDrift: isolatedBlocks.length > 0 || ghostDrifts.length > 0 || retestRequired.length > 0 || semanticReviews.length > 0 || chainTopologyIssues.length > 0,
   };
 }
 
@@ -877,10 +887,11 @@ export function renderGraphStatus(service, { locale = "en" } = {}) {
       }
     }
     if (drift.chainDisconnections?.length) {
-      lines.push("### 🔗 Disconnected Chain paths");
+      lines.push("### 🔗 Chain topology needs attention");
       for (const chain of drift.chainDisconnections) {
-        lines.push(`- **chain:${chain.chainId}** (${chain.title}) · missing reachability for ${chain.missingNodeIds.map((id) => `block:${id}`).join(", ")}`);
-        lines.push("  *Action*: add the missing explicit Link and append it with `chain_append`, or revise the Chain path deliberately.");
+        const issueText = (chain.issues ?? []).map((issue) => issue.detail || issue.code).join("; ");
+        lines.push(`- **chain:${chain.chainId}** (${chain.title})${issueText ? ` · ${issueText}` : ""}`);
+        lines.push("  *Action*: let task reconciliation reorder a forward DAG, or revise the Chain path with `set_chain_path` and explicit Links.");
       }
     }
     if (drift.linksOutsideChains.length > 0) {

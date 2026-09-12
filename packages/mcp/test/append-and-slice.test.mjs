@@ -98,6 +98,125 @@ test("task network reconciliation appends an explicitly linked Block", async () 
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
+test("chain topology reconciliation repairs order and keeps deliberate fan-out", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-topology-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-topology-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create fan-out chain fixture", operations: [
+    ...["root", "left", "right", "tail"].map((id) => ({ action: "create_block", id, fields: { title: id, kind: "service", architectureLayer: "application", scope: "core" } })),
+    { action: "create_link", id: "root-left", fields: { sourceType: "block", sourceId: "root", targetType: "block", targetId: "left", kind: "calls", contract: "root -> left" } },
+    { action: "create_link", id: "root-right", fields: { sourceType: "block", sourceId: "root", targetType: "block", targetId: "right", kind: "calls", contract: "root -> right" } },
+    { action: "create_link", id: "left-tail", fields: { sourceType: "block", sourceId: "left", targetType: "block", targetId: "tail", kind: "calls", contract: "left -> tail" } },
+    { action: "create_link", id: "right-tail", fields: { sourceType: "block", sourceId: "right", targetType: "block", targetId: "tail", kind: "calls", contract: "right -> tail" } },
+    { action: "create_chain", id: "fanout-chain", fields: { title: "Fan-out", intent: "Root fans out and merges", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "fanout-chain", expectedRevision: 1, fields: { nodeIds: ["tail", "right", "left", "root"], linkIds: [] } },
+  ] });
+  // Simulate a legacy projection that attached Links without reconciling node order.
+  for (const [position, linkId] of ["root-left", "root-right", "left-tail", "right-tail"].entries()) {
+    service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)").run("fanout-chain", linkId, position);
+  }
+  const dryRun = service.reconcileChainTopology({ chainId: "fanout-chain", autoReorder: false });
+  assert.equal(dryRun.changed, false);
+  assert.ok(dryRun.issues.some((issue) => issue.code === "needs_reorder"));
+  const repaired = service.reconcileChainTopology({ chainId: "fanout-chain" });
+  assert.deepEqual(repaired.changedChainIds, ["fanout-chain"]);
+  assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "fanout-chain").map((item) => item.blockId), ["root", "right", "left", "tail"]);
+  assert.equal(service.validate().errors.some((error) => error.includes("backward_edge")), false);
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("task network inserts a newly linked Block at its topological position", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-insert-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-insert-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create insertion fixture", operations: [
+    ...["root", "middle", "tail"].map((id) => ({ action: "create_block", id, fields: { title: id, kind: "service", architectureLayer: "application", scope: "core" } })),
+    { action: "create_link", id: "root-middle", fields: { sourceType: "block", sourceId: "root", targetType: "block", targetId: "middle", kind: "calls", contract: "root -> middle" } },
+    { action: "create_link", id: "middle-tail", fields: { sourceType: "block", sourceId: "middle", targetType: "block", targetId: "tail", kind: "calls", contract: "middle -> tail" } },
+    { action: "create_chain", id: "insert-chain", fields: { title: "Insertion", intent: "Insert a newly discovered root", inputContract: "input", outputContract: "output", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "insert-chain", expectedRevision: 1, fields: { nodeIds: ["middle", "tail"], linkIds: ["middle-tail"] } },
+  ] });
+  service.database.prepare("UPDATE chains SET delivery_state = 'complete', health_state = 'healthy' WHERE id = 'insert-chain'").run();
+  const result = synchronizeTaskNetwork(service, { chainId: "insert-chain", blockIds: ["root"], linkIds: ["root-middle"] });
+  assert.equal(result.changed, true);
+  assert.equal(result.reordered, true);
+  assert.deepEqual(result.appendedNodeIds, ["root"]);
+  assert.deepEqual(result.appendedLinkIds, ["root-middle"]);
+  assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "insert-chain").map((item) => item.blockId), ["root", "middle", "tail"]);
+  assert.deepEqual(service.snapshot().chainEdges.filter((item) => item.chainId === "insert-chain").map((item) => item.linkId), ["middle-tail", "root-middle"]);
+  assert.equal(service.snapshot().chains.find((item) => item.id === "insert-chain")?.deliveryState, "implementing");
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("Chain completion rejects a disconnected legacy path", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-complete-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-complete-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create completion fixture", operations: [
+    { action: "create_block", id: "first", fields: { title: "First", kind: "product", architectureLayer: "application", scope: "core" } },
+    { action: "create_block", id: "second", fields: { title: "Second", kind: "product", architectureLayer: "application", scope: "core" } },
+    { action: "create_chain", id: "complete-chain", fields: { title: "Complete", intent: "Completion gate", inputContract: "input", outputContract: "output", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "complete-chain", expectedRevision: 1, fields: { nodeIds: ["first", "second"], linkIds: [] } },
+  ] });
+  service.database.prepare("UPDATE blocks SET delivery_state = 'complete' WHERE id IN ('first', 'second')").run();
+  assert.throws(
+    () => service.mutate({ reason: "Reject incomplete Chain", operations: [{ action: "update_chain", id: "complete-chain", expectedRevision: 2, fields: { deliveryState: "complete" } }] }),
+    /ordered connected topology/,
+  );
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("chain topology validation surfaces cycles instead of treating them as a healthy path", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-cycle-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-cycle-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create cyclic legacy fixture", operations: [
+    { action: "create_block", id: "a", fields: { title: "A", kind: "service", architectureLayer: "application", scope: "core" } },
+    { action: "create_block", id: "b", fields: { title: "B", kind: "service", architectureLayer: "application", scope: "core" } },
+    { action: "create_link", id: "a-b", fields: { sourceType: "block", sourceId: "a", targetType: "block", targetId: "b", kind: "calls", contract: "A -> B" } },
+    { action: "create_link", id: "b-a", fields: { sourceType: "block", sourceId: "b", targetType: "block", targetId: "a", kind: "calls", contract: "B -> A" } },
+    { action: "create_chain", id: "cyclic-chain", fields: { title: "Cyclic legacy path", intent: "Cycle must be visible", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "cyclic-chain", expectedRevision: 1, fields: { nodeIds: ["a", "b"], linkIds: [] } },
+  ] });
+  service.database.prepare("UPDATE chains SET delivery_state = 'complete' WHERE id = ?").run("cyclic-chain");
+  service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)").run("cyclic-chain", "a-b", 0);
+  service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)").run("cyclic-chain", "b-a", 1);
+  const reconciliation = service.reconcileChainTopology({ chainId: "cyclic-chain" });
+  assert.equal(reconciliation.changed, false);
+  assert.match(reconciliation.issues.map((issue) => issue.detail).join("\n"), /cycle/i);
+  assert.ok(service.validate().errors.some((error) => /cycle/i.test(error)));
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("task network reconciliation appends an explicit Link even when Blocks already belong to the Chain", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-link-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-link-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create explicit link fixture", operations: [
+    { action: "create_block", id: "root", fields: { title: "Root", kind: "service", architectureLayer: "application", scope: "core" } },
+    { action: "create_block", id: "leaf", fields: { title: "Leaf", kind: "service", architectureLayer: "application", scope: "core" } },
+    { action: "create_link", id: "root-leaf", fields: { sourceType: "block", sourceId: "root", targetType: "block", targetId: "leaf", kind: "calls", contract: "Root -> Leaf" } },
+    { action: "create_chain", id: "explicit-link-chain", fields: { title: "Explicit link", intent: "Attach an existing route", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "explicit-link-chain", expectedRevision: 1, fields: { nodeIds: ["root", "leaf"], linkIds: [] } },
+  ] });
+  const result = synchronizeTaskNetwork(service, { chainId: "explicit-link-chain", blockIds: ["root", "leaf"], linkIds: ["root-leaf"] });
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.appendedNodeIds, []);
+  assert.deepEqual(result.appendedLinkIds, ["root-leaf"]);
+  assert.deepEqual(service.snapshot().chainEdges.filter((item) => item.chainId === "explicit-link-chain").map((item) => item.linkId), ["root-leaf"]);
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
 test("context boundary advances a bound ghost Block without marking it complete", async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-ghost-test-"));
   const router = new ProjectServiceRouter();

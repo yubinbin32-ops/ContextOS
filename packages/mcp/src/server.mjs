@@ -28,7 +28,7 @@ const projectRootInput = {
 
 function withProject(input, callback) {
   const service = router.serviceFor(input);
-  const runtime = { version: '0.4.0', protocolVersion: 2, observedAt: new Date().toISOString(), pid: process.pid, projectRoot: service.paths.projectRoot, capabilities: ['documents','readme-readonly','task-sessions','source-index','projection-recovery','chapter-context','plan-append','chain-append','block-ast-slice','source-cache'], plugin: pluginRuntimeStatus(service.paths.projectRoot) };
+  const runtime = { version: '0.4.0', protocolVersion: 2, observedAt: new Date().toISOString(), pid: process.pid, projectRoot: service.paths.projectRoot, capabilities: ['documents','readme-readonly','task-sessions','source-index','projection-recovery','chapter-context','plan-append','chain-append','chain-reconcile','block-ast-slice','source-cache'], plugin: pluginRuntimeStatus(service.paths.projectRoot) };
   const runtimePath = path.join(service.paths.projectRoot, '.contextos', 'runtime.json');
   try { fs.writeFileSync(runtimePath + '.' + process.pid, JSON.stringify(runtime)); fs.renameSync(runtimePath + '.' + process.pid, runtimePath); } catch { /* read-only project: tools still report their result */ }
   const { projectRoot: _projectRoot, ...payload } = normalizeMcpIds(input);
@@ -894,6 +894,32 @@ server.registerTool(
   async (input) => {
     const data = withProject(input, (service, payload) => service.appendChainPath(payload));
     return writeResult(data, `Appended Chain path to chain:${input.chainId}. Graph revision ${data.graphRevision}.`, input.includeStructured, "chain_append");
+  },
+);
+
+server.registerTool(
+  "chain_reconcile",
+  {
+    description:
+      "Reconcile an existing Chain's declared order with its explicit Link network. Safe forward DAGs are reordered automatically; cycles, backward edges, and disconnected components are returned as actionable issues.",
+    inputSchema: {
+      ...projectRootInput,
+      chainId: z.string().min(1),
+      autoReorder: z.boolean().default(true),
+      actor: z.string().optional(),
+      reason: z.string().optional(),
+      includeStructured: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const data = withProject(input, (service, payload) => service.reconcileChainTopology(payload));
+    const markdown = [
+      `# Chain topology reconciliation: ${input.chainId}`,
+      `- Graph revision: ${data.graphRevision}`,
+      `- Reordered: ${data.changedChainIds?.length ? data.changedChainIds.map((id) => `chain:${id}`).join(", ") : "none"}`,
+      ...(data.issues?.length ? ["", "## Issues", ...data.issues.map((issue) => `- ${issue.detail}`)] : ["- Topology is ordered and connected."]),
+    ].join("\n");
+    return writeResult(data, markdown, input.includeStructured, "chain_reconcile");
   },
 );
 

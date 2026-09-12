@@ -5,6 +5,7 @@ import {spawnSync} from 'node:child_process';
 import { detectLanguage, extractSymbols } from './ast.mjs';
 import { transaction, getSyncMeta, setSyncMeta } from './database.mjs';
 import { executeMutate } from './mutation-engine.mjs';
+import { inspectChainTopology, stableChainOrder, topologyIssueText } from './chain-topology.mjs';
 
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const ignored = new Set(['.git','.contextos','node_modules','.build','build','dist','coverage','.next','release-assets']);
@@ -171,6 +172,31 @@ export function ensurePlanCoverage(service, { planId, chainId = null, blockIds =
   plan = planForTask(service, planId);
   let scope = chainId ? snapshot.planChainScopes.find((item) => item.planId === planId && item.chainId === chainId) : null;
   const chain = chainId ? snapshot.chains.find((item) => item.id === chainId) : null;
+  if (chain && chain.deliveryState !== 'complete') {
+    const targetKeys = new Set([
+      ...targetBlockIds
+        .filter((blockId) => snapshot.blocks.find((item) => item.id === blockId)?.deliveryState !== 'complete')
+        .map((blockId) => `block:${blockId}`),
+      `chain:${chainId}`,
+      ...snapshot.chainEdges
+        .filter((edge) => edge.chainId === chainId)
+        .map((edge) => `link:${edge.linkId}`),
+    ]);
+    const reopened = snapshot.planChanges
+      .filter((change) => targetKeys.has(`${change.entityType}:${change.entityId}`))
+      .filter((change) => ['complete', 'skipped'].includes(change.status))
+      .map((change) => ({ changeId: change.id, patch: { status: 'active' } }));
+    if (reopened.length) {
+      service.mutate({
+        planId,
+        reason: 'Reopen Plan coverage after feature Chain expansion',
+        task: 'plan-sync',
+        operations: [{ action: 'update_plan_changes', id: planId, expectedRevision: plan.currentRevision, fields: { updates: reopened } }],
+      });
+      snapshot = service.snapshot();
+      plan = planForTask(service, planId);
+    }
+  }
   if (chain) {
     const nodeIds = snapshot.chainNodes.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.blockId);
     const linkIds = snapshot.chainEdges.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.linkId);
@@ -207,46 +233,232 @@ export function ensurePlanCoverage(service, { planId, chainId = null, blockIds =
 }
 
 /**
+ * Reconcile the declared order of one or all Chains with their explicit Link
+ * network. Safe DAGs are reordered without changing membership or Links;
+ * cycles, backward edges and disconnected components remain visible issues.
+ */
+export function reconcileChainTopology(service, { chainId = null, autoReorder = true, reason = 'Reconcile Chain topology' } = {}) {
+  let snapshot = service.snapshot();
+  const chains = chainId ? snapshot.chains.filter((chain) => chain.id === chainId) : snapshot.chains;
+  const changedChainIds = [];
+  const issues = [];
+  if (chainId && !chains.length) {
+    return {
+      changed: false,
+      changedChainIds,
+      issues: [{ chainId, code: 'missing_chain', detail: `Chain not found: ${chainId}` }],
+      graphRevision: service.project().graph_revision,
+    };
+  }
+  for (const chain of chains) {
+    const nodeRows = snapshot.chainNodes
+      .filter((node) => node.chainId === chain.id)
+      .sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));
+    const edgeRows = snapshot.chainEdges
+      .filter((edge) => edge.chainId === chain.id)
+      .sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+    const edgeInputs = edgeRows.map((edge) => {
+      const link = snapshot.links.find((item) => item.id === edge.linkId);
+      return link
+        ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId }
+        : { linkId: edge.linkId, position: edge.position };
+    });
+    let topology = inspectChainTopology({ nodes: nodeRows, edges: edgeInputs });
+    const hardIssues = topology.issues.filter((issue) => issue.hard);
+    const reorderableIssues = new Set(['backward_edge', 'position_gap', 'duplicate_position']);
+    const irreparableIssues = hardIssues.filter((issue) => !reorderableIssues.has(issue.code));
+    if (irreparableIssues.length) {
+      issues.push({ chainId: chain.id, code: 'invalid', detail: topologyIssueText(chain.id, { issues: irreparableIssues }), issues: irreparableIssues });
+      continue;
+    }
+    if (!autoReorder && hardIssues.length) {
+      issues.push({ chainId: chain.id, code: 'needs_reorder', detail: topologyIssueText(chain.id, { issues: hardIssues }), issues: hardIssues });
+      continue;
+    }
+    const canonicalOrder = stableChainOrder(nodeRows, edgeInputs);
+    const currentOrder = nodeRows.map((node) => node.blockId);
+    const needsPositionRewrite = topology.issues.some((issue) => ['position_gap', 'duplicate_position'].includes(issue.code));
+    if (autoReorder && canonicalOrder && (canonicalOrder.join('\u0000') !== currentOrder.join('\u0000') || needsPositionRewrite)) {
+      try {
+        service.mutate({
+          reason,
+          task: 'chain-reconcile',
+          operations: [{
+            action: 'set_chain_path',
+            id: chain.id,
+            expectedRevision: chain.currentRevision,
+            fields: { nodeIds: canonicalOrder, linkIds: edgeRows.map((edge) => edge.linkId) },
+          }],
+        });
+        changedChainIds.push(chain.id);
+        snapshot = service.snapshot();
+        const updatedNodes = snapshot.chainNodes.filter((node) => node.chainId === chain.id).sort((left, right) => left.position - right.position);
+        const updatedEdges = snapshot.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position).map((edge) => {
+          const link = snapshot.links.find((item) => item.id === edge.linkId);
+          return link
+            ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId }
+            : { linkId: edge.linkId, position: edge.position };
+        });
+        topology = inspectChainTopology({ nodes: updatedNodes, edges: updatedEdges });
+      } catch (error) {
+        issues.push({ chainId: chain.id, code: 'reorder_failed', detail: error.message });
+        continue;
+      }
+    }
+    const softIssues = topology.issues.filter((issue) => !issue.hard);
+    if (softIssues.length) issues.push({ chainId: chain.id, code: 'incomplete', detail: topologyIssueText(chain.id, { issues: softIssues }), issues: softIssues });
+  }
+  return {
+    changed: changedChainIds.length > 0,
+    changedChainIds,
+    issues,
+    graphRevision: service.project().graph_revision,
+  };
+}
+
+/**
  * Append only explicit task Blocks and Links that extend a feature Chain. A
  * missing Link is reported to the caller instead of being invented from
  * directory or import proximity.
  */
-export function synchronizeTaskNetwork(service, { chainId, blockIds = [] } = {}) {
+export function synchronizeTaskNetwork(service, { chainId, blockIds = [], linkIds = [] } = {}) {
   if (!chainId) return { changed: false, appendedNodeIds: [], appendedLinkIds: [], issue: null };
   const snapshot = service.snapshot();
   const chain = snapshot.chains.find((item) => item.id === chainId);
   if (!chain) return { changed: false, appendedNodeIds: [], appendedLinkIds: [], issue: `chain:${chainId} not found` };
-  const currentNodes = snapshot.chainNodes.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.blockId);
-  const currentLinks = new Set(snapshot.chainEdges.filter((item) => item.chainId === chainId).map((item) => item.linkId));
+  const currentNodeRows = snapshot.chainNodes
+    .filter((item) => item.chainId === chainId)
+    .sort((a, b) => a.position - b.position || a.blockId.localeCompare(b.blockId));
+  const currentNodes = currentNodeRows.map((item) => item.blockId);
+  const currentEdgeRows = snapshot.chainEdges
+    .filter((item) => item.chainId === chainId)
+    .sort((a, b) => a.position - b.position || a.linkId.localeCompare(b.linkId));
+  const currentLinks = new Set(currentEdgeRows.map((item) => item.linkId));
   const missingNodes = unique(blockIds).filter((id) => !currentNodes.includes(id));
-  if (!missingNodes.length) return { changed: false, appendedNodeIds: [], appendedLinkIds: [], issue: null };
   const finalNodes = new Set([...currentNodes, ...missingNodes]);
-  const candidateLinks = snapshot.links
+  const explicitLinkIds = unique(linkIds).filter((id) => !currentLinks.has(id));
+  const explicitLinks = explicitLinkIds
+    .map((id) => snapshot.links.find((link) => link.id === id))
+    .filter((link) => link && link.sourceType === 'block' && link.targetType === 'block' && finalNodes.has(link.sourceId) && finalNodes.has(link.targetId));
+  const inferredLinks = snapshot.links
     .filter((link) => link.sourceType === 'block' && link.targetType === 'block')
     .filter((link) => !currentLinks.has(link.id))
     .filter((link) => finalNodes.has(link.sourceId) && finalNodes.has(link.targetId))
     .filter((link) => missingNodes.includes(link.sourceId) || missingNodes.includes(link.targetId))
     .map((link) => link.id);
-  if (!candidateLinks.length) {
+  const candidateLinks = [
+    ...explicitLinks.map((link) => link.id),
+    ...inferredLinks.filter((id) => !explicitLinkIds.includes(id)),
+  ];
+  const missingExplicitLinks = explicitLinkIds.filter((id) => !explicitLinks.some((link) => link.id === id));
+  if (missingExplicitLinks.length) {
+    return {
+      changed: false, appendedNodeIds: [], appendedLinkIds: [],
+      issue: `Task feature Links ${missingExplicitLinks.map((id) => `link:${id}`).join(', ')} are not valid links between Chain nodes`,
+    };
+  }
+  if (!missingNodes.length && !candidateLinks.length) {
+    return { changed: false, appendedNodeIds: [], appendedLinkIds: [], issue: null };
+  }
+  if (!candidateLinks.length && missingNodes.length && finalNodes.size > 1) {
     return {
       changed: false, appendedNodeIds: [], appendedLinkIds: [],
       issue: `Task Blocks ${missingNodes.map((id) => `block:${id}`).join(', ')} have no explicit Link into chain:${chainId}`,
     };
   }
-  const result = service.appendChainPath({
-    chainId, expectedRevision: chain.currentRevision,
-    nodeIds: missingNodes, linkIds: candidateLinks,
-    reason: 'Append task Blocks and their explicit feature Links',
-  });
-  return { ...result, changed: true, appendedNodeIds: missingNodes, appendedLinkIds: candidateLinks, issue: null };
+  const nodeOrder = [...currentNodes, ...missingNodes];
+  const linkRows = [
+    ...currentEdgeRows.map((edge) => {
+      const link = snapshot.links.find((item) => item.id === edge.linkId);
+      return link ? {
+        linkId: edge.linkId,
+        sourceId: link.sourceId ?? link.source_id,
+        targetId: link.targetId ?? link.target_id,
+        position: edge.position,
+      } : { linkId: edge.linkId, position: edge.position };
+    }),
+    ...candidateLinks.map((id, index) => {
+      const link = snapshot.links.find((item) => item.id === id);
+      return {
+        linkId: id,
+        sourceId: link?.sourceId ?? link?.source_id,
+        targetId: link?.targetId ?? link?.target_id,
+        position: currentEdgeRows.length + index,
+      };
+    }),
+  ];
+  const topology = inspectChainTopology({ nodes: nodeOrder.map((blockId, position) => ({ blockId, position })), edges: linkRows });
+  const hardIssues = topology.issues.filter((issue) => issue.hard && !['backward_edge', 'position_gap', 'duplicate_position'].includes(issue.code));
+  if (hardIssues.length) return {
+    changed: false, appendedNodeIds: [], appendedLinkIds: [],
+    issue: topologyIssueText(chainId, { issues: hardIssues }),
+  };
+  const orderedNodes = stableChainOrder(
+    nodeOrder.map((blockId, position) => ({ blockId, position })),
+    linkRows,
+  );
+  if (!orderedNodes) {
+    return {
+      changed: false, appendedNodeIds: [], appendedLinkIds: [],
+      issue: topologyIssueText(chainId, { issues: topology.issues.filter((issue) => issue.hard) }) || `Chain ${chainId} cannot be topologically ordered`,
+    };
+  }
+  const orderedLinks = [...currentEdgeRows.map((edge) => edge.linkId), ...candidateLinks];
+  const currentOrder = currentNodes.join('\u0000');
+  const needsRewrite = orderedNodes.join('\u0000') !== currentOrder || candidateLinks.length > 0 || topology.issues.some((issue) => ['position_gap', 'duplicate_position'].includes(issue.code));
+  if (!needsRewrite) return { changed: false, appendedNodeIds: [], appendedLinkIds: [], issue: null };
+  try {
+    const extendsCompleteChain = chain.deliveryState === 'complete' && (missingNodes.length > 0 || candidateLinks.length > 0);
+    const operations = [{
+      action: 'set_chain_path',
+      id: chainId,
+      expectedRevision: chain.currentRevision,
+      fields: { nodeIds: orderedNodes, linkIds: orderedLinks },
+    }];
+    if (extendsCompleteChain) {
+      operations.push({
+        action: 'update_chain',
+        id: chainId,
+        expectedRevision: chain.currentRevision + 1,
+        fields: { deliveryState: 'implementing', healthState: 'warning' },
+        summary: 'Reopened after task feature network expansion',
+      });
+    }
+    const result = service.mutate({
+      reason: 'Synchronize task Blocks, explicit feature Links and Chain order',
+      task: 'task-reconcile',
+      operations,
+    });
+    return {
+      ...result,
+      changed: true,
+      appendedNodeIds: orderedNodes.filter((id) => missingNodes.includes(id)),
+      appendedLinkIds: candidateLinks,
+      reordered: orderedNodes.join('\u0000') !== currentOrder,
+      reopened: extendsCompleteChain,
+      issue: null,
+    };
+  } catch (error) {
+    return { changed: false, appendedNodeIds: [], appendedLinkIds: [], issue: error.message };
+  }
 }
 
-export function beginTask(service,{intent,blockIds=[],chainId=null,planId=null,feature=null,standaloneReason='',readOnly=false}={}) {
+export function beginTask(service,{intent,blockIds=[],linkIds=[],chainId=null,planId=null,feature=null,standaloneReason='',readOnly=false}={}) {
   if (!intent?.trim()) throw new Error('intent is required');
   service.ensureSynced();
   let snapshot=service.snapshot();
+  const existingFeatureChainId = feature?.id ?? chainId;
+  if (existingFeatureChainId && snapshot.chains.some((chain) => chain.id === existingFeatureChainId)) {
+    service.reconcileChainTopology({
+      chainId: existingFeatureChainId,
+      autoReorder: true,
+      reason: 'Reconcile existing feature Chain before task begin',
+    });
+    snapshot = service.snapshot();
+  }
   planForTask(service, planId);
   for(const id of blockIds) if(!snapshot.blocks.some(b=>b.id===id)) throw new Error(`Register Block before task: ${id}`);
+  let initialNetwork = null;
   if(feature) {
     chainId=feature.id;
     const current=snapshot.chains.find(c=>c.id===chainId);
@@ -260,22 +472,22 @@ export function beginTask(service,{intent,blockIds=[],chainId=null,planId=null,f
       const result=service.mutate({reason:'Declare task feature network',operations});
       if(result.success===false) throw new Error(result.projection.error);
     } else {
-      const existingNodes=snapshot.chainNodes.filter(n=>n.chainId===chainId).sort((a,b)=>a.position-b.position).map(n=>n.blockId);
-      const existingLinks=snapshot.chainEdges.filter(e=>e.chainId===chainId).map(e=>e.linkId);
-      const appendNodes=requestedNodes.filter((id)=>!existingNodes.includes(id));
-      const appendLinks=requestedLinks.filter((id)=>!existingLinks.includes(id));
-      if(appendNodes.length||appendLinks.length) service.appendChainPath({chainId,expectedRevision:current.currentRevision,nodeIds:appendNodes,linkIds:appendLinks,reason:'Extend existing task feature Chain'});
+      const network = synchronizeTaskNetwork(service, { chainId, blockIds: requestedNodes, linkIds: requestedLinks });
+      if (network.issue) throw new Error(network.issue);
+      initialNetwork = network;
     }
+  } else if (chainId) {
+    initialNetwork = synchronizeTaskNetwork(service, { chainId, blockIds, linkIds });
   }
   if(chainId&&!service.snapshot().chains.some(c=>c.id===chainId)) throw new Error('Unknown Chain');
   snapshot=service.snapshot();
   const planCoverage=ensurePlanCoverage(service,{planId,chainId,blockIds,readOnly,reason:'Register task scope in Plan'});
   const index=indexSources(service); const now=new Date().toISOString();const id=`task_${crypto.randomUUID()}`;
-  const scope={blockIds,chainId,planId,standaloneReason,readOnly,startRevision:index.revision};
+  const scope={blockIds,chainId,planId,linkIds:unique(feature?.linkIds ?? linkIds),standaloneReason,readOnly,startRevision:index.revision};
   service.database.prepare('INSERT INTO task_sessions(id,project_id,intent,scope_json,source_revision,created_at,updated_at) VALUES(?,?,?,?,?,?,?)')
     .run(id,service.paths.descriptor.id,intent,JSON.stringify(scope),index.sourceRevision,now,now);
   const unfinished=service.database.prepare("SELECT id,intent FROM task_sessions WHERE status='active' AND id<>? AND project_id=?").all(id,service.paths.descriptor.id);
-  return {taskId:id,updatedAt:now,...index,planCoverage,resumableTasks:unfinished,nextActions:['Implement from registered locators','task_reconcile','run_command / checkpoint_record','task_finish']};
+  return {taskId:id,updatedAt:now,...index,planCoverage,initialNetwork,resumableTasks:unfinished,nextActions:['Implement from registered locators','task_reconcile','run_command / checkpoint_record','task_finish']};
 }
 export function reconcileTask(service,{taskId}={}) {
   service.ensureSynced();
@@ -286,27 +498,30 @@ export function reconcileTask(service,{taskId}={}) {
   let snapshot=service.snapshot();
   const issues=[]; const add=(kind,target,detail)=>issues.push({kind,target,detail});
   let planCoverage={planId:scope.planId??null,appendedChangeIds:[],chainScopeId:null,changed:false};
-  if(scope.planId) {
-    try {
-      planCoverage=ensurePlanCoverage(service,{planId:scope.planId,chainId:scope.chainId,blockIds:scope.blockIds,readOnly:scope.readOnly,reason:'Reconcile task scope in Plan'});
-      snapshot=service.snapshot();
-    } catch(error) {
-      add('plan_coverage',scope.planId,error.message);
-    }
-  }
   let network={changed:false,appendedNodeIds:[],appendedLinkIds:[],issue:null};
+  let chainTopology = {changed:false,changedChainIds:[],issues:[],graphRevision:service.project().graph_revision};
   if(scope.chainId) {
-    network=synchronizeTaskNetwork(service,{chainId:scope.chainId,blockIds:scope.blockIds});
+    network=synchronizeTaskNetwork(service,{chainId:scope.chainId,blockIds:scope.blockIds,linkIds:scope.linkIds ?? []});
     if(network.issue) add('chain_incomplete',scope.chainId,network.issue);
-    if(network.changed && scope.planId) {
+    chainTopology=reconcileChainTopology(service,{chainId:scope.chainId,autoReorder:true,reason:'Reconcile task Chain topology'});
+    for (const issue of chainTopology.issues) add('chain_topology', scope.chainId, issue.detail);
+    if(scope.planId) {
       try {
-        planCoverage=ensurePlanCoverage(service,{planId:scope.planId,chainId:scope.chainId,blockIds:scope.blockIds,readOnly:scope.readOnly,reason:'Refresh Plan after Chain append'});
+        planCoverage=ensurePlanCoverage(service,{planId:scope.planId,chainId:scope.chainId,blockIds:scope.blockIds,readOnly:scope.readOnly,reason:'Refresh Plan after Chain synchronization'});
       } catch(error) {
         add('plan_coverage',scope.planId,error.message);
       }
     }
     snapshot=service.snapshot();
     index=indexSources(service);
+  }
+  if(scope.planId && !scope.chainId) {
+    try {
+      planCoverage=ensurePlanCoverage(service,{planId:scope.planId,chainId:null,blockIds:scope.blockIds,readOnly:scope.readOnly,reason:'Reconcile task scope in Plan'});
+      snapshot=service.snapshot();
+    } catch(error) {
+      add('plan_coverage',scope.planId,error.message);
+    }
   }
   const changed=service.database.prepare('SELECT DISTINCT path FROM sync_events WHERE revision>?').all(scope.startRevision).map(r=>r.path);
   for(const relative of changed) {
@@ -328,14 +543,19 @@ export function reconcileTask(service,{taskId}={}) {
     const chain=snapshot.chains.find(c=>c.id===scope.chainId);
     if(!chain) add('missing_chain',scope.chainId,'Declared feature Chain was removed');
     else if(!chain.inputContract?.trim() || !chain.outputContract?.trim()) add('chain_contract_missing',scope.chainId,'Describe the feature input and observable outcome');
-    const nodes=snapshot.chainNodes.filter(n=>n.chainId===scope.chainId).map(n=>n.blockId);
+    const nodes=snapshot.chainNodes.filter(n=>n.chainId===scope.chainId).sort((a,b)=>a.position-b.position).map(n=>n.blockId);
     const edges=snapshot.chainEdges.filter(e=>e.chainId===scope.chainId);
     for(const id of scope.blockIds) if(!nodes.includes(id)) add('chain_incomplete',id,'Task Block absent from feature Chain');
-    if(nodes.length>1) {
-      const adjacency=new Map(nodes.map(id=>[id,new Set()]));
-      for(const edge of edges) {const link=snapshot.links.find(l=>l.id===edge.linkId);if(link&&adjacency.has(link.sourceId)&&adjacency.has(link.targetId)){adjacency.get(link.sourceId).add(link.targetId);adjacency.get(link.targetId).add(link.sourceId);}}
-      const visited=new Set();const queue=nodes.slice(0,1);while(queue.length){const id=queue.shift();if(visited.has(id))continue;visited.add(id);queue.push(...adjacency.get(id));}
-      if(visited.size!==nodes.length) add('chain_disconnected',scope.chainId,'Declare links joining the serial/parallel feature network');
+    const topology = inspectChainTopology({
+      nodes: snapshot.chainNodes.filter(n=>n.chainId===scope.chainId).sort((a,b)=>a.position-b.position),
+      edges: edges.map((edge) => {
+        const link = snapshot.links.find((item) => item.id === edge.linkId);
+        return link ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId } : { linkId: edge.linkId, position: edge.position };
+      }),
+    });
+    for (const issue of topology.issues) {
+      const alreadyReported = chainTopology.issues.some((entry) => entry.issues?.some((item) => item.code === issue.code));
+      if (!alreadyReported && (issue.hard || ['disconnected', 'no_edges'].includes(issue.code))) add('chain_topology', scope.chainId, issue.detail);
     }
   }
   transaction(service.database,()=>{
@@ -344,7 +564,7 @@ export function reconcileTask(service,{taskId}={}) {
       .run(hash(`${taskId}:${issue.kind}:${issue.target}`),taskId,issue.kind,issue.target,issue.detail,new Date().toISOString());
     service.database.prepare('UPDATE task_sessions SET source_revision=?,updated_at=? WHERE id=?').run(index.sourceRevision,new Date().toISOString(),taskId);
   });
-  return {taskId,updatedAt:session(service,taskId).updated_at,...index,autoReconciliation,planCoverage,network,issues,status:issues.length?'needs_work':'ready',graphRevision:service.project().graph_revision};
+  return {taskId,updatedAt:session(service,taskId).updated_at,...index,autoReconciliation,chainTopology,planCoverage,network,issues,status:issues.length?'needs_work':'ready',graphRevision:service.project().graph_revision};
 }
 export function finishTask(service,{taskId,expectedGraphRevision,sourceRevision,idempotencyKey,summary=''}={}) {
   if(!idempotencyKey)throw new Error('idempotencyKey is required');
@@ -413,7 +633,7 @@ export function finishTask(service,{taskId,expectedGraphRevision,sourceRevision,
   return result;
 }
 
-export function updateTaskScope(service,{taskId,expectedUpdatedAt,blockIds,chainId,planId,standaloneReason,excludedPaths,nextAction,summary}={}) {
+export function updateTaskScope(service,{taskId,expectedUpdatedAt,blockIds,linkIds,chainId,planId,standaloneReason,excludedPaths,nextAction,summary}={}) {
   service.ensureSynced();
   const db=service.database;
   return transaction(db,()=>{
@@ -424,6 +644,10 @@ export function updateTaskScope(service,{taskId,expectedUpdatedAt,blockIds,chain
     if(blockIds!==undefined){
       for(const id of blockIds) if(!db.prepare('SELECT id FROM blocks WHERE id=? AND project_id=?').get(id,service.paths.descriptor.id))throw new Error(`Unknown Block: ${id}`);
       scope.blockIds=blockIds;
+    }
+    if(linkIds!==undefined){
+      for(const id of linkIds) if(!db.prepare('SELECT id FROM links WHERE id=? AND project_id=? AND archived=0').get(id,service.paths.descriptor.id))throw new Error(`Unknown Link: ${id}`);
+      scope.linkIds=unique(linkIds);
     }
     if(chainId!==undefined){
       if(chainId&&!db.prepare('SELECT id FROM chains WHERE id=? AND project_id=?').get(chainId,service.paths.descriptor.id))throw new Error('Unknown Chain');

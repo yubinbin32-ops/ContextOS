@@ -1,4 +1,4 @@
-import { indexSources } from "./reconciliation.mjs";
+import { indexSources, reconcileChainTopology } from "./reconciliation.mjs";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -741,8 +741,17 @@ export class ContextOSService {
     if (mode && mode !== "contract") throw new Error("chain_code_stream is locator-only; implementation bodies are not returned");
     mode = "contract";
     this.ensureSynced();
+    // Capture the binding scan for this response before topology reconciliation.
+    // Reconciliation reads a fresh snapshot, which would otherwise consume a
+    // transient moved/changed status before the caller sees the code stream.
+    const sourceSync = this.syncSourceBindings({ includeUnchanged: true });
+    const streamBindingState = new Map(this.sourceBindingState);
+    const chainReconciliation = this.reconcileChainTopology({
+      chainId,
+      autoReorder: true,
+      reason: "Reconcile Chain topology before code stream",
+    });
     const snapshot = this.snapshot();
-    const sourceSync = snapshot.sourceSync ?? this.syncSourceBindings();
     const chain = snapshot.chains.find((c) => c.id === chainId);
     if (!chain) throw new Error(`Chain not found: ${chainId}`);
 
@@ -774,7 +783,7 @@ export class ContextOSService {
           || sourceRefs.find((candidate) => candidate.symbol)
           || sourceRefs.find((candidate) => candidate.role === "implementation")
           || sourceRefs[0];
-        const binding = this.sourceBindingState.get(ref.id);
+        const binding = streamBindingState.get(ref.id) ?? this.sourceBindingState.get(ref.id);
         filePath = binding?.relativePath ?? ref.path;
         symbol = ref.symbol;
         startLine = binding?.startLine ?? ref.start_line;
@@ -830,11 +839,14 @@ export class ContextOSService {
         invalidBindingCount: sourceSync.invalidBindingCount,
         changes: sourceSync.changes.slice(0, 12),
       },
+      chainReconciliation,
       nodes: streamNodes,
       codeStream,
       markdown: [
         `# Chain Code Stream: ${chain.title} (${chain.id})`,
         `Nodes: ${streamNodes.length} · Locator-only path + symbol indexes`,
+        ...(chainReconciliation.changedChainIds?.length ? [`Chain order reconciled: ${chainReconciliation.changedChainIds.map((id) => `chain:${id}`).join(", ")}`] : []),
+        ...(chainReconciliation.issues?.length ? ["Chain topology issues:", ...chainReconciliation.issues.map((issue) => `- ${issue.detail}`)] : []),
         `Source sync: r${sourceSync.revision} · ${sourceSync.changedBindingCount} binding change(s) · ${sourceSync.invalidBindingCount} invalid`,
         ...(sourceSync.changes.length ? ["", "## Source changes", ...sourceSync.changes.slice(0, 8).map((change) =>
           `- block:${change.blockId} ${change.symbol ?? change.path} · ${change.kinds.join(", ")}`)] : []),
@@ -1230,10 +1242,19 @@ export class ContextOSService {
     });
   }
 
+  reconcileChainTopology({ chainId = null, autoReorder = true, reason = "Reconcile Chain topology" } = {}) {
+    this.ensureSynced();
+    return reconcileChainTopology(this, { chainId, autoReorder, reason });
+  }
+
   contextForTask(options = {}) {
     const repositorySync = indexSources(this);
     const autoReconciliation = this.reconcileSourceBackedBlocks();
-    return { ...buildContextForTask(this, {...options, repositorySync}), repositorySync, autoReconciliation };
+    const chainReconciliation = this.reconcileChainTopology({
+      autoReorder: true,
+      reason: "Reconcile Chain topology at context boundary",
+    });
+    return { ...buildContextForTask(this, {...options, repositorySync}), repositorySync, autoReconciliation, chainReconciliation };
   }
 
   resolveHistoryContext(planId = null, chainScopeId = null) {
