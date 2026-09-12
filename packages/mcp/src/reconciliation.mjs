@@ -7,6 +7,7 @@ import { transaction, getSyncMeta, setSyncMeta } from './database.mjs';
 import { executeMutate } from './mutation-engine.mjs';
 import { inspectChainTopology, stableChainOrder, topologyIssueText } from './chain-topology.mjs';
 import { inspectChainNetwork } from './chain-network.mjs';
+import { inspectChainComposition } from './chain-composition.mjs';
 
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const ignored = new Set(['.git','.contextos','node_modules','.build','build','dist','coverage','.next','release-assets']);
@@ -110,6 +111,97 @@ function planForTask(service, planId) {
   const plan = service.snapshot().plans.find((item) => item.id === planId);
   if (!plan) throw new Error(`plan:${planId} not found`);
   return plan;
+}
+
+/**
+ * Reconcile the macro route of Composite Chains. A parent only exposes typed
+ * Chain/Block members; child delivery and topology remain owned by the child.
+ */
+export function reconcileChainComposition(service, { chainId = null, autoReorder = true, reason = 'Reconcile Composite Chain composition' } = {}) {
+  let snapshot = service.snapshot();
+  const chains = chainId ? snapshot.chains.filter((chain) => chain.id === chainId) : snapshot.chains;
+  const reports = [];
+  const changedChainIds = [];
+  if (chainId && !chains.length) {
+    return { changed: false, changedChainIds, reports: [{ chainId, issues: [{ code: 'missing_chain', detail: `Chain not found: ${chainId}` }] }], graphRevision: service.project().graph_revision };
+  }
+  for (const chain of chains.filter((candidate) => candidate.chainType === 'composite')) {
+    let members = snapshot.chainMembers.filter((member) => member.chainId === chain.id)
+      .sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
+    let edges = snapshot.chainEdges.filter((edge) => edge.chainId === chain.id)
+      .sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+    let composition = inspectChainComposition({ chain, members, edges, chains: snapshot.chains, blocks: snapshot.blocks, links: snapshot.links });
+    const currentOrder = members.map((member) => `${member.memberType}:${member.memberId}`);
+    const ordered = composition.topology.orderedMemberIds;
+    let changed = false;
+    const hardIssues = composition.topology.issues.filter((issue) => issue.hard);
+    if (autoReorder && ordered && hardIssues.length === 0 && ordered.join('\u0000') !== currentOrder.join('\u0000')) {
+      try {
+        const memberById = new Map(members.map((member) => [`${member.memberType}:${member.memberId}`, member]));
+        service.mutate({
+          reason,
+          task: 'chain-compose-reconcile',
+          operations: [{
+            action: 'set_chain_composition',
+            id: chain.id,
+            expectedRevision: chain.currentRevision,
+            fields: {
+              memberRefs: ordered.map((id) => {
+                const member = memberById.get(id);
+                return { memberType: member.memberType, memberId: member.memberId, role: member.role, required: member.required };
+              }),
+              linkIds: edges.map((edge) => edge.linkId),
+            },
+          }],
+        });
+        changed = true;
+        changedChainIds.push(chain.id);
+        snapshot = service.snapshot();
+        members = snapshot.chainMembers.filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position);
+        edges = snapshot.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
+        composition = inspectChainComposition({ chain: snapshot.chains.find((candidate) => candidate.id === chain.id) ?? chain, members, edges, chains: snapshot.chains, blocks: snapshot.blocks, links: snapshot.links });
+      } catch (error) {
+        composition.topology.issues.push({ code: 'reorder_failed', detail: error.message, hard: true });
+      }
+    }
+    const currentChain = snapshot.chains.find((candidate) => candidate.id === chain.id) ?? chain;
+    if (currentChain.deliveryState === 'complete' && !composition.ready) {
+      try {
+        service.mutate({
+          reason: 'Reopen Composite Chain after child composition drift',
+          task: 'chain-compose-reconcile',
+          operations: [{
+            action: 'update_chain', id: chain.id, expectedRevision: currentChain.currentRevision,
+            fields: { deliveryState: 'implementing', healthState: 'warning' },
+            summary: 'Reopened after Composite Chain member drift',
+          }],
+        });
+        changed = true;
+        if (!changedChainIds.includes(chain.id)) changedChainIds.push(chain.id);
+      } catch (error) {
+        composition.topology.issues.push({ code: 'state_reopen_failed', detail: error.message, hard: true });
+      }
+    }
+    reports.push({
+      chainId: chain.id,
+      complete: composition.complete,
+      ready: composition.ready,
+      changed,
+      memberCount: members.length,
+      edgeCount: edges.length,
+      composition,
+      issues: [
+        ...composition.topology.issues,
+        ...composition.incompleteMembers.map((member) => ({
+          code: 'incomplete_member',
+          detail: `Required ${member.memberType}:${member.memberId} is ${member.deliveryState}`,
+          memberType: member.memberType,
+          memberId: member.memberId,
+        })),
+      ],
+    });
+  }
+  return { changed: changedChainIds.length > 0, changedChainIds, reports, graphRevision: service.project().graph_revision };
 }
 
 /**
@@ -258,6 +350,7 @@ function reconcileChainNetworkPass(service, {
   }
 
   for (const chain of chains) {
+    if (chain.chainType === 'composite') continue;
     const currentNodes = snapshot.chainNodes
       .filter((node) => node.chainId === chain.id)
       .sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));
@@ -408,6 +501,25 @@ export function reconcileChainNetwork(service, options = {}) {
   const changedChainIds = new Set();
   let changed = false;
   let graphRevision = service.project().graph_revision;
+  const compositionResult = reconcileChainComposition(service, options);
+  changed = compositionResult.changed;
+  compositionResult.changedChainIds.forEach((id) => changedChainIds.add(id));
+  for (const report of compositionResult.reports ?? []) {
+    aggregate.set(report.chainId, {
+      chainId: report.chainId,
+      autoExpandedBlockIds: new Set(),
+      addedLinkIds: new Set(),
+      skippedLinkIds: new Set(),
+      issues: [...(report.issues ?? [])],
+      complete: report.complete,
+      ready: report.ready,
+      composition: report.composition,
+      memberCount: report.memberCount,
+      edgeCount: report.edgeCount,
+      changed: report.changed,
+      passes: 1,
+    });
+  }
   const maxPasses = 16;
   let passes = 0;
   let converged = false;
@@ -462,7 +574,7 @@ export function reconcileChainNetwork(service, options = {}) {
     addedLinkIds: [...report.addedLinkIds],
     skippedLinkIds: [...report.skippedLinkIds],
   }));
-  return { changed, changedChainIds: [...changedChainIds], reports, graphRevision };
+  return { changed, changedChainIds: [...changedChainIds], reports, composition: compositionResult, graphRevision };
 }
 
 /**
@@ -484,6 +596,7 @@ export function reconcileChainTopology(service, { chainId = null, autoReorder = 
     };
   }
   for (const chain of chains) {
+    if (chain.chainType === 'composite') continue;
     const nodeRows = snapshot.chainNodes
       .filter((node) => node.chainId === chain.id)
       .sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));

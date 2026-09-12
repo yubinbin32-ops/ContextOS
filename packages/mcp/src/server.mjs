@@ -18,7 +18,7 @@ const server = new McpServer(
   { name: "contextos", version: "0.4.0" },
   {
     instructions:
-      "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Chain reconciliation audits feature membership and order together: a related new Block should carry chain:<chain-id> and an explicit route Link, while safe forward route Links and high-confidence affiliated Blocks are attached automatically; an affinity tag without a route stays as an actionable membership gap; an intentional standalone Block carries standalone:<reason>. Feedback, read and dependency relations remain visible as cross-cutting edges when they would create a cycle. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools.",
+      "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Chain reconciliation audits feature membership and order together: a related new Block should carry chain:<chain-id> and an explicit route Link, while safe forward route Links and high-confidence affiliated Blocks are attached automatically; an affinity tag without a route stays as an actionable membership gap; an intentional standalone Block carries standalone:<reason>. Composite Chains keep a short typed macro route over child Chain paths; use chain_compose for their members and let validation propagate child drift to the parent. Feedback, read and dependency relations remain visible as cross-cutting edges when they would create a cycle. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools.",
   },
 );
 const projectRootInput = {
@@ -28,7 +28,7 @@ const projectRootInput = {
 
 function withProject(input, callback) {
   const service = router.serviceFor(input);
-  const runtime = { version: '0.4.0', protocolVersion: 2, observedAt: new Date().toISOString(), pid: process.pid, projectRoot: service.paths.projectRoot, capabilities: ['documents','readme-readonly','task-sessions','source-index','projection-recovery','chapter-context','plan-append','chain-append','chain-reconcile','block-ast-slice','source-cache'], plugin: pluginRuntimeStatus(service.paths.projectRoot) };
+  const runtime = { version: '0.4.0', protocolVersion: 2, observedAt: new Date().toISOString(), pid: process.pid, projectRoot: service.paths.projectRoot, capabilities: ['documents','readme-readonly','task-sessions','source-index','projection-recovery','chapter-context','plan-append','chain-append','chain-compose','chain-reconcile','block-ast-slice','source-cache'], plugin: pluginRuntimeStatus(service.paths.projectRoot) };
   const runtimePath = path.join(service.paths.projectRoot, '.contextos', 'runtime.json');
   try { fs.writeFileSync(runtimePath + '.' + process.pid, JSON.stringify(runtime)); fs.renameSync(runtimePath + '.' + process.pid, runtimePath); } catch { /* read-only project: tools still report their result */ }
   const { projectRoot: _projectRoot, ...payload } = normalizeMcpIds(input);
@@ -802,6 +802,8 @@ server.registerTool(
               "set_checkpoint_dependencies",
               "set_chain_path",
               "append_chain_path",
+              "set_chain_composition",
+              "append_chain_composition",
               "set_background_scopes",
               "set_decision_scopes",
             ]),
@@ -925,6 +927,44 @@ server.registerTool(
       ...(data.issues?.length ? ["", "## Issues", ...data.issues.map((issue) => `- ${issue.detail}`)] : ["- Topology is ordered and connected."]),
     ].join("\n");
     return writeResult(data, markdown, input.includeStructured, "chain_reconcile");
+  },
+);
+
+server.registerTool(
+  "chain_compose",
+  {
+    description:
+      "Set or extend a Composite Chain made from typed Chain/Block members. Parent composition Links must use route kinds and connect the declared macro members; child Chains keep their own Block paths.",
+    inputSchema: {
+      ...projectRootInput,
+      chainId: z.string().min(1),
+      expectedRevision: z.number().int().min(1),
+      mode: z.enum(["set", "append"]).default("set"),
+      members: z.array(z.object({
+        memberType: z.enum(["chain", "block"]),
+        memberId: z.string().min(1),
+        role: z.string().min(1).optional(),
+        required: z.boolean().optional(),
+      })).default([]),
+      linkIds: z.array(z.string().min(1)).default([]),
+      actor: z.string().optional(),
+      reason: z.string().optional(),
+      includeStructured: z.boolean().default(false),
+    },
+  },
+  async (input) => {
+    const data = withProject(input, (service, payload) => input.mode === "append"
+      ? service.appendChainComposition(payload)
+      : service.setChainComposition(payload));
+    const markdown = [
+      `# Composite Chain ${input.mode === "append" ? "updated" : "set"}`,
+      `- Chain: chain:${input.chainId}`,
+      `- Members: ${input.members.length}`,
+      `- Composition Links: ${input.linkIds.length}`,
+      `- Graph revision: ${data.graphRevision}`,
+      `- ChangeSet: ${data.changeSetId}`,
+    ].join("\\n");
+    return writeResult(data, markdown, input.includeStructured, "chain_compose");
   },
 );
 

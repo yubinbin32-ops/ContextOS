@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS chains (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  chain_type TEXT NOT NULL DEFAULT 'leaf' CHECK(chain_type IN ('leaf', 'composite')),
   purpose TEXT NOT NULL DEFAULT 'feature',
   intent TEXT NOT NULL DEFAULT '',
   input_contract TEXT NOT NULL DEFAULT '',
@@ -196,6 +197,8 @@ CREATE TABLE IF NOT EXISTS chain_members (
   member_type TEXT NOT NULL CHECK(member_type IN ('block', 'chain')),
   member_id TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0,
+  role TEXT NOT NULL DEFAULT 'stage',
+  required INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY(chain_id, member_type, member_id)
 );
 
@@ -609,16 +612,41 @@ function migratePlanWorkflow(database) {
   `);
 }
 
+function migrateChainComposition(database) {
+  addColumnIfMissing(database, "chains", "chain_type", "TEXT NOT NULL DEFAULT 'leaf'");
+  addColumnIfMissing(database, "chain_members", "role", "TEXT NOT NULL DEFAULT 'stage'");
+  addColumnIfMissing(database, "chain_members", "required", "INTEGER NOT NULL DEFAULT 1");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_chain_members_chain ON chain_members(chain_id, position, member_type, member_id);");
+  // A legacy chain_members row with a child Chain already expresses a
+  // Composite Chain. Preserve it and make the type explicit for new readers.
+  database.exec(`
+    UPDATE chains SET chain_type = 'composite'
+    WHERE id IN (SELECT chain_id FROM chain_members WHERE member_type = 'chain')
+      AND COALESCE(chain_type, 'leaf') <> 'composite';
+  `);
+}
+
 function backfillChainPaths(database) {
-  const legacyMemberCount = database.prepare("SELECT COUNT(*) AS count FROM chain_members").get().count;
-  if (legacyMemberCount > 0) {
-    database.exec(`
-      INSERT OR IGNORE INTO chain_nodes(chain_id, block_id, position, role)
-      SELECT chain_id, member_id, position, 'path'
-      FROM chain_members WHERE member_type = 'block';
-      DELETE FROM chain_members;
-    `);
+  const legacyBlockRows = database.prepare(`
+    SELECT cm.chain_id, cm.member_id, cm.position
+    FROM chain_members cm
+    JOIN chains c ON c.id = cm.chain_id
+    WHERE cm.member_type = 'block' AND COALESCE(c.chain_type, 'leaf') = 'leaf'
+      AND NOT EXISTS (SELECT 1 FROM chain_nodes cn WHERE cn.chain_id = cm.chain_id)
+  `).all();
+  for (const row of legacyBlockRows) {
+    database.prepare("INSERT OR IGNORE INTO chain_nodes(chain_id, block_id, position, role) VALUES (?, ?, ?, 'path')")
+      .run(row.chain_id, row.member_id, row.position);
+    database.prepare("DELETE FROM chain_members WHERE chain_id = ? AND member_type = 'block' AND member_id = ?")
+      .run(row.chain_id, row.member_id);
   }
+  // Rows left on a Leaf Chain are legacy duplicates of chain_nodes. Remove
+  // only those rows; Composite Chain memberships remain durable.
+  database.exec(`
+    DELETE FROM chain_members
+    WHERE member_type = 'block'
+      AND EXISTS (SELECT 1 FROM chains c WHERE c.id = chain_members.chain_id AND COALESCE(c.chain_type, 'leaf') = 'leaf');
+  `);
 
   const missingEdgeCount = database.prepare(`
     SELECT COUNT(*) AS count
@@ -663,6 +691,7 @@ export function openDatabase(databasePath) {
   migratePlanCapableTables(database);
   migrateBlockArchitecture(database);
   migratePlanWorkflow(database);
+  migrateChainComposition(database);
   backfillChainPaths(database);
   return database;
 }
@@ -691,6 +720,7 @@ export const GRAPH_TABLES = [
   { name: "blocks", orderBy: "id" },
   { name: "source_refs", orderBy: "block_id, id" },
   { name: "chains", orderBy: "id" },
+  { name: "chain_members", orderBy: "chain_id, position, member_type, member_id" },
   { name: "chain_nodes", orderBy: "chain_id, position, block_id" },
   { name: "chain_edges", orderBy: "chain_id, position, link_id" },
   { name: "links", orderBy: "id" },

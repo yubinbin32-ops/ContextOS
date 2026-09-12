@@ -9,6 +9,8 @@
  * match plus a route Link touching an existing member.
  */
 
+import { inspectChainComposition } from "./chain-composition.mjs";
+
 export const ROUTE_LINK_KINDS = new Set(["flows_to", "calls", "writes", "implements"]);
 
 const STOP_WORDS = new Set([
@@ -201,15 +203,60 @@ export function inspectChainNetwork({ chain, nodes = [], edges = [], links = [],
 /** Inspect every active Chain in a project snapshot without mutating it. */
 export function inspectProjectNetworks(snapshot) {
   const reports = (snapshot?.chains ?? []).map((chain) => {
+    if (chain.chainType === "composite") {
+      const members = (snapshot.chainMembers ?? []).filter((member) => member.chainId === chain.id)
+        .sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
+      const edges = (snapshot.chainEdges ?? []).filter((edge) => edge.chainId === chain.id)
+        .sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+      const composition = inspectChainComposition({
+        chain, members, edges, chains: snapshot.chains ?? [], blocks: snapshot.blocks ?? [], links: snapshot.links ?? [],
+      });
+      return {
+        chainId: chain.id,
+        chainType: chain.chainType,
+        memberIds: composition.memberIds,
+        internalRouteLinks: [],
+        missingInternalLinks: [],
+        backwardInternalLinks: [],
+        candidateBlocks: [],
+        autoExpandBlockIds: [],
+        expansionLinks: [],
+        complete: composition.complete,
+        composition,
+      };
+    }
     const nodes = (snapshot.chainNodes ?? []).filter((node) => node.chainId === chain.id).sort((left, right) => left.position - right.position);
     const edges = (snapshot.chainEdges ?? []).filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
     return inspectChainNetwork({ chain, nodes, edges, links: snapshot.links ?? [], blocks: snapshot.blocks ?? [] });
   });
   const chainIdsByBlock = new Map();
+  const directMembersByChain = new Map();
+  for (const member of snapshot.chainMembers ?? []) {
+    const values = directMembersByChain.get(member.chainId) ?? [];
+    values.push(member);
+    directMembersByChain.set(member.chainId, values);
+  }
+  const blockIdsForChain = (chainId, visiting = new Set()) => {
+    if (visiting.has(chainId)) return new Set();
+    visiting.add(chainId);
+    const ids = new Set((snapshot.chainNodes ?? []).filter((node) => node.chainId === chainId).map((node) => node.blockId));
+    for (const member of directMembersByChain.get(chainId) ?? []) {
+      if (member.memberType === "block") ids.add(member.memberId);
+      else for (const blockId of blockIdsForChain(member.memberId, new Set(visiting))) ids.add(blockId);
+    }
+    return ids;
+  };
   for (const node of snapshot.chainNodes ?? []) {
     const values = chainIdsByBlock.get(node.blockId) ?? [];
     values.push(node.chainId);
     chainIdsByBlock.set(node.blockId, values);
+  }
+  for (const chain of snapshot.chains ?? []) {
+    for (const blockId of blockIdsForChain(chain.id)) {
+      const values = chainIdsByBlock.get(blockId) ?? [];
+      if (!values.includes(chain.id)) values.push(chain.id);
+      chainIdsByBlock.set(blockId, values);
+    }
   }
   const membershipGapBlockIds = new Set(reports.flatMap((report) => report.candidateBlocks
     .filter((candidate) => candidate.requiresRouteLink)
@@ -222,6 +269,15 @@ export function inspectProjectNetworks(snapshot) {
     .map((block) => ({ id: block.id, title: block.title, kind: block.kind, scope: block.scope, deliveryState: block.deliveryState }));
   return {
     chains: reports,
+    compositions: reports.filter((report) => report.chainType === "composite").map((report) => ({
+      chainId: report.chainId,
+      complete: report.composition.complete,
+      ready: report.composition.ready,
+      memberIds: report.composition.memberIds,
+      missingMembers: report.composition.missingMembers,
+      incompleteMembers: report.composition.incompleteMembers,
+      issues: report.composition.topology.issues,
+    })),
     unassignedBlocks,
     standaloneBlocks,
     missingInternalLinks: reports.flatMap((report) => report.missingInternalLinks.map((link) => ({ chainId: report.chainId, linkId: link.id, sourceId: link.sourceId, targetId: link.targetId, kind: link.kind }))),

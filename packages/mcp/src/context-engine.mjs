@@ -401,7 +401,13 @@ export function buildContextForTask(service, { task, focusRefs = [], maxChars = 
         .sort((left, right) => left.position - right.position)
         .map((node) => `block:${node.blockId}`)
         .join(" → ");
-      lines.push(`- [chain:${chain.id}] ${title} — ${chain.deliveryState}/${chain.healthState}${path ? ` · path ${path}` : ""}`);
+      const compositionMembers = chain.chainType === "composite"
+        ? snapshot.chainMembers.filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position)
+        : [];
+      const composition = compositionMembers.length
+        ? ` · macro ${compositionMembers.map((member) => `${member.memberType}:${member.memberId}`).join(" → ")}`
+        : "";
+      lines.push(`- [chain:${chain.id}] ${title} — ${chain.deliveryState}/${chain.healthState}${path ? ` · path ${path}` : ""}${composition}`);
       const intent = localizedValue(translations, "chain", chain.id, locale, "intent", chain.intent);
       if (intent && (selectedPlanIds.size === 0 || hasExplicitChainFocus)) lines.push(`  ${intent}`);
     }

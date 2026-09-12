@@ -152,6 +152,7 @@ final class ProjectDatabase {
             ChainItem(
                 id: row.text("id"),
                 title: row.text("title"),
+                chainType: row.text("chain_type").isEmpty ? "leaf" : row.text("chain_type"),
                 purpose: row.text("purpose"),
                 intent: row.text("intent"),
                 inputContract: row.text("input_contract"),
@@ -203,6 +204,18 @@ final class ProjectDatabase {
             bindings: [project.id]
         ).map { row in
             ChainNode(chainId: row.text("chain_id"), blockId: row.text("block_id"), position: row.int("position"), role: row.text("role"))
+        }
+        let chainMembers = try optionalRows(
+            """
+            SELECT cm.* FROM chain_members cm JOIN chains c ON c.id = cm.chain_id
+            WHERE c.project_id = ? AND c.archived = 0 ORDER BY cm.chain_id, cm.position, cm.member_type, cm.member_id
+            """,
+            table: "chain_members", bindings: [project.id]
+        ).map { row in
+            ChainMemberItem(
+                chainId: row.text("chain_id"), memberType: row.text("member_type"), memberId: row.text("member_id"),
+                position: row.int("position"), role: row.text("role").isEmpty ? "stage" : row.text("role"), required: row.int("required") != 0
+            )
         }
         let chainEdges = try rows(
             """
@@ -469,6 +482,7 @@ final class ProjectDatabase {
             chains: chains,
             plans: plans,
             links: links,
+            chainMembers: chainMembers,
             chainNodes: chainNodes,
             chainEdges: chainEdges,
             planChainReferences: planChainReferences,

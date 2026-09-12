@@ -10,6 +10,7 @@ import { redactSensitiveText, sanitizeTerminalOutput } from "./sanitizer.mjs";
 import { getTimelineState, syncTimeline, advanceStep } from "./timeline.mjs";
 import { applyArrowFlow } from "./flow.mjs";
 import { suggestLinksForBlock, connectBlocks } from "./architecture-link.mjs";
+import { inspectChainComposition } from "./chain-composition.mjs";
 
 function writeFileAtomically(filePath, content) {
   const temporaryPath = `${filePath}.contextos-tmp-${process.pid}-${crypto.randomUUID()}`;
@@ -524,6 +525,20 @@ export class ContextOSService {
       )
       .all(projectId)
       .map((row) => ({ chainId: row.chain_id, blockId: row.block_id, position: row.position, role: row.role }));
+    const chainMembers = this.database
+      .prepare(
+        `SELECT cm.* FROM chain_members cm JOIN chains c ON c.id = cm.chain_id
+         WHERE c.project_id = ? AND c.archived = 0 ORDER BY cm.chain_id, cm.position, cm.member_type, cm.member_id`,
+      )
+      .all(projectId)
+      .map((row) => ({
+        chainId: row.chain_id,
+        memberType: row.member_type,
+        memberId: row.member_id,
+        position: row.position,
+        role: row.role ?? "stage",
+        required: row.required !== 0,
+      }));
     const chainEdges = this.database
       .prepare(
         `SELECT ce.* FROM chain_edges ce JOIN chains c ON c.id = ce.chain_id
@@ -715,6 +730,7 @@ export class ContextOSService {
       chains,
       plans,
       links,
+      chainMembers,
       chainNodes,
       chainEdges,
       planChainRefs,
@@ -759,6 +775,100 @@ export class ContextOSService {
     const snapshot = this.snapshot();
     const chain = snapshot.chains.find((c) => c.id === chainId);
     if (!chain) throw new Error(`Chain not found: ${chainId}`);
+
+    if (chain.chainType === "composite") {
+      const members = snapshot.chainMembers
+        .filter((member) => member.chainId === chain.id)
+        .sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
+      const edges = snapshot.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const composition = inspectChainComposition({
+        chain, members, edges, chains: snapshot.chains, blocks: snapshot.blocks, links: snapshot.links,
+      });
+      const childBlockCount = (childId, seen = new Set()) => {
+        if (seen.has(childId)) return 0;
+        seen.add(childId);
+        const childMembers = snapshot.chainMembers.filter((member) => member.chainId === childId);
+        if (!childMembers.length) return snapshot.chainNodes.filter((node) => node.chainId === childId).length;
+        return childMembers.reduce((total, member) => total + (member.memberType === "chain"
+          ? childBlockCount(member.memberId, seen)
+          : 1), 0);
+      };
+      const streamNodes = members.map((member) => {
+        const ref = `${member.memberType}:${member.memberId}`;
+        const item = member.memberType === "chain"
+          ? snapshot.chains.find((candidate) => candidate.id === member.memberId)
+          : snapshot.blocks.find((candidate) => candidate.id === member.memberId);
+        const childNodes = member.memberType === "chain"
+          ? snapshot.chainNodes.filter((node) => node.chainId === member.memberId).length
+          : null;
+        const childEdges = member.memberType === "chain"
+          ? snapshot.chainEdges.filter((edge) => edge.chainId === member.memberId).length
+          : null;
+        const source = member.memberType === "block"
+          ? this.database.prepare("SELECT path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id").all(member.memberId)[0]
+          : null;
+        return {
+          memberType: member.memberType,
+          memberId: member.memberId,
+          ref,
+          title: item?.title ?? member.memberId,
+          role: member.role ?? "stage",
+          required: member.required !== false,
+          deliveryState: item?.deliveryState ?? "missing",
+          healthState: item?.healthState ?? "unknown",
+          childBlockCount: member.memberType === "chain" ? childBlockCount(member.memberId) : 1,
+          childNodeCount: childNodes,
+          childEdgeCount: childEdges,
+          filePath: source?.path ?? null,
+          symbol: source?.symbol ?? null,
+          startLine: source?.start_line ?? null,
+          endLine: source?.end_line ?? null,
+          contract: member.memberType === "chain"
+            ? item?.outputContract || item?.intent || ""
+            : item?.contract || item?.summary || "",
+        };
+      });
+      const orderedMemberIds = composition.topology.orderedMemberIds ?? members.map((member) => `${member.memberType}:${member.memberId}`);
+      const orderedNodes = orderedMemberIds.map((id) => streamNodes.find((node) => node.ref === id)).filter(Boolean);
+      const codeStream = [
+        `# Composite Chain: ${chain.title} (${chain.id})`,
+        `Members: ${orderedNodes.length} macro stage(s) · underlying Blocks are expanded on demand`,
+        `Composition: ${composition.complete ? "valid" : "needs attention"} · ${edges.length} typed route edge(s)`,
+        "",
+        ...orderedNodes.flatMap((node, index) => [
+          `${index + 1}. [${node.ref}] ${node.title} — ${node.deliveryState}/${node.healthState}`,
+          `   Role: ${node.role}${node.required ? " · required" : " · optional"}`,
+          node.memberType === "chain"
+            ? `   Child Chain: ${node.childNodeCount} path Block(s), ${node.childEdgeCount} route Link(s), ${node.childBlockCount} recursive Block(s)`
+            : `   Locator: ${node.filePath ? `${node.filePath}${node.symbol ? ` :: ${node.symbol}` : ""}${node.startLine ? ` L${node.startLine}-${node.endLine}` : ""}` : "virtual/no SourceRef"}`,
+          node.contract ? `   Contract: ${node.contract}` : "",
+        ].filter(Boolean)),
+        ...(edges.length ? ["", "## Composition route", ...edges.map((edge) => {
+          const link = snapshot.links.find((candidate) => candidate.id === edge.linkId);
+          return link ? `- ${link.sourceType}:${link.sourceId} -[${link.kind}]-> ${link.targetType}:${link.targetId}` : `- missing link:${edge.linkId}`;
+        })] : []),
+        ...(composition.topology.issues.length ? ["", "## Composition issues", ...composition.topology.issues.map((issue) => `- ${issue.detail}`)] : []),
+      ].join("\n");
+      return {
+        chainId: chain.id,
+        title: chain.title,
+        chainType: chain.chainType,
+        mode,
+        sourceSync: {
+          revision: sourceSync.revision,
+          changed: sourceSync.changed,
+          changedBindingCount: sourceSync.changedBindingCount,
+          invalidBindingCount: sourceSync.invalidBindingCount,
+          changes: sourceSync.changes.slice(0, 12),
+        },
+        chainNetwork,
+        chainReconciliation,
+        composition,
+        nodes: orderedNodes,
+        codeStream,
+        markdown: codeStream,
+      };
+    }
 
     const nodeIds = snapshot.chainNodes
       .filter((node) => node.chainId === chain.id)
@@ -836,6 +946,7 @@ export class ContextOSService {
     return {
       chainId: chain.id,
       title: chain.title,
+      chainType: chain.chainType,
       mode,
       sourceSync: {
         revision: sourceSync.revision,
@@ -1246,6 +1357,26 @@ export class ContextOSService {
       reason,
       task: "chain-append",
       operations: [{ action: "append_chain_path", id: chainId, expectedRevision, fields: { nodeIds, linkIds } }],
+    });
+  }
+
+  setChainComposition({ chainId, expectedRevision, memberRefs = [], members = null, linkIds = [], actor = "agent", reason = "Set Composite Chain composition" } = {}) {
+    if (!chainId?.trim()) throw new Error("chainId is required");
+    return this.mutate({
+      actor,
+      reason,
+      task: "chain-compose",
+      operations: [{ action: "set_chain_composition", id: chainId, expectedRevision, fields: { memberRefs: members ?? memberRefs, linkIds } }],
+    });
+  }
+
+  appendChainComposition({ chainId, expectedRevision, memberRefs = [], members = null, linkIds = [], actor = "agent", reason = "Append members to a Composite Chain" } = {}) {
+    if (!chainId?.trim()) throw new Error("chainId is required");
+    return this.mutate({
+      actor,
+      reason,
+      task: "chain-compose",
+      operations: [{ action: "append_chain_composition", id: chainId, expectedRevision, fields: { memberRefs: members ?? memberRefs, linkIds } }],
     });
   }
 

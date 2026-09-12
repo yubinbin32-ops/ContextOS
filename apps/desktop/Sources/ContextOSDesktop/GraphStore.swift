@@ -280,7 +280,7 @@ final class GraphStore: ObservableObject {
     func architectureCoverage(for planID: String?) -> ArchitectureCoverage {
         let blocks = snapshot.blocks.filter { $0.deliveryState != "deprecated" }
         let blockIDs = Set(blocks.map(\.id))
-        let chainMemberIDs = Set(snapshot.chainNodes.filter { blockIDs.contains($0.blockId) }.map(\.blockId))
+        let chainMemberIDs = Set(snapshot.chains.flatMap { chainBlockIDs($0.id) }.filter { blockIDs.contains($0) })
         let candidatePlanIDs = Set(snapshot.plans.filter { planID == nil || $0.id == planID }.map(\.id))
         var directlyPlanned = Set(snapshot.planChanges.filter {
             candidatePlanIDs.contains($0.planId) && $0.entityType == "block" && blockIDs.contains($0.entityId)
@@ -318,7 +318,12 @@ final class GraphStore: ObservableObject {
                   checkpoint.kind == "integration" else { continue }
             chainGateIDs.insert(scope.chainId)
         }
-        let chainIDsByBlock = Dictionary(grouping: snapshot.chainNodes, by: \.blockId)
+        var chainIDsByBlock: [String: [String]] = [:]
+        for chain in snapshot.chains {
+            for blockID in chainBlockIDs(chain.id) where blockIDs.contains(blockID) {
+                chainIDsByBlock[blockID, default: []].append(chain.id)
+            }
+        }
         let blockCoverage = blocks.map { block in
             let checkpoints = checkpointGroups[block.id, default: []]
             let changeIDs = Set(changesByBlock[block.id, default: []].map(\.id))
@@ -326,7 +331,7 @@ final class GraphStore: ObservableObject {
             let exactBinding = checkpointBindings.contains {
                 $0.subjectType == "plan_change" && changeIDs.contains($0.subjectId)
             }
-            let memberChainIDs = Set(chainIDsByBlock[block.id, default: []].map(\.chainId))
+            let memberChainIDs = Set(chainIDsByBlock[block.id, default: []])
             let relevantChainIDs = planID == nil
                 ? memberChainIDs
                 : Set(candidateScopes.filter { structuredStringList($0.nodeIds).contains(block.id) }.map(\.chainId))
@@ -762,9 +767,39 @@ final class GraphStore: ObservableObject {
         }
         for scope in snapshot.planChainScopes where scope.planId == planID {
             result.formUnion(structuredStringList(scope.nodeIds))
+            result.formUnion(chainBlockIDs(scope.chainId))
         }
         for chainID in planChainIDs(for: planID) {
-            result.formUnion(chainNodeIDs(chainID))
+            result.formUnion(chainBlockIDs(chainID))
+        }
+        return result
+    }
+
+    func chainMembers(for chainID: String) -> [ChainMemberItem] {
+        snapshot.chainMembers
+            .filter { $0.chainId == chainID }
+            .sorted { $0.position < $1.position || ($0.position == $1.position && $0.memberId < $1.memberId) }
+    }
+
+    /// Resolve the implementation Blocks beneath a leaf or Composite Chain.
+    /// The UI uses this only for counts and coverage; the visible route for a
+    /// Composite Chain stays at its macro member level.
+    func chainBlockIDs(_ chainID: String, visited: Set<String> = []) -> [String] {
+        guard !visited.contains(chainID) else { return [] }
+        var nextVisited = visited
+        nextVisited.insert(chainID)
+        var result = snapshot.chainNodes
+            .filter { $0.chainId == chainID }
+            .sorted { $0.position < $1.position }
+            .map(\.blockId)
+        for member in chainMembers(for: chainID) {
+            if member.memberType == "block" {
+                if !result.contains(member.memberId) { result.append(member.memberId) }
+            } else {
+                for blockID in chainBlockIDs(member.memberId, visited: nextVisited) where !result.contains(blockID) {
+                    result.append(blockID)
+                }
+            }
         }
         return result
     }
@@ -778,7 +813,7 @@ final class GraphStore: ObservableObject {
     }
 
     func chains(containing blockID: String) -> [ChainItem] {
-        let ids = Set(snapshot.chainNodes.filter { $0.blockId == blockID }.map(\.chainId))
+        let ids = Set(snapshot.chains.filter { chainBlockIDs($0.id).contains(blockID) }.map(\.id))
         return snapshot.chains.filter { ids.contains($0.id) }.sorted { $0.id < $1.id }
     }
 
@@ -810,7 +845,7 @@ final class GraphStore: ObservableObject {
     }
 
     func plans(containing blockID: String) -> [PlanItem] {
-        let chainIDs = Set(snapshot.chainNodes.filter { $0.blockId == blockID }.map(\.chainId))
+        let chainIDs = Set(snapshot.chains.filter { chainBlockIDs($0.id).contains(blockID) }.map(\.id))
         let planIDs = Set(snapshot.planChainReferences.filter { chainIDs.contains($0.chainId) }.map(\.planId))
             .union(snapshot.planChainScopes.filter { chainIDs.contains($0.chainId) }.map(\.planId))
             .union(snapshot.planChanges.filter { $0.entityType == "block" && $0.entityId == blockID }.map(\.planId))

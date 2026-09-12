@@ -111,6 +111,7 @@ export const EDITABLE_BLOCK_FIELDS = new Set([
 ]);
 
 export const EDITABLE_CHAIN_FIELDS = new Set([
+  "chainType",
   "title",
   "purpose",
   "intent",
@@ -294,6 +295,7 @@ export function normalizeChain(row) {
   return {
     id: row.id,
     title: row.title,
+    chainType: row.chain_type ?? "leaf",
     purpose: row.purpose,
     intent: row.intent,
     inputContract: row.input_contract,
@@ -441,7 +443,24 @@ export function checkpointSatisfiesGate(checkpoint) {
 export function architectureCoverage(snapshot, planId = null) {
   const blocks = snapshot.blocks.filter((block) => block.deliveryState !== "deprecated" && block.kind !== "decision");
   const blockIds = new Set(blocks.map((block) => block.id));
-  const chainBlockIds = new Set(snapshot.chainNodes.filter((node) => blockIds.has(node.blockId)).map((node) => node.blockId));
+  const compositionMembersByChain = new Map();
+  for (const member of snapshot.chainMembers ?? []) {
+    const values = compositionMembersByChain.get(member.chainId) ?? [];
+    values.push(member);
+    compositionMembersByChain.set(member.chainId, values);
+  }
+  const chainBlocks = (chainId, visiting = new Set()) => {
+    if (visiting.has(chainId)) return new Set();
+    visiting.add(chainId);
+    const ids = new Set(snapshot.chainNodes.filter((node) => node.chainId === chainId && blockIds.has(node.blockId)).map((node) => node.blockId));
+    for (const member of compositionMembersByChain.get(chainId) ?? []) {
+      if (member.memberType === "block" && blockIds.has(member.memberId)) ids.add(member.memberId);
+      if (member.memberType === "chain") for (const blockId of chainBlocks(member.memberId, new Set(visiting))) ids.add(blockId);
+    }
+    return ids;
+  };
+  const chainBlockIds = new Set();
+  for (const chain of snapshot.chains ?? []) for (const blockId of chainBlocks(chain.id)) chainBlockIds.add(blockId);
   const checkpointsByBlock = new Map(blocks.map((block) => [block.id, []]));
   for (const checkpoint of snapshot.checkpoints) {
     if (checkpoint.targetType === "block" && checkpointsByBlock.has(checkpoint.targetId)) {
@@ -466,6 +485,9 @@ export function architectureCoverage(snapshot, planId = null) {
     .filter((scope) => candidatePlanIds.has(scope.planId))
     .flatMap((scope) => scope.nodeIds)
     .filter((blockId) => blockIds.has(blockId)));
+  for (const scope of snapshot.planChainScopes.filter((item) => candidatePlanIds.has(item.planId))) {
+    for (const blockId of chainBlocks(scope.chainId)) chainPlanBlockIds.add(blockId);
+  }
   const plannedBlockIds = new Set([...directPlanBlockIds, ...chainPlanBlockIds]);
   const candidateChangeIdsByBlock = new Map();
   for (const change of snapshot.planChanges) {
@@ -498,6 +520,11 @@ export function architectureCoverage(snapshot, planId = null) {
   const chainIdsByBlock = new Map(blocks.map((block) => [block.id, []]));
   for (const node of snapshot.chainNodes) {
     if (chainIdsByBlock.has(node.blockId)) chainIdsByBlock.get(node.blockId).push(node.chainId);
+  }
+  for (const chain of snapshot.chains ?? []) {
+    for (const blockId of chainBlocks(chain.id)) {
+      if (chainIdsByBlock.has(blockId) && !chainIdsByBlock.get(blockId).includes(chain.id)) chainIdsByBlock.get(blockId).push(chain.id);
+    }
   }
   // Chain integration is opt-in. Membership alone does not make every member
   // Block wait for a Chain checkpoint; only a declared integration Checkpoint
@@ -733,6 +760,12 @@ export function affectedRefsForOperation(operation) {
   for (const id of fields.nodeIds ?? []) add("block", id);
   for (const id of fields.linkIds ?? []) add("link", id);
   for (const id of fields.chainIds ?? []) add("chain", id);
+  for (const member of [...(fields.memberRefs ?? []), ...(fields.members ?? [])]) {
+    const type = member?.memberType ?? member?.member_type ?? member?.type;
+    const id = member?.memberId ?? member?.member_id ?? member?.id ?? (typeof member === "string" && member.includes(":") ? member.split(":").slice(1).join(":") : null);
+    if (type && id) add(type, id);
+  }
+  for (const id of fields.compositionLinkIds ?? []) add("link", id);
   for (const id of fields.planIds ?? []) add("plan", id);
   for (const id of fields.decisionIds ?? []) add("decision", id);
   if (fields.supersedesDecisionId) add("decision", fields.supersedesDecisionId);

@@ -8,6 +8,12 @@ import { extractSymbols } from "./ast.mjs";
 import { executeRecordCheckpointOperation } from "./checkpoint-engine.mjs";
 import { inspectChainTopology, topologyIssueText } from "./chain-topology.mjs";
 import {
+  memberKey,
+  memberRef,
+  inspectChainComposition,
+  inspectCompositionCycles,
+} from "./chain-composition.mjs";
+import {
   assertAllowed,
   now,
   identifier,
@@ -75,6 +81,8 @@ export function historyState(service, entityType, id) {
       ...normalizeChain(row),
       nodeIds: db.prepare("SELECT block_id FROM chain_nodes WHERE chain_id = ? ORDER BY position").all(id).map((item) => item.block_id),
       linkIds: db.prepare("SELECT link_id FROM chain_edges WHERE chain_id = ? ORDER BY position").all(id).map((item) => item.link_id),
+      members: db.prepare("SELECT member_type, member_id, position, role, required FROM chain_members WHERE chain_id = ? ORDER BY position, member_type, member_id").all(id)
+        .map((item) => ({ memberType: item.member_type, memberId: item.member_id, position: item.position, role: item.role, required: item.required !== 0 })),
     } : {};
   }
   if (entityType === "link") {
@@ -196,6 +204,8 @@ export function executeMutate(
     append_plan_chain_scope: new Set(['scope']),
     update_plan_changes: new Set(['updates']),
     append_chain_path: new Set(['nodeIds','linkIds']),
+    set_chain_composition: new Set(['memberRefs', 'members', 'linkIds']),
+    append_chain_composition: new Set(['memberRefs', 'members', 'linkIds']),
   };
   for (const operation of operations) {
     const allowed = fieldSchemas[operation.action];
@@ -282,19 +292,36 @@ export function executeMutate(
           if(!bindings.length || bindings.some(b=>!b.symbol || ['missing','ambiguous','stale','unreadable','outside_project','line_only'].includes(b.bindingStatus))) throw new Error(`Completion requires valid source bindings and a fresh passed Checkpoint for block:${target}`);
         }
         if(type==='chain') {
-          const nodes=snapshot.chainNodes.filter(n=>n.chainId===target);
-          if(!nodes.length || nodes.some(n=>snapshot.blocks.find(b=>b.id===n.blockId)?.deliveryState!=='complete')) throw new Error(`Chain completion requires completed member Blocks: ${target}`);
-          const edges = snapshot.chainEdges
-            .filter((edge) => edge.chainId === target)
-            .map((edge) => {
-              const link = snapshot.links.find((item) => item.id === edge.linkId);
-              return link
-                ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId }
-                : { linkId: edge.linkId, position: edge.position };
+          const targetChain = snapshot.chains.find((candidate) => candidate.id === target);
+          if (targetChain?.chainType === "composite") {
+            const members = snapshot.chainMembers.filter((member) => member.chainId === target).sort((a, b) => a.position - b.position);
+            const edges = snapshot.chainEdges.filter((edge) => edge.chainId === target).sort((a, b) => a.position - b.position);
+            const composition = inspectChainComposition({
+              chain: targetChain,
+              members,
+              edges,
+              chains: snapshot.chains,
+              blocks: snapshot.blocks,
+              links: snapshot.links,
             });
-          const topology = inspectChainTopology({ nodes, edges });
-          const topologyIssues = topology.issues.filter((issue) => issue.hard || ['disconnected', 'no_edges'].includes(issue.code));
-          if (topologyIssues.length) throw new Error(`Chain completion requires an ordered connected topology for ${target}: ${topologyIssueText(target, { issues: topologyIssues })}`);
+            if (!members.length || !composition.ready) {
+              throw new Error(`Composite Chain completion requires complete members and a connected acyclic composition for ${target}`);
+            }
+          } else {
+            const nodes=snapshot.chainNodes.filter(n=>n.chainId===target);
+            if(!nodes.length || nodes.some(n=>snapshot.blocks.find(b=>b.id===n.blockId)?.deliveryState!=='complete')) throw new Error(`Chain completion requires completed member Blocks: ${target}`);
+            const edges = snapshot.chainEdges
+              .filter((edge) => edge.chainId === target)
+              .map((edge) => {
+                const link = snapshot.links.find((item) => item.id === edge.linkId);
+                return link
+                  ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId }
+                  : { linkId: edge.linkId, position: edge.position };
+              });
+            const topology = inspectChainTopology({ nodes, edges });
+            const topologyIssues = topology.issues.filter((issue) => issue.hard || ['disconnected', 'no_edges'].includes(issue.code));
+            if (topologyIssues.length) throw new Error(`Chain completion requires an ordered connected topology for ${target}: ${topologyIssueText(target, { issues: topologyIssues })}`);
+          }
         }
         if ((checks.length || sourceBacked || op.action === 'update_block') && !checks.some(c => c.status === 'passed' && c.freshness?.status === 'fresh')) {
           throw new Error(`Completion requires a fresh passed Checkpoint for ${type}:${target}; use checkpoint_record and block_seal/task_finish`);
@@ -396,6 +423,10 @@ export function applyOperation(service, operation, context) {
       return setChainPath(service, operation, context);
     case "append_chain_path":
       return appendChainPath(service, operation, context);
+    case "set_chain_composition":
+      return setChainComposition(service, operation, context);
+    case "append_chain_composition":
+      return appendChainComposition(service, operation, context);
     case "set_background_scopes":
       return setBackgroundScopes(service, operation, context);
     case "create_decision":
@@ -1001,6 +1032,143 @@ export function setCheckpointDependencies(service, operation) {
   return finishCheckpointRelationMutation(service, checkpoint, operation, "dependencies-set", `${children.length} child checkpoint(s)`);
 }
 
+function compositionEntities(service) {
+  const projectId = service.paths.descriptor.id;
+  const chains = service.database.prepare("SELECT * FROM chains WHERE project_id = ?").all(projectId).map(normalizeChain);
+  const blocks = service.database.prepare("SELECT * FROM blocks WHERE project_id = ?").all(projectId).map(normalizeBlock);
+  const links = service.database.prepare("SELECT * FROM links WHERE project_id = ? AND archived = 0").all(projectId).map(normalizeLink);
+  const chainMembers = service.database.prepare(
+    "SELECT chain_id, member_type, member_id, position, role, required FROM chain_members ORDER BY chain_id, position, member_type, member_id",
+  ).all().map((row) => ({
+    chainId: row.chain_id, memberType: row.member_type, memberId: row.member_id,
+    position: row.position, role: row.role ?? "stage", required: row.required !== 0,
+  }));
+  return { chains, blocks, links, chainMembers };
+}
+
+function compositionPayload(service, operation, { append = false } = {}) {
+  if (!operation.id || !Number.isInteger(operation.expectedRevision)) {
+    throw new Error(`${append ? "append_chain_composition" : "set_chain_composition"} requires id and expectedRevision`);
+  }
+  const row = service.database.prepare("SELECT * FROM chains WHERE project_id = ? AND id = ?")
+    .get(service.paths.descriptor.id, operation.id);
+  if (!row) throw new Error(`chain:${operation.id} not found`);
+  if (row.current_revision !== operation.expectedRevision) {
+    throw new Error(`Revision conflict for chain:${operation.id}; expected ${operation.expectedRevision}, current ${row.current_revision}`);
+  }
+  if (row.chain_type !== "composite") throw new Error(`chain:${operation.id} is a leaf Chain; set chainType to composite first`);
+  const fields = operation.fields ?? {};
+  const rawMembers = fields.memberRefs ?? fields.members ?? [];
+  const rawLinkIds = fields.linkIds ?? [];
+  if (!Array.isArray(rawMembers) || !Array.isArray(rawLinkIds)) throw new Error("memberRefs/members and linkIds must be arrays");
+  const existing = compositionEntities(service);
+  const currentMembers = existing.chainMembers.filter((member) => member.chainId === operation.id)
+    .sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
+  const currentEdgeIds = service.database.prepare("SELECT link_id FROM chain_edges WHERE chain_id = ? ORDER BY position").all(operation.id).map((item) => item.link_id);
+  const requestedMembers = rawMembers.map((member, index) => {
+    const ref = memberRef(member);
+    if (!ref) throw new Error(`Invalid Composite Chain member at position ${index}`);
+    return {
+      memberType: ref.memberType,
+      memberId: ref.memberId,
+      position: index,
+      role: member?.role ?? member?.memberRole ?? member?.member_role ?? "stage",
+      required: member?.required !== false && member?.required !== 0,
+    };
+  });
+  const requestedLinks = rawLinkIds.map((id) => String(id));
+  const members = append ? [...currentMembers, ...requestedMembers.map((member, index) => ({ ...member, position: currentMembers.length + index }))] : requestedMembers;
+  const linkIds = append ? [...currentEdgeIds, ...requestedLinks] : requestedLinks;
+  if (new Set(members.map((member) => memberKey(member.memberType, member.memberId))).size !== members.length) {
+    throw new Error("Composite Chain members must be unique");
+  }
+  if (new Set(linkIds).size !== linkIds.length) throw new Error("Composite Chain Links must be unique");
+  const chainById = new Map(existing.chains.map((chain) => [chain.id, chain]));
+  const blockById = new Map(existing.blocks.map((block) => [block.id, block]));
+  for (const member of members) {
+    const entity = member.memberType === "chain" ? chainById.get(member.memberId) : blockById.get(member.memberId);
+    if (!entity || entity.archived || (member.memberType === "block" && entity.deliveryState === "deprecated")) {
+      throw new Error(`Composite Chain member not found or archived: ${member.memberType}:${member.memberId}`);
+    }
+    if (member.memberType === "chain" && member.memberId === operation.id) throw new Error("Composite Chain cannot contain itself");
+  }
+  const memberSet = new Set(members.map((member) => memberKey(member.memberType, member.memberId)));
+  const links = linkIds.map((linkId) => {
+    const link = existing.links.find((candidate) => candidate.id === linkId);
+    if (!link) throw new Error(`link:${linkId} not found`);
+    const sourceKey = memberKey(link.sourceType, link.sourceId);
+    const targetKey = memberKey(link.targetType, link.targetId);
+    if (!memberSet.has(sourceKey) || !memberSet.has(targetKey)) {
+      throw new Error(`link:${linkId} endpoints must both be Composite Chain members`);
+    }
+    if (!["flows_to", "calls", "writes", "implements"].includes(link.kind)) {
+      throw new Error(`link:${linkId} must use a route kind (flows_to, calls, writes, or implements)`);
+    }
+    return link;
+  });
+  const candidateChainMembers = [
+    ...existing.chainMembers.filter((member) => member.chainId !== operation.id),
+    ...members.map((member) => ({ chainId: operation.id, ...member })),
+  ];
+  const cycleSnapshot = { chains: existing.chains, chainMembers: candidateChainMembers };
+  const cycles = inspectCompositionCycles(cycleSnapshot);
+  if (cycles.length) throw new Error(`Composite Chain membership must remain acyclic: ${cycles[0].join(" -> ")}`);
+  const inspected = inspectChainComposition({
+    chain: { ...normalizeChain(row), chainType: "composite" },
+    members,
+    edges: linkIds.map((linkId, position) => ({ linkId, position })),
+    chains: existing.chains,
+    blocks: existing.blocks,
+    links: existing.links,
+  });
+  const structuralIssues = inspected.topology.issues.filter((issue) => issue.hard || ["disconnected", "no_edges"].includes(issue.code));
+  if (structuralIssues.length) {
+    throw new Error(`Composite Chain composition invalid: ${structuralIssues.map((issue) => issue.detail).join("; ")}`);
+  }
+  return { row, members, linkIds, links, inspected };
+}
+
+/** Replace a Composite Chain's typed member route atomically. */
+export function setChainComposition(service, operation) {
+  const { row, members, linkIds } = compositionPayload(service, operation);
+  service.database.prepare("DELETE FROM chain_members WHERE chain_id = ?").run(operation.id);
+  service.database.prepare("DELETE FROM chain_nodes WHERE chain_id = ?").run(operation.id);
+  service.database.prepare("DELETE FROM chain_edges WHERE chain_id = ?").run(operation.id);
+  const insertMember = service.database.prepare(
+    "INSERT INTO chain_members(chain_id, member_type, member_id, position, role, required) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  members.forEach((member, position) => insertMember.run(operation.id, member.memberType, member.memberId, position, member.role, Number(member.required)));
+  const insertEdge = service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)");
+  linkIds.forEach((linkId, position) => insertEdge.run(operation.id, linkId, position));
+  const revision = row.current_revision + 1;
+  service.database.prepare("UPDATE chains SET current_revision = ?, updated_at = ? WHERE project_id = ? AND id = ?")
+    .run(revision, now(), service.paths.descriptor.id, operation.id);
+  return {
+    entityType: "chain", id: operation.id, action: "composition-set", revision,
+    summary: `${members.length} typed member(s) / ${linkIds.length} composition edge(s)`,
+  };
+}
+
+/** Add typed members and composition Links without replaying the parent route. */
+export function appendChainComposition(service, operation) {
+  const { row, members, linkIds } = compositionPayload(service, operation, { append: true });
+  const currentMemberCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_members WHERE chain_id = ?").get(operation.id).count;
+  const currentEdgeCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_edges WHERE chain_id = ?").get(operation.id).count;
+  const insertMember = service.database.prepare(
+    "INSERT INTO chain_members(chain_id, member_type, member_id, position, role, required) VALUES (?, ?, ?, ?, ?, ?)",
+  );
+  members.slice(currentMemberCount).forEach((member, index) => insertMember.run(operation.id, member.memberType, member.memberId, currentMemberCount + index, member.role, Number(member.required)));
+  const insertEdge = service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)");
+  linkIds.slice(currentEdgeCount).forEach((linkId, index) => insertEdge.run(operation.id, linkId, currentEdgeCount + index));
+  const revision = row.current_revision + 1;
+  service.database.prepare("UPDATE chains SET current_revision = ?, updated_at = ? WHERE project_id = ? AND id = ?")
+    .run(revision, now(), service.paths.descriptor.id, operation.id);
+  return {
+    entityType: "chain", id: operation.id, action: "composition-appended", revision,
+    summary: `${members.length - currentMemberCount} member(s) / ${linkIds.length - currentEdgeCount} composition edge(s) appended`,
+  };
+}
+
 export function setChainPath(service, operation) {
   if (!operation.id || !Number.isInteger(operation.expectedRevision)) {
     throw new Error("set_chain_path requires id and expectedRevision");
@@ -1008,6 +1176,7 @@ export function setChainPath(service, operation) {
   const chain = service.database.prepare("SELECT * FROM chains WHERE project_id = ? AND id = ?")
     .get(service.paths.descriptor.id, operation.id);
   if (!chain) throw new Error(`chain:${operation.id} not found`);
+  if (chain.chain_type === "composite") throw new Error(`chain:${operation.id} is composite; use set_chain_composition`);
   if (chain.current_revision !== operation.expectedRevision) {
     throw new Error(`Revision conflict for chain:${operation.id}; expected ${operation.expectedRevision}, current ${chain.current_revision}`);
   }
@@ -1066,6 +1235,7 @@ export function appendChainPath(service, operation) {
   const chain = service.database.prepare("SELECT * FROM chains WHERE project_id = ? AND id = ?")
     .get(service.paths.descriptor.id, operation.id);
   if (!chain) throw new Error(`chain:${operation.id} not found`);
+  if (chain.chain_type === "composite") throw new Error(`chain:${operation.id} is composite; use append_chain_composition`);
   if (chain.current_revision !== operation.expectedRevision) {
     throw new Error(`Revision conflict for chain:${operation.id}; expected ${operation.expectedRevision}, current ${chain.current_revision}`);
   }
@@ -1272,6 +1442,7 @@ export function createBlock(service, operation, { timestamp }) {
 
 export function createChain(service, operation, { timestamp }) {
   const fields = operation.fields ?? {};
+  assertAllowed(fields.chainType ?? "leaf", new Set(["leaf", "composite"]), "chain type");
   assertAllowed(fields.deliveryState ?? "planned", DELIVERY_STATES, "delivery state");
   assertAllowed(fields.healthState ?? "unknown", HEALTH_STATES, "health state");
   if (!fields.title?.trim()) throw new Error("create_chain requires fields.title");
@@ -1279,14 +1450,15 @@ export function createChain(service, operation, { timestamp }) {
   service.database
     .prepare(
       `INSERT INTO chains(
-        id, project_id, title, purpose, intent, input_contract, output_contract,
+        id, project_id, title, chain_type, purpose, intent, input_contract, output_contract,
         delivery_state, health_state, priority, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       id,
       service.paths.descriptor.id,
       fields.title.trim(),
+      fields.chainType ?? "leaf",
       fields.purpose ?? "feature",
       fields.intent ?? "",
       fields.inputContract ?? "",
@@ -1488,6 +1660,7 @@ export function deleteBlock(service, operation, { timestamp }) {
   service.database.prepare("DELETE FROM source_refs WHERE block_id = ?").run(id);
   service.database.prepare("DELETE FROM background_scopes WHERE block_id = ?").run(id);
   service.database.prepare("DELETE FROM chain_nodes WHERE block_id = ?").run(id);
+  service.database.prepare("DELETE FROM chain_members WHERE member_type = 'block' AND member_id = ?").run(id);
   service.database.prepare("DELETE FROM localized_text WHERE entity_type = 'block' AND entity_id = ?").run(id);
   service.database.prepare("DELETE FROM checkpoint_bindings WHERE subject_type = 'block' AND subject_id = ?").run(id);
   service.database.prepare("DELETE FROM plan_changes WHERE entity_type = 'block' AND entity_id = ?").run(id);
@@ -1553,6 +1726,7 @@ export function deleteChain(service, operation, { timestamp }) {
   service.database.prepare("DELETE FROM chain_nodes WHERE chain_id = ?").run(id);
   service.database.prepare("DELETE FROM chain_edges WHERE chain_id = ?").run(id);
   service.database.prepare("DELETE FROM chain_members WHERE chain_id = ?").run(id);
+  service.database.prepare("DELETE FROM chain_members WHERE member_type = 'chain' AND member_id = ?").run(id);
   service.database.prepare("DELETE FROM localized_text WHERE entity_type = 'chain' AND entity_id = ?").run(id);
   service.database.prepare("DELETE FROM plan_chain_refs WHERE chain_id = ?").run(id);
 
@@ -1759,6 +1933,17 @@ export function updateEntity(service, type, operation, { timestamp }) {
       assertAllowed(rawValue, LEGACY_BLOCK_KINDS, "block kind");
     }
     if (field === "kind" && type === "link") assertAllowed(rawValue, LINK_KINDS, "link kind");
+    if (field === "chainType") {
+      assertAllowed(rawValue, new Set(["leaf", "composite"]), "chain type");
+      if (type !== "chain") throw new Error("chainType is editable only on Chain");
+      const memberCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_members WHERE chain_id = ?").get(operation.id).count;
+      const nodeCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_nodes WHERE chain_id = ?").get(operation.id).count;
+      if (rawValue === "leaf" && memberCount > 0) throw new Error(`chain:${operation.id} still has Composite members; clear composition first`);
+      if (rawValue === "composite" && nodeCount > 0 && memberCount === 0) {
+        // Conversion is allowed so the next atomic composition operation can
+        // replace the old leaf path without a transient empty parent in the UI.
+      }
+    }
     if (field === "architectureLayer") assertAllowed(rawValue, ARCHITECTURE_LAYERS, "architecture layer");
     if (field === "scope" && (typeof rawValue !== "string" || !rawValue.trim())) {
       throw new Error("scope must be a non-empty string");

@@ -140,7 +140,9 @@ struct ContentView: View {
                         ForEach(store.snapshot.chains) { chain in
                             sidebarButton(
                                 title: store.chainText(chain, field: "title"),
-                                subtitle: "\(store.chainNodeIDs(chain.id).count) BLOCKS · \(chain.deliveryState.uppercased())",
+                                subtitle: chain.chainType == "composite"
+                                    ? "\(store.chainMembers(for: chain.id).count) STAGES · COMPOSITE · \(chain.deliveryState.uppercased())"
+                                    : "\(store.chainNodeIDs(chain.id).count) BLOCKS · \(chain.deliveryState.uppercased())",
                                 color: store.chainColor(chain.id),
                                 selected: store.selection == GraphSelection(type: .chain, id: chain.id)
                             ) { store.select(GraphSelection(type: .chain, id: chain.id)) }

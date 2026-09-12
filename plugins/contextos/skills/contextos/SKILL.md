@@ -19,10 +19,11 @@ The graph stores architecture and intent. Source files define implementation beh
 ## Keep the architecture connected
 
 - A Block is an independent architecture unit. A Link is a typed relation such as `calls`, `reads`, `writes`, `validates` or `constrains`.
-- A Chain is an observable feature network. It can contain a serial route or a deliberate branch; every Chain edge has explicit endpoints in the Chain and points forward in the declared node order. Forward DAGs are reordered automatically at context, stream and task boundaries. Cycles, disconnected components and missing endpoints remain visible validation issues.
+- A Chain is an observable feature network. A Leaf Chain owns a focused Block path; a Composite Chain owns a short typed route of child Chains and/or direct Blocks. Every route edge has explicit endpoints in its declared members and points forward in the member order. Forward DAGs are reordered automatically at context, stream and task boundaries. Cycles, disconnected components and missing endpoints remain visible validation issues.
 - `chain_reconcile` audits membership as well as order. It attaches a safe forward route Link when both endpoints are already in the Chain, and it expands a related Block when the Block carries `chain:<chain-id>` (or `chain-affinity:<chain-id>`) or has a high-confidence feature match plus a declared route Link touching the Chain. An affinity tag without a route Link stays visible as a membership gap until the forward relationship is declared. It then reorders the resulting DAG and returns the added Block/Link IDs. Read-back, dependency and feedback relations remain cross-cutting when placing them in the forward route would create a cycle; the relation is still visible in the global graph.
 - Run `architecture_link_suggest` as a review inbox. High-confidence candidates require target-symbol use in the Block's AST slice. Shared files and layer conventions are weak evidence. Do not connect every import, and do not create meaningless Links just to remove an alert.
 - Persist accepted relationships with `architecture_connect` or `graph_flow`, then extend an existing Chain with `chain_append`. `graph_flow` creates or updates Links; it does not automatically make Chain membership. For a new feature Block, add its explicit route Link and the `chain:<chain-id>` affinity tag in the same mutation when the feature is known. Use `chain_reconcile` to inspect or repair an existing Chain after a Block or Link was added. A deliberately independent Block carries `standalone:<reason>` so it is distinguishable from a missing feature assignment.
+- Keep long features readable by grouping their focused paths into a Composite Chain with `chain_compose`. The parent is the macro map; child Chain paths remain the implementation map. Use `mode:"set"` for a complete ordered route and `mode:"append"` when a stage is added. The operation checks typed endpoints, forward DAG order, duplicate members, cycles and child existence before writing.
 - `graph_status` reports isolated Blocks, ghost implementations, disconnected Chain paths, stale checkpoints and semantic reviews. `linksOutsideChains` is diagnostic: cross-cutting Links may intentionally stay outside feature Chains.
 
 ## Read and edit source precisely
@@ -54,7 +55,7 @@ The graph stores architecture and intent. Source files define implementation beh
 |---|---|
 | Orient | `context_for_task`, `project_map`, `plan_context`, `entity_open`, `graph_search` |
 | Knowledge | `document_list`, `document_open`, `document_write`, `document_patch`, `document_import` |
-| Architecture | `graph_mutate`, `graph_patch`, `graph_flow`, `architecture_link_suggest`, `architecture_connect`, `chain_append`, `chain_reconcile` |
+| Architecture | `graph_mutate`, `graph_patch`, `graph_flow`, `architecture_link_suggest`, `architecture_connect`, `chain_append`, `chain_compose`, `chain_reconcile` |
 | Plan growth | `plan_append_changes`, `plan_append_chain_scope`, `task_begin(planId)`, `task_scope(planId)` |
 | Source | `source_sync`, `source_index`, `source_binding_suggest`, `source_binding_accept`, `chain_code_stream`, `block_code_stream` |
 | Task lifecycle | `task_begin`, `task_scope`, `task_reconcile`, `task_finish`, `sync_issues` |

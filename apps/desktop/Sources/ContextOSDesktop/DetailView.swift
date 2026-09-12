@@ -117,12 +117,22 @@ struct DetailView: View {
             }
         case .chain:
             if let chain = store.snapshot.chains.first(where: { $0.id == selection.id }) {
+                HStack(spacing: 8) {
+                    metadataLabel(chain.chainType == "composite" ? "COMPOSITE CHAIN" : "LEAF CHAIN")
+                    metadataSeparator
+                    metadataLabel(chain.deliveryState)
+                    metadataSeparator
+                    metadataLabel(chain.healthState)
+                }
                 section(store.text("summary").uppercased(), text: store.chainText(chain, field: "intent"))
                 let contract = [
                     chain.inputContract.isEmpty ? nil : "\(store.text("input")) — \(store.chainText(chain, field: "inputContract"))",
                     chain.outputContract.isEmpty ? nil : "\(store.text("output")) — \(store.chainText(chain, field: "outputContract"))",
                 ].compactMap { $0 }.joined(separator: "\n\n")
                 section(store.text("contract").uppercased(), text: contract)
+                if chain.chainType == "composite" {
+                    chainCompositionSection(chain.id)
+                }
                 chainCodeStreamSection(chain)
                 chainPathSection(chain.id)
             }
@@ -505,7 +515,9 @@ struct DetailView: View {
                             Circle().fill(store.chainColor(chain.id)).frame(width: 8, height: 8)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(store.chainText(chain, field: "title"))
-                                Text("\((position?.index ?? 0) + 1) / \(position?.count ?? 0) · \(chain.deliveryState.uppercased())")
+                                Text(chain.chainType == "composite"
+                                    ? "\(store.chainMembers(for: chain.id).count) STAGES · COMPOSITE · \(chain.deliveryState.uppercased())"
+                                    : "\((position?.index ?? 0) + 1) / \(position?.count ?? 0) · \(chain.deliveryState.uppercased())")
                                     .font(.system(size: 8.5, weight: .bold, design: .monospaced))
                                     .foregroundStyle(ContextOSTheme.muted)
                             }
@@ -518,7 +530,9 @@ struct DetailView: View {
                         .overlay(alignment: .bottom) { Rectangle().fill(ContextOSTheme.hairline).frame(height: 1) }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(store.chainText(chain, field: "title")), step \((position?.index ?? 0) + 1) of \(position?.count ?? 0)")
+                    .accessibilityLabel(chain.chainType == "composite"
+                        ? "\(store.chainText(chain, field: "title")), composite chain"
+                        : "\(store.chainText(chain, field: "title")), step \((position?.index ?? 0) + 1) of \(position?.count ?? 0)")
                 }
             }
         }
@@ -576,6 +590,54 @@ struct DetailView: View {
                         .overlay(alignment: .bottom) { Rectangle().fill(ContextOSTheme.hairline).frame(height: 1) }
                     }
                     .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func chainCompositionSection(_ chainID: String) -> some View {
+        let members = store.chainMembers(for: chainID)
+        if !members.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    sectionLabel(store.activeLocale == "zh-Hans" ? "组合路线" : "COMPOSITE ROUTE")
+                    Spacer()
+                    Text("\(members.count) \(store.activeLocale == "zh-Hans" ? "个宏观阶段" : "STAGES")")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(ContextOSTheme.muted)
+                }
+                ForEach(Array(members.enumerated()), id: \.offset) { _, member in
+                    let isChain = member.memberType == "chain"
+                    let title = isChain
+                        ? (store.snapshot.chains.first { $0.id == member.memberId }.map { store.chainText($0, field: "title") } ?? member.memberId)
+                        : (store.block(member.memberId).map { store.blockText($0, field: "title") } ?? member.memberId)
+                    Button {
+                        store.select(GraphSelection(type: isChain ? .chain : .block, id: member.memberId))
+                    } label: {
+                        HStack(alignment: .top, spacing: 9) {
+                            Text("\(member.position + 1)")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(store.chainColor(chainID))
+                                .frame(width: 18, height: 18)
+                                .background(store.chainColor(chainID).opacity(0.1), in: Circle())
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(title).font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                                Text("\(member.memberType.uppercased()) · \(member.role.uppercased()) · \(member.required ? (store.activeLocale == "zh-Hans" ? "必需" : "REQUIRED") : (store.activeLocale == "zh-Hans" ? "可选" : "OPTIONAL"))")
+                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
+                            Spacer(minLength: 6)
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(ContextOSTheme.muted)
+                        }
+                        .foregroundStyle(ContextOSTheme.ink)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 6)
+                    .overlay(alignment: .bottom) { Rectangle().fill(ContextOSTheme.hairline).frame(height: 1) }
                 }
             }
         }
@@ -809,7 +871,49 @@ struct DetailView: View {
     @ViewBuilder
     private func chainCodeStreamSection(_ chain: ChainItem) -> some View {
         let nodeIDs = store.chainNodeIDs(chain.id)
-        if !nodeIDs.isEmpty {
+        if chain.chainType == "composite" {
+            let members = store.chainMembers(for: chain.id)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    sectionLabel(store.activeLocale == "zh-Hans" ? "宏观契约流" : "MACRO CONTRACT STREAM")
+                    Spacer()
+                    Text("\(store.chainBlockIDs(chain.id).count) BLOCKS UNDERLYING")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(ContextOSTheme.muted)
+                }
+                Text(store.activeLocale == "zh-Hans"
+                     ? "这里先展示阶段级路线；打开任一子 Chain 可继续查看 Block 和 AST 定位。"
+                     : "This view keeps the route at stage level. Open a child Chain for its Block path and AST locators.")
+                    .font(.system(size: 10.5, design: .rounded))
+                    .foregroundStyle(ContextOSTheme.muted)
+                ForEach(Array(members.enumerated()), id: \.offset) { index, member in
+                    let title = member.memberType == "chain"
+                        ? (store.snapshot.chains.first { $0.id == member.memberId }.map { store.chainText($0, field: "title") } ?? member.memberId)
+                        : (store.block(member.memberId).map { store.blockText($0, field: "title") } ?? member.memberId)
+                    Button { store.select(GraphSelection(type: member.memberType == "chain" ? .chain : .block, id: member.memberId)) } label: {
+                        HStack(spacing: 8) {
+                            Text("\(index + 1)")
+                                .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                                .foregroundStyle(store.chainColor(chain.id))
+                                .frame(width: 17, height: 17)
+                                .background(store.chainColor(chain.id).opacity(0.1), in: Circle())
+                            Text(title).font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                            Spacer()
+                            Text(member.memberType.uppercased())
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .foregroundStyle(ContextOSTheme.muted)
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundStyle(ContextOSTheme.muted)
+                        }
+                        .foregroundStyle(ContextOSTheme.ink)
+                        .padding(.vertical, 5)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 4)
+        } else if !nodeIDs.isEmpty {
             let blocks = nodeIDs.compactMap { store.block($0) }
             let ghostCount = blocks.filter(\.isGhost).count
             let solidCount = blocks.count - ghostCount
@@ -923,6 +1027,25 @@ struct DetailView: View {
     }
 
     private func buildChainCodeStream(chain: ChainItem) -> String {
+        if chain.chainType == "composite" {
+            let members = store.chainMembers(for: chain.id)
+            var lines = [
+                "# Composite Chain Code Stream: \(chain.id)",
+                "## Purpose: \(chain.intent.isEmpty ? chain.title : chain.intent)",
+                "",
+                "Members: \(members.count) macro stage(s)",
+            ]
+            for (index, member) in members.enumerated() {
+                let title = member.memberType == "chain"
+                    ? (store.snapshot.chains.first { $0.id == member.memberId }.map { store.chainText($0, field: "title") } ?? member.memberId)
+                    : (store.block(member.memberId).map { store.blockText($0, field: "title") } ?? member.memberId)
+                lines.append("\(index + 1). [\(member.memberType):\(member.memberId)] \(title) · \(member.role) · \(member.required ? "required" : "optional")")
+                if member.memberType == "chain" {
+                    lines.append("   Underlying Blocks: \(store.chainBlockIDs(member.memberId).count)")
+                }
+            }
+            return lines.joined(separator: "\n")
+        }
         let nodeIDs = store.chainNodeIDs(chain.id)
         var lines: [String] = []
         lines.append("# Chain Code Stream: \(chain.id)")

@@ -42,6 +42,7 @@ struct BlockItem: Identifiable, Equatable {
 struct ChainItem: Identifiable, Equatable {
     let id: String
     let title: String
+    let chainType: String
     let purpose: String
     let intent: String
     let inputContract: String
@@ -50,6 +51,15 @@ struct ChainItem: Identifiable, Equatable {
     let healthState: String
     let priority: String
     let revision: Int
+}
+
+struct ChainMemberItem: Equatable {
+    let chainId: String
+    let memberType: String
+    let memberId: String
+    let position: Int
+    let role: String
+    let required: Bool
 }
 
 struct LinkItem: Identifiable, Equatable {
@@ -351,6 +361,7 @@ struct GraphSnapshot: Equatable {
     let chains: [ChainItem]
     let plans: [PlanItem]
     let links: [LinkItem]
+    let chainMembers: [ChainMemberItem]
     let chainNodes: [ChainNode]
     let chainEdges: [ChainEdge]
     let planChainReferences: [PlanChainReference]
@@ -379,6 +390,7 @@ struct GraphSnapshot: Equatable {
             chains: [],
             plans: [],
             links: [],
+            chainMembers: [],
             chainNodes: [],
             chainEdges: [],
             planChainReferences: [],

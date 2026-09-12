@@ -23793,6 +23793,7 @@ CREATE TABLE IF NOT EXISTS chains (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  chain_type TEXT NOT NULL DEFAULT 'leaf' CHECK(chain_type IN ('leaf', 'composite')),
   purpose TEXT NOT NULL DEFAULT 'feature',
   intent TEXT NOT NULL DEFAULT '',
   input_contract TEXT NOT NULL DEFAULT '',
@@ -23924,6 +23925,8 @@ CREATE TABLE IF NOT EXISTS chain_members (
   member_type TEXT NOT NULL CHECK(member_type IN ('block', 'chain')),
   member_id TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0,
+  role TEXT NOT NULL DEFAULT 'stage',
+  required INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY(chain_id, member_type, member_id)
 );
 
@@ -24331,16 +24334,34 @@ function migratePlanWorkflow(database) {
     CREATE INDEX IF NOT EXISTS idx_checkpoint_dependencies_parent ON checkpoint_dependencies(parent_checkpoint_id, position);
   `);
 }
+function migrateChainComposition(database) {
+  addColumnIfMissing(database, "chains", "chain_type", "TEXT NOT NULL DEFAULT 'leaf'");
+  addColumnIfMissing(database, "chain_members", "role", "TEXT NOT NULL DEFAULT 'stage'");
+  addColumnIfMissing(database, "chain_members", "required", "INTEGER NOT NULL DEFAULT 1");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_chain_members_chain ON chain_members(chain_id, position, member_type, member_id);");
+  database.exec(`
+    UPDATE chains SET chain_type = 'composite'
+    WHERE id IN (SELECT chain_id FROM chain_members WHERE member_type = 'chain')
+      AND COALESCE(chain_type, 'leaf') <> 'composite';
+  `);
+}
 function backfillChainPaths(database) {
-  const legacyMemberCount = database.prepare("SELECT COUNT(*) AS count FROM chain_members").get().count;
-  if (legacyMemberCount > 0) {
-    database.exec(`
-      INSERT OR IGNORE INTO chain_nodes(chain_id, block_id, position, role)
-      SELECT chain_id, member_id, position, 'path'
-      FROM chain_members WHERE member_type = 'block';
-      DELETE FROM chain_members;
-    `);
+  const legacyBlockRows = database.prepare(`
+    SELECT cm.chain_id, cm.member_id, cm.position
+    FROM chain_members cm
+    JOIN chains c ON c.id = cm.chain_id
+    WHERE cm.member_type = 'block' AND COALESCE(c.chain_type, 'leaf') = 'leaf'
+      AND NOT EXISTS (SELECT 1 FROM chain_nodes cn WHERE cn.chain_id = cm.chain_id)
+  `).all();
+  for (const row of legacyBlockRows) {
+    database.prepare("INSERT OR IGNORE INTO chain_nodes(chain_id, block_id, position, role) VALUES (?, ?, ?, 'path')").run(row.chain_id, row.member_id, row.position);
+    database.prepare("DELETE FROM chain_members WHERE chain_id = ? AND member_type = 'block' AND member_id = ?").run(row.chain_id, row.member_id);
   }
+  database.exec(`
+    DELETE FROM chain_members
+    WHERE member_type = 'block'
+      AND EXISTS (SELECT 1 FROM chains c WHERE c.id = chain_members.chain_id AND COALESCE(c.chain_type, 'leaf') = 'leaf');
+  `);
   const missingEdgeCount = database.prepare(`
     SELECT COUNT(*) AS count
     FROM chain_nodes source
@@ -24377,6 +24398,7 @@ function openDatabase(databasePath) {
   migratePlanCapableTables(database);
   migrateBlockArchitecture(database);
   migratePlanWorkflow(database);
+  migrateChainComposition(database);
   backfillChainPaths(database);
   return database;
 }
@@ -24403,6 +24425,7 @@ var GRAPH_TABLES = [
   { name: "blocks", orderBy: "id" },
   { name: "source_refs", orderBy: "block_id, id" },
   { name: "chains", orderBy: "id" },
+  { name: "chain_members", orderBy: "chain_id, position, member_type, member_id" },
   { name: "chain_nodes", orderBy: "chain_id, position, block_id" },
   { name: "chain_edges", orderBy: "chain_id, position, link_id" },
   { name: "links", orderBy: "id" },
@@ -24976,6 +24999,7 @@ var EDITABLE_BLOCK_FIELDS = /* @__PURE__ */ new Set([
   "archived"
 ]);
 var EDITABLE_CHAIN_FIELDS = /* @__PURE__ */ new Set([
+  "chainType",
   "title",
   "purpose",
   "intent",
@@ -25135,6 +25159,7 @@ function normalizeChain(row) {
   return {
     id: row.id,
     title: row.title,
+    chainType: row.chain_type ?? "leaf",
     purpose: row.purpose,
     intent: row.intent,
     inputContract: row.input_contract,
@@ -25289,7 +25314,24 @@ function checkpointSatisfiesGate(checkpoint) {
 function architectureCoverage(snapshot2, planId = null) {
   const blocks = snapshot2.blocks.filter((block) => block.deliveryState !== "deprecated" && block.kind !== "decision");
   const blockIds = new Set(blocks.map((block) => block.id));
-  const chainBlockIds = new Set(snapshot2.chainNodes.filter((node2) => blockIds.has(node2.blockId)).map((node2) => node2.blockId));
+  const compositionMembersByChain = /* @__PURE__ */ new Map();
+  for (const member of snapshot2.chainMembers ?? []) {
+    const values = compositionMembersByChain.get(member.chainId) ?? [];
+    values.push(member);
+    compositionMembersByChain.set(member.chainId, values);
+  }
+  const chainBlocks = (chainId, visiting = /* @__PURE__ */ new Set()) => {
+    if (visiting.has(chainId)) return /* @__PURE__ */ new Set();
+    visiting.add(chainId);
+    const ids = new Set(snapshot2.chainNodes.filter((node2) => node2.chainId === chainId && blockIds.has(node2.blockId)).map((node2) => node2.blockId));
+    for (const member of compositionMembersByChain.get(chainId) ?? []) {
+      if (member.memberType === "block" && blockIds.has(member.memberId)) ids.add(member.memberId);
+      if (member.memberType === "chain") for (const blockId of chainBlocks(member.memberId, new Set(visiting))) ids.add(blockId);
+    }
+    return ids;
+  };
+  const chainBlockIds = /* @__PURE__ */ new Set();
+  for (const chain of snapshot2.chains ?? []) for (const blockId of chainBlocks(chain.id)) chainBlockIds.add(blockId);
   const checkpointsByBlock = new Map(blocks.map((block) => [block.id, []]));
   for (const checkpoint of snapshot2.checkpoints) {
     if (checkpoint.targetType === "block" && checkpointsByBlock.has(checkpoint.targetId)) {
@@ -25310,6 +25352,9 @@ function architectureCoverage(snapshot2, planId = null) {
     }
   }
   const chainPlanBlockIds = new Set(snapshot2.planChainScopes.filter((scope) => candidatePlanIds.has(scope.planId)).flatMap((scope) => scope.nodeIds).filter((blockId) => blockIds.has(blockId)));
+  for (const scope of snapshot2.planChainScopes.filter((item) => candidatePlanIds.has(item.planId))) {
+    for (const blockId of chainBlocks(scope.chainId)) chainPlanBlockIds.add(blockId);
+  }
   const plannedBlockIds = /* @__PURE__ */ new Set([...directPlanBlockIds, ...chainPlanBlockIds]);
   const candidateChangeIdsByBlock = /* @__PURE__ */ new Map();
   for (const change of snapshot2.planChanges) {
@@ -25340,6 +25385,11 @@ function architectureCoverage(snapshot2, planId = null) {
   const chainIdsByBlock = new Map(blocks.map((block) => [block.id, []]));
   for (const node2 of snapshot2.chainNodes) {
     if (chainIdsByBlock.has(node2.blockId)) chainIdsByBlock.get(node2.blockId).push(node2.chainId);
+  }
+  for (const chain of snapshot2.chains ?? []) {
+    for (const blockId of chainBlocks(chain.id)) {
+      if (chainIdsByBlock.has(blockId) && !chainIdsByBlock.get(blockId).includes(chain.id)) chainIdsByBlock.get(blockId).push(chain.id);
+    }
   }
   const declaredChainGateIds = new Set(snapshot2.checkpoints.filter((checkpoint) => checkpoint.targetType === "chain" && checkpoint.checkpointKind === "integration").map((checkpoint) => checkpoint.targetId));
   const chainGateIds = /* @__PURE__ */ new Set([...declaredChainGateIds]);
@@ -25540,6 +25590,12 @@ function affectedRefsForOperation(operation) {
   for (const id of fields.nodeIds ?? []) add("block", id);
   for (const id of fields.linkIds ?? []) add("link", id);
   for (const id of fields.chainIds ?? []) add("chain", id);
+  for (const member of [...fields.memberRefs ?? [], ...fields.members ?? []]) {
+    const type = member?.memberType ?? member?.member_type ?? member?.type;
+    const id = member?.memberId ?? member?.member_id ?? member?.id ?? (typeof member === "string" && member.includes(":") ? member.split(":").slice(1).join(":") : null);
+    if (type && id) add(type, id);
+  }
+  for (const id of fields.compositionLinkIds ?? []) add("link", id);
   for (const id of fields.planIds ?? []) add("plan", id);
   for (const id of fields.decisionIds ?? []) add("decision", id);
   if (fields.supersedesDecisionId) add("decision", fields.supersedesDecisionId);
@@ -26731,6 +26787,285 @@ function topologyIssueText(chainId, topology) {
   return (topology?.issues ?? []).map((issue2) => `chain:${chainId} ${issue2.code}: ${issue2.detail}`).join("; ");
 }
 
+// packages/mcp/src/chain-composition.mjs
+function memberType(value) {
+  return value === "chain" ? "chain" : value === "block" ? "block" : null;
+}
+function memberKey(type, id) {
+  const normalizedType = memberType(type);
+  if (!normalizedType || !id) return null;
+  return `${normalizedType}:${id}`;
+}
+function memberRef(value, fallbackType = null) {
+  if (typeof value === "string") {
+    const separator = value.indexOf(":");
+    if (separator > 0) {
+      const type2 = memberType(value.slice(0, separator));
+      const id2 = value.slice(separator + 1);
+      return type2 && id2 ? { memberType: type2, memberId: id2 } : null;
+    }
+    return fallbackType && memberType(fallbackType) && value ? { memberType: fallbackType, memberId: value } : null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const type = memberType(value.memberType ?? value.member_type ?? value.type ?? fallbackType);
+  const id = value.memberId ?? value.member_id ?? value.id;
+  return type && id ? { memberType: type, memberId: id } : null;
+}
+function nodeId2(node2) {
+  const ref = memberRef(node2);
+  return ref ? memberKey(ref.memberType, ref.memberId) : null;
+}
+function edgeId2(edge) {
+  return typeof edge === "string" ? edge : edge?.linkId ?? edge?.link_id ?? edge?.id ?? null;
+}
+function endpoint(link, side) {
+  const type = memberType(link?.[`${side}Type`] ?? link?.[`${side}_type`]);
+  const id = link?.[`${side}Id`] ?? link?.[`${side}_id`];
+  return type && id ? { memberType: type, memberId: id } : null;
+}
+function positionOf(item, index) {
+  return Number.isInteger(item?.position) ? item.position : index;
+}
+function topoIssues(nodes, edges) {
+  const issues = [];
+  const add = (code, detail, hard = true, extra = {}) => issues.push({ code, detail, hard, ...extra });
+  const normalizedNodes = nodes.map((node2, index) => ({
+    ref: memberRef(node2),
+    id: nodeId2(node2),
+    position: positionOf(node2, index)
+  }));
+  const nodeIds = normalizedNodes.map((node2) => node2.id).filter(Boolean);
+  const nodeSet = new Set(nodeIds);
+  const positions = new Map(normalizedNodes.filter((node2) => node2.id).map((node2) => [node2.id, node2.position]));
+  const duplicateNodes = nodeIds.filter((id, index) => nodeIds.indexOf(id) !== index);
+  if (duplicateNodes.length) add("duplicate_member", `duplicate member(s): ${[...new Set(duplicateNodes)].join(", ")}`);
+  const expectedPositions = normalizedNodes.map((_, index) => index);
+  if (normalizedNodes.some((node2, index) => node2.position !== expectedPositions[index])) {
+    add("position_gap", "Composite Chain member positions must be contiguous and start at 0");
+  }
+  const normalizedEdges = edges.map((edge, index) => ({
+    id: edgeId2(edge),
+    source: edge.source ?? endpoint(edge.link ?? edge, "source"),
+    target: edge.target ?? endpoint(edge.link ?? edge, "target"),
+    sourceId: edge.sourceId ?? edge.source_id ?? edge.link?.sourceId ?? edge.link?.source_id,
+    targetId: edge.targetId ?? edge.target_id ?? edge.link?.targetId ?? edge.link?.target_id,
+    sourceType: edge.sourceType ?? edge.source_type ?? edge.link?.sourceType ?? edge.link?.source_type,
+    targetType: edge.targetType ?? edge.target_type ?? edge.link?.targetType ?? edge.link?.target_type,
+    position: positionOf(edge, index)
+  })).map((edge) => ({
+    ...edge,
+    source: edge.source ?? memberRef({ memberType: edge.sourceType, memberId: edge.sourceId }),
+    target: edge.target ?? memberRef({ memberType: edge.targetType, memberId: edge.targetId })
+  })).map((edge) => ({
+    ...edge,
+    sourceKey: edge.source ? memberKey(edge.source.memberType, edge.source.memberId) : null,
+    targetKey: edge.target ? memberKey(edge.target.memberType, edge.target.memberId) : null
+  }));
+  const duplicateEdges = normalizedEdges.map((edge) => edge.id).filter((id, index, all) => id && all.indexOf(id) !== index);
+  if (duplicateEdges.length) add("duplicate_edge", `duplicate edge(s): ${[...new Set(duplicateEdges)].join(", ")}`);
+  const indegree = new Map(nodeIds.map((id) => [id, 0]));
+  const adjacency = new Map(nodeIds.map((id) => [id, []]));
+  const undirected = new Map(nodeIds.map((id) => [id, /* @__PURE__ */ new Set()]));
+  const structuralEdges = [];
+  for (const edge of normalizedEdges) {
+    if (!edge.id) {
+      add("missing_edge_id", "Composite Chain edge is missing Link id");
+      continue;
+    }
+    if (!edge.sourceKey || !edge.targetKey || !nodeSet.has(edge.sourceKey) || !nodeSet.has(edge.targetKey)) {
+      add("external_endpoint", `edge ${edge.id} must connect two Composite Chain members`, true, { edgeId: edge.id });
+      continue;
+    }
+    if (edge.sourceKey === edge.targetKey) {
+      add("self_edge", `edge ${edge.id} points from ${edge.sourceKey} to itself`, true, { edgeId: edge.id });
+      continue;
+    }
+    if (positions.get(edge.sourceKey) >= positions.get(edge.targetKey)) {
+      add("backward_edge", `edge ${edge.id} points backward (${edge.sourceKey}@${positions.get(edge.sourceKey)} -> ${edge.targetKey}@${positions.get(edge.targetKey)})`, true, {
+        edgeId: edge.id,
+        sourceId: edge.sourceKey,
+        targetId: edge.targetKey
+      });
+    }
+    if (!adjacency.get(edge.sourceKey).includes(edge.targetKey)) {
+      adjacency.get(edge.sourceKey).push(edge.targetKey);
+      indegree.set(edge.targetKey, indegree.get(edge.targetKey) + 1);
+    }
+    undirected.get(edge.sourceKey).add(edge.targetKey);
+    undirected.get(edge.targetKey).add(edge.sourceKey);
+    structuralEdges.push(edge);
+  }
+  const roots = nodeIds.filter((id) => indegree.get(id) === 0);
+  const queue = [...roots];
+  const reachable = /* @__PURE__ */ new Set();
+  while (queue.length) {
+    const id = queue.shift();
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    queue.push(...adjacency.get(id) ?? []);
+  }
+  const weakQueue = nodeIds.length ? [nodeIds[0]] : [];
+  const weakReachable = /* @__PURE__ */ new Set();
+  while (weakQueue.length) {
+    const id = weakQueue.shift();
+    if (weakReachable.has(id)) continue;
+    weakReachable.add(id);
+    weakQueue.push(...undirected.get(id) ?? []);
+  }
+  const missingMemberIds = nodeIds.filter((id) => !weakReachable.has(id));
+  const connected = nodeIds.length <= 1 || missingMemberIds.length === 0;
+  if (nodeIds.length > 1 && !connected) add("disconnected", `Composite Chain has disconnected member(s): ${missingMemberIds.join(", ")}`, false, { roots, missingMemberIds });
+  if (nodeIds.length > 1 && structuralEdges.length === 0) add("no_edges", "Composite Chain with multiple members needs an explicit composition Link", false, { roots, missingMemberIds: nodeIds });
+  const cycleIndegree = new Map(indegree);
+  const cycleQueue = nodeIds.filter((id) => cycleIndegree.get(id) === 0);
+  let visited = 0;
+  while (cycleQueue.length) {
+    const id = cycleQueue.shift();
+    visited += 1;
+    for (const next of adjacency.get(id) ?? []) {
+      cycleIndegree.set(next, cycleIndegree.get(next) - 1);
+      if (cycleIndegree.get(next) === 0) cycleQueue.push(next);
+    }
+  }
+  if (structuralEdges.length > 0 && visited < nodeIds.length) {
+    add("cycle", "Composite Chain composition Links form a cycle and cannot be ordered", true, {
+      cycleMemberIds: nodeIds.filter((id) => cycleIndegree.get(id) > 0)
+    });
+  }
+  return { normalizedNodes, normalizedEdges, nodeIds, positions, roots, reachable, connected, missingMemberIds, issues };
+}
+function stableCompositionOrder(members2 = [], edges = []) {
+  const topology = topoIssues(members2, edges);
+  const nodeIds = topology.nodeIds;
+  if (new Set(nodeIds).size !== nodeIds.length || nodeIds.some((id) => !id)) return null;
+  const originalPosition = new Map(topology.normalizedNodes.map((node2, index) => [node2.id, Number.isInteger(node2.position) ? node2.position : index]));
+  const indegree = new Map(nodeIds.map((id) => [id, 0]));
+  const adjacency = new Map(nodeIds.map((id) => [id, []]));
+  for (const edge of topology.normalizedEdges) {
+    if (!edge.id || !edge.sourceKey || !edge.targetKey || !indegree.has(edge.sourceKey) || !indegree.has(edge.targetKey) || edge.sourceKey === edge.targetKey) return null;
+    if (adjacency.get(edge.sourceKey).includes(edge.targetKey)) continue;
+    adjacency.get(edge.sourceKey).push(edge.targetKey);
+    indegree.set(edge.targetKey, indegree.get(edge.targetKey) + 1);
+  }
+  const ready = nodeIds.filter((id) => indegree.get(id) === 0);
+  const result = [];
+  while (ready.length) {
+    ready.sort((left, right) => originalPosition.get(left) - originalPosition.get(right) || left.localeCompare(right));
+    const id = ready.shift();
+    result.push(id);
+    for (const next of adjacency.get(id) ?? []) {
+      indegree.set(next, indegree.get(next) - 1);
+      if (indegree.get(next) === 0) ready.push(next);
+    }
+  }
+  return result.length === nodeIds.length ? result : null;
+}
+function memberExists(ref, chains, blocks, parentId) {
+  if (!ref) return false;
+  if (ref.memberType === "block") return blocks.some((block) => block.id === ref.memberId && !block.archived && block.deliveryState !== "deprecated");
+  return ref.memberId !== parentId && chains.some((candidate) => candidate.id === ref.memberId && !candidate.archived);
+}
+function childStates(members2, chains, blocks, parentId = "") {
+  return members2.map((member) => {
+    const ref = memberRef(member);
+    const item = ref?.memberType === "chain" ? chains.find((candidate) => candidate.id === ref.memberId) : blocks.find((candidate) => candidate.id === ref?.memberId);
+    return {
+      memberType: ref?.memberType ?? null,
+      memberId: ref?.memberId ?? null,
+      position: positionOf(member, 0),
+      role: member.role ?? member.memberRole ?? member.member_role ?? "stage",
+      required: member.required !== false && member.required !== 0,
+      deliveryState: item?.deliveryState ?? "missing",
+      healthState: item?.healthState ?? "unknown",
+      title: item?.title ?? ref?.memberId ?? "unknown",
+      exists: Boolean(item) && memberExists(ref, chains, blocks, parentId)
+    };
+  });
+}
+function inspectChainComposition({ chain, members: members2 = [], edges = [], chains = [], blocks = [], links = [] } = {}) {
+  if (!chain?.id) throw new Error("chain is required");
+  const memberRefs = members2.map((member, index) => ({ ...memberRef(member), position: positionOf(member, index), role: member.role ?? member.memberRole ?? member.member_role ?? "stage", required: member.required !== false && member.required !== 0 }));
+  const memberKeys = new Set(memberRefs.map((member) => memberKey(member.memberType, member.memberId)).filter(Boolean));
+  const activeChains = chains.filter((candidate) => !candidate.archived);
+  const activeBlocks = blocks.filter((block) => !block.archived && block.deliveryState !== "deprecated");
+  const missingMembers = memberRefs.filter((member) => !memberExists(member, activeChains, activeBlocks, chain.id)).map((member) => ({ memberType: member.memberType, memberId: member.memberId }));
+  const linkById = new Map(links.filter((link) => !link.archived).map((link) => [link.id, link]));
+  const resolvedEdges = edges.map((edge) => ({
+    ...edge,
+    link: linkById.get(edge.linkId ?? edge.link_id ?? edge.id)
+  }));
+  const topology = topoIssues(memberRefs, resolvedEdges);
+  for (const edge of resolvedEdges) {
+    if (!edge.link) {
+      topology.issues.push({ code: "missing_link", detail: `Composite Chain edge references missing Link: ${edge.linkId ?? edge.link_id ?? edge.id}`, hard: true, edgeId: edge.linkId ?? edge.link_id ?? edge.id });
+      continue;
+    }
+    const source = endpoint(edge.link, "source");
+    const target = endpoint(edge.link, "target");
+    if (!source || !target || !memberKeys.has(memberKey(source.memberType, source.memberId)) || !memberKeys.has(memberKey(target.memberType, target.memberId))) {
+      continue;
+    }
+  }
+  const states = childStates(memberRefs, activeChains, activeBlocks, chain.id);
+  const incompleteMembers = states.filter((state) => state.required && state.deliveryState !== "complete").map((state) => ({
+    memberType: state.memberType,
+    memberId: state.memberId,
+    deliveryState: state.deliveryState
+  }));
+  const complete = missingMembers.length === 0 && topology.issues.length === 0;
+  const ready = complete && incompleteMembers.length === 0;
+  return {
+    chainId: chain.id,
+    memberIds: memberRefs.map((member) => memberKey(member.memberType, member.memberId)).filter(Boolean),
+    members: memberRefs,
+    edges: resolvedEdges.map((edge) => ({ linkId: edge.linkId ?? edge.link_id ?? edge.id, position: edge.position })),
+    missingMembers,
+    memberStates: states,
+    incompleteMembers,
+    complete,
+    ready,
+    topology: {
+      ...topology,
+      issues: topology.issues,
+      orderedMemberIds: stableCompositionOrder(memberRefs, resolvedEdges)
+    }
+  };
+}
+function inspectCompositionCycles(snapshot2) {
+  const parentByChild = /* @__PURE__ */ new Map();
+  for (const member of snapshot2?.chainMembers ?? []) {
+    if (member.memberType !== "chain") continue;
+    const parents = parentByChild.get(member.memberId) ?? [];
+    parents.push(member.chainId);
+    parentByChild.set(member.memberId, parents);
+  }
+  const cycles = [];
+  for (const chain of snapshot2?.chains ?? []) {
+    const visiting = /* @__PURE__ */ new Set();
+    const path16 = [];
+    const visit = (id) => {
+      if (visiting.has(id)) {
+        const index = path16.indexOf(id);
+        cycles.push(path16.slice(index).concat(id));
+        return;
+      }
+      visiting.add(id);
+      path16.push(id);
+      for (const parent of parentByChild.get(id) ?? []) visit(parent);
+      path16.pop();
+      visiting.delete(id);
+    };
+    visit(chain.id);
+  }
+  const unique2 = /* @__PURE__ */ new Set();
+  return cycles.filter((cycle) => {
+    const key = [...cycle].sort().join("|");
+    if (unique2.has(key)) return false;
+    unique2.add(key);
+    return true;
+  });
+}
+
 // packages/mcp/src/mutation-engine.mjs
 function uiLocationFor(entityType, id) {
   if (entityType === "plan") return `Project > Plans > plan:${id}`;
@@ -26756,7 +27091,8 @@ function historyState(service, entityType, id) {
     return row ? {
       ...normalizeChain(row),
       nodeIds: db.prepare("SELECT block_id FROM chain_nodes WHERE chain_id = ? ORDER BY position").all(id).map((item) => item.block_id),
-      linkIds: db.prepare("SELECT link_id FROM chain_edges WHERE chain_id = ? ORDER BY position").all(id).map((item) => item.link_id)
+      linkIds: db.prepare("SELECT link_id FROM chain_edges WHERE chain_id = ? ORDER BY position").all(id).map((item) => item.link_id),
+      members: db.prepare("SELECT member_type, member_id, position, role, required FROM chain_members WHERE chain_id = ? ORDER BY position, member_type, member_id").all(id).map((item) => ({ memberType: item.member_type, memberId: item.member_id, position: item.position, role: item.role, required: item.required !== 0 }))
     } : {};
   }
   if (entityType === "link") {
@@ -26874,7 +27210,9 @@ function executeMutate(service, { actor = "agent", reason, task = "", gitHead: g
     append_plan_changes: /* @__PURE__ */ new Set(["changes"]),
     append_plan_chain_scope: /* @__PURE__ */ new Set(["scope"]),
     update_plan_changes: /* @__PURE__ */ new Set(["updates"]),
-    append_chain_path: /* @__PURE__ */ new Set(["nodeIds", "linkIds"])
+    append_chain_path: /* @__PURE__ */ new Set(["nodeIds", "linkIds"]),
+    set_chain_composition: /* @__PURE__ */ new Set(["memberRefs", "members", "linkIds"]),
+    append_chain_composition: /* @__PURE__ */ new Set(["memberRefs", "members", "linkIds"])
   };
   for (const operation of operations) {
     const allowed = fieldSchemas[operation.action];
@@ -26947,15 +27285,32 @@ function executeMutate(service, { actor = "agent", reason, task = "", gitHead: g
           if (!bindings.length || bindings.some((b) => !b.symbol || ["missing", "ambiguous", "stale", "unreadable", "outside_project", "line_only"].includes(b.bindingStatus))) throw new Error(`Completion requires valid source bindings and a fresh passed Checkpoint for block:${target}`);
         }
         if (type === "chain") {
-          const nodes = snapshot2.chainNodes.filter((n) => n.chainId === target);
-          if (!nodes.length || nodes.some((n) => snapshot2.blocks.find((b) => b.id === n.blockId)?.deliveryState !== "complete")) throw new Error(`Chain completion requires completed member Blocks: ${target}`);
-          const edges = snapshot2.chainEdges.filter((edge) => edge.chainId === target).map((edge) => {
-            const link = snapshot2.links.find((item) => item.id === edge.linkId);
-            return link ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId } : { linkId: edge.linkId, position: edge.position };
-          });
-          const topology = inspectChainTopology({ nodes, edges });
-          const topologyIssues = topology.issues.filter((issue2) => issue2.hard || ["disconnected", "no_edges"].includes(issue2.code));
-          if (topologyIssues.length) throw new Error(`Chain completion requires an ordered connected topology for ${target}: ${topologyIssueText(target, { issues: topologyIssues })}`);
+          const targetChain = snapshot2.chains.find((candidate) => candidate.id === target);
+          if (targetChain?.chainType === "composite") {
+            const members2 = snapshot2.chainMembers.filter((member) => member.chainId === target).sort((a, b) => a.position - b.position);
+            const edges = snapshot2.chainEdges.filter((edge) => edge.chainId === target).sort((a, b) => a.position - b.position);
+            const composition = inspectChainComposition({
+              chain: targetChain,
+              members: members2,
+              edges,
+              chains: snapshot2.chains,
+              blocks: snapshot2.blocks,
+              links: snapshot2.links
+            });
+            if (!members2.length || !composition.ready) {
+              throw new Error(`Composite Chain completion requires complete members and a connected acyclic composition for ${target}`);
+            }
+          } else {
+            const nodes = snapshot2.chainNodes.filter((n) => n.chainId === target);
+            if (!nodes.length || nodes.some((n) => snapshot2.blocks.find((b) => b.id === n.blockId)?.deliveryState !== "complete")) throw new Error(`Chain completion requires completed member Blocks: ${target}`);
+            const edges = snapshot2.chainEdges.filter((edge) => edge.chainId === target).map((edge) => {
+              const link = snapshot2.links.find((item) => item.id === edge.linkId);
+              return link ? { linkId: edge.linkId, position: edge.position, sourceId: link.sourceId, targetId: link.targetId } : { linkId: edge.linkId, position: edge.position };
+            });
+            const topology = inspectChainTopology({ nodes, edges });
+            const topologyIssues = topology.issues.filter((issue2) => issue2.hard || ["disconnected", "no_edges"].includes(issue2.code));
+            if (topologyIssues.length) throw new Error(`Chain completion requires an ordered connected topology for ${target}: ${topologyIssueText(target, { issues: topologyIssues })}`);
+          }
         }
         if ((checks.length || sourceBacked || op.action === "update_block") && !checks.some((c) => c.status === "passed" && c.freshness?.status === "fresh")) {
           throw new Error(`Completion requires a fresh passed Checkpoint for ${type}:${target}; use checkpoint_record and block_seal/task_finish`);
@@ -27051,6 +27406,10 @@ function applyOperation(service, operation, context) {
       return setChainPath(service, operation, context);
     case "append_chain_path":
       return appendChainPath(service, operation, context);
+    case "set_chain_composition":
+      return setChainComposition(service, operation, context);
+    case "append_chain_composition":
+      return appendChainComposition(service, operation, context);
     case "set_background_scopes":
       return setBackgroundScopes(service, operation, context);
     case "create_decision":
@@ -27721,12 +28080,150 @@ function setCheckpointDependencies(service, operation) {
   children.forEach((child, index) => insert.run(operation.id, child.checkpointId, child.position ?? index, child.required === false ? 0 : 1));
   return finishCheckpointRelationMutation(service, checkpoint, operation, "dependencies-set", `${children.length} child checkpoint(s)`);
 }
+function compositionEntities(service) {
+  const projectId = service.paths.descriptor.id;
+  const chains = service.database.prepare("SELECT * FROM chains WHERE project_id = ?").all(projectId).map(normalizeChain);
+  const blocks = service.database.prepare("SELECT * FROM blocks WHERE project_id = ?").all(projectId).map(normalizeBlock);
+  const links = service.database.prepare("SELECT * FROM links WHERE project_id = ? AND archived = 0").all(projectId).map(normalizeLink);
+  const chainMembers2 = service.database.prepare(
+    "SELECT chain_id, member_type, member_id, position, role, required FROM chain_members ORDER BY chain_id, position, member_type, member_id"
+  ).all().map((row) => ({
+    chainId: row.chain_id,
+    memberType: row.member_type,
+    memberId: row.member_id,
+    position: row.position,
+    role: row.role ?? "stage",
+    required: row.required !== 0
+  }));
+  return { chains, blocks, links, chainMembers: chainMembers2 };
+}
+function compositionPayload(service, operation, { append = false } = {}) {
+  if (!operation.id || !Number.isInteger(operation.expectedRevision)) {
+    throw new Error(`${append ? "append_chain_composition" : "set_chain_composition"} requires id and expectedRevision`);
+  }
+  const row = service.database.prepare("SELECT * FROM chains WHERE project_id = ? AND id = ?").get(service.paths.descriptor.id, operation.id);
+  if (!row) throw new Error(`chain:${operation.id} not found`);
+  if (row.current_revision !== operation.expectedRevision) {
+    throw new Error(`Revision conflict for chain:${operation.id}; expected ${operation.expectedRevision}, current ${row.current_revision}`);
+  }
+  if (row.chain_type !== "composite") throw new Error(`chain:${operation.id} is a leaf Chain; set chainType to composite first`);
+  const fields = operation.fields ?? {};
+  const rawMembers = fields.memberRefs ?? fields.members ?? [];
+  const rawLinkIds = fields.linkIds ?? [];
+  if (!Array.isArray(rawMembers) || !Array.isArray(rawLinkIds)) throw new Error("memberRefs/members and linkIds must be arrays");
+  const existing = compositionEntities(service);
+  const currentMembers = existing.chainMembers.filter((member) => member.chainId === operation.id).sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
+  const currentEdgeIds = service.database.prepare("SELECT link_id FROM chain_edges WHERE chain_id = ? ORDER BY position").all(operation.id).map((item) => item.link_id);
+  const requestedMembers = rawMembers.map((member, index) => {
+    const ref = memberRef(member);
+    if (!ref) throw new Error(`Invalid Composite Chain member at position ${index}`);
+    return {
+      memberType: ref.memberType,
+      memberId: ref.memberId,
+      position: index,
+      role: member?.role ?? member?.memberRole ?? member?.member_role ?? "stage",
+      required: member?.required !== false && member?.required !== 0
+    };
+  });
+  const requestedLinks = rawLinkIds.map((id) => String(id));
+  const members2 = append ? [...currentMembers, ...requestedMembers.map((member, index) => ({ ...member, position: currentMembers.length + index }))] : requestedMembers;
+  const linkIds = append ? [...currentEdgeIds, ...requestedLinks] : requestedLinks;
+  if (new Set(members2.map((member) => memberKey(member.memberType, member.memberId))).size !== members2.length) {
+    throw new Error("Composite Chain members must be unique");
+  }
+  if (new Set(linkIds).size !== linkIds.length) throw new Error("Composite Chain Links must be unique");
+  const chainById = new Map(existing.chains.map((chain) => [chain.id, chain]));
+  const blockById = new Map(existing.blocks.map((block) => [block.id, block]));
+  for (const member of members2) {
+    const entity = member.memberType === "chain" ? chainById.get(member.memberId) : blockById.get(member.memberId);
+    if (!entity || entity.archived || member.memberType === "block" && entity.deliveryState === "deprecated") {
+      throw new Error(`Composite Chain member not found or archived: ${member.memberType}:${member.memberId}`);
+    }
+    if (member.memberType === "chain" && member.memberId === operation.id) throw new Error("Composite Chain cannot contain itself");
+  }
+  const memberSet = new Set(members2.map((member) => memberKey(member.memberType, member.memberId)));
+  const links = linkIds.map((linkId) => {
+    const link = existing.links.find((candidate) => candidate.id === linkId);
+    if (!link) throw new Error(`link:${linkId} not found`);
+    const sourceKey = memberKey(link.sourceType, link.sourceId);
+    const targetKey = memberKey(link.targetType, link.targetId);
+    if (!memberSet.has(sourceKey) || !memberSet.has(targetKey)) {
+      throw new Error(`link:${linkId} endpoints must both be Composite Chain members`);
+    }
+    if (!["flows_to", "calls", "writes", "implements"].includes(link.kind)) {
+      throw new Error(`link:${linkId} must use a route kind (flows_to, calls, writes, or implements)`);
+    }
+    return link;
+  });
+  const candidateChainMembers = [
+    ...existing.chainMembers.filter((member) => member.chainId !== operation.id),
+    ...members2.map((member) => ({ chainId: operation.id, ...member }))
+  ];
+  const cycleSnapshot = { chains: existing.chains, chainMembers: candidateChainMembers };
+  const cycles = inspectCompositionCycles(cycleSnapshot);
+  if (cycles.length) throw new Error(`Composite Chain membership must remain acyclic: ${cycles[0].join(" -> ")}`);
+  const inspected = inspectChainComposition({
+    chain: { ...normalizeChain(row), chainType: "composite" },
+    members: members2,
+    edges: linkIds.map((linkId, position) => ({ linkId, position })),
+    chains: existing.chains,
+    blocks: existing.blocks,
+    links: existing.links
+  });
+  const structuralIssues = inspected.topology.issues.filter((issue2) => issue2.hard || ["disconnected", "no_edges"].includes(issue2.code));
+  if (structuralIssues.length) {
+    throw new Error(`Composite Chain composition invalid: ${structuralIssues.map((issue2) => issue2.detail).join("; ")}`);
+  }
+  return { row, members: members2, linkIds, links, inspected };
+}
+function setChainComposition(service, operation) {
+  const { row, members: members2, linkIds } = compositionPayload(service, operation);
+  service.database.prepare("DELETE FROM chain_members WHERE chain_id = ?").run(operation.id);
+  service.database.prepare("DELETE FROM chain_nodes WHERE chain_id = ?").run(operation.id);
+  service.database.prepare("DELETE FROM chain_edges WHERE chain_id = ?").run(operation.id);
+  const insertMember = service.database.prepare(
+    "INSERT INTO chain_members(chain_id, member_type, member_id, position, role, required) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  members2.forEach((member, position) => insertMember.run(operation.id, member.memberType, member.memberId, position, member.role, Number(member.required)));
+  const insertEdge = service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)");
+  linkIds.forEach((linkId, position) => insertEdge.run(operation.id, linkId, position));
+  const revision = row.current_revision + 1;
+  service.database.prepare("UPDATE chains SET current_revision = ?, updated_at = ? WHERE project_id = ? AND id = ?").run(revision, now(), service.paths.descriptor.id, operation.id);
+  return {
+    entityType: "chain",
+    id: operation.id,
+    action: "composition-set",
+    revision,
+    summary: `${members2.length} typed member(s) / ${linkIds.length} composition edge(s)`
+  };
+}
+function appendChainComposition(service, operation) {
+  const { row, members: members2, linkIds } = compositionPayload(service, operation, { append: true });
+  const currentMemberCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_members WHERE chain_id = ?").get(operation.id).count;
+  const currentEdgeCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_edges WHERE chain_id = ?").get(operation.id).count;
+  const insertMember = service.database.prepare(
+    "INSERT INTO chain_members(chain_id, member_type, member_id, position, role, required) VALUES (?, ?, ?, ?, ?, ?)"
+  );
+  members2.slice(currentMemberCount).forEach((member, index) => insertMember.run(operation.id, member.memberType, member.memberId, currentMemberCount + index, member.role, Number(member.required)));
+  const insertEdge = service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)");
+  linkIds.slice(currentEdgeCount).forEach((linkId, index) => insertEdge.run(operation.id, linkId, currentEdgeCount + index));
+  const revision = row.current_revision + 1;
+  service.database.prepare("UPDATE chains SET current_revision = ?, updated_at = ? WHERE project_id = ? AND id = ?").run(revision, now(), service.paths.descriptor.id, operation.id);
+  return {
+    entityType: "chain",
+    id: operation.id,
+    action: "composition-appended",
+    revision,
+    summary: `${members2.length - currentMemberCount} member(s) / ${linkIds.length - currentEdgeCount} composition edge(s) appended`
+  };
+}
 function setChainPath(service, operation) {
   if (!operation.id || !Number.isInteger(operation.expectedRevision)) {
     throw new Error("set_chain_path requires id and expectedRevision");
   }
   const chain = service.database.prepare("SELECT * FROM chains WHERE project_id = ? AND id = ?").get(service.paths.descriptor.id, operation.id);
   if (!chain) throw new Error(`chain:${operation.id} not found`);
+  if (chain.chain_type === "composite") throw new Error(`chain:${operation.id} is composite; use set_chain_composition`);
   if (chain.current_revision !== operation.expectedRevision) {
     throw new Error(`Revision conflict for chain:${operation.id}; expected ${operation.expectedRevision}, current ${chain.current_revision}`);
   }
@@ -27779,6 +28276,7 @@ function appendChainPath(service, operation) {
   }
   const chain = service.database.prepare("SELECT * FROM chains WHERE project_id = ? AND id = ?").get(service.paths.descriptor.id, operation.id);
   if (!chain) throw new Error(`chain:${operation.id} not found`);
+  if (chain.chain_type === "composite") throw new Error(`chain:${operation.id} is composite; use append_chain_composition`);
   if (chain.current_revision !== operation.expectedRevision) {
     throw new Error(`Revision conflict for chain:${operation.id}; expected ${operation.expectedRevision}, current ${chain.current_revision}`);
   }
@@ -27983,19 +28481,21 @@ function createBlock(service, operation, { timestamp }) {
 }
 function createChain(service, operation, { timestamp }) {
   const fields = operation.fields ?? {};
+  assertAllowed(fields.chainType ?? "leaf", /* @__PURE__ */ new Set(["leaf", "composite"]), "chain type");
   assertAllowed(fields.deliveryState ?? "planned", DELIVERY_STATES, "delivery state");
   assertAllowed(fields.healthState ?? "unknown", HEALTH_STATES, "health state");
   if (!fields.title?.trim()) throw new Error("create_chain requires fields.title");
   const id = operation.id ?? identifier("chain");
   service.database.prepare(
     `INSERT INTO chains(
-        id, project_id, title, purpose, intent, input_contract, output_contract,
+        id, project_id, title, chain_type, purpose, intent, input_contract, output_contract,
         delivery_state, health_state, priority, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     service.paths.descriptor.id,
     fields.title.trim(),
+    fields.chainType ?? "leaf",
     fields.purpose ?? "feature",
     fields.intent ?? "",
     fields.inputContract ?? "",
@@ -28161,6 +28661,7 @@ function deleteBlock(service, operation, { timestamp }) {
   service.database.prepare("DELETE FROM source_refs WHERE block_id = ?").run(id);
   service.database.prepare("DELETE FROM background_scopes WHERE block_id = ?").run(id);
   service.database.prepare("DELETE FROM chain_nodes WHERE block_id = ?").run(id);
+  service.database.prepare("DELETE FROM chain_members WHERE member_type = 'block' AND member_id = ?").run(id);
   service.database.prepare("DELETE FROM localized_text WHERE entity_type = 'block' AND entity_id = ?").run(id);
   service.database.prepare("DELETE FROM checkpoint_bindings WHERE subject_type = 'block' AND subject_id = ?").run(id);
   service.database.prepare("DELETE FROM plan_changes WHERE entity_type = 'block' AND entity_id = ?").run(id);
@@ -28216,6 +28717,7 @@ function deleteChain(service, operation, { timestamp }) {
   service.database.prepare("DELETE FROM chain_nodes WHERE chain_id = ?").run(id);
   service.database.prepare("DELETE FROM chain_edges WHERE chain_id = ?").run(id);
   service.database.prepare("DELETE FROM chain_members WHERE chain_id = ?").run(id);
+  service.database.prepare("DELETE FROM chain_members WHERE member_type = 'chain' AND member_id = ?").run(id);
   service.database.prepare("DELETE FROM localized_text WHERE entity_type = 'chain' AND entity_id = ?").run(id);
   service.database.prepare("DELETE FROM plan_chain_refs WHERE chain_id = ?").run(id);
   const scopes = service.database.prepare("SELECT id FROM plan_chain_scopes WHERE chain_id = ?").all(id);
@@ -28394,6 +28896,15 @@ function updateEntity(service, type, operation, { timestamp }) {
       assertAllowed(rawValue, LEGACY_BLOCK_KINDS, "block kind");
     }
     if (field === "kind" && type === "link") assertAllowed(rawValue, LINK_KINDS, "link kind");
+    if (field === "chainType") {
+      assertAllowed(rawValue, /* @__PURE__ */ new Set(["leaf", "composite"]), "chain type");
+      if (type !== "chain") throw new Error("chainType is editable only on Chain");
+      const memberCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_members WHERE chain_id = ?").get(operation.id).count;
+      const nodeCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_nodes WHERE chain_id = ?").get(operation.id).count;
+      if (rawValue === "leaf" && memberCount > 0) throw new Error(`chain:${operation.id} still has Composite members; clear composition first`);
+      if (rawValue === "composite" && nodeCount > 0 && memberCount === 0) {
+      }
+    }
     if (field === "architectureLayer") assertAllowed(rawValue, ARCHITECTURE_LAYERS, "architecture layer");
     if (field === "scope" && (typeof rawValue !== "string" || !rawValue.trim())) {
       throw new Error("scope must be a non-empty string");
@@ -29129,21 +29640,78 @@ function inspectChainNetwork({ chain, nodes = [], edges = [], links = [], blocks
 }
 function inspectProjectNetworks(snapshot2) {
   const reports = (snapshot2?.chains ?? []).map((chain) => {
+    if (chain.chainType === "composite") {
+      const members2 = (snapshot2.chainMembers ?? []).filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
+      const edges2 = (snapshot2.chainEdges ?? []).filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+      const composition = inspectChainComposition({
+        chain,
+        members: members2,
+        edges: edges2,
+        chains: snapshot2.chains ?? [],
+        blocks: snapshot2.blocks ?? [],
+        links: snapshot2.links ?? []
+      });
+      return {
+        chainId: chain.id,
+        chainType: chain.chainType,
+        memberIds: composition.memberIds,
+        internalRouteLinks: [],
+        missingInternalLinks: [],
+        backwardInternalLinks: [],
+        candidateBlocks: [],
+        autoExpandBlockIds: [],
+        expansionLinks: [],
+        complete: composition.complete,
+        composition
+      };
+    }
     const nodes = (snapshot2.chainNodes ?? []).filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position);
     const edges = (snapshot2.chainEdges ?? []).filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
     return inspectChainNetwork({ chain, nodes, edges, links: snapshot2.links ?? [], blocks: snapshot2.blocks ?? [] });
   });
   const chainIdsByBlock = /* @__PURE__ */ new Map();
+  const directMembersByChain = /* @__PURE__ */ new Map();
+  for (const member of snapshot2.chainMembers ?? []) {
+    const values = directMembersByChain.get(member.chainId) ?? [];
+    values.push(member);
+    directMembersByChain.set(member.chainId, values);
+  }
+  const blockIdsForChain = (chainId, visiting = /* @__PURE__ */ new Set()) => {
+    if (visiting.has(chainId)) return /* @__PURE__ */ new Set();
+    visiting.add(chainId);
+    const ids = new Set((snapshot2.chainNodes ?? []).filter((node2) => node2.chainId === chainId).map((node2) => node2.blockId));
+    for (const member of directMembersByChain.get(chainId) ?? []) {
+      if (member.memberType === "block") ids.add(member.memberId);
+      else for (const blockId of blockIdsForChain(member.memberId, new Set(visiting))) ids.add(blockId);
+    }
+    return ids;
+  };
   for (const node2 of snapshot2.chainNodes ?? []) {
     const values = chainIdsByBlock.get(node2.blockId) ?? [];
     values.push(node2.chainId);
     chainIdsByBlock.set(node2.blockId, values);
+  }
+  for (const chain of snapshot2.chains ?? []) {
+    for (const blockId of blockIdsForChain(chain.id)) {
+      const values = chainIdsByBlock.get(blockId) ?? [];
+      if (!values.includes(chain.id)) values.push(chain.id);
+      chainIdsByBlock.set(blockId, values);
+    }
   }
   const membershipGapBlockIds = new Set(reports.flatMap((report) => report.candidateBlocks.filter((candidate) => candidate.requiresRouteLink).map((candidate) => candidate.blockId)));
   const unassignedBlocks = (snapshot2.blocks ?? []).filter((block) => block.kind !== "decision" && block.deliveryState !== "deprecated" && !chainIdsByBlock.has(block.id) && !membershipGapBlockIds.has(block.id) && !isExplicitlyStandalone(block)).map((block) => ({ id: block.id, title: block.title, kind: block.kind, scope: block.scope, deliveryState: block.deliveryState }));
   const standaloneBlocks = (snapshot2.blocks ?? []).filter((block) => block.kind !== "decision" && block.deliveryState !== "deprecated" && !chainIdsByBlock.has(block.id) && isExplicitlyStandalone(block)).map((block) => ({ id: block.id, title: block.title, kind: block.kind, scope: block.scope, deliveryState: block.deliveryState }));
   return {
     chains: reports,
+    compositions: reports.filter((report) => report.chainType === "composite").map((report) => ({
+      chainId: report.chainId,
+      complete: report.composition.complete,
+      ready: report.composition.ready,
+      memberIds: report.composition.memberIds,
+      missingMembers: report.composition.missingMembers,
+      incompleteMembers: report.composition.incompleteMembers,
+      issues: report.composition.topology.issues
+    })),
     unassignedBlocks,
     standaloneBlocks,
     missingInternalLinks: reports.flatMap((report) => report.missingInternalLinks.map((link) => ({ chainId: report.chainId, linkId: link.id, sourceId: link.sourceId, targetId: link.targetId, kind: link.kind }))),
@@ -29254,6 +29822,92 @@ function planForTask(service, planId) {
   const plan = service.snapshot().plans.find((item) => item.id === planId);
   if (!plan) throw new Error(`plan:${planId} not found`);
   return plan;
+}
+function reconcileChainComposition(service, { chainId = null, autoReorder = true, reason = "Reconcile Composite Chain composition" } = {}) {
+  let snapshot2 = service.snapshot();
+  const chains = chainId ? snapshot2.chains.filter((chain) => chain.id === chainId) : snapshot2.chains;
+  const reports = [];
+  const changedChainIds = [];
+  if (chainId && !chains.length) {
+    return { changed: false, changedChainIds, reports: [{ chainId, issues: [{ code: "missing_chain", detail: `Chain not found: ${chainId}` }] }], graphRevision: service.project().graph_revision };
+  }
+  for (const chain of chains.filter((candidate) => candidate.chainType === "composite")) {
+    let members2 = snapshot2.chainMembers.filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
+    let edges = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+    let composition = inspectChainComposition({ chain, members: members2, edges, chains: snapshot2.chains, blocks: snapshot2.blocks, links: snapshot2.links });
+    const currentOrder = members2.map((member) => `${member.memberType}:${member.memberId}`);
+    const ordered = composition.topology.orderedMemberIds;
+    let changed = false;
+    const hardIssues = composition.topology.issues.filter((issue2) => issue2.hard);
+    if (autoReorder && ordered && hardIssues.length === 0 && ordered.join("\0") !== currentOrder.join("\0")) {
+      try {
+        const memberById = new Map(members2.map((member) => [`${member.memberType}:${member.memberId}`, member]));
+        service.mutate({
+          reason,
+          task: "chain-compose-reconcile",
+          operations: [{
+            action: "set_chain_composition",
+            id: chain.id,
+            expectedRevision: chain.currentRevision,
+            fields: {
+              memberRefs: ordered.map((id) => {
+                const member = memberById.get(id);
+                return { memberType: member.memberType, memberId: member.memberId, role: member.role, required: member.required };
+              }),
+              linkIds: edges.map((edge) => edge.linkId)
+            }
+          }]
+        });
+        changed = true;
+        changedChainIds.push(chain.id);
+        snapshot2 = service.snapshot();
+        members2 = snapshot2.chainMembers.filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position);
+        edges = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
+        composition = inspectChainComposition({ chain: snapshot2.chains.find((candidate) => candidate.id === chain.id) ?? chain, members: members2, edges, chains: snapshot2.chains, blocks: snapshot2.blocks, links: snapshot2.links });
+      } catch (error2) {
+        composition.topology.issues.push({ code: "reorder_failed", detail: error2.message, hard: true });
+      }
+    }
+    const currentChain = snapshot2.chains.find((candidate) => candidate.id === chain.id) ?? chain;
+    if (currentChain.deliveryState === "complete" && !composition.ready) {
+      try {
+        service.mutate({
+          reason: "Reopen Composite Chain after child composition drift",
+          task: "chain-compose-reconcile",
+          operations: [{
+            action: "update_chain",
+            id: chain.id,
+            expectedRevision: currentChain.currentRevision,
+            fields: { deliveryState: "implementing", healthState: "warning" },
+            summary: "Reopened after Composite Chain member drift"
+          }]
+        });
+        changed = true;
+        if (!changedChainIds.includes(chain.id)) changedChainIds.push(chain.id);
+      } catch (error2) {
+        composition.topology.issues.push({ code: "state_reopen_failed", detail: error2.message, hard: true });
+      }
+    }
+    reports.push({
+      chainId: chain.id,
+      complete: composition.complete,
+      ready: composition.ready,
+      changed,
+      memberCount: members2.length,
+      edgeCount: edges.length,
+      composition,
+      issues: [
+        ...composition.topology.issues,
+        ...composition.incompleteMembers.map((member) => ({
+          code: "incomplete_member",
+          detail: `Required ${member.memberType}:${member.memberId} is ${member.deliveryState}`,
+          memberType: member.memberType,
+          memberId: member.memberId
+        }))
+      ]
+    });
+  }
+  return { changed: changedChainIds.length > 0, changedChainIds, reports, graphRevision: service.project().graph_revision };
 }
 function ensurePlanCoverage(service, { planId, chainId = null, blockIds = [], readOnly = false, reason = "Sync task scope into Plan" } = {}) {
   if (!planId || readOnly) return { planId: planId ?? null, appendedChangeIds: [], chainScopeId: null, changed: false };
@@ -29398,6 +30052,7 @@ function reconcileChainNetworkPass(service, {
     };
   }
   for (const chain of chains) {
+    if (chain.chainType === "composite") continue;
     const currentNodes = snapshot2.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));
     const currentEdges = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
     const network = inspectChainNetwork({
@@ -29513,6 +30168,25 @@ function reconcileChainNetwork(service, options = {}) {
   const changedChainIds = /* @__PURE__ */ new Set();
   let changed = false;
   let graphRevision = service.project().graph_revision;
+  const compositionResult = reconcileChainComposition(service, options);
+  changed = compositionResult.changed;
+  compositionResult.changedChainIds.forEach((id) => changedChainIds.add(id));
+  for (const report of compositionResult.reports ?? []) {
+    aggregate.set(report.chainId, {
+      chainId: report.chainId,
+      autoExpandedBlockIds: /* @__PURE__ */ new Set(),
+      addedLinkIds: /* @__PURE__ */ new Set(),
+      skippedLinkIds: /* @__PURE__ */ new Set(),
+      issues: [...report.issues ?? []],
+      complete: report.complete,
+      ready: report.ready,
+      composition: report.composition,
+      memberCount: report.memberCount,
+      edgeCount: report.edgeCount,
+      changed: report.changed,
+      passes: 1
+    });
+  }
   const maxPasses = 16;
   let passes = 0;
   let converged = false;
@@ -29567,7 +30241,7 @@ function reconcileChainNetwork(service, options = {}) {
     addedLinkIds: [...report.addedLinkIds],
     skippedLinkIds: [...report.skippedLinkIds]
   }));
-  return { changed, changedChainIds: [...changedChainIds], reports, graphRevision };
+  return { changed, changedChainIds: [...changedChainIds], reports, composition: compositionResult, graphRevision };
 }
 function reconcileChainTopology(service, { chainId = null, autoReorder = true, reason = "Reconcile Chain topology" } = {}) {
   let snapshot2 = service.snapshot();
@@ -29583,6 +30257,7 @@ function reconcileChainTopology(service, { chainId = null, autoReorder = true, r
     };
   }
   for (const chain of chains) {
+    if (chain.chainType === "composite") continue;
     const nodeRows = snapshot2.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));
     const edgeRows = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
     const edgeInputs = edgeRows.map((edge) => {
@@ -30910,7 +31585,10 @@ function renderProjectMap(service, { locale = "en" } = {}) {
     if (plan.derivedReason) lines.push(`  ${plan.derivedReason}`);
   }
   lines.push("", "## Project network");
-  lines.push(`- ${graphBlocks.length} Blocks / ${snapshot2.links.length} Links / ${snapshot2.chains.length} Chain overlays`);
+  const compositeChains = snapshot2.chains.filter((chain) => chain.chainType === "composite");
+  const leafChains = snapshot2.chains.length - compositeChains.length;
+  lines.push(`- ${graphBlocks.length} Blocks / ${snapshot2.links.length} Links / ${leafChains} leaf Chains + ${compositeChains.length} Composite Chains`);
+  if (compositeChains.length) lines.push(`- Hierarchy: ${compositeChains.map((chain) => `chain:${chain.id} (${snapshot2.chainMembers.filter((member) => member.chainId === chain.id).length} macro stage(s))`).join(" \xB7 ")}`);
   lines.push(`- ${snapshot2.decisions.length} Decisions (scoped index; expand a record on demand)`);
   lines.push(`- Coverage: ${coverage.verified}/${coverage.totalBlocks} verified \xB7 ${coverage.planned}/${coverage.totalBlocks} planned \xB7 ${coverage.withCheckpoint}/${coverage.totalBlocks} with checkpoints`);
   lines.push(`- Verification: ${coverage.verificationCovered}/${coverage.totalBlocks} bound or passed \xB7 ${coverage.failingIds.length} failing`);
@@ -31149,12 +31827,22 @@ function openEntity(service, rawPayload = {}) {
     gitCommit: row.git_commit
   })) : [];
   const decisionScopes = type === "decision" ? service.database.prepare("SELECT scope_type, scope_value FROM decision_scopes WHERE decision_id = ? ORDER BY scope_type, scope_value").all(id).map((row) => ({ scopeType: row.scope_type, scopeValue: row.scope_value })) : [];
-  const pathNodes = type === "chain" ? service.database.prepare("SELECT chain_id, 'block' AS member_type, block_id AS member_id, position FROM chain_nodes WHERE chain_id = ? ORDER BY position").all(id).map((row) => ({
+  const pathNodes = type === "chain" ? service.database.prepare(entity.chainType === "composite" ? "SELECT chain_id, member_type, member_id, position, role, required FROM chain_members WHERE chain_id = ? ORDER BY position, member_type, member_id" : "SELECT chain_id, 'block' AS member_type, block_id AS member_id, position, role, 1 AS required FROM chain_nodes WHERE chain_id = ? ORDER BY position").all(id).map((row) => ({
     memberType: row.member_type,
     memberId: row.member_id,
-    position: row.position
+    position: row.position,
+    role: row.role ?? "stage",
+    required: row.required !== 0
   })) : [];
   const pathEdges = type === "chain" ? service.database.prepare("SELECT link_id, position FROM chain_edges WHERE chain_id = ? ORDER BY position").all(id).map((row) => ({ linkId: row.link_id, position: row.position })) : [];
+  const composition = type === "chain" && entity.chainType === "composite" ? inspectChainComposition({
+    chain: entity,
+    members: pathNodes,
+    edges: pathEdges,
+    chains: service.snapshot().chains,
+    blocks: service.snapshot().blocks,
+    links: service.snapshot().links
+  }) : null;
   const targetChains = type === "plan" ? service.database.prepare("SELECT chain_id, position FROM plan_chain_refs WHERE plan_id = ? ORDER BY position").all(id).map((row) => ({ chainId: row.chain_id, position: row.position })) : [];
   const dependencies = type === "plan" ? service.database.prepare("SELECT depends_on_plan_id, position FROM plan_dependencies WHERE plan_id = ? ORDER BY position").all(id).map((row) => ({ planId: row.depends_on_plan_id, position: row.position })) : [];
   const steps = type === "plan" ? service.database.prepare("SELECT * FROM plan_steps WHERE plan_id = ? ORDER BY position").all(id).map((row) => ({
@@ -31200,6 +31888,7 @@ function openEntity(service, rawPayload = {}) {
     lines.push(`- Priority: ${entity.priority}`);
   }
   if (entity.healthState) lines.push(`- Health: ${entity.healthState}`);
+  if (type === "chain") lines.push(`- Type: ${entity.chainType === "composite" ? "Composite (macro route)" : "Leaf (Block path)"}`);
   if (displaySummary) lines.push("", "## Summary", displaySummary);
   if (type === "block") {
     const displayBody = localizedValue(translations, type, id, locale, "body", entity.body ?? "");
@@ -31214,6 +31903,19 @@ function openEntity(service, rawPayload = {}) {
   if (displayContract) lines.push("", "## Contract", displayContract);
   if (entity.inputContract || entity.outputContract) {
     lines.push("", "## Contract", `Input: ${displayInput || "\u2014"}`, `Output: ${displayOutput || "\u2014"}`);
+  }
+  if (composition) {
+    lines.push("", "## Composition");
+    lines.push(`- Members: ${composition.members.length} \xB7 route Links: ${composition.edges.length} \xB7 ${composition.complete ? "structurally complete" : "needs attention"}`);
+    for (const member of composition.members) {
+      const item = member.memberType === "chain" ? snapshot2.chains.find((candidate) => candidate.id === member.memberId) : snapshot2.blocks.find((candidate) => candidate.id === member.memberId);
+      lines.push(`- ${member.position + 1}. ${member.memberType}:${member.memberId} \xB7 ${item?.title ?? "missing"} \xB7 ${member.role}${member.required ? " \xB7 required" : " \xB7 optional"}`);
+    }
+    if (composition.edges.length) lines.push("", "### Macro route", ...composition.edges.map((edge) => {
+      const link = snapshot2.links.find((candidate) => candidate.id === edge.linkId);
+      return link ? `- ${link.sourceType}:${link.sourceId} -[${link.kind}]-> ${link.targetType}:${link.targetId}` : `- missing link:${edge.linkId}`;
+    }));
+    if (composition.topology.issues.length) lines.push("", "### Composition issues", ...composition.topology.issues.map((issue2) => `- ${issue2.detail}`));
   }
   if (type === "plan") {
     const goal = localizedValue(translations, type, id, locale, "goal", entity.goal);
@@ -31272,7 +31974,7 @@ function openEntity(service, rawPayload = {}) {
       markdown: detailed.markdown
     };
   }
-  return { entity, sourceRefs, pathNodes, pathEdges, targetChains, dependencies, steps, checkpointRefs, checkpoints, history, coverage, ruleScopes, decisionScopes, markdown: lines.join("\n") };
+  return { entity, sourceRefs, pathNodes, pathEdges, composition, targetChains, dependencies, steps, checkpointRefs, checkpoints, history, coverage, ruleScopes, decisionScopes, markdown: lines.join("\n") };
 }
 function getChangesSince(service, { sequence = 0, sourceSyncRevision = null, limit = 100 } = {}) {
   if (!Number.isInteger(sequence) || sequence < 0) throw new Error("sequence must be a non-negative integer");
@@ -31346,6 +32048,8 @@ function validateGraph(service) {
   const networkAudit = inspectProjectNetworks(snapshot2);
   const errors = [];
   const warnings = [];
+  const compositionCycles = inspectCompositionCycles(snapshot2);
+  for (const cycle of compositionCycles) errors.push(`Composite Chain membership cycle: ${cycle.join(" -> ")}`);
   const refs = /* @__PURE__ */ new Set([
     ...snapshot2.blocks.map((block) => `block:${block.id}`),
     ...snapshot2.chains.map((chain) => `chain:${chain.id}`)
@@ -31361,6 +32065,22 @@ function validateGraph(service) {
     }
   }
   for (const chain of snapshot2.chains) {
+    if (chain.chainType === "composite") {
+      const members2 = snapshot2.chainMembers.filter((item) => item.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const edges2 = snapshot2.chainEdges.filter((item) => item.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const composition = inspectChainComposition({ chain, members: members2, edges: edges2, chains: snapshot2.chains, blocks: snapshot2.blocks, links: snapshot2.links });
+      if (members2.length === 0) warnings.push(`Empty Composite Chain: chain:${chain.id}`);
+      for (const issue2 of composition.topology.issues) {
+        const message = `Composite Chain topology ${issue2.code}: chain:${chain.id}${issue2.detail ? ` \xB7 ${issue2.detail}` : ""}`;
+        if (issue2.hard || ["disconnected", "no_edges"].includes(issue2.code)) errors.push(message);
+        else warnings.push(message);
+      }
+      for (const member of composition.missingMembers) errors.push(`Missing Composite Chain member: chain:${chain.id} -> ${member.memberType}:${member.memberId}`);
+      if (composition.incompleteMembers.length && chain.deliveryState === "complete") {
+        warnings.push(`Complete Composite Chain has incomplete members: chain:${chain.id}`);
+      }
+      continue;
+    }
     const nodes = snapshot2.chainNodes.filter((item) => item.chainId === chain.id);
     const edges = snapshot2.chainEdges.filter((item) => item.chainId === chain.id);
     const count = nodes.length;
@@ -31552,6 +32272,21 @@ function analyzeGraphDrift(service, snapshot2 = service.snapshot()) {
   const pendingCheckpoints = snapshot2.checkpoints.filter((cp) => cp.status === "pending" || cp.status === "failed" || cp.status === "blocked").map((cp) => ({ id: cp.id, title: cp.title, targetType: cp.targetType, targetId: cp.targetId, status: cp.status }));
   const semanticReviews = collectSemanticReviews(service, snapshot2);
   const chainTopologyIssues = snapshot2.chains.flatMap((chain) => {
+    if (chain.chainType === "composite") {
+      const members2 = snapshot2.chainMembers.filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const edges2 = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const composition = inspectChainComposition({ chain, members: members2, edges: edges2, chains: snapshot2.chains, blocks: snapshot2.blocks, links: snapshot2.links });
+      const actionable2 = composition.topology.issues.filter((issue2) => issue2.hard || ["disconnected", "no_edges"].includes(issue2.code));
+      return actionable2.length ? [{
+        chainId: chain.id,
+        title: chain.title,
+        nodeIds: composition.memberIds,
+        reachableNodeIds: composition.topology.reachable,
+        missingNodeIds: composition.topology.missingMemberIds,
+        edgeIds: edges2.map((edge) => edge.linkId),
+        issues: actionable2
+      }] : [];
+    }
     const nodes = snapshot2.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position);
     if (nodes.length < 2) return [];
     const edges = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position).map((edge) => {
@@ -31648,6 +32383,8 @@ function renderGraphStatus(service, { locale = "en" } = {}) {
   ).length;
   const ghostBlocks = totalBlocks - solidBlocks;
   const totalChains = snapshot2.chains.length;
+  const compositeChains = snapshot2.chains.filter((chain) => chain.chainType === "composite");
+  const leafChains = totalChains - compositeChains.length;
   const totalLinks = snapshot2.links.length;
   const totalCheckpoints = snapshot2.checkpoints.length;
   const passedCheckpoints = snapshot2.checkpoints.filter((c) => c.status === "passed").length;
@@ -31656,7 +32393,8 @@ function renderGraphStatus(service, { locale = "en" } = {}) {
     `# contextos Architecture & Sync Status`,
     `- Project: ${snapshot2.project.name || snapshot2.project.id} (rev ${snapshot2.project.graphRevision})`,
     `- Blocks: ${totalBlocks} (${solidBlocks} solid, ${ghostBlocks} ghost blueprints)`,
-    `- Chains: ${totalChains} \xB7 Links: ${totalLinks}`,
+    `- Chains: ${totalChains} (${leafChains} leaf, ${compositeChains.length} composite) \xB7 Links: ${totalLinks}`,
+    ...compositeChains.length ? [`- Composite routes: ${compositeChains.map((chain) => `chain:${chain.id} \xB7 ${snapshot2.chainMembers.filter((member) => member.chainId === chain.id).length} stage(s)`).join(" | ")}`] : [],
     `- Links outside a Chain: ${drift.linksOutsideChains.length} (cross-cutting; review only when part of a feature path)`,
     `- Blocks outside feature Chains: ${drift.networkAudit?.unassignedBlocks?.length ?? 0} \xB7 Chain network gaps: ${drift.networkAudit?.missingInternalLinks?.length ?? 0} \xB7 membership gaps: ${drift.networkAudit?.membershipGaps?.length ?? 0} \xB7 auto-expand candidates: ${drift.networkAudit?.autoExpandCandidates?.length ?? 0}`,
     `- Checkpoints: ${passedCheckpoints}/${totalCheckpoints} passed`,
@@ -31762,6 +32500,8 @@ function renderGraphStatus(service, { locale = "en" } = {}) {
       solidBlocks,
       ghostBlocks,
       totalChains,
+      leafChains,
+      compositeChains: compositeChains.length,
       totalLinks,
       passedCheckpoints,
       totalCheckpoints,
@@ -32083,7 +32823,9 @@ function buildContextForTask(service, { task, focusRefs = [], maxChars = 6e3, lo
     for (const chain of relevantChains) {
       const title = localizedValue(translations, "chain", chain.id, locale, "title", chain.title);
       const path16 = snapshot2.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position).map((node2) => `block:${node2.blockId}`).join(" \u2192 ");
-      lines.push(`- [chain:${chain.id}] ${title} \u2014 ${chain.deliveryState}/${chain.healthState}${path16 ? ` \xB7 path ${path16}` : ""}`);
+      const compositionMembers = chain.chainType === "composite" ? snapshot2.chainMembers.filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position) : [];
+      const composition = compositionMembers.length ? ` \xB7 macro ${compositionMembers.map((member) => `${member.memberType}:${member.memberId}`).join(" \u2192 ")}` : "";
+      lines.push(`- [chain:${chain.id}] ${title} \u2014 ${chain.deliveryState}/${chain.healthState}${path16 ? ` \xB7 path ${path16}` : ""}${composition}`);
       const intent = localizedValue(translations, "chain", chain.id, locale, "intent", chain.intent);
       if (intent && (selectedPlanIds.size === 0 || hasExplicitChainFocus)) lines.push(`  ${intent}`);
     }
@@ -32420,7 +33162,7 @@ function renderPlanContext(service, { id, locale = "en", maxChars = 12e3 } = {})
   for (const scope of hierarchy) {
     lines.push("", `### ${scope.position + 1}. ${scope.title} [chain:${scope.chainId}]`, scope.summary || "\u2014");
     if (scope.rationale) lines.push(`Reason: ${scope.rationale}`);
-    if (scope.nodeIds.length || scope.linkIds.length) lines.push(`Path: ${scope.nodeIds.map((nodeId2) => `block:${nodeId2}`).join(" \u2192 ")}${scope.linkIds.length ? ` \xB7 Links ${scope.linkIds.map((linkId) => `link:${linkId}`).join(", ")}` : ""}`);
+    if (scope.nodeIds.length || scope.linkIds.length) lines.push(`Path: ${scope.nodeIds.map((nodeId3) => `block:${nodeId3}`).join(" \u2192 ")}${scope.linkIds.length ? ` \xB7 Links ${scope.linkIds.map((linkId) => `link:${linkId}`).join(", ")}` : ""}`);
     if (scope.prohibitions.length) lines.push("Prohibitions:", ...scope.prohibitions.map((item) => `- ${item}`));
     if (scope.changes.length) lines.push(`Changes: ${scope.changes.map((change) => `[plan_change:${change.id}]`).join(", ")}`);
     for (const binding of scope.checkpoints) {
@@ -33093,6 +33835,17 @@ var ContextOSService = class {
       `SELECT cn.* FROM chain_nodes cn JOIN chains c ON c.id = cn.chain_id
          WHERE c.project_id = ? AND c.archived = 0 ORDER BY cn.chain_id, cn.position`
     ).all(projectId).map((row) => ({ chainId: row.chain_id, blockId: row.block_id, position: row.position, role: row.role }));
+    const chainMembers2 = this.database.prepare(
+      `SELECT cm.* FROM chain_members cm JOIN chains c ON c.id = cm.chain_id
+         WHERE c.project_id = ? AND c.archived = 0 ORDER BY cm.chain_id, cm.position, cm.member_type, cm.member_id`
+    ).all(projectId).map((row) => ({
+      chainId: row.chain_id,
+      memberType: row.member_type,
+      memberId: row.member_id,
+      position: row.position,
+      role: row.role ?? "stage",
+      required: row.required !== 0
+    }));
     const chainEdges = this.database.prepare(
       `SELECT ce.* FROM chain_edges ce JOIN chains c ON c.id = ce.chain_id
          WHERE c.project_id = ? AND c.archived = 0 ORDER BY ce.chain_id, ce.position`
@@ -33257,6 +34010,7 @@ var ContextOSService = class {
       chains,
       plans,
       links,
+      chainMembers: chainMembers2,
       chainNodes,
       chainEdges,
       planChainRefs,
@@ -33297,6 +34051,88 @@ var ContextOSService = class {
     const snapshot2 = this.snapshot();
     const chain = snapshot2.chains.find((c) => c.id === chainId);
     if (!chain) throw new Error(`Chain not found: ${chainId}`);
+    if (chain.chainType === "composite") {
+      const members2 = snapshot2.chainMembers.filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
+      const edges = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const composition = inspectChainComposition({
+        chain,
+        members: members2,
+        edges,
+        chains: snapshot2.chains,
+        blocks: snapshot2.blocks,
+        links: snapshot2.links
+      });
+      const childBlockCount = (childId, seen = /* @__PURE__ */ new Set()) => {
+        if (seen.has(childId)) return 0;
+        seen.add(childId);
+        const childMembers = snapshot2.chainMembers.filter((member) => member.chainId === childId);
+        if (!childMembers.length) return snapshot2.chainNodes.filter((node2) => node2.chainId === childId).length;
+        return childMembers.reduce((total, member) => total + (member.memberType === "chain" ? childBlockCount(member.memberId, seen) : 1), 0);
+      };
+      const streamNodes2 = members2.map((member) => {
+        const ref = `${member.memberType}:${member.memberId}`;
+        const item = member.memberType === "chain" ? snapshot2.chains.find((candidate) => candidate.id === member.memberId) : snapshot2.blocks.find((candidate) => candidate.id === member.memberId);
+        const childNodes = member.memberType === "chain" ? snapshot2.chainNodes.filter((node2) => node2.chainId === member.memberId).length : null;
+        const childEdges = member.memberType === "chain" ? snapshot2.chainEdges.filter((edge) => edge.chainId === member.memberId).length : null;
+        const source = member.memberType === "block" ? this.database.prepare("SELECT path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id").all(member.memberId)[0] : null;
+        return {
+          memberType: member.memberType,
+          memberId: member.memberId,
+          ref,
+          title: item?.title ?? member.memberId,
+          role: member.role ?? "stage",
+          required: member.required !== false,
+          deliveryState: item?.deliveryState ?? "missing",
+          healthState: item?.healthState ?? "unknown",
+          childBlockCount: member.memberType === "chain" ? childBlockCount(member.memberId) : 1,
+          childNodeCount: childNodes,
+          childEdgeCount: childEdges,
+          filePath: source?.path ?? null,
+          symbol: source?.symbol ?? null,
+          startLine: source?.start_line ?? null,
+          endLine: source?.end_line ?? null,
+          contract: member.memberType === "chain" ? item?.outputContract || item?.intent || "" : item?.contract || item?.summary || ""
+        };
+      });
+      const orderedMemberIds = composition.topology.orderedMemberIds ?? members2.map((member) => `${member.memberType}:${member.memberId}`);
+      const orderedNodes = orderedMemberIds.map((id) => streamNodes2.find((node2) => node2.ref === id)).filter(Boolean);
+      const codeStream2 = [
+        `# Composite Chain: ${chain.title} (${chain.id})`,
+        `Members: ${orderedNodes.length} macro stage(s) \xB7 underlying Blocks are expanded on demand`,
+        `Composition: ${composition.complete ? "valid" : "needs attention"} \xB7 ${edges.length} typed route edge(s)`,
+        "",
+        ...orderedNodes.flatMap((node2, index) => [
+          `${index + 1}. [${node2.ref}] ${node2.title} \u2014 ${node2.deliveryState}/${node2.healthState}`,
+          `   Role: ${node2.role}${node2.required ? " \xB7 required" : " \xB7 optional"}`,
+          node2.memberType === "chain" ? `   Child Chain: ${node2.childNodeCount} path Block(s), ${node2.childEdgeCount} route Link(s), ${node2.childBlockCount} recursive Block(s)` : `   Locator: ${node2.filePath ? `${node2.filePath}${node2.symbol ? ` :: ${node2.symbol}` : ""}${node2.startLine ? ` L${node2.startLine}-${node2.endLine}` : ""}` : "virtual/no SourceRef"}`,
+          node2.contract ? `   Contract: ${node2.contract}` : ""
+        ].filter(Boolean)),
+        ...edges.length ? ["", "## Composition route", ...edges.map((edge) => {
+          const link = snapshot2.links.find((candidate) => candidate.id === edge.linkId);
+          return link ? `- ${link.sourceType}:${link.sourceId} -[${link.kind}]-> ${link.targetType}:${link.targetId}` : `- missing link:${edge.linkId}`;
+        })] : [],
+        ...composition.topology.issues.length ? ["", "## Composition issues", ...composition.topology.issues.map((issue2) => `- ${issue2.detail}`)] : []
+      ].join("\n");
+      return {
+        chainId: chain.id,
+        title: chain.title,
+        chainType: chain.chainType,
+        mode,
+        sourceSync: {
+          revision: sourceSync.revision,
+          changed: sourceSync.changed,
+          changedBindingCount: sourceSync.changedBindingCount,
+          invalidBindingCount: sourceSync.invalidBindingCount,
+          changes: sourceSync.changes.slice(0, 12)
+        },
+        chainNetwork,
+        chainReconciliation,
+        composition,
+        nodes: orderedNodes,
+        codeStream: codeStream2,
+        markdown: codeStream2
+      };
+    }
     const nodeIds = snapshot2.chainNodes.filter((node2) => node2.chainId === chain.id).sort((a, b) => a.position - b.position).map((node2) => node2.blockId);
     const streamNodes = [];
     for (const blockId of nodeIds) {
@@ -33359,6 +34195,7 @@ var ContextOSService = class {
     return {
       chainId: chain.id,
       title: chain.title,
+      chainType: chain.chainType,
       mode,
       sourceSync: {
         revision: sourceSync.revision,
@@ -33745,6 +34582,24 @@ ${stderr}` : ""].filter(Boolean).join("\n");
       reason,
       task: "chain-append",
       operations: [{ action: "append_chain_path", id: chainId, expectedRevision, fields: { nodeIds, linkIds } }]
+    });
+  }
+  setChainComposition({ chainId, expectedRevision, memberRefs = [], members: members2 = null, linkIds = [], actor = "agent", reason = "Set Composite Chain composition" } = {}) {
+    if (!chainId?.trim()) throw new Error("chainId is required");
+    return this.mutate({
+      actor,
+      reason,
+      task: "chain-compose",
+      operations: [{ action: "set_chain_composition", id: chainId, expectedRevision, fields: { memberRefs: members2 ?? memberRefs, linkIds } }]
+    });
+  }
+  appendChainComposition({ chainId, expectedRevision, memberRefs = [], members: members2 = null, linkIds = [], actor = "agent", reason = "Append members to a Composite Chain" } = {}) {
+    if (!chainId?.trim()) throw new Error("chainId is required");
+    return this.mutate({
+      actor,
+      reason,
+      task: "chain-compose",
+      operations: [{ action: "append_chain_composition", id: chainId, expectedRevision, fields: { memberRefs: members2 ?? memberRefs, linkIds } }]
     });
   }
   reconcileChainTopology({ chainId = null, autoReorder = true, reason = "Reconcile Chain topology" } = {}) {
@@ -34456,7 +35311,7 @@ var router = new ProjectServiceRouter();
 var server = new McpServer(
   { name: "contextos", version: "0.4.0" },
   {
-    instructions: "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Chain reconciliation audits feature membership and order together: a related new Block should carry chain:<chain-id> and an explicit route Link, while safe forward route Links and high-confidence affiliated Blocks are attached automatically; an affinity tag without a route stays as an actionable membership gap; an intentional standalone Block carries standalone:<reason>. Feedback, read and dependency relations remain visible as cross-cutting edges when they would create a cycle. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools."
+    instructions: "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Chain reconciliation audits feature membership and order together: a related new Block should carry chain:<chain-id> and an explicit route Link, while safe forward route Links and high-confidence affiliated Blocks are attached automatically; an affinity tag without a route stays as an actionable membership gap; an intentional standalone Block carries standalone:<reason>. Composite Chains keep a short typed macro route over child Chain paths; use chain_compose for their members and let validation propagate child drift to the parent. Feedback, read and dependency relations remain visible as cross-cutting edges when they would create a cycle. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools."
   }
 );
 var projectRootInput = {
@@ -34465,7 +35320,7 @@ var projectRootInput = {
 };
 function withProject(input, callback) {
   const service = router.serviceFor(input);
-  const runtime = { version: "0.4.0", protocolVersion: 2, observedAt: (/* @__PURE__ */ new Date()).toISOString(), pid: process.pid, projectRoot: service.paths.projectRoot, capabilities: ["documents", "readme-readonly", "task-sessions", "source-index", "projection-recovery", "chapter-context", "plan-append", "chain-append", "chain-reconcile", "block-ast-slice", "source-cache"], plugin: pluginRuntimeStatus(service.paths.projectRoot) };
+  const runtime = { version: "0.4.0", protocolVersion: 2, observedAt: (/* @__PURE__ */ new Date()).toISOString(), pid: process.pid, projectRoot: service.paths.projectRoot, capabilities: ["documents", "readme-readonly", "task-sessions", "source-index", "projection-recovery", "chapter-context", "plan-append", "chain-append", "chain-compose", "chain-reconcile", "block-ast-slice", "source-cache"], plugin: pluginRuntimeStatus(service.paths.projectRoot) };
   const runtimePath = path15.join(service.paths.projectRoot, ".contextos", "runtime.json");
   try {
     fs13.writeFileSync(runtimePath + "." + process.pid, JSON.stringify(runtime));
@@ -35180,6 +36035,8 @@ server.registerTool(
             "set_checkpoint_dependencies",
             "set_chain_path",
             "append_chain_path",
+            "set_chain_composition",
+            "append_chain_composition",
             "set_background_scopes",
             "set_decision_scopes"
           ]),
@@ -35292,6 +36149,40 @@ server.registerTool(
       ...data.issues?.length ? ["", "## Issues", ...data.issues.map((issue2) => `- ${issue2.detail}`)] : ["- Topology is ordered and connected."]
     ].join("\n");
     return writeResult(data, markdown, input.includeStructured, "chain_reconcile");
+  }
+);
+server.registerTool(
+  "chain_compose",
+  {
+    description: "Set or extend a Composite Chain made from typed Chain/Block members. Parent composition Links must use route kinds and connect the declared macro members; child Chains keep their own Block paths.",
+    inputSchema: {
+      ...projectRootInput,
+      chainId: string2().min(1),
+      expectedRevision: number2().int().min(1),
+      mode: _enum(["set", "append"]).default("set"),
+      members: array(object2({
+        memberType: _enum(["chain", "block"]),
+        memberId: string2().min(1),
+        role: string2().min(1).optional(),
+        required: boolean2().optional()
+      })).default([]),
+      linkIds: array(string2().min(1)).default([]),
+      actor: string2().optional(),
+      reason: string2().optional(),
+      includeStructured: boolean2().default(false)
+    }
+  },
+  async (input) => {
+    const data = withProject(input, (service, payload) => input.mode === "append" ? service.appendChainComposition(payload) : service.setChainComposition(payload));
+    const markdown = [
+      `# Composite Chain ${input.mode === "append" ? "updated" : "set"}`,
+      `- Chain: chain:${input.chainId}`,
+      `- Members: ${input.members.length}`,
+      `- Composition Links: ${input.linkIds.length}`,
+      `- Graph revision: ${data.graphRevision}`,
+      `- ChangeSet: ${data.changeSetId}`
+    ].join("\\n");
+    return writeResult(data, markdown, input.includeStructured, "chain_compose");
   }
 );
 server.registerTool(

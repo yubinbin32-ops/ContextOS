@@ -3,6 +3,7 @@ import path from "node:path";
 import { pluginRuntimeStatus } from "./plugin-runtime.mjs";
 import { inspectChainTopology } from "./chain-topology.mjs";
 import { inspectProjectNetworks } from "./chain-network.mjs";
+import { inspectChainComposition, inspectCompositionCycles } from "./chain-composition.mjs";
 import {
   architectureCoverage,
   assertAllowed,
@@ -74,7 +75,10 @@ export function renderProjectMap(service, { locale = "en" } = {}) {
     if (plan.derivedReason) lines.push(`  ${plan.derivedReason}`);
   }
   lines.push("", "## Project network");
-  lines.push(`- ${graphBlocks.length} Blocks / ${snapshot.links.length} Links / ${snapshot.chains.length} Chain overlays`);
+  const compositeChains = snapshot.chains.filter((chain) => chain.chainType === "composite");
+  const leafChains = snapshot.chains.length - compositeChains.length;
+  lines.push(`- ${graphBlocks.length} Blocks / ${snapshot.links.length} Links / ${leafChains} leaf Chains + ${compositeChains.length} Composite Chains`);
+  if (compositeChains.length) lines.push(`- Hierarchy: ${compositeChains.map((chain) => `chain:${chain.id} (${snapshot.chainMembers.filter((member) => member.chainId === chain.id).length} macro stage(s))`).join(" · ")}`);
   lines.push(`- ${snapshot.decisions.length} Decisions (scoped index; expand a record on demand)`);
   lines.push(`- Coverage: ${coverage.verified}/${coverage.totalBlocks} verified · ${coverage.planned}/${coverage.totalBlocks} planned · ${coverage.withCheckpoint}/${coverage.totalBlocks} with checkpoints`);
   lines.push(`- Verification: ${coverage.verificationCovered}/${coverage.totalBlocks} bound or passed · ${coverage.failingIds.length} failing`);
@@ -331,12 +335,16 @@ export function openEntity(service, rawPayload = {}) {
   const pathNodes =
     type === "chain"
       ? service.database
-          .prepare("SELECT chain_id, 'block' AS member_type, block_id AS member_id, position FROM chain_nodes WHERE chain_id = ? ORDER BY position")
+          .prepare(entity.chainType === "composite"
+            ? "SELECT chain_id, member_type, member_id, position, role, required FROM chain_members WHERE chain_id = ? ORDER BY position, member_type, member_id"
+            : "SELECT chain_id, 'block' AS member_type, block_id AS member_id, position, role, 1 AS required FROM chain_nodes WHERE chain_id = ? ORDER BY position")
           .all(id)
           .map((row) => ({
             memberType: row.member_type,
             memberId: row.member_id,
             position: row.position,
+            role: row.role ?? "stage",
+            required: row.required !== 0,
           }))
       : [];
   const pathEdges =
@@ -344,6 +352,16 @@ export function openEntity(service, rawPayload = {}) {
       ? service.database.prepare("SELECT link_id, position FROM chain_edges WHERE chain_id = ? ORDER BY position").all(id)
           .map((row) => ({ linkId: row.link_id, position: row.position }))
       : [];
+  const composition = type === "chain" && entity.chainType === "composite"
+    ? inspectChainComposition({
+      chain: entity,
+      members: pathNodes,
+      edges: pathEdges,
+      chains: service.snapshot().chains,
+      blocks: service.snapshot().blocks,
+      links: service.snapshot().links,
+    })
+    : null;
   const targetChains =
     type === "plan"
       ? service.database.prepare("SELECT chain_id, position FROM plan_chain_refs WHERE plan_id = ? ORDER BY position").all(id)
@@ -407,6 +425,7 @@ export function openEntity(service, rawPayload = {}) {
     lines.push(`- Priority: ${entity.priority}`);
   }
   if (entity.healthState) lines.push(`- Health: ${entity.healthState}`);
+  if (type === "chain") lines.push(`- Type: ${entity.chainType === "composite" ? "Composite (macro route)" : "Leaf (Block path)"}`);
   if (displaySummary) lines.push("", "## Summary", displaySummary);
   if (type === "block") {
     const displayBody = localizedValue(translations, type, id, locale, "body", entity.body ?? "");
@@ -421,6 +440,21 @@ export function openEntity(service, rawPayload = {}) {
   if (displayContract) lines.push("", "## Contract", displayContract);
   if (entity.inputContract || entity.outputContract) {
     lines.push("", "## Contract", `Input: ${displayInput || "—"}`, `Output: ${displayOutput || "—"}`);
+  }
+  if (composition) {
+    lines.push("", "## Composition");
+    lines.push(`- Members: ${composition.members.length} · route Links: ${composition.edges.length} · ${composition.complete ? "structurally complete" : "needs attention"}`);
+    for (const member of composition.members) {
+      const item = member.memberType === "chain"
+        ? snapshot.chains.find((candidate) => candidate.id === member.memberId)
+        : snapshot.blocks.find((candidate) => candidate.id === member.memberId);
+      lines.push(`- ${member.position + 1}. ${member.memberType}:${member.memberId} · ${item?.title ?? "missing"} · ${member.role}${member.required ? " · required" : " · optional"}`);
+    }
+    if (composition.edges.length) lines.push("", "### Macro route", ...composition.edges.map((edge) => {
+      const link = snapshot.links.find((candidate) => candidate.id === edge.linkId);
+      return link ? `- ${link.sourceType}:${link.sourceId} -[${link.kind}]-> ${link.targetType}:${link.targetId}` : `- missing link:${edge.linkId}`;
+    }));
+    if (composition.topology.issues.length) lines.push("", "### Composition issues", ...composition.topology.issues.map((issue) => `- ${issue.detail}`));
   }
   if (type === "plan") {
     const goal = localizedValue(translations, type, id, locale, "goal", entity.goal);
@@ -470,7 +504,7 @@ export function openEntity(service, rawPayload = {}) {
       checkpoints: detailed.checkpoints, history, hierarchy: detailed.hierarchy, markdown: detailed.markdown,
     };
   }
-  return { entity, sourceRefs, pathNodes, pathEdges, targetChains, dependencies, steps, checkpointRefs, checkpoints, history, coverage, ruleScopes, decisionScopes, markdown: lines.join("\n") };
+  return { entity, sourceRefs, pathNodes, pathEdges, composition, targetChains, dependencies, steps, checkpointRefs, checkpoints, history, coverage, ruleScopes, decisionScopes, markdown: lines.join("\n") };
 }
 
 export function getChangesSince(service, { sequence = 0, sourceSyncRevision = null, limit = 100 } = {}) {
@@ -538,6 +572,8 @@ export function validateGraph(service) {
   const networkAudit = inspectProjectNetworks(snapshot);
   const errors = [];
   const warnings = [];
+  const compositionCycles = inspectCompositionCycles(snapshot);
+  for (const cycle of compositionCycles) errors.push(`Composite Chain membership cycle: ${cycle.join(" -> ")}`);
   const refs = new Set([
     ...snapshot.blocks.map((block) => `block:${block.id}`),
     ...snapshot.chains.map((chain) => `chain:${chain.id}`),
@@ -553,6 +589,22 @@ export function validateGraph(service) {
     }
   }
   for (const chain of snapshot.chains) {
+    if (chain.chainType === "composite") {
+      const members = snapshot.chainMembers.filter((item) => item.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const edges = snapshot.chainEdges.filter((item) => item.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const composition = inspectChainComposition({ chain, members, edges, chains: snapshot.chains, blocks: snapshot.blocks, links: snapshot.links });
+      if (members.length === 0) warnings.push(`Empty Composite Chain: chain:${chain.id}`);
+      for (const issue of composition.topology.issues) {
+        const message = `Composite Chain topology ${issue.code}: chain:${chain.id}${issue.detail ? ` · ${issue.detail}` : ""}`;
+        if (issue.hard || ["disconnected", "no_edges"].includes(issue.code)) errors.push(message);
+        else warnings.push(message);
+      }
+      for (const member of composition.missingMembers) errors.push(`Missing Composite Chain member: chain:${chain.id} -> ${member.memberType}:${member.memberId}`);
+      if (composition.incompleteMembers.length && chain.deliveryState === "complete") {
+        warnings.push(`Complete Composite Chain has incomplete members: chain:${chain.id}`);
+      }
+      continue;
+    }
     const nodes = snapshot.chainNodes.filter((item) => item.chainId === chain.id);
     const edges = snapshot.chainEdges.filter((item) => item.chainId === chain.id);
     const count = nodes.length;
@@ -769,6 +821,21 @@ export function analyzeGraphDrift(service, snapshot = service.snapshot()) {
 
   const semanticReviews = collectSemanticReviews(service, snapshot);
   const chainTopologyIssues = snapshot.chains.flatMap((chain) => {
+    if (chain.chainType === "composite") {
+      const members = snapshot.chainMembers.filter((member) => member.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const edges = snapshot.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
+      const composition = inspectChainComposition({ chain, members, edges, chains: snapshot.chains, blocks: snapshot.blocks, links: snapshot.links });
+      const actionable = composition.topology.issues.filter((issue) => issue.hard || ["disconnected", "no_edges"].includes(issue.code));
+      return actionable.length ? [{
+        chainId: chain.id,
+        title: chain.title,
+        nodeIds: composition.memberIds,
+        reachableNodeIds: composition.topology.reachable,
+        missingNodeIds: composition.topology.missingMemberIds,
+        edgeIds: edges.map((edge) => edge.linkId),
+        issues: actionable,
+      }] : [];
+    }
     const nodes = snapshot.chainNodes
       .filter((node) => node.chainId === chain.id)
       .sort((left, right) => left.position - right.position);
@@ -887,6 +954,8 @@ export function renderGraphStatus(service, { locale = "en" } = {}) {
   ).length;
   const ghostBlocks = totalBlocks - solidBlocks;
   const totalChains = snapshot.chains.length;
+  const compositeChains = snapshot.chains.filter((chain) => chain.chainType === "composite");
+  const leafChains = totalChains - compositeChains.length;
   const totalLinks = snapshot.links.length;
   const totalCheckpoints = snapshot.checkpoints.length;
   const passedCheckpoints = snapshot.checkpoints.filter((c) => c.status === "passed").length;
@@ -896,7 +965,8 @@ export function renderGraphStatus(service, { locale = "en" } = {}) {
     `# contextos Architecture & Sync Status`,
     `- Project: ${snapshot.project.name || snapshot.project.id} (rev ${snapshot.project.graphRevision})`,
     `- Blocks: ${totalBlocks} (${solidBlocks} solid, ${ghostBlocks} ghost blueprints)`,
-    `- Chains: ${totalChains} · Links: ${totalLinks}`,
+    `- Chains: ${totalChains} (${leafChains} leaf, ${compositeChains.length} composite) · Links: ${totalLinks}`,
+    ...(compositeChains.length ? [`- Composite routes: ${compositeChains.map((chain) => `chain:${chain.id} · ${snapshot.chainMembers.filter((member) => member.chainId === chain.id).length} stage(s)`).join(" | ")}`] : []),
     `- Links outside a Chain: ${drift.linksOutsideChains.length} (cross-cutting; review only when part of a feature path)`,
     `- Blocks outside feature Chains: ${drift.networkAudit?.unassignedBlocks?.length ?? 0} · Chain network gaps: ${drift.networkAudit?.missingInternalLinks?.length ?? 0} · membership gaps: ${drift.networkAudit?.membershipGaps?.length ?? 0} · auto-expand candidates: ${drift.networkAudit?.autoExpandCandidates?.length ?? 0}`,
     `- Checkpoints: ${passedCheckpoints}/${totalCheckpoints} passed`,
@@ -1005,6 +1075,8 @@ export function renderGraphStatus(service, { locale = "en" } = {}) {
       solidBlocks,
       ghostBlocks,
       totalChains,
+      leafChains,
+      compositeChains: compositeChains.length,
       totalLinks,
       passedCheckpoints,
       totalCheckpoints,

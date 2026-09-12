@@ -25,6 +25,12 @@ ContextOS stores that working memory beside the code in one OS graph. Each conve
 
 **5. Knowledge has one clear entrance.** Proposals, audits, designs, and guides live as OS Documents and are read by chapter in the App. `README.md` and `README_zh.md` remain at the repository root and appear read-only in the App Knowledge view, with images and relative links intact.
 
+## A large feature stays readable
+
+A long feature does not have to be one flat Chain. A **Leaf Chain** owns a focused Block path. A **Composite Chain** groups several Leaf Chains (and, when useful, a few direct Blocks) into a short macro route. The parent shows stages such as boundary → context → source → knowledge → verification; opening a stage reveals its own Blocks, Links, source symbols, and AST locators.
+
+The current feedback-loop pilot turns 42 implementation Blocks into 7 stage Chains. The parent route has 7 members and 6 explicit `flows_to` Links, so a new conversation can understand the feature in seven items and expand only the stage it needs. The same model supports nested Composite Chains, fan-out, optional stages, cycle detection, and automatic state propagation from children to parents.
+
 ![A feature path with exact code locations](assets/path-impact.png)
 
 ![OS Documents and README in the same Knowledge drawer](assets/knowledge-reader.png)

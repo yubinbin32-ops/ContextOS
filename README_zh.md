@@ -25,6 +25,12 @@ ContextOS 把这些项目记忆放在代码旁边，由 OS 图谱统一保存。
 
 **5. 文档有统一入口。** 项目方案、审计、设计和教材写入 OS Documents，按章节阅读并在 App 中展示。`README.md` 与 `README_zh.md` 继续位于仓库根目录，在 App 的 Knowledge 中以只读方式预览，图片和相对链接保持原样。
 
+## 复杂功能也能一眼看懂
+
+一条很长的功能不必再平铺成几十个 Block。**叶子 Chain** 负责一段聚焦的 Block 路径，**组合 Chain** 把几条叶子 Chain（必要时也可以放入少量直接 Block）组成一条短的宏观路线。父 Chain 只展示“边界 → 上下文 → 源码 → 知识 → 验证”这样的阶段；点击阶段后，再查看它自己的 Block、Link、源码符号和 AST 定位。
+
+当前反馈闭环试点把 42 个实现 Block 拆成 7 条阶段 Chain。父 Chain 只有 7 个成员和 6 条明确的 `flows_to` Link，新对话先看到 7 项就能理解全貌，需要实现细节时再展开对应阶段。同一模型也支持嵌套组合、分支、可选阶段、环检测，以及子 Chain 状态向父 Chain 回传。
+
 ![功能链与精确代码定位](assets/path-impact.png)
 
 ![OS 文档和 README 的知识抽屉](assets/knowledge-reader.png)
