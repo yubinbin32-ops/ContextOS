@@ -9,7 +9,7 @@ const transport = new StdioClientTransport({
   args: ["plugins/contextos/server/contextos-mcp.mjs"],
   cwd: projectRoot,
 });
-const client = new Client({ name: "contextos-plugin-smoke", version: "0.4.0" });
+const client = new Client({ name: "contextos-plugin-smoke", version: "0.4.1" });
 const packageVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 const pluginVersion = JSON.parse(fs.readFileSync("plugins/contextos/.codex-plugin/plugin.json", "utf8")).version;
 const appVersion = fs.readFileSync("apps/desktop/Resources/Info.plist", "utf8").match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)/)?.[1];
@@ -25,7 +25,7 @@ try {
   }
 
   const runtime = await client.callTool({name:"runtime_info",arguments:{projectRoot,includeStructured:true}});
-  assert.ok(!runtime.isError);assert.match(JSON.stringify(runtime),/0\.4\.0/);
+  assert.ok(!runtime.isError);assert.match(JSON.stringify(runtime),/0\.4\.1/);
   const documents = await client.callTool({name:"document_list",arguments:{projectRoot}});
   assert.ok(!documents.isError);assert.match(JSON.stringify(documents),/documents/);
   const chainTool = listing.tools.find((tool) => tool.name === "chain_code_stream");
@@ -84,7 +84,7 @@ try {
   assert.equal(listing.tools.find((tool) => tool.name === "chain_append").inputSchema.properties.expectedRevision.type, "integer");
   assert.equal(listing.tools.find((tool) => tool.name === "plan_append_changes").inputSchema.properties.planId.type, "string");
   const graphMutateActions = listing.tools.find((tool) => tool.name === "graph_mutate").inputSchema.properties.operations.items.properties.action.enum;
-  for (const action of ["append_plan_changes", "update_plan_changes", "append_chain_path"]) {
+  for (const action of ["append_plan_changes", "update_plan_changes", "append_chain_path", "set_chain_composition"]) {
     assert.ok(graphMutateActions.includes(action), `graph_mutate must expose ${action}`);
   }
   const sourceSync = await client.callTool({

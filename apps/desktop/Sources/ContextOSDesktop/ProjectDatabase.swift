@@ -70,9 +70,13 @@ final class ProjectDatabase {
 
     func refreshToken() throws -> String {
         let project = try rows("SELECT graph_revision,updated_at FROM projects LIMIT 1", bindings: []).first
-        let coordinates = try rows("SELECT id,start_line,end_line FROM source_refs ORDER BY id", bindings: []).map { "\($0.text("id")):\($0.int("start_line")):\($0.int("end_line"))" }.joined(separator: "|")
+        let coordinates = try rows("SELECT id,path,symbol,role,start_line,end_line FROM source_refs ORDER BY id", bindings: []).map { "\($0.text("id")):\($0.text("path")):\($0.text("symbol")):\($0.text("role")):\($0.int("start_line")):\($0.int("end_line"))" }.joined(separator: "|")
+        let chainTypes = try optionalRows("SELECT id,chain_type,current_revision FROM chains ORDER BY id", table: "chains", bindings: []).map { "\($0.text("id")):\($0.text("chain_type")):\($0.int("current_revision"))" }.joined(separator: "|")
+        let chainMembers = try optionalRows("SELECT chain_id,member_type,member_id,position,role,required FROM chain_members ORDER BY chain_id,position,member_type,member_id", table: "chain_members", bindings: []).map { "\($0.text("chain_id")):\($0.text("member_type")):\($0.text("member_id")):\($0.int("position")):\($0.text("role")):\($0.int("required"))" }.joined(separator: "|")
+        let chainNodes = try rows("SELECT chain_id,block_id,position,role FROM chain_nodes ORDER BY chain_id,position,block_id", bindings: []).map { "\($0.text("chain_id")):\($0.text("block_id")):\($0.int("position")):\($0.text("role"))" }.joined(separator: "|")
+        let chainEdges = try rows("SELECT chain_id,link_id,position FROM chain_edges ORDER BY chain_id,position,link_id", bindings: []).map { "\($0.text("chain_id")):\($0.text("link_id")):\($0.int("position"))" }.joined(separator: "|")
         let verification = try optionalRows("SELECT * FROM checkpoint_runtime ORDER BY checkpoint_id", table: "checkpoint_runtime", bindings: []).map { "\($0.text("checkpoint_id")):\($0.int("checkpoint_revision")):\($0.text("status"))" }.joined(separator: "|")
-        return "\(project?.int("graph_revision") ?? 0):\(project?.text("updated_at") ?? ""):\(coordinates):\(verification)"
+        return "\(project?.int("graph_revision") ?? 0):\(project?.text("updated_at") ?? ""):\(coordinates):\(chainTypes):\(chainMembers):\(chainNodes):\(chainEdges):\(verification)"
     }
 
     func changeSequence() throws -> Int {

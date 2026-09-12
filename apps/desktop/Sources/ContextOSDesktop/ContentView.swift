@@ -141,7 +141,9 @@ struct ContentView: View {
                             sidebarButton(
                                 title: store.chainText(chain, field: "title"),
                                 subtitle: chain.chainType == "composite"
-                                    ? "\(store.chainMembers(for: chain.id).count) STAGES · COMPOSITE · \(chain.deliveryState.uppercased())"
+                                    ? (store.chainMembers(for: chain.id).isEmpty
+                                        ? "EMPTY COMPOSITE · REPAIR IN OS · \(chain.deliveryState.uppercased())"
+                                        : "\(store.chainMembers(for: chain.id).count) STAGES · \(store.chainBlockIDs(chain.id).count) BLOCKS · COMPOSITE · \(chain.deliveryState.uppercased())")
                                     : "\(store.chainNodeIDs(chain.id).count) BLOCKS · \(chain.deliveryState.uppercased())",
                                 color: store.chainColor(chain.id),
                                 selected: store.selection == GraphSelection(type: .chain, id: chain.id)

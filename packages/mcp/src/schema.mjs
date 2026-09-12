@@ -758,6 +758,7 @@ export function affectedRefsForOperation(operation) {
   const fields = operation.fields ?? {};
   const add = (type, id) => { if (id) refs.add(`${type}:${id}`); };
   for (const id of fields.nodeIds ?? []) add("block", id);
+  for (const id of fields.removeBlockIds ?? []) add("block", id);
   for (const id of fields.linkIds ?? []) add("link", id);
   for (const id of fields.chainIds ?? []) add("chain", id);
   for (const member of [...(fields.memberRefs ?? []), ...(fields.members ?? [])]) {

@@ -123,7 +123,7 @@ struct GraphCanvasView: View {
         case .block:
             return scene.connectedComponent(from: selection.id)
         case .chain:
-            return Set(scene.chainNodes[selection.id] ?? [])
+            return Set(store.chainBlockIDs(selection.id)).intersection(Set(scene.blocks.map(\.id)))
         case .plan:
             return store.relatedBlockIDs(for: selection).intersection(Set(scene.blocks.map(\.id)))
         case .link:
@@ -520,7 +520,7 @@ struct GraphCanvasView: View {
         guard let selection = store.focusTarget else { return }
         let ids: Set<String>
         if selection.type == .chain {
-            ids = Set(scene.chainNodes[selection.id] ?? [])
+            ids = Set(store.chainBlockIDs(selection.id)).intersection(Set(scene.blocks.map(\.id)))
         } else if selection.type == .plan {
             ids = store.relatedBlockIDs(for: selection).intersection(Set(scene.blocks.map(\.id)))
         } else { return }

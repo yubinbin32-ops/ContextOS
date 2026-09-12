@@ -15,10 +15,10 @@ import { registerWorkspaceTools } from "./workspace-tools.mjs";
 
 const router = new ProjectServiceRouter();
 const server = new McpServer(
-  { name: "contextos", version: "0.4.0" },
+  { name: "contextos", version: "0.4.1" },
   {
     instructions:
-      "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Chain reconciliation audits feature membership and order together: a related new Block should carry chain:<chain-id> and an explicit route Link, while safe forward route Links and high-confidence affiliated Blocks are attached automatically; an affinity tag without a route stays as an actionable membership gap; an intentional standalone Block carries standalone:<reason>. Composite Chains keep a short typed macro route over child Chain paths; use chain_compose for their members and let validation propagate child drift to the parent. Feedback, read and dependency relations remain visible as cross-cutting edges when they would create a cycle. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools.",
+      "ContextOS is project-scoped and runs in the background after installation. Use project context when the task benefits from progress or architecture details; when the architecture is already known, read a Block or Chain source map directly. A Block is an independent architecture unit and may own a Checkpoint. Leaf Chains hold explicit serial or parallel Block paths, and Composite Chains hold typed child Chain or Block members. The AI chooses architecture members, route Links and Block replacement; graph_mutate and chain_compose persist the chosen structure atomically, while graph_validate reviews it. Use source_index for repository inventory, source_sync for binding updates, and changes_since for compact deltas. Read a source map first, then use the returned path, symbol and line range through the local CLI for the required code slice. Composite Chains keep a concise macro route over child Chain paths. Repeat projectRoot when switching projects and register an uninitialized directory with project_register.",
   },
 );
 const projectRootInput = {
@@ -28,7 +28,7 @@ const projectRootInput = {
 
 function withProject(input, callback) {
   const service = router.serviceFor(input);
-  const runtime = { version: '0.4.0', protocolVersion: 2, observedAt: new Date().toISOString(), pid: process.pid, projectRoot: service.paths.projectRoot, capabilities: ['documents','readme-readonly','task-sessions','source-index','projection-recovery','chapter-context','plan-append','chain-append','chain-compose','chain-reconcile','block-ast-slice','source-cache'], plugin: pluginRuntimeStatus(service.paths.projectRoot) };
+  const runtime = { version: '0.4.1', protocolVersion: 3, observedAt: new Date().toISOString(), pid: process.pid, projectRoot: service.paths.projectRoot, capabilities: ['documents','readme-readonly','task-sessions','source-index','source-locator-map','source-range-read','projection-recovery','chapter-context','plan-append','chain-append','chain-compose','chain-reconcile','block-ast-slice','source-cache'], plugin: pluginRuntimeStatus(service.paths.projectRoot) };
   const runtimePath = path.join(service.paths.projectRoot, '.contextos', 'runtime.json');
   try { fs.writeFileSync(runtimePath + '.' + process.pid, JSON.stringify(runtime)); fs.renameSync(runtimePath + '.' + process.pid, runtimePath); } catch { /* read-only project: tools still report their result */ }
   const { projectRoot: _projectRoot, ...payload } = normalizeMcpIds(input);
@@ -204,13 +204,14 @@ server.registerTool(
   "block_code_stream",
   {
     description:
-      "Return one Block's exact source locator and, only when explicitly requested, an AST-bounded symbol slice. The containing file is never returned.",
+      "Return every SourceRef for a Block as exact locators. The default contract map contains no implementation body; request one sourceRefId for an explicit AST-bounded slice. The containing file is never returned.",
     inputSchema: {
       ...projectRootInput,
       blockId: z.string().min(1),
+      sourceRefId: z.string().min(1).optional(),
       maxChars: z.number().int().min(500).max(20000).optional(),
       maxLines: z.number().int().min(4).max(240).optional(),
-      mode: z.enum(["contract", "slice"]).default("slice"),
+      mode: z.enum(["contract", "slice"]).default("contract"),
       includeStructured: z.boolean().default(false),
     },
   },
@@ -238,6 +239,8 @@ server.registerTool(
       "# Source Synchronization",
       `- Status: ${data.invalidBindingCount ? "attention required" : data.changed ? "updated" : "in sync"}`,
       `- Revision: ${data.sourceSyncRevision} · Bindings: ${data.bindingCount} · Invalid: ${data.invalidBindingCount}`,
+      ...(data.rangeChanges?.length ? [`- Locator ranges persisted: ${data.rangeChanges.length}`] : []),
+      ...(data.projection?.status === "pending" ? [`- Graph projection pending: ${data.projection.error}`] : []),
       ...(data.affectedBlockIds?.length ? [`- Affected Blocks: ${data.affectedBlockIds.map((id) => `block:${id}`).join(", ")}`] : []),
       ...(data.affectedChainIds?.length ? [`- Affected Chains: ${data.affectedChainIds.map((id) => `chain:${id}`).join(", ")}`] : []),
       ...(data.changes?.length ? ["", "## Changes", ...data.changes.slice(0, 20).map((change) =>
@@ -903,12 +906,12 @@ server.registerTool(
   "chain_reconcile",
   {
     description:
-      "Reconcile an existing Chain's feature membership and declared order. Explicitly affiliated or high-confidence linked Blocks and missing forward route Links are added automatically; an affinity Block without a route is returned as a membership gap. Feedback, read and dependency relations stay visible as cross-cutting edges when they would create a cycle. Cycles, backward edges and disconnected components remain actionable issues.",
+      "Review an existing Chain's explicit feature membership, route Links and declared order. The result lists related Blocks, missing route Links, cycles and disconnected components so the AI can choose the next composition change.",
     inputSchema: {
       ...projectRootInput,
       chainId: z.string().min(1),
-      autoExpand: z.boolean().default(true),
-      autoReorder: z.boolean().default(true),
+      autoExpand: z.boolean().default(false),
+      autoReorder: z.boolean().default(false),
       actor: z.string().optional(),
       reason: z.string().optional(),
       includeStructured: z.boolean().default(false),
@@ -916,7 +919,7 @@ server.registerTool(
   },
   async (input) => {
     const data = withProject(input, (service, payload) => {
-      const network = service.reconcileChainNetwork({ chainId: payload.chainId, autoExpand: payload.autoExpand, reason: payload.reason || "Reconcile Chain feature network" });
+      const network = service.reconcileChainNetwork({ chainId: payload.chainId, autoExpand: payload.autoExpand, autoReorder: payload.autoReorder, reason: payload.reason || "Review Chain feature network" });
       const topology = service.reconcileChainTopology({ chainId: payload.chainId, autoReorder: payload.autoReorder, reason: payload.reason || "Reconcile Chain topology" });
       return { ...network, topology, changedChainIds: [...new Set([...(network.changedChainIds || []), ...(topology.changedChainIds || [])])], issues: [...(network.reports || []).flatMap((report) => report.issues || []), ...(topology.issues || [])], graphRevision: service.project().graph_revision };
     });
@@ -934,7 +937,7 @@ server.registerTool(
   "chain_compose",
   {
     description:
-      "Set or extend a Composite Chain made from typed Chain/Block members. Parent composition Links must use route kinds and connect the declared macro members; child Chains keep their own Block paths.",
+      "Set or extend a Composite Chain from the AI's explicitly chosen Chain/Block members. Parent route Links must connect declared macro members; child Chains keep their own Block paths. Replaced Blocks can be removed from the active graph in the same atomic update.",
     inputSchema: {
       ...projectRootInput,
       chainId: z.string().min(1),
@@ -947,6 +950,7 @@ server.registerTool(
         required: z.boolean().optional(),
       })).default([]),
       linkIds: z.array(z.string().min(1)).default([]),
+      removeBlockIds: z.array(z.string().min(1)).default([]),
       actor: z.string().optional(),
       reason: z.string().optional(),
       includeStructured: z.boolean().default(false),

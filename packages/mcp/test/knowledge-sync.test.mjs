@@ -80,8 +80,12 @@ test('ghost detection requires actual symbol and all readers share current line 
  const {root,service}=fixture(t);fs.writeFileSync(path.join(root,'source.mjs'),'export function exists() {return 1;}');
  service.mutate({reason:'future symbol',operations:[{action:'create_block',id:'future',fields:{kind:'service',title:'Future'}},{action:'add_source_ref',id:'future',fields:{path:'source.mjs',symbol:'future'}}]});
  assert.equal(service.validate().drift.ghostDrifts.length,0);
+ const graphRevisionBeforeMove=service.project().graph_revision;
  fs.writeFileSync(path.join(root,'source.mjs'),'\n\nexport function future() {return 2;}');service.syncSourceBindings();
  const row=service.database.prepare("SELECT start_line FROM source_refs WHERE block_id='future'").get();assert.equal(row.start_line,3);
+ const graph=JSON.parse(fs.readFileSync(path.join(root,'.contextos/graph.json')));
+ assert.equal(graph.data.source_refs.find((item)=>item.block_id==='future').start_line,3);
+ assert.ok(service.project().graph_revision>graphRevisionBeforeMove);
 });
 
 test('finish rejects an edit after reconciliation and never completes unbound added files',t=>{

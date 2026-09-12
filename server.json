@@ -7,11 +7,11 @@
     "url": "https://github.com/yubinbin32-ops/ContextOS",
     "source": "github"
   },
-  "version": "0.4.0",
+  "version": "0.4.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/yubinbin32-ops/contextos:0.4.0",
+      "identifier": "ghcr.io/yubinbin32-ops/contextos:0.4.1",
       "transport": {
         "type": "stdio"
       },

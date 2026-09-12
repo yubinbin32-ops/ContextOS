@@ -876,7 +876,7 @@ final class GraphStore: ObservableObject {
             }
             return visited
         case .chain:
-            return Set(chainNodeIDs(selection.id))
+            return Set(chainBlockIDs(selection.id))
         case .plan:
             return planBlockIDs(for: selection.id)
         case .link:

@@ -36,6 +36,58 @@ test("block_code_stream returns only the requested AST symbol slice", async () =
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
+test("block_code_stream returns all SourceRef locators and requires a choice for a multi-file slice", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-locator-map-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "locator-map-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  await fs.mkdir(path.join(tmpDir, "src"), { recursive: true });
+  await fs.writeFile(path.join(tmpDir, "src/entry.js"), "export function entry() { return 'entry'; }\n");
+  await fs.writeFile(path.join(tmpDir, "src/adapter.js"), "export function adapter() { return 'adapter'; }\n");
+  service.mutate({ reason: "Create multi-source locator fixture", operations: [
+    { action: "create_block", id: "multi", fields: { title: "Multi source", kind: "service", architectureLayer: "application", scope: "core" } },
+    { action: "add_source_ref", id: "multi", fields: { sourceId: "source-1", path: "src/entry.js", symbol: "entry", role: "implementation" } },
+    { action: "add_source_ref", id: "multi", fields: { sourceId: "source-2", path: "src/adapter.js", symbol: "adapter", role: "adapter" } },
+  ] });
+  const map = service.blockCodeStream({ blockId: "multi" });
+  assert.equal(map.readMode, "locator-only");
+  assert.equal(map.locators.length, 2);
+  assert.deepEqual(map.locators.map((locator) => locator.path), ["src/entry.js", "src/adapter.js"]);
+  assert.doesNotMatch(map.codeStream, /return 'entry'/);
+  const ambiguous = service.blockCodeStream({ blockId: "multi", mode: "slice" });
+  assert.equal(ambiguous.readMode, "locator-only");
+  assert.match(ambiguous.node.reason, /multiple SourceRefs/);
+  const selected = service.blockCodeStream({ blockId: "multi", sourceRefId: "source-2", mode: "slice" });
+  assert.equal(selected.readMode, "ast-slice");
+  assert.match(selected.codeStream, /return 'adapter'/);
+  assert.doesNotMatch(selected.codeStream, /return 'entry'/);
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("block_code_stream can read an explicitly selected line-only locator", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-line-locator-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "line-locator-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  await fs.writeFile(path.join(tmpDir, "range.js"), [
+    "const before = 1;",
+    "const selected = 2;",
+    "const after = 3;",
+  ].join("\n"));
+  service.mutate({ reason: "Create line-only locator fixture", operations: [
+    { action: "create_block", id: "range", fields: { title: "Line range", kind: "service", architectureLayer: "application", scope: "core" } },
+    { action: "add_source_ref", id: "range", fields: { sourceId: "range-source", path: "range.js", startLine: 2, endLine: 2, role: "implementation" } },
+  ] });
+  const result = service.blockCodeStream({ blockId: "range", sourceRefId: "range-source", mode: "slice" });
+  assert.equal(result.readMode, "ast-slice");
+  assert.match(result.codeStream, /const selected = 2/);
+  assert.doesNotMatch(result.codeStream, /const before = 1/);
+  assert.doesNotMatch(result.codeStream, /const after = 3/);
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
 test("plan and chain append operations preserve existing paths and changes", async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-append-test-"));
   const router = new ProjectServiceRouter();
@@ -77,7 +129,7 @@ test("plan and chain append operations preserve existing paths and changes", asy
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-test("task network reconciliation appends an explicitly linked Block", async () => {
+test("task network reconciliation appends explicitly selected Blocks and Links", async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-network-test-"));
   const router = new ProjectServiceRouter();
   router.register({ projectRoot: tmpDir, name: "network-test" });
@@ -89,7 +141,7 @@ test("task network reconciliation appends an explicitly linked Block", async () 
     { action: "create_chain", id: "feature-chain", fields: { title: "Feature", intent: "Root to Leaf", inputContract: "input", outputContract: "output", deliveryState: "planned" } },
     { action: "set_chain_path", id: "feature-chain", expectedRevision: 1, fields: { nodeIds: ["root"], linkIds: [] } },
   ] });
-  const result = synchronizeTaskNetwork(service, { chainId: "feature-chain", blockIds: ["root", "leaf"] });
+  const result = synchronizeTaskNetwork(service, { chainId: "feature-chain", blockIds: ["root", "leaf"], linkIds: ["root-to-leaf"] });
   assert.equal(result.changed, true);
   assert.deepEqual(result.appendedNodeIds, ["leaf"]);
   assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "feature-chain").map((item) => item.blockId), ["root", "leaf"]);
@@ -119,10 +171,36 @@ test("chain topology reconciliation repairs order and keeps deliberate fan-out",
   const dryRun = service.reconcileChainTopology({ chainId: "fanout-chain", autoReorder: false });
   assert.equal(dryRun.changed, false);
   assert.ok(dryRun.issues.some((issue) => issue.code === "needs_reorder"));
-  const repaired = service.reconcileChainTopology({ chainId: "fanout-chain" });
+  const repaired = service.reconcileChainTopology({ chainId: "fanout-chain", autoReorder: true });
   assert.deepEqual(repaired.changedChainIds, ["fanout-chain"]);
   assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "fanout-chain").map((item) => item.blockId), ["root", "right", "left", "tail"]);
   assert.equal(service.validate().errors.some((error) => error.includes("backward_edge")), false);
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("chain network inspection reports order drift without mutating the Chain", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-network-inspect-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-network-inspect-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create network inspection fixture", operations: [
+    ...["source", "target"].map((id) => ({ action: "create_block", id, fields: { title: id, kind: "service", architectureLayer: "application", scope: "feature" } })),
+    { action: "create_link", id: "source-target", fields: { sourceType: "block", sourceId: "source", targetType: "block", targetId: "target", kind: "calls", contract: "source -> target" } },
+    { action: "create_chain", id: "network-inspect", fields: { title: "Network inspection", intent: "Review order", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "network-inspect", expectedRevision: 1, fields: { nodeIds: ["source", "target"], linkIds: ["source-target"] } },
+  ] });
+  // Reproduce a legacy projection whose stored order drifted from its route.
+  service.database.prepare("UPDATE chain_nodes SET position = CASE block_id WHEN 'source' THEN 1 ELSE 0 END WHERE chain_id = 'network-inspect'").run();
+  const before = service.snapshot().chainNodes.filter((item) => item.chainId === "network-inspect").sort((a, b) => a.position - b.position).map((item) => item.blockId);
+  const report = service.reconcileChainNetwork({ chainId: "network-inspect", autoExpand: false, autoReorder: false });
+  assert.equal(report.changed, false);
+  const after = service.snapshot().chainNodes.filter((item) => item.chainId === "network-inspect").sort((a, b) => a.position - b.position).map((item) => item.blockId);
+  assert.deepEqual(after, before);
+  const topology = service.reconcileChainTopology({ chainId: "network-inspect", autoReorder: false });
+  assert.ok(topology.issues.some((issue) => issue.code === "needs_reorder"));
+  const repaired = service.reconcileChainNetwork({ chainId: "network-inspect", autoExpand: false, autoReorder: true });
+  assert.deepEqual(repaired.changedChainIds, ["network-inspect"]);
   router.close();
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
@@ -328,7 +406,7 @@ test("Chain network reconciliation surfaces an affinity Block that is waiting fo
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
-test("context boundary reconciles a newly written Block into a completed Chain", async () => {
+test("context boundary reports a newly written Block without changing Chain membership", async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-context-boundary-test-"));
   const router = new ProjectServiceRouter();
   router.register({ projectRoot: tmpDir, name: "chain-context-boundary-test" });
@@ -345,10 +423,12 @@ test("context boundary reconciles a newly written Block into a completed Chain",
     { action: "create_link", id: "entry-handler", fields: { sourceType: "block", sourceId: "entry", targetType: "block", targetId: "handler", kind: "calls", contract: "Entry calls Handler" } },
   ] });
   const context = service.contextForTask({ task: "continue the boundary feature", maxChars: 1800 });
-  assert.deepEqual(context.chainNetwork.changedChainIds, ["boundary-chain"]);
-  assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "boundary-chain").sort((a, b) => a.position - b.position).map((item) => item.blockId), ["entry", "handler"]);
-  assert.deepEqual(service.snapshot().chainEdges.filter((item) => item.chainId === "boundary-chain").map((item) => item.linkId), ["entry-handler"]);
-  assert.equal(service.snapshot().chains.find((item) => item.id === "boundary-chain")?.deliveryState, "implementing");
+  assert.deepEqual(context.chainNetwork.changedChainIds, []);
+  const report = context.chainNetwork.reports.find((item) => item.chainId === "boundary-chain");
+  assert.ok(report?.candidateBlocks.some((candidate) => candidate.blockId === "handler"));
+  assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "boundary-chain").sort((a, b) => a.position - b.position).map((item) => item.blockId), ["entry"]);
+  assert.deepEqual(service.snapshot().chainEdges.filter((item) => item.chainId === "boundary-chain").map((item) => item.linkId), []);
+  assert.equal(service.snapshot().chains.find((item) => item.id === "boundary-chain")?.deliveryState, "complete");
   router.close();
   await fs.rm(tmpDir, { recursive: true, force: true });
 });

@@ -35,8 +35,28 @@ struct CanvasScene: Equatable {
                 visibleIDs.contains($0.sourceId) && visibleIDs.contains($0.targetId)
         }
         let cardSize = CGSize(width: 224, height: 128)
+        let directChainNodes = Dictionary(uniqueKeysWithValues: snapshot.chains.map { chain in
+            (chain.id, snapshot.chainNodes.filter { $0.chainId == chain.id }.sorted { $0.position < $1.position }.map(\.blockId))
+        })
+        let membersByChain = Dictionary(grouping: snapshot.chainMembers, by: \.chainId)
+        func resolvedChainNodes(_ chainID: String, visited: Set<String> = []) -> [String] {
+            guard !visited.contains(chainID) else { return [] }
+            var nextVisited = visited
+            nextVisited.insert(chainID)
+            var result = directChainNodes[chainID] ?? []
+            for member in (membersByChain[chainID] ?? []).sorted(by: { $0.position < $1.position }) {
+                if member.memberType == "block" {
+                    if !result.contains(member.memberId) { result.append(member.memberId) }
+                } else {
+                    for blockID in resolvedChainNodes(member.memberId, visited: nextVisited) where !result.contains(blockID) {
+                        result.append(blockID)
+                    }
+                }
+            }
+            return result
+        }
         let chainNodes = Dictionary(uniqueKeysWithValues: snapshot.chains.map { chain in
-            (chain.id, snapshot.chainNodes.filter { $0.chainId == chain.id && visibleIDs.contains($0.blockId) }.sorted { $0.position < $1.position }.map(\.blockId))
+            (chain.id, resolvedChainNodes(chain.id).filter { visibleIDs.contains($0) })
         })
         let visibleLinkIDs = Set(links.map(\.id))
         let chainLinks = Dictionary(uniqueKeysWithValues: snapshot.chains.map { chain in

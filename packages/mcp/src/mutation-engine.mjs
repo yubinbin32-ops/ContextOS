@@ -204,8 +204,8 @@ export function executeMutate(
     append_plan_chain_scope: new Set(['scope']),
     update_plan_changes: new Set(['updates']),
     append_chain_path: new Set(['nodeIds','linkIds']),
-    set_chain_composition: new Set(['memberRefs', 'members', 'linkIds']),
-    append_chain_composition: new Set(['memberRefs', 'members', 'linkIds']),
+    set_chain_composition: new Set(['memberRefs', 'members', 'linkIds', 'removeBlockIds']),
+    append_chain_composition: new Set(['memberRefs', 'members', 'linkIds', 'removeBlockIds']),
   };
   for (const operation of operations) {
     const allowed = fieldSchemas[operation.action];
@@ -1060,7 +1060,8 @@ function compositionPayload(service, operation, { append = false } = {}) {
   const fields = operation.fields ?? {};
   const rawMembers = fields.memberRefs ?? fields.members ?? [];
   const rawLinkIds = fields.linkIds ?? [];
-  if (!Array.isArray(rawMembers) || !Array.isArray(rawLinkIds)) throw new Error("memberRefs/members and linkIds must be arrays");
+  const removeBlockIds = fields.removeBlockIds ?? [];
+  if (!Array.isArray(rawMembers) || !Array.isArray(rawLinkIds) || !Array.isArray(removeBlockIds)) throw new Error("memberRefs/members, linkIds and removeBlockIds must be arrays");
   const existing = compositionEntities(service);
   const currentMembers = existing.chainMembers.filter((member) => member.chainId === operation.id)
     .sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId));
@@ -1085,6 +1086,13 @@ function compositionPayload(service, operation, { append = false } = {}) {
   if (new Set(linkIds).size !== linkIds.length) throw new Error("Composite Chain Links must be unique");
   const chainById = new Map(existing.chains.map((chain) => [chain.id, chain]));
   const blockById = new Map(existing.blocks.map((block) => [block.id, block]));
+  const blocksToRemove = [...new Set(removeBlockIds.map((id) => String(id).trim()).filter(Boolean))];
+  for (const blockId of blocksToRemove) {
+    if (!blockById.has(blockId)) throw new Error(`Block to replace not found: ${blockId}`);
+    if (members.some((member) => member.memberType === "block" && member.memberId === blockId)) {
+      throw new Error(`Block to replace cannot remain a Composite Chain member: ${blockId}`);
+    }
+  }
   for (const member of members) {
     const entity = member.memberType === "chain" ? chainById.get(member.memberId) : blockById.get(member.memberId);
     if (!entity || entity.archived || (member.memberType === "block" && entity.deliveryState === "deprecated")) {
@@ -1125,12 +1133,12 @@ function compositionPayload(service, operation, { append = false } = {}) {
   if (structuralIssues.length) {
     throw new Error(`Composite Chain composition invalid: ${structuralIssues.map((issue) => issue.detail).join("; ")}`);
   }
-  return { row, members, linkIds, links, inspected };
+  return { row, members, linkIds, links, inspected, blocksToRemove };
 }
 
 /** Replace a Composite Chain's typed member route atomically. */
 export function setChainComposition(service, operation) {
-  const { row, members, linkIds } = compositionPayload(service, operation);
+  const { row, members, linkIds, blocksToRemove } = compositionPayload(service, operation);
   service.database.prepare("DELETE FROM chain_members WHERE chain_id = ?").run(operation.id);
   service.database.prepare("DELETE FROM chain_nodes WHERE chain_id = ?").run(operation.id);
   service.database.prepare("DELETE FROM chain_edges WHERE chain_id = ?").run(operation.id);
@@ -1140,18 +1148,20 @@ export function setChainComposition(service, operation) {
   members.forEach((member, position) => insertMember.run(operation.id, member.memberType, member.memberId, position, member.role, Number(member.required)));
   const insertEdge = service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)");
   linkIds.forEach((linkId, position) => insertEdge.run(operation.id, linkId, position));
+  for (const blockId of blocksToRemove) deleteBlock(service, { id: blockId }, { timestamp: now() });
   const revision = row.current_revision + 1;
   service.database.prepare("UPDATE chains SET current_revision = ?, updated_at = ? WHERE project_id = ? AND id = ?")
     .run(revision, now(), service.paths.descriptor.id, operation.id);
   return {
     entityType: "chain", id: operation.id, action: "composition-set", revision,
-    summary: `${members.length} typed member(s) / ${linkIds.length} composition edge(s)`,
+    summary: `${members.length} typed member(s) / ${linkIds.length} composition edge(s)${blocksToRemove.length ? ` / removed ${blocksToRemove.length} replaced Block(s)` : ""}`,
+    removedBlockIds: blocksToRemove,
   };
 }
 
 /** Add typed members and composition Links without replaying the parent route. */
 export function appendChainComposition(service, operation) {
-  const { row, members, linkIds } = compositionPayload(service, operation, { append: true });
+  const { row, members, linkIds, blocksToRemove } = compositionPayload(service, operation, { append: true });
   const currentMemberCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_members WHERE chain_id = ?").get(operation.id).count;
   const currentEdgeCount = service.database.prepare("SELECT COUNT(*) AS count FROM chain_edges WHERE chain_id = ?").get(operation.id).count;
   const insertMember = service.database.prepare(
@@ -1160,12 +1170,14 @@ export function appendChainComposition(service, operation) {
   members.slice(currentMemberCount).forEach((member, index) => insertMember.run(operation.id, member.memberType, member.memberId, currentMemberCount + index, member.role, Number(member.required)));
   const insertEdge = service.database.prepare("INSERT INTO chain_edges(chain_id, link_id, position) VALUES (?, ?, ?)");
   linkIds.slice(currentEdgeCount).forEach((linkId, index) => insertEdge.run(operation.id, linkId, currentEdgeCount + index));
+  for (const blockId of blocksToRemove) deleteBlock(service, { id: blockId }, { timestamp: now() });
   const revision = row.current_revision + 1;
   service.database.prepare("UPDATE chains SET current_revision = ?, updated_at = ? WHERE project_id = ? AND id = ?")
     .run(revision, now(), service.paths.descriptor.id, operation.id);
   return {
     entityType: "chain", id: operation.id, action: "composition-appended", revision,
-    summary: `${members.length - currentMemberCount} member(s) / ${linkIds.length - currentEdgeCount} composition edge(s) appended`,
+    summary: `${members.length - currentMemberCount} member(s) / ${linkIds.length - currentEdgeCount} composition edge(s) appended${blocksToRemove.length ? ` / removed ${blocksToRemove.length} replaced Block(s)` : ""}`,
+    removedBlockIds: blocksToRemove,
   };
 }
 

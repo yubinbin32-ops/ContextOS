@@ -59,6 +59,37 @@ function parseExecutionSummary(command, output, success) {
 const SOURCE_BACKED_BLOCK_KINDS = new Set(["flow", "ui", "service", "function", "integration", "api", "data", "database"]);
 const INVALID_BINDING_STATUSES = new Set(["missing", "unreadable", "outside_project", "stale", "ambiguous"]);
 
+function sourceLocator(ref, binding = null, sourceSyncRevision = null) {
+  const pathValue = binding?.relativePath ?? ref?.path ?? null;
+  const symbol = binding?.symbol ?? ref?.symbol ?? null;
+  const startLine = binding?.startLine ?? ref?.start_line ?? null;
+  const endLine = binding?.endLine ?? ref?.end_line ?? null;
+  return {
+    sourceRefId: ref?.id ?? null,
+    blockId: ref?.block_id ?? ref?.blockId ?? null,
+    path: pathValue,
+    symbol,
+    role: binding?.role ?? ref?.role ?? "implementation",
+    startLine,
+    endLine,
+    signature: binding?.signature ?? null,
+    sourceHash: binding?.fileHash ?? null,
+    nodeHash: binding?.nodeHash ?? null,
+    bindingStatus: binding?.bindingStatus ?? (ref ? "unknown" : "unbound"),
+    sourceStatus: binding?.sourceStatus ?? (ref ? "missing" : "virtual"),
+    sourceSyncRevision,
+    locator: pathValue
+      ? `${pathValue}${symbol ? ` :: ${symbol}` : ""}${startLine ? ` L${startLine}-${endLine ?? startLine}` : ""}`
+      : "—",
+  };
+}
+
+function sourceLocatorMarkdown(locator) {
+  const status = locator.sourceStatus ?? locator.bindingStatus ?? "unknown";
+  const hash = locator.sourceHash ? ` · sha256:${locator.sourceHash.slice(0, 12)}` : "";
+  return `- [source:${locator.sourceRefId ?? "unbound"}] ${locator.locator} · ${locator.role} · ${status}${hash}`;
+}
+
 import {
   now,
   identifier,
@@ -159,17 +190,39 @@ export class ContextOSService {
       return true;
     }
 
-    // Hash canonical content: timestamp equality alone misses checkout/rapid writes.
-
+    // Hash content and compare revisions. SQLite is the live writer for
+    // generated projections. A checked-in graph with a newer revision, or a
+    // same-revision file edited after the last export, is an intentional
+    // import. Older projections are regenerated from SQLite so a stale plugin
+    // process cannot replace newer Composite membership with an incomplete
+    // projection.
     const content = fs.readFileSync(graphJsonPath, "utf8");
     const currentHash = crypto.createHash("sha256").update(content).digest("hex");
-    if (meta.graph_json_hash !== currentHash) {
-      importGraphFromJson(this.database, graphJsonPath);
-      return true;
-    } else {
+    if (meta.graph_json_hash === currentHash) {
       setSyncMeta(this.database, "graph_json_mtime", String(stat.mtimeMs));
       return false;
     }
+    let externalRevision = null;
+    let externalProjectId = null;
+    try {
+      const payload = JSON.parse(content);
+      externalRevision = Number.isInteger(payload?.graphRevision) ? payload.graphRevision : null;
+      externalProjectId = payload?.projectId ?? null;
+    } catch {
+      externalRevision = null;
+    }
+    const databaseRevision = Number(this.database.prepare("SELECT graph_revision FROM projects WHERE id = ?").get(this.paths.descriptor.id)?.graph_revision ?? 0);
+    const lastExportMtime = Number(meta.graph_json_mtime ?? 0);
+    const sameRevisionEdit = externalProjectId === this.paths.descriptor.id
+      && externalRevision === databaseRevision
+      && stat.mtimeMs > lastExportMtime + 0.5;
+    if (externalProjectId === this.paths.descriptor.id && externalRevision != null
+      && (externalRevision > databaseRevision || sameRevisionEdit)) {
+      importGraphFromJson(this.database, graphJsonPath);
+      return true;
+    }
+    exportGraphToJson(this.database, graphJsonPath);
+    return true;
   }
 
   ensureProject() {
@@ -248,9 +301,31 @@ export class ContextOSService {
       if (this.sourceSyncHistory.length > 100) this.sourceSyncHistory.shift();
     }
     this.sourceBindingState = new Map(result.bindings.map((binding) => [binding.id, binding]));
-    const updateRange = this.database.prepare("UPDATE source_refs SET start_line=?,end_line=? WHERE id=? AND (start_line IS NOT ? OR end_line IS NOT ?)");
-    for (const binding of result.bindings) if (binding.symbol && !INVALID_BINDING_STATUSES.has(binding.bindingStatus)) {
-      updateRange.run(binding.startLine, binding.endLine, binding.id, binding.startLine, binding.endLine);
+    const rangeChanges = result.bindings.filter((binding) => {
+      if (!binding.symbol || INVALID_BINDING_STATUSES.has(binding.bindingStatus)) return false;
+      const current = this.database.prepare("SELECT start_line, end_line FROM source_refs WHERE id = ?").get(binding.id);
+      return current && (current.start_line !== binding.startLine || current.end_line !== binding.endLine);
+    });
+    let projection = null;
+    if (rangeChanges.length && inTransaction(this.database)) {
+      const updateRange = this.database.prepare("UPDATE source_refs SET start_line=?,end_line=? WHERE id=?");
+      for (const binding of rangeChanges) updateRange.run(binding.startLine, binding.endLine, binding.id);
+    } else if (rangeChanges.length) {
+      // Derived symbol coordinates are part of the portable graph projection.
+      // Publish them as one small graph change so the App, SQLite and
+      // graph.json observe the same locator revision after a source move.
+      transaction(this.database, () => {
+        const updateRange = this.database.prepare("UPDATE source_refs SET start_line=?,end_line=? WHERE id=?");
+        for (const binding of rangeChanges) updateRange.run(binding.startLine, binding.endLine, binding.id);
+        this.database.prepare("UPDATE projects SET graph_revision = graph_revision + 1, updated_at = ? WHERE id = ?")
+          .run(now(), projectId);
+        markProjectionPending(this.database);
+      });
+      try {
+        projection = flushProjection(this.database, this.paths.graphJsonPath);
+      } catch (error) {
+        projection = { status: "pending", error: error.message };
+      }
     }
     if (changed || !previousRevision) {
       setSyncMeta(this.database, 'binding_revision', String(this.sourceSyncRevision));
@@ -268,6 +343,8 @@ export class ContextOSService {
       invalidBindingCount: result.bindings.filter((item) => ["missing", "unreadable", "outside_project", "stale", "ambiguous"].includes(item.bindingStatus)).length,
       affectedBlockIds: [...new Set(result.changes.map((item) => item.blockId).filter(Boolean))],
       changes: result.changes,
+      rangeChanges: rangeChanges.map((binding) => ({ refId: binding.id, blockId: binding.blockId, path: binding.relativePath ?? binding.path, symbol: binding.symbol, startLine: binding.startLine, endLine: binding.endLine })),
+      projection,
     };
     return {
       ...this.sourceSyncState,
@@ -764,13 +841,14 @@ export class ContextOSService {
     const streamBindingState = new Map(this.sourceBindingState);
     const chainNetwork = this.reconcileChainNetwork({
       chainId,
-      autoExpand: true,
-      reason: "Reconcile Chain feature network before code stream",
+      autoExpand: false,
+      autoReorder: false,
+      reason: "Inspect Chain feature network before code stream",
     });
     const chainReconciliation = this.reconcileChainTopology({
       chainId,
-      autoReorder: true,
-      reason: "Reconcile Chain topology before code stream",
+      autoReorder: false,
+      reason: "Inspect Chain topology before code stream",
     });
     const snapshot = this.snapshot();
     const chain = snapshot.chains.find((c) => c.id === chainId);
@@ -804,9 +882,18 @@ export class ContextOSService {
         const childEdges = member.memberType === "chain"
           ? snapshot.chainEdges.filter((edge) => edge.chainId === member.memberId).length
           : null;
-        const source = member.memberType === "block"
-          ? this.database.prepare("SELECT path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id").all(member.memberId)[0]
-          : null;
+        const sourceRefs = member.memberType === "block"
+          ? this.database.prepare("SELECT id, block_id, path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id").all(member.memberId)
+          : [];
+        const locators = sourceRefs.map((ref) => sourceLocator(
+          ref,
+          streamBindingState.get(ref.id) ?? this.sourceBindingState.get(ref.id),
+          sourceSync.revision,
+        ));
+        const primaryLocator = locators.find((locator) => locator.role === "implementation" && locator.symbol)
+          ?? locators.find((locator) => locator.symbol)
+          ?? locators[0]
+          ?? null;
         return {
           memberType: member.memberType,
           memberId: member.memberId,
@@ -819,10 +906,11 @@ export class ContextOSService {
           childBlockCount: member.memberType === "chain" ? childBlockCount(member.memberId) : 1,
           childNodeCount: childNodes,
           childEdgeCount: childEdges,
-          filePath: source?.path ?? null,
-          symbol: source?.symbol ?? null,
-          startLine: source?.start_line ?? null,
-          endLine: source?.end_line ?? null,
+          filePath: primaryLocator?.path ?? null,
+          symbol: primaryLocator?.symbol ?? null,
+          startLine: primaryLocator?.startLine ?? null,
+          endLine: primaryLocator?.endLine ?? null,
+          locators,
           contract: member.memberType === "chain"
             ? item?.outputContract || item?.intent || ""
             : item?.contract || item?.summary || "",
@@ -840,7 +928,9 @@ export class ContextOSService {
           `   Role: ${node.role}${node.required ? " · required" : " · optional"}`,
           node.memberType === "chain"
             ? `   Child Chain: ${node.childNodeCount} path Block(s), ${node.childEdgeCount} route Link(s), ${node.childBlockCount} recursive Block(s)`
-            : `   Locator: ${node.filePath ? `${node.filePath}${node.symbol ? ` :: ${node.symbol}` : ""}${node.startLine ? ` L${node.startLine}-${node.endLine}` : ""}` : "virtual/no SourceRef"}`,
+            : (node.locators.length
+              ? node.locators.map((locator) => `   Locator: ${locator.locator} · ${locator.role} · ${locator.sourceStatus ?? locator.bindingStatus ?? "unknown"}`).join("\n")
+              : "   Locator: virtual/no SourceRef"),
           node.contract ? `   Contract: ${node.contract}` : "",
         ].filter(Boolean)),
         ...(edges.length ? ["", "## Composition route", ...edges.map((edge) => {
@@ -884,61 +974,30 @@ export class ContextOSService {
         .prepare("SELECT id, path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id")
         .all(block.id);
 
-      let code = null;
-      let filePath = null;
-      let symbol = null;
-      let signature = null;
-      let startLine = null;
-      let endLine = null;
-      let sourceStatus = "virtual";
-      let sourceHash = null;
-
-      if (sourceRefs.length > 0) {
-        const ref = sourceRefs.find((candidate) => candidate.role === "implementation" && candidate.symbol)
-          || sourceRefs.find((candidate) => candidate.symbol)
-          || sourceRefs.find((candidate) => candidate.role === "implementation")
-          || sourceRefs[0];
-        const binding = streamBindingState.get(ref.id) ?? this.sourceBindingState.get(ref.id);
-        filePath = binding?.relativePath ?? ref.path;
-        symbol = ref.symbol;
-        startLine = binding?.startLine ?? ref.start_line;
-        endLine = binding?.endLine ?? ref.end_line;
-        sourceStatus = "missing";
-        if (binding) {
-          sourceStatus = binding.sourceStatus;
-          sourceHash = binding.fileHash;
-          signature = binding.signature;
-          if (binding.content && !["missing", "unreadable", "outside_project", "stale", "ambiguous"].includes(binding.bindingStatus)) {
-            const fullPath = binding.absolutePath;
-            const slice = extractSymbolSlice(binding.content, {
-              symbol: ref.symbol,
-              startLine: ref.symbol ? null : binding.startLine ?? ref.start_line,
-              endLine: ref.symbol ? null : binding.endLine ?? ref.end_line,
-              maxLines: maxLinesPerSymbol,
-              language: binding.language,
-              filePath: fullPath,
-            });
-            signature = slice.signature;
-            startLine = slice.startLine;
-            endLine = slice.endLine;
-            code = null;
-          }
-        }
-        if (!ref.symbol && sourceStatus === "anchored") sourceStatus = "line_only";
-      }
+      const locators = sourceRefs.map((ref) => sourceLocator(
+        ref,
+        streamBindingState.get(ref.id) ?? this.sourceBindingState.get(ref.id),
+        sourceSync.revision,
+      ));
+      const primary = locators.find((item) => item.role === "implementation" && item.symbol)
+        ?? locators.find((item) => item.symbol)
+        ?? locators.find((item) => item.role === "implementation")
+        ?? locators[0]
+        ?? sourceLocator(null, null, sourceSync.revision);
 
       streamNodes.push({
         blockId: block.id,
         title: block.title,
-        filePath,
-        symbol,
-        code,
-        signature,
-        startLine,
-        endLine,
-        sourceStatus,
-        sourceHash,
+        filePath: primary.path,
+        symbol: primary.symbol,
+        code: null,
+        signature: primary.signature,
+        startLine: primary.startLine,
+        endLine: primary.endLine,
+        sourceStatus: primary.sourceStatus,
+        sourceHash: primary.sourceHash,
         contract: block.contract || block.summary,
+        locators,
       });
     }
 
@@ -975,112 +1034,177 @@ export class ContextOSService {
   }
 
   /**
-   * Return one Block's AST-bounded implementation only when the caller asks
-   * for a slice. The normal context and Chain stream remain locator-only.
-   * This gives an agent a safe edit/read path without opening the containing
-   * file in full.
+   * Return a Block's compact source map. A Block may span many files and
+   * symbols, so every SourceRef is exposed as a stable locator while source
+   * bodies stay opt-in. `sourceRefId` selects one locator for an explicit AST
+   * slice; the default contract view never returns implementation text.
    */
-  blockCodeStream({ blockId, maxChars = 8000, maxLines = 80, mode = "slice" } = {}) {
+  blockCodeStream({ blockId, sourceRefId = null, maxChars = 8000, maxLines = 80, mode = "contract" } = {}) {
     if (!blockId?.trim()) throw new Error("blockId is required");
     if (!Number.isInteger(maxChars) || maxChars < 500) throw new Error("maxChars must be at least 500");
     if (!Number.isInteger(maxLines) || maxLines < 4) throw new Error("maxLines must be at least 4");
-    if (!['contract', 'slice'].includes(mode)) throw new Error("mode must be contract or slice");
+    if (!["contract", "slice"].includes(mode)) throw new Error("mode must be contract or slice");
     this.ensureSynced();
     const snapshot = this.snapshot();
     const block = snapshot.blocks.find((item) => item.id === blockId);
     if (!block) throw new Error(`Block not found: ${blockId}`);
-    const ref = this.database
-      .prepare("SELECT id, path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id")
-      .all(blockId)
-      .find((candidate) => candidate.role === "implementation" && candidate.symbol)
-      ?? this.database
-        .prepare("SELECT id, path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id")
-        .all(blockId)
-        .find((candidate) => candidate.symbol)
-      ?? this.database
-        .prepare("SELECT id, path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id")
-        .all(blockId)[0];
-
+    const sourceSync = this.syncSourceBindings({ includeUnchanged: true });
+    const refs = this.database
+      .prepare("SELECT id, block_id, path, start_line, end_line, symbol, role FROM source_refs WHERE block_id = ? ORDER BY id")
+      .all(blockId);
+    if (sourceRefId && !refs.some((ref) => ref.id === sourceRefId)) {
+      throw new Error(`source:${sourceRefId} is not attached to block:${blockId}`);
+    }
+    const locators = refs.map((ref) => sourceLocator(
+      ref,
+      this.sourceBindingState.get(ref.id),
+      sourceSync.revision,
+    ));
+    const primary = locators.find((item) => item.role === "implementation" && item.symbol)
+      ?? locators.find((item) => item.symbol)
+      ?? locators.find((item) => item.role === "implementation")
+      ?? locators[0]
+      ?? sourceLocator(null, null, sourceSync.revision);
     const node = {
       blockId: block.id,
       title: block.title,
-      filePath: ref?.path ?? null,
-      symbol: ref?.symbol ?? null,
-      role: ref?.role ?? null,
-      signature: null,
-      startLine: ref?.start_line ?? null,
-      endLine: ref?.end_line ?? null,
-      sourceStatus: ref ? "missing" : "virtual",
-      sourceHash: null,
+      filePath: primary.path,
+      symbol: primary.symbol,
+      role: primary.role,
+      signature: primary.signature,
+      startLine: primary.startLine,
+      endLine: primary.endLine,
+      sourceStatus: primary.sourceStatus,
+      sourceHash: primary.sourceHash,
       contract: block.contract || block.summary,
       code: null,
       codeChars: 0,
-      readMode: mode === "slice" ? "ast-slice" : "locator-only",
+      readMode: "locator-only",
       containingFileReturned: false,
       truncated: false,
-      reason: ref ? "source binding unavailable" : "Block has no SourceRef",
+      reason: locators.length ? null : "Block has no SourceRef",
+      locators,
     };
 
-    if (ref) {
-      const binding = this.sourceBindingState.get(ref.id);
-      node.filePath = binding?.relativePath ?? ref.path;
-      node.symbol = ref.symbol;
-      node.startLine = binding?.startLine ?? ref.start_line;
-      node.endLine = binding?.endLine ?? ref.end_line;
-      node.sourceStatus = binding?.sourceStatus ?? "missing";
-      node.sourceHash = binding?.fileHash ?? null;
-      node.signature = binding?.signature ?? null;
-      node.reason = binding?.reason ?? null;
-      const invalid = ["missing", "unreadable", "outside_project", "stale", "ambiguous", "line_only"];
-      if (mode === "slice" && binding?.content && !invalid.includes(binding.bindingStatus) && !invalid.includes(binding.sourceStatus)) {
-        const slice = extractSymbolSlice(binding.content, {
-          symbol: ref.symbol,
-          startLine: ref.symbol ? null : binding.startLine ?? ref.start_line,
-          endLine: ref.symbol ? null : binding.endLine ?? ref.end_line,
-          maxLines,
-          language: binding.language,
-          filePath: binding.absolutePath,
-        });
-        node.signature = slice.signature;
-        node.startLine = slice.startLine;
-        node.endLine = slice.endLine;
-        node.reason = slice.reason ?? null;
-        if (slice.found) {
-          node.code = slice.code;
-          node.codeChars = slice.code.length;
-          node.truncated = slice.totalLines > maxLines || slice.code.length > maxChars;
-          if (node.code.length > maxChars) {
-            node.code = `${node.code.slice(0, Math.max(0, maxChars - 64))}\n... [slice truncated; use the locator in an editor]`;
-            node.codeChars = node.code.length;
-          }
+    const selected = sourceRefId
+      ? locators.find((item) => item.sourceRefId === sourceRefId)
+      : (mode === "slice" && locators.length > 1 ? null : primary);
+    const binding = selected?.sourceRefId ? this.sourceBindingState.get(selected.sourceRefId) : null;
+    // A line-only SourceRef is still a useful bounded range when the caller
+    // explicitly selects it. A changed or stale range remains gated by the
+    // binding status so an old line number is not presented as implementation.
+    const invalid = ["missing", "unreadable", "outside_project", "stale", "ambiguous"];
+    if (mode === "slice" && selected && binding?.content && !invalid.includes(binding.bindingStatus) && !invalid.includes(binding.sourceStatus)) {
+      const slice = extractSymbolSlice(binding.content, {
+        symbol: selected.symbol,
+        startLine: selected.symbol ? null : selected.startLine,
+        endLine: selected.symbol ? null : selected.endLine,
+        maxLines,
+        language: binding.language,
+        filePath: binding.absolutePath,
+      });
+      node.signature = slice.signature ?? node.signature;
+      node.startLine = slice.startLine ?? node.startLine;
+      node.endLine = slice.endLine ?? node.endLine;
+      node.reason = slice.reason ?? null;
+      if (slice.found) {
+        node.code = slice.code;
+        node.codeChars = slice.code.length;
+        node.readMode = "ast-slice";
+        node.truncated = slice.totalLines > maxLines || slice.code.length > maxChars;
+        if (node.code.length > maxChars) {
+          node.code = `${node.code.slice(0, Math.max(0, maxChars - 64))}\n... [slice truncated; use the locator in an editor]`;
+          node.codeChars = node.code.length;
         }
       }
+    } else if (mode === "slice" && selected) {
+      node.reason = selected.sourceStatus === "virtual"
+        ? "SourceRef is virtual"
+        : `SourceRef is ${selected.sourceStatus}; use source_sync or source_binding_accept`;
+    } else if (mode === "slice" && locators.length > 1 && !sourceRefId) {
+      node.reason = "Block has multiple SourceRefs; select sourceRefId for one AST slice";
     }
 
     const lines = [
-      `# Block Code Stream: ${block.title} (${block.id})`,
-      `Mode: ${mode} · AST-bounded ${mode === "slice" ? "slice" : "locator"}; containing file is not returned`,
-      `Locator: ${node.filePath ? `${node.filePath}${node.symbol ? ` :: ${node.symbol}` : ""}${node.startLine ? ` L${node.startLine}-L${node.endLine}` : ""}` : "—"}`,
-      `Source status: ${node.sourceStatus}`,
+      `# Block Code Map: ${block.title} (${block.id})`,
+      `Mode: ${mode} · ${mode === "slice" ? "one AST-bounded slice" : "locator-only map"}; containing files are not returned`,
+      `Source sync: r${sourceSync.revision} · ${locators.length} locator(s)`,
       `Contract: ${node.contract || "(not declared)"}`,
+      ...(locators.length ? ["", "## Locators", ...locators.map(sourceLocatorMarkdown)] : ["", "No SourceRef is attached to this Block."]),
     ];
-    if (node.signature) lines.push(`Signature: ${node.signature}`);
     if (node.reason) lines.push(`Note: ${node.reason}`);
-    if (node.code != null) {
-      lines.push("", "## AST slice", "```", node.code, "```");
-    } else if (mode === "slice") {
-      lines.push("", "No safe slice returned; rebind the SourceRef before opening implementation.");
-    }
+    if (node.code != null) lines.push("", `## AST slice · source:${selected.sourceRefId}`, "```", node.code, "```");
     const codeStream = lines.join("\n");
     return {
       blockId: block.id,
       title: block.title,
       mode,
       node,
-      readMode: node.code != null ? "ast-slice" : "locator-only",
+      locators,
+      sourceSync: { revision: sourceSync.revision, sourceRevision: sourceSync.sourceRevision, changed: sourceSync.changed },
+      readMode: node.readMode,
       containingFileReturned: false,
       truncated: node.truncated || codeStream.length > maxChars,
       codeStream,
+    };
+  }
+
+  /**
+   * Read one exact source range for the local CLI. The path is validated
+   * against the registered project and the returned body is always bounded by
+   * a symbol or line range; callers can fence the read with an expected hash.
+   */
+  readSourceSlice({ filePath, path: requestedPath = null, symbol = null, startLine = null, endLine = null, maxChars = 12000, maxLines = 240, expectedHash = null } = {}) {
+    const rawPath = String(filePath ?? requestedPath ?? "").trim();
+    if (!rawPath) throw new Error("filePath is required");
+    if (!Number.isInteger(maxChars) || maxChars < 200) throw new Error("maxChars must be at least 200");
+    if (!Number.isInteger(maxLines) || maxLines < 1) throw new Error("maxLines must be at least 1");
+    const requestedSymbol = String(symbol ?? "").trim();
+    if (!requestedSymbol && (!Number.isInteger(startLine) || !Number.isInteger(endLine))) {
+      throw new Error("symbol or startLine/endLine is required");
+    }
+    if (!requestedSymbol && (startLine < 1 || endLine < startLine)) {
+      throw new Error("startLine/endLine must be a positive ordered range");
+    }
+    const absolutePath = path.resolve(this.paths.projectRoot, rawPath);
+    const relativePath = path.relative(this.paths.projectRoot, absolutePath).split(path.sep).join("/");
+    if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+      throw new Error("filePath must stay inside the registered project");
+    }
+    let content;
+    try { content = fs.readFileSync(absolutePath, "utf8"); } catch (error) {
+      throw new Error(`Source file cannot be read: ${relativePath} (${error.message})`);
+    }
+    const sourceHash = crypto.createHash("sha256").update(content).digest("hex");
+    if (expectedHash && expectedHash !== sourceHash) {
+      return { status: "stale", path: relativePath, symbol, sourceHash, expectedHash, code: "", found: false, reason: "source hash changed" };
+    }
+    const slice = extractSymbolSlice(content, {
+      symbol: requestedSymbol || null,
+      startLine: requestedSymbol ? null : startLine,
+      endLine: requestedSymbol ? null : endLine,
+      maxLines,
+      language: detectLanguage(absolutePath),
+      filePath: absolutePath,
+    });
+    let code = slice.code ?? "";
+    let truncated = slice.totalLines > maxLines || code.length > maxChars;
+    if (code.length > maxChars) {
+      code = `${code.slice(0, Math.max(0, maxChars - 64))}\n... [slice truncated]`;
+      truncated = true;
+    }
+    return {
+      status: slice.found ? "anchored" : slice.reason ?? "missing",
+      path: relativePath,
+      symbol: slice.symbol ?? (requestedSymbol || null),
+      startLine: slice.startLine ?? startLine,
+      endLine: slice.endLine ?? endLine,
+      signature: slice.signature ?? null,
+      sourceHash,
+      found: Boolean(slice.found),
+      reason: slice.reason ?? null,
+      truncated,
+      code,
     };
   }
 
@@ -1360,46 +1484,47 @@ export class ContextOSService {
     });
   }
 
-  setChainComposition({ chainId, expectedRevision, memberRefs = [], members = null, linkIds = [], actor = "agent", reason = "Set Composite Chain composition" } = {}) {
+  setChainComposition({ chainId, expectedRevision, memberRefs = [], members = null, linkIds = [], removeBlockIds = [], actor = "agent", reason = "Set Composite Chain composition" } = {}) {
     if (!chainId?.trim()) throw new Error("chainId is required");
     return this.mutate({
       actor,
       reason,
       task: "chain-compose",
-      operations: [{ action: "set_chain_composition", id: chainId, expectedRevision, fields: { memberRefs: members ?? memberRefs, linkIds } }],
+      operations: [{ action: "set_chain_composition", id: chainId, expectedRevision, fields: { memberRefs: members ?? memberRefs, linkIds, removeBlockIds } }],
     });
   }
 
-  appendChainComposition({ chainId, expectedRevision, memberRefs = [], members = null, linkIds = [], actor = "agent", reason = "Append members to a Composite Chain" } = {}) {
+  appendChainComposition({ chainId, expectedRevision, memberRefs = [], members = null, linkIds = [], removeBlockIds = [], actor = "agent", reason = "Append members to a Composite Chain" } = {}) {
     if (!chainId?.trim()) throw new Error("chainId is required");
     return this.mutate({
       actor,
       reason,
       task: "chain-compose",
-      operations: [{ action: "append_chain_composition", id: chainId, expectedRevision, fields: { memberRefs: members ?? memberRefs, linkIds } }],
+      operations: [{ action: "append_chain_composition", id: chainId, expectedRevision, fields: { memberRefs: members ?? memberRefs, linkIds, removeBlockIds } }],
     });
   }
 
-  reconcileChainTopology({ chainId = null, autoReorder = true, reason = "Reconcile Chain topology" } = {}) {
+  reconcileChainTopology({ chainId = null, autoReorder = false, reason = "Inspect Chain topology" } = {}) {
     this.ensureSynced();
     return reconcileChainTopology(this, { chainId, autoReorder, reason });
   }
 
-  reconcileChainNetwork({ chainId = null, autoExpand = true, reason = "Reconcile Chain feature network" } = {}) {
+  reconcileChainNetwork({ chainId = null, autoExpand = false, autoReorder = false, reason = "Inspect Chain feature network" } = {}) {
     this.ensureSynced();
-    return reconcileChainNetwork(this, { chainId, autoExpand, reason });
+    return reconcileChainNetwork(this, { chainId, autoExpand, autoReorder, reason });
   }
 
   contextForTask(options = {}) {
     const repositorySync = indexSources(this);
     const autoReconciliation = this.reconcileSourceBackedBlocks();
     const chainNetwork = this.reconcileChainNetwork({
-      autoExpand: true,
-      reason: "Reconcile Chain feature networks at context boundary",
+      autoExpand: false,
+      autoReorder: false,
+      reason: "Inspect Chain feature networks at context boundary",
     });
     const chainReconciliation = this.reconcileChainTopology({
-      autoReorder: true,
-      reason: "Reconcile Chain topology at context boundary",
+      autoReorder: false,
+      reason: "Inspect Chain topology at context boundary",
     });
     return { ...buildContextForTask(this, {...options, repositorySync}), repositorySync, autoReconciliation, chainNetwork, chainReconciliation };
   }
@@ -1453,12 +1578,13 @@ export class ContextOSService {
 
   validate() {
     this.reconcileChainNetwork({
-      autoExpand: true,
-      reason: "Reconcile Chain feature networks before validation",
+      autoExpand: false,
+      autoReorder: false,
+      reason: "Inspect Chain feature networks before validation",
     });
     this.reconcileChainTopology({
-      autoReorder: true,
-      reason: "Reconcile Chain topology before validation",
+      autoReorder: false,
+      reason: "Inspect Chain topology before validation",
     });
     return validateGraph(this);
   }

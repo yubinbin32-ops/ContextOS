@@ -5,7 +5,7 @@ import path from "node:path";
 import { registerProject, resolveProjectPaths } from "./paths.mjs";
 import { exportGraphToJson, importGraphFromJson } from "./database.mjs";
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 
 const HELP = `
 ContextOS v${VERSION}: A context operating system for AI coding agents.
@@ -18,6 +18,7 @@ Commands:
   init [--scan]         Initialize .contextos project (optionally scan code to seed blocks)
   sync                  Reconcile source inventory and unfinished tasks
   status                Show graph revision, blocks, chains, and active plans
+  code --path <file>    Read one bounded source range returned by a locator
   export                Export .contextos/graph.json from local SQLite cache
   import                Import .contextos/graph.json into local SQLite cache
   setup                 Configure MCP in Cursor, Claude Desktop, and VS Code
@@ -37,6 +38,50 @@ export async function runCli(args, router) {
 
   if (command === "-v" || command === "--version" || command === "version") {
     console.log(`ContextOS v${VERSION}`);
+    return;
+  }
+
+  if (command === "code" || command === "source") {
+    const projectRoot = process.cwd();
+    const value = (name) => {
+      const index = args.findIndex((item) => item === name);
+      return index >= 0 ? args[index + 1] : undefined;
+    };
+    const filePath = value("--path") ?? value("--file");
+    const symbol = value("--symbol");
+    const startLine = value("--start") ?? value("--start-line");
+    const endLine = value("--end") ?? value("--end-line");
+    const maxLines = value("--max-lines");
+    const maxChars = value("--max-chars");
+    const expectedHash = value("--hash");
+    const asJson = args.includes("--json");
+    try {
+      if (!filePath) throw new Error("code requires --path <file>");
+      if (!symbol && (!startLine || !endLine)) {
+        throw new Error("code requires --symbol <name> or --start <line> --end <line>");
+      }
+      const service = router.serviceFor({ projectRoot, autoRegister: false });
+      const result = service.readSourceSlice({
+        filePath,
+        symbol: symbol ?? null,
+        startLine: startLine ? Number(startLine) : null,
+        endLine: endLine ? Number(endLine) : null,
+        maxLines: maxLines ? Number(maxLines) : 240,
+        maxChars: maxChars ? Number(maxChars) : 12000,
+        expectedHash: expectedHash ?? null,
+      });
+      if (asJson) console.log(JSON.stringify(result, null, 2));
+      else {
+        console.log(`# ${result.path}${result.symbol ? ` :: ${result.symbol}` : ""}`);
+        console.log(`# Lines: ${result.startLine ?? "?"}-${result.endLine ?? "?"} · Status: ${result.status}${result.truncated ? " · truncated" : ""}`);
+        if (result.reason) console.log(`# Note: ${result.reason}`);
+        if (result.code) console.log(result.code);
+      }
+      if (!result.found) process.exitCode = 2;
+    } catch (error) {
+      console.error(`Code read failed: ${error.message}`);
+      process.exitCode = 1;
+    }
     return;
   }
 

@@ -72,11 +72,22 @@ test("Composite Chain keeps macro members separate from child Block paths", asyn
     const opened = service.openEntity({ type: "chain", id: "macro" });
     assert.equal(opened.entity.chainType, "composite");
     assert.deepEqual(opened.composition.members.map((item) => item.memberId), ["stage-a", "stage-b", "macro-note"]);
+    const replaced = service.setChainComposition({
+      chainId: "macro",
+      expectedRevision: 3,
+      memberRefs: ["chain:stage-a", "chain:stage-b"],
+      linkIds: ["stage-a-b"],
+      removeBlockIds: ["macro-note"],
+    });
+    assert.deepEqual(replaced.receipts[0].removedBlockIds, ["macro-note"]);
+    assert.equal(service.snapshot().blocks.some((item) => item.id === "macro-note"), false);
+    assert.deepEqual(service.snapshot().chainMembers.filter((item) => item.chainId === "macro").map((item) => item.memberId), ["stage-a", "stage-b"]);
+    assert.equal(service.snapshot().links.some((item) => item.id === "stage-b-note"), false);
     assert.equal(service.validate().errors.some((error) => error.includes("Composite Chain topology")), false);
     router.close();
     const reopenedRouter = new ProjectServiceRouter();
     const reopened = reopenedRouter.serviceFor({ projectRoot: tmpDir });
-    assert.deepEqual(reopened.snapshot().chainMembers.filter((item) => item.chainId === "macro").map((item) => item.memberId), ["stage-a", "stage-b", "macro-note"]);
+    assert.deepEqual(reopened.snapshot().chainMembers.filter((item) => item.chainId === "macro").map((item) => item.memberId), ["stage-a", "stage-b"]);
     reopenedRouter.close();
   } finally {
     router.close();

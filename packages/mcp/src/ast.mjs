@@ -520,23 +520,30 @@ export function buildChainCodeStream(chainNodes = [], { maxTotalChars = 4000, mo
   let currentChars = 0;
 
   for (const node of chainNodes) {
-    const { blockId, title, filePath, symbol, code, contract, signature, sourceStatus, startLine, endLine } = node;
+    const { blockId, title, filePath, symbol, contract, signature, sourceStatus, startLine, endLine } = node;
+    const fallbackLocator = filePath || symbol || startLine
+      ? [{ path: filePath, symbol, signature, sourceStatus, startLine, endLine, role: "implementation" }]
+      : [];
+    const locators = Array.isArray(node.locators) && node.locators.length ? node.locators : fallbackLocator;
     const header = `// -------------------------------------------------------------
-// [Node: ${blockId}] ${title} ${filePath ? `(${filePath}${symbol ? ` :: ${symbol}` : ""})` : ""}
+// [Node: ${blockId}] ${title} · ${locators.length} locator(s)
 // -------------------------------------------------------------`;
 
     const bodyLines = [
-      `// Source status: ${sourceStatus ?? (filePath ? "anchored" : "virtual")}`,
-      `// Symbol: ${symbol || "—"}${signature ? ` · ${signature}` : ""}`,
-      `// Lines: ${startLine && endLine ? `${startLine}-${endLine}` : "—"}`,
       `// Contract: ${contract || "(not declared)"}`,
+      `// Source status: ${sourceStatus || locators[0]?.sourceStatus || locators[0]?.bindingStatus || (locators.length ? "mapped" : "virtual")}`,
+      ...(locators.length
+        ? locators.flatMap((locator, index) => [
+          `// Locator ${index + 1}: ${locator.path || "—"}${locator.symbol ? ` :: ${locator.symbol}` : ""}`,
+          `//   Role: ${locator.role || "implementation"} · Status: ${locator.sourceStatus || locator.bindingStatus || "unknown"}`,
+          `//   Lines: ${locator.startLine && locator.endLine ? `${locator.startLine}-${locator.endLine}` : "—"}${locator.signature ? ` · ${locator.signature}` : ""}`,
+          ...(locator.sourceStatus === "line_only" ? ["//   This is a line-only binding; resolve a symbol before implementation work"] : []),
+          ...(["missing", "unreadable", "outside_project", "stale", "ambiguous"].includes(locator.sourceStatus)
+            ? [`//   Locator is ${locator.sourceStatus}; refresh or rebind before opening implementation`]
+            : []),
+        ])
+        : [`// Source: virtual/no SourceRef`]),
     ];
-    if (sourceStatus === "line_only") {
-      bodyLines.splice(1, 0, "// Warning: line-only binding; do not treat this range as a symbol facade");
-    }
-    if (["missing", "unreadable", "outside_project", "stale", "ambiguous"].includes(sourceStatus)) {
-      bodyLines.push(`// Locator is ${sourceStatus}; rebind before opening implementation`);
-    }
 
     const section = `${header}\n${bodyLines.join("\n")}\n`;
     if (currentChars + section.length > maxTotalChars && sections.length > 0) {

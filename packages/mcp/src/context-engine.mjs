@@ -445,8 +445,10 @@ export function buildContextForTask(service, { task, focusRefs = [], maxChars = 
       lines.push(`${index + 1}. [block:${block.id}] ${title} — ${stateTag} · ${block.architectureLayer}/${block.scope} · ${block.deliveryState}/${block.healthState}`);
       const sources = snapshot.sourceRefs?.filter((s) => s.blockId === block.id) ?? [];
       if (sources.length > 0) {
-        const primary = sources.find((item) => item.role === "implementation" && item.symbol) || sources.find((item) => item.symbol) || sources[0];
-        lines.push(`  Locator: ${primary.path}${primary.symbol ? ` :: ${primary.symbol}` : ""}${primary.startLine ? ` L${primary.startLine}-L${primary.endLine}` : ""}`);
+        const locators = sources.slice(0, 4).map((source) =>
+          `${source.path}${source.symbol ? ` :: ${source.symbol}` : ""}${source.startLine ? ` L${source.startLine}-L${source.endLine ?? source.startLine}` : ""}`,
+        );
+        lines.push(`  Locators (${sources.length}): ${locators.join(" · ")}${sources.length > locators.length ? " · …" : ""}`);
       }
       const incoming = snapshot.links.filter((l) => l.targetType === "block" && l.targetId === block.id);
       const outgoing = snapshot.links.filter((l) => l.sourceType === "block" && l.sourceId === block.id);
@@ -505,8 +507,11 @@ export function buildContextForTask(service, { task, focusRefs = [], maxChars = 
   if(resumableTasks.length) priority.splice(4,0,'## Resume / synchronization',...resumableTasks.map(t=>`- ${t.id}: ${t.intent.slice(0,100)}; next: ${(JSON.parse(t.scope_json).nextAction??'task_reconcile').slice(0,100)}`),'');
   const visibleRefs = new Set();
   for (const {block} of scoredBlocks.slice(0,5)) {
-    const ref = snapshot.sourceRefs.find(r => r.blockId === block.id && r.symbol);
-    const locator = ref ? `${ref.path} :: ${ref.symbol} L${ref.startLine ?? '?'}-${ref.endLine ?? '?'}` : 'Binding not yet declared';
+    const refs = snapshot.sourceRefs.filter((ref) => ref.blockId === block.id);
+    const locators = refs.slice(0, 4).map((ref) => `${ref.path}${ref.symbol ? ` :: ${ref.symbol}` : ""}${ref.startLine ? ` L${ref.startLine}-${ref.endLine ?? ref.startLine}` : ""}`);
+    const locator = locators.length
+      ? `Locators (${refs.length}): ${locators.join(" · ")}${refs.length > locators.length ? " · …" : ""}`
+      : "Locators: binding not yet declared";
     priority.push(`- [block:${block.id}] ${block.title} — ${block.summary.slice(0,140)}\n  ${locator}`);
     visibleRefs.add(`block:${block.id}`);
   }

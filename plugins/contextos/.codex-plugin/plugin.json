@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Task-focused code locators, persistent project knowledge, read-only README previews and verified task completion via MCP.",
   "author": {
     "name": "ContextOS"

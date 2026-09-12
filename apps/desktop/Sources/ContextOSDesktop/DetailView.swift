@@ -40,6 +40,8 @@ struct DetailView: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
         }
+        .scrollIndicators(.visible)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(ContextOSTheme.surface)
     }
 
@@ -640,6 +642,16 @@ struct DetailView: View {
                     .overlay(alignment: .bottom) { Rectangle().fill(ContextOSTheme.hairline).frame(height: 1) }
                 }
             }
+        } else if store.snapshot.chains.first(where: { $0.id == chainID })?.chainType == "composite" {
+            VStack(alignment: .leading, spacing: 5) {
+                sectionLabel(store.activeLocale == "zh-Hans" ? "组合路线" : "COMPOSITE ROUTE")
+                Text(store.activeLocale == "zh-Hans"
+                     ? "此 Composite 没有成员，当前结构需要在 OS 中重新组合或删除。"
+                     : "This Composite has no members. Recompose or remove it in ContextOS.")
+                    .font(.system(size: 10.5, design: .rounded))
+                    .foregroundStyle(ContextOSTheme.failure)
+                    .textSelection(.enabled)
+            }
         }
     }
 
@@ -853,8 +865,8 @@ struct DetailView: View {
                                     .font(.system(size: 8))
                                     .foregroundStyle(ContextOSTheme.success)
                                 Text(store.activeLocale == "zh-Hans"
-                                     ? "Token 节约: 仅切片 \(lineCount) 行 (~约 \(sliceTokens) tokens), 降低上下文膨胀 >85%"
-                                     : "Token Saving: ~\(sliceTokens) tokens slice (\(lineCount) LOC), avoids full-file overhead")
+                                     ? "按定位读取：仅切片 \(lineCount) 行（约 \(sliceTokens) tokens）"
+                                     : "Exact locator read: ~\(sliceTokens) tokens (\(lineCount) LOC)")
                                     .font(.system(size: 8.5, design: .monospaced))
                                     .foregroundStyle(ContextOSTheme.muted)
                             }
@@ -881,11 +893,15 @@ struct DetailView: View {
                         .font(.system(size: 8, weight: .bold, design: .monospaced))
                         .foregroundStyle(ContextOSTheme.muted)
                 }
-                Text(store.activeLocale == "zh-Hans"
-                     ? "这里先展示阶段级路线；打开任一子 Chain 可继续查看 Block 和 AST 定位。"
-                     : "This view keeps the route at stage level. Open a child Chain for its Block path and AST locators.")
+                Text(members.isEmpty
+                     ? (store.activeLocale == "zh-Hans"
+                        ? "当前 Composite 没有成员，请在 OS 中重新组合或删除。"
+                        : "This Composite has no members. Recompose or remove it in ContextOS.")
+                     : (store.activeLocale == "zh-Hans"
+                        ? "这里先展示阶段级路线；打开任一子 Chain 可继续查看 Block 和 AST 定位。"
+                        : "This view keeps the route at stage level. Open a child Chain for its Block path and AST locators."))
                     .font(.system(size: 10.5, design: .rounded))
-                    .foregroundStyle(ContextOSTheme.muted)
+                    .foregroundStyle(members.isEmpty ? ContextOSTheme.failure : ContextOSTheme.muted)
                 ForEach(Array(members.enumerated()), id: \.offset) { index, member in
                     let title = member.memberType == "chain"
                         ? (store.snapshot.chains.first { $0.id == member.memberId }.map { store.chainText($0, field: "title") } ?? member.memberId)

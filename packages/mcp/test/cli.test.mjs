@@ -11,12 +11,26 @@ const CLI_PATH = path.resolve("packages/mcp/src/server.mjs");
 
 test("cli: --version and --help", async () => {
   const { stdout: versionOut } = await execFileAsync(process.execPath, [CLI_PATH, "--version"]);
-  assert.match(versionOut, /ContextOS v0\.4\.0/);
+  assert.match(versionOut, /ContextOS v0\.4\.1/);
 
   const { stdout: helpOut } = await execFileAsync(process.execPath, [CLI_PATH, "--help"]);
   assert.match(helpOut, /Usage:/);
   assert.match(helpOut, /init \[--scan\]/);
   assert.match(helpOut, /status/);
+  assert.match(helpOut, /code --path/);
+});
+
+test("cli: code reads one symbol range without returning the containing file", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-cli-code-"));
+  await fs.mkdir(path.join(tmpDir, ".contextos"), { recursive: true });
+  await fs.writeFile(path.join(tmpDir, ".contextos", "project.json"), JSON.stringify({
+    schemaVersion: "2.0.0", id: "cli-code", name: "CLI Code", defaultLocale: "en", supportedLocales: ["en"],
+  }));
+  await fs.writeFile(path.join(tmpDir, "sample.js"), "export function first() { return 1; }\nexport function second() { return 2; }\n");
+  const { stdout } = await execFileAsync(process.execPath, [CLI_PATH, "code", "--path", "sample.js", "--symbol", "first"], { cwd: tmpDir });
+  assert.match(stdout, /return 1/);
+  assert.doesNotMatch(stdout, /return 2/);
+  await fs.rm(tmpDir, { recursive: true, force: true });
 });
 
 test("cli: status on current repo", async () => {

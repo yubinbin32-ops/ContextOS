@@ -106,6 +106,30 @@ function unique(values = []) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function chainBlockIds(snapshot, chainId, visiting = new Set()) {
+  if (!chainId || visiting.has(chainId)) return [];
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(chainId);
+  const result = [];
+  for (const node of (snapshot.chainNodes ?? [])
+    .filter((item) => item.chainId === chainId)
+    .sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId))) {
+    if (!result.includes(node.blockId)) result.push(node.blockId);
+  }
+  for (const member of (snapshot.chainMembers ?? [])
+    .filter((item) => item.chainId === chainId)
+    .sort((left, right) => left.position - right.position || left.memberType.localeCompare(right.memberType) || left.memberId.localeCompare(right.memberId))) {
+    if (member.memberType === "block") {
+      if (!result.includes(member.memberId)) result.push(member.memberId);
+    } else {
+      for (const blockId of chainBlockIds(snapshot, member.memberId, nextVisiting)) {
+        if (!result.includes(blockId)) result.push(blockId);
+      }
+    }
+  }
+  return result;
+}
+
 function planForTask(service, planId) {
   if (!planId) return null;
   const plan = service.snapshot().plans.find((item) => item.id === planId);
@@ -214,7 +238,11 @@ export function ensurePlanCoverage(service, { planId, chainId = null, blockIds =
   if (!planId || readOnly) return { planId: planId ?? null, appendedChangeIds: [], chainScopeId: null, changed: false };
   let snapshot = service.snapshot();
   let plan = planForTask(service, planId);
-  const targetBlockIds = unique(blockIds);
+  const scopedChain = chainId ? snapshot.chains.find((item) => item.id === chainId) : null;
+  const targetBlockIds = unique([
+    ...blockIds,
+    ...(scopedChain?.chainType === "composite" ? chainBlockIds(snapshot, chainId) : []),
+  ]);
   const targetLinkIds = chainId
     ? unique(snapshot.chainEdges.filter((edge) => edge.chainId === chainId).map((edge) => edge.linkId))
     : [];
@@ -291,7 +319,9 @@ export function ensurePlanCoverage(service, { planId, chainId = null, blockIds =
     }
   }
   if (chain) {
-    const nodeIds = snapshot.chainNodes.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.blockId);
+    const nodeIds = chain.chainType === "composite"
+      ? chainBlockIds(snapshot, chainId)
+      : snapshot.chainNodes.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.blockId);
     const linkIds = snapshot.chainEdges.filter((item) => item.chainId === chainId).sort((a, b) => a.position - b.position).map((item) => item.linkId);
     if (!scope) {
       const result = service.appendPlanChainScope({
@@ -333,7 +363,8 @@ export function ensurePlanCoverage(service, { planId, chainId = null, blockIds =
  */
 function reconcileChainNetworkPass(service, {
   chainId = null,
-  autoExpand = true,
+  autoExpand = false,
+  autoReorder = false,
   reason = 'Reconcile Chain feature network',
 } = {}) {
   let snapshot = service.snapshot();
@@ -374,7 +405,7 @@ function reconcileChainNetworkPass(service, {
     // Add route Links one at a time.  Rechecking the DAG after each addition
     // prevents an interaction/feedback edge from turning a feature Chain
     // into a cycle.  Such Links stay global and are reported for review.
-    const candidateLinks = network.expansionLinks
+    const candidateLinks = (autoExpand ? network.expansionLinks : [])
       .filter((link) => !selectedLinkIds.includes(link.id))
       .sort((left, right) => left.id.localeCompare(right.id));
     for (const link of candidateLinks) {
@@ -417,7 +448,15 @@ function reconcileChainNetworkPass(service, {
     const disconnected = finalTopology?.issues.filter((issue) => issue.code === 'disconnected' || issue.code === 'no_edges') ?? [];
     const nodeChanged = JSON.stringify(orderedNodes ?? currentNodeIds) !== JSON.stringify(currentNodeIds);
     const linkChanged = JSON.stringify(orderedLinks) !== JSON.stringify(currentEdgeIds);
-    const canApply = Boolean(orderedNodes) && hardIssues.length === 0 && disconnected.length === 0 && (nodeChanged || linkChanged);
+    // Network inspection is the default boundary operation. Apply a
+    // membership/order change only when the caller explicitly opts into the
+    // corresponding repair pass; reporting a canonical order must not mutate
+    // a Chain behind the caller's back.
+    const canApply = (autoExpand || autoReorder)
+      && Boolean(orderedNodes)
+      && hardIssues.length === 0
+      && disconnected.length === 0
+      && (nodeChanged || linkChanged);
     let mutation = null;
     if (canApply) {
       try {
@@ -582,7 +621,7 @@ export function reconcileChainNetwork(service, options = {}) {
  * network. Safe DAGs are reordered without changing membership or Links;
  * cycles, backward edges and disconnected components remain visible issues.
  */
-export function reconcileChainTopology(service, { chainId = null, autoReorder = true, reason = 'Reconcile Chain topology' } = {}) {
+export function reconcileChainTopology(service, { chainId = null, autoReorder = false, reason = 'Inspect Chain topology' } = {}) {
   let snapshot = service.snapshot();
   const chains = chainId ? snapshot.chains.filter((chain) => chain.id === chainId) : snapshot.chains;
   const changedChainIds = [];
@@ -686,16 +725,10 @@ export function synchronizeTaskNetwork(service, { chainId, blockIds = [], linkId
   const explicitLinks = explicitLinkIds
     .map((id) => snapshot.links.find((link) => link.id === id))
     .filter((link) => link && link.sourceType === 'block' && link.targetType === 'block' && finalNodes.has(link.sourceId) && finalNodes.has(link.targetId));
-  const inferredLinks = snapshot.links
-    .filter((link) => link.sourceType === 'block' && link.targetType === 'block')
-    .filter((link) => !currentLinks.has(link.id))
-    .filter((link) => finalNodes.has(link.sourceId) && finalNodes.has(link.targetId))
-    .filter((link) => missingNodes.includes(link.sourceId) || missingNodes.includes(link.targetId))
-    .map((link) => link.id);
-  const candidateLinks = [
-    ...explicitLinks.map((link) => link.id),
-    ...inferredLinks.filter((id) => !explicitLinkIds.includes(id)),
-  ];
+  // Membership and route Links are semantic decisions made by the caller.
+  // Keep the task boundary explicit so a newly written Block is never pulled
+  // into a Chain merely because a global Link happens to connect two nodes.
+  const candidateLinks = explicitLinks.map((link) => link.id);
   const missingExplicitLinks = explicitLinkIds.filter((id) => !explicitLinks.some((link) => link.id === id));
   if (missingExplicitLinks.length) {
     return {
@@ -797,13 +830,14 @@ export function beginTask(service,{intent,blockIds=[],linkIds=[],chainId=null,pl
   if (existingFeatureChainId && snapshot.chains.some((chain) => chain.id === existingFeatureChainId)) {
     service.reconcileChainNetwork({
       chainId: existingFeatureChainId,
-      autoExpand: true,
-      reason: 'Reconcile existing feature Chain network before task begin',
+      autoExpand: false,
+      autoReorder: false,
+      reason: 'Inspect existing feature Chain network before task begin',
     });
     service.reconcileChainTopology({
       chainId: existingFeatureChainId,
-      autoReorder: true,
-      reason: 'Reconcile existing feature Chain before task begin',
+      autoReorder: false,
+      reason: 'Inspect existing feature Chain before task begin',
     });
     snapshot = service.snapshot();
   }
@@ -855,12 +889,21 @@ export function reconcileTask(service,{taskId}={}) {
   if(scope.chainId) {
     chainNetwork=service.reconcileChainNetwork({
       chainId:scope.chainId,
-      autoExpand:true,
-      reason:'Reconcile task feature network',
+      autoExpand:false,
+      autoReorder:false,
+      reason:'Inspect task feature network',
     });
     for (const report of chainNetwork.reports ?? []) {
       for (const candidate of (report.candidateBlocks ?? []).filter((item) => item.requiresRouteLink)) {
         add('chain_incomplete', `${scope.chainId}:${candidate.blockId}`, `Block ${candidate.blockId} declares affinity for chain:${scope.chainId} but has no explicit route Link touching the Chain`);
+      }
+      // Composite member readiness is part of the task boundary. Surface the
+      // report so a parent Chain cannot be sealed while a required child stage
+      // still needs implementation or composition repair.
+      for (const issue of report.issues ?? []) {
+        if (!issue?.detail) continue;
+        const target = `${scope.chainId}:${issue.blockId ?? issue.memberId ?? issue.edgeId ?? issue.code}`;
+        add(report.composition ? 'chain_composition' : 'chain_network', target, issue.detail);
       }
     }
     const expandedBlockIds=chainNetwork.reports.flatMap((report)=>report.autoExpandedBlockIds ?? []);
@@ -871,9 +914,14 @@ export function reconcileTask(service,{taskId}={}) {
       service.database.prepare('UPDATE task_sessions SET scope_json=?, updated_at=? WHERE id=?')
         .run(JSON.stringify(scope),new Date().toISOString(),task.id);
     }
-    network=synchronizeTaskNetwork(service,{chainId:scope.chainId,blockIds:scope.blockIds,linkIds:scope.linkIds ?? []});
-    if(network.issue) add('chain_incomplete',scope.chainId,network.issue);
-    chainTopology=reconcileChainTopology(service,{chainId:scope.chainId,autoReorder:true,reason:'Reconcile task Chain topology'});
+    const scopedChain = snapshot.chains.find((chain) => chain.id === scope.chainId);
+    if (scopedChain?.chainType === "composite") {
+      network = { changed: false, appendedNodeIds: [], appendedLinkIds: [], issue: null, composite: true };
+    } else {
+      network=synchronizeTaskNetwork(service,{chainId:scope.chainId,blockIds:scope.blockIds,linkIds:scope.linkIds ?? []});
+      if(network.issue) add('chain_incomplete',scope.chainId,network.issue);
+    }
+    chainTopology=reconcileChainTopology(service,{chainId:scope.chainId,autoReorder:false,reason:'Inspect task Chain topology'});
     for (const issue of chainTopology.issues) add('chain_topology', scope.chainId, issue.detail);
     if(scope.planId) {
       try {
@@ -913,7 +961,9 @@ export function reconcileTask(service,{taskId}={}) {
     const chain=snapshot.chains.find(c=>c.id===scope.chainId);
     if(!chain) add('missing_chain',scope.chainId,'Declared feature Chain was removed');
     else if(!chain.inputContract?.trim() || !chain.outputContract?.trim()) add('chain_contract_missing',scope.chainId,'Describe the feature input and observable outcome');
-    const nodes=snapshot.chainNodes.filter(n=>n.chainId===scope.chainId).sort((a,b)=>a.position-b.position).map(n=>n.blockId);
+    const nodes = chain.chainType === "composite"
+      ? chainBlockIds(snapshot, scope.chainId)
+      : snapshot.chainNodes.filter(n=>n.chainId===scope.chainId).sort((a,b)=>a.position-b.position).map(n=>n.blockId);
     const edges=snapshot.chainEdges.filter(e=>e.chainId===scope.chainId);
     for(const id of scope.blockIds) if(!nodes.includes(id)) add('chain_incomplete',id,'Task Block absent from feature Chain');
     const topology = inspectChainTopology({
