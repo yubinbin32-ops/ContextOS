@@ -1,8 +1,8 @@
 {
   "version": 1,
   "projectId": "contextos",
-  "graphRevision": 1059,
-  "exportedAt": "2026-09-12T13:28:33.508Z",
+  "graphRevision": 1060,
+  "exportedAt": "2026-09-12T13:28:46.560Z",
   "data": {
     "documents": [
       {
@@ -203,14 +203,14 @@
     "projects": [
       {
         "created_at": "2026-09-04T08:35:14.191Z",
-        "graph_revision": 1059,
-        "handoff_json": "{\"activePlanId\":\"knowledge-sync-delivery\",\"activeStepId\":\"verify-push\",\"nowDoing\":\"代码、图谱、README、OS 审计与验收已完成，本地 commits 6f75143 已创建\",\"nextUp\":\"维护者上传本地 commits 后，重启编辑器插件并收集真实安装反馈\",\"lastFinished\":\"npm test 79/79、plugin:verify 48 工具、desktop:build、运行时定位流验收、benchmark 与 graph_validate 已通过\",\"touchedFiles\":[\"packages/mcp/src/chain-topology.mjs\",\"packages/mcp/src/reconciliation.mjs\",\"packages/mcp/src/mutation-engine.mjs\",\"packages/mcp/src/query-engine.mjs\",\"packages/mcp/src/service.mjs\",\"packages/mcp/src/server.mjs\",\"packages/mcp/src/workspace-tools.mjs\",\"README.md\",\"README_zh.md\",\"plugins/contextos/server/contextos-mcp.mjs\",\"plugins/contextos/skills/contextos/SKILL.md\",\"scripts/plugin-smoke.mjs\",\".contextos/graph.json\",\"docs/benchmarks/2026-09-12-v040.json\"],\"cursorUpdatedAt\":\"2026-09-12T13:28:33.508Z\"}",
+        "graph_revision": 1060,
+        "handoff_json": "{\"activePlanId\":\"knowledge-sync-delivery\",\"activeStepId\":\"verify-push\",\"nowDoing\":\"代码、图谱、README、OS 审计与验收已完成，本地提交已创建，等待维护者上传\",\"nextUp\":\"维护者上传本地提交后，重启编辑器插件并收集真实安装反馈\",\"lastFinished\":\"npm test 79/79、plugin:verify 48 工具、desktop:build、运行时定位流验收、benchmark 与 graph_validate 已通过\",\"touchedFiles\":[\"packages/mcp/src/chain-topology.mjs\",\"packages/mcp/src/reconciliation.mjs\",\"packages/mcp/src/mutation-engine.mjs\",\"packages/mcp/src/query-engine.mjs\",\"packages/mcp/src/service.mjs\",\"packages/mcp/src/server.mjs\",\"packages/mcp/src/workspace-tools.mjs\",\"README.md\",\"README_zh.md\",\"plugins/contextos/server/contextos-mcp.mjs\",\"plugins/contextos/skills/contextos/SKILL.md\",\"scripts/plugin-smoke.mjs\",\".contextos/graph.json\",\"docs/benchmarks/2026-09-12-v040.json\"],\"cursorUpdatedAt\":\"2026-09-12T13:28:46.560Z\"}",
         "id": "contextos",
         "name": "contextos",
         "repo_root": ".",
         "schema_version": 1,
-        "timeline_json": "{\"activePlanId\":\"knowledge-sync-delivery\",\"activeStepId\":\"verify-push\",\"nowDoing\":\"代码、图谱、README、OS 审计与验收已完成，本地 commits 6f75143 已创建\",\"nextUp\":\"维护者上传本地 commits 后，重启编辑器插件并收集真实安装反馈\",\"lastFinished\":\"npm test 79/79、plugin:verify 48 工具、desktop:build、运行时定位流验收、benchmark 与 graph_validate 已通过\",\"touchedFiles\":[\"packages/mcp/src/chain-topology.mjs\",\"packages/mcp/src/reconciliation.mjs\",\"packages/mcp/src/mutation-engine.mjs\",\"packages/mcp/src/query-engine.mjs\",\"packages/mcp/src/service.mjs\",\"packages/mcp/src/server.mjs\",\"packages/mcp/src/workspace-tools.mjs\",\"README.md\",\"README_zh.md\",\"plugins/contextos/server/contextos-mcp.mjs\",\"plugins/contextos/skills/contextos/SKILL.md\",\"scripts/plugin-smoke.mjs\",\".contextos/graph.json\",\"docs/benchmarks/2026-09-12-v040.json\"],\"cursorUpdatedAt\":\"2026-09-12T13:28:33.508Z\"}",
-        "updated_at": "2026-09-12T13:28:33.508Z"
+        "timeline_json": "{\"activePlanId\":\"knowledge-sync-delivery\",\"activeStepId\":\"verify-push\",\"nowDoing\":\"代码、图谱、README、OS 审计与验收已完成，本地提交已创建，等待维护者上传\",\"nextUp\":\"维护者上传本地提交后，重启编辑器插件并收集真实安装反馈\",\"lastFinished\":\"npm test 79/79、plugin:verify 48 工具、desktop:build、运行时定位流验收、benchmark 与 graph_validate 已通过\",\"touchedFiles\":[\"packages/mcp/src/chain-topology.mjs\",\"packages/mcp/src/reconciliation.mjs\",\"packages/mcp/src/mutation-engine.mjs\",\"packages/mcp/src/query-engine.mjs\",\"packages/mcp/src/service.mjs\",\"packages/mcp/src/server.mjs\",\"packages/mcp/src/workspace-tools.mjs\",\"README.md\",\"README_zh.md\",\"plugins/contextos/server/contextos-mcp.mjs\",\"plugins/contextos/skills/contextos/SKILL.md\",\"scripts/plugin-smoke.mjs\",\".contextos/graph.json\",\"docs/benchmarks/2026-09-12-v040.json\"],\"cursorUpdatedAt\":\"2026-09-12T13:28:46.560Z\"}",
+        "updated_at": "2026-09-12T13:28:46.560Z"
       }
     ],
     "blocks": [
