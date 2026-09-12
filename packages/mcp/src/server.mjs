@@ -18,7 +18,7 @@ const server = new McpServer(
   { name: "contextos", version: "0.4.0" },
   {
     instructions:
-      "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools.",
+      "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Chain reconciliation audits feature membership and order together: a related new Block should carry chain:<chain-id> and an explicit route Link, while safe forward route Links and high-confidence affiliated Blocks are attached automatically; an affinity tag without a route stays as an actionable membership gap; an intentional standalone Block carries standalone:<reason>. Feedback, read and dependency relations remain visible as cross-cutting edges when they would create a cycle. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools.",
   },
 );
 const projectRootInput = {
@@ -901,10 +901,11 @@ server.registerTool(
   "chain_reconcile",
   {
     description:
-      "Reconcile an existing Chain's declared order with its explicit Link network. Safe forward DAGs are reordered automatically; cycles, backward edges, and disconnected components are returned as actionable issues.",
+      "Reconcile an existing Chain's feature membership and declared order. Explicitly affiliated or high-confidence linked Blocks and missing forward route Links are added automatically; an affinity Block without a route is returned as a membership gap. Feedback, read and dependency relations stay visible as cross-cutting edges when they would create a cycle. Cycles, backward edges and disconnected components remain actionable issues.",
     inputSchema: {
       ...projectRootInput,
       chainId: z.string().min(1),
+      autoExpand: z.boolean().default(true),
       autoReorder: z.boolean().default(true),
       actor: z.string().optional(),
       reason: z.string().optional(),
@@ -912,11 +913,15 @@ server.registerTool(
     },
   },
   async (input) => {
-    const data = withProject(input, (service, payload) => service.reconcileChainTopology(payload));
+    const data = withProject(input, (service, payload) => {
+      const network = service.reconcileChainNetwork({ chainId: payload.chainId, autoExpand: payload.autoExpand, reason: payload.reason || "Reconcile Chain feature network" });
+      const topology = service.reconcileChainTopology({ chainId: payload.chainId, autoReorder: payload.autoReorder, reason: payload.reason || "Reconcile Chain topology" });
+      return { ...network, topology, changedChainIds: [...new Set([...(network.changedChainIds || []), ...(topology.changedChainIds || [])])], issues: [...(network.reports || []).flatMap((report) => report.issues || []), ...(topology.issues || [])], graphRevision: service.project().graph_revision };
+    });
     const markdown = [
       `# Chain topology reconciliation: ${input.chainId}`,
       `- Graph revision: ${data.graphRevision}`,
-      `- Reordered: ${data.changedChainIds?.length ? data.changedChainIds.map((id) => `chain:${id}`).join(", ") : "none"}`,
+      `- Reconciled: ${data.changedChainIds?.length ? data.changedChainIds.map((id) => `chain:${id}`).join(", ") : "none"}`,
       ...(data.issues?.length ? ["", "## Issues", ...data.issues.map((issue) => `- ${issue.detail}`)] : ["- Topology is ordered and connected."]),
     ].join("\n");
     return writeResult(data, markdown, input.includeStructured, "chain_reconcile");

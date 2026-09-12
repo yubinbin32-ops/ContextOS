@@ -6,6 +6,7 @@ import { detectLanguage, extractSymbols } from './ast.mjs';
 import { transaction, getSyncMeta, setSyncMeta } from './database.mjs';
 import { executeMutate } from './mutation-engine.mjs';
 import { inspectChainTopology, stableChainOrder, topologyIssueText } from './chain-topology.mjs';
+import { inspectChainNetwork } from './chain-network.mjs';
 
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const ignored = new Set(['.git','.contextos','node_modules','.build','build','dist','coverage','.next','release-assets']);
@@ -233,6 +234,238 @@ export function ensurePlanCoverage(service, { planId, chainId = null, blockIds =
 }
 
 /**
+ * Reconcile a Chain with the global feature network.  This is deliberately
+ * separate from topology ordering: a valid DAG may still omit a related
+ * Block or a route Link.  Only explicit chain-affinity tags or strong
+ * semantic candidates with a declared route Link are auto-expanded.
+ */
+function reconcileChainNetworkPass(service, {
+  chainId = null,
+  autoExpand = true,
+  reason = 'Reconcile Chain feature network',
+} = {}) {
+  let snapshot = service.snapshot();
+  const chains = chainId ? snapshot.chains.filter((chain) => chain.id === chainId) : snapshot.chains;
+  const reports = [];
+  const changedChainIds = [];
+  if (chainId && !chains.length) {
+    return {
+      changed: false,
+      changedChainIds,
+      reports: [{ chainId, issues: [{ code: 'missing_chain', detail: `Chain not found: ${chainId}` }] }],
+      graphRevision: service.project().graph_revision,
+    };
+  }
+
+  for (const chain of chains) {
+    const currentNodes = snapshot.chainNodes
+      .filter((node) => node.chainId === chain.id)
+      .sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));
+    const currentEdges = snapshot.chainEdges
+      .filter((edge) => edge.chainId === chain.id)
+      .sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+    const network = inspectChainNetwork({
+      chain,
+      nodes: currentNodes,
+      edges: currentEdges,
+      links: snapshot.links,
+      blocks: snapshot.blocks,
+    });
+    const currentNodeIds = currentNodes.map((node) => node.blockId);
+    const currentEdgeIds = currentEdges.map((edge) => edge.linkId);
+    const candidateNodeIds = autoExpand ? network.autoExpandBlockIds : [];
+    const finalNodeIds = [...currentNodeIds, ...candidateNodeIds.filter((id) => !currentNodeIds.includes(id))];
+    const selectedLinkIds = [...currentEdgeIds];
+    const skippedLinkIds = [];
+
+    // Add route Links one at a time.  Rechecking the DAG after each addition
+    // prevents an interaction/feedback edge from turning a feature Chain
+    // into a cycle.  Such Links stay global and are reported for review.
+    const candidateLinks = network.expansionLinks
+      .filter((link) => !selectedLinkIds.includes(link.id))
+      .sort((left, right) => left.id.localeCompare(right.id));
+    for (const link of candidateLinks) {
+      const trialLinkIds = [...selectedLinkIds, link.id];
+      const trialLinks = trialLinkIds
+        .map((id) => snapshot.links.find((item) => item.id === id))
+        .filter(Boolean)
+        .map((item, position) => ({
+          linkId: item.id,
+          sourceId: item.sourceId,
+          targetId: item.targetId,
+          position,
+        }));
+      const trialNodes = finalNodeIds.map((id, position) => ({ blockId: id, position }));
+      if (!stableChainOrder(trialNodes, trialLinks)) {
+        skippedLinkIds.push(link.id);
+        continue;
+      }
+      selectedLinkIds.push(link.id);
+    }
+
+    const orderedNodes = stableChainOrder(
+      finalNodeIds.map((id, position) => ({ blockId: id, position })),
+      selectedLinkIds
+        .map((id) => snapshot.links.find((item) => item.id === id))
+        .filter(Boolean)
+        .map((item, position) => ({ linkId: item.id, sourceId: item.sourceId, targetId: item.targetId, position })),
+    );
+    const orderedLinks = selectedLinkIds;
+    const finalTopology = orderedNodes
+      ? inspectChainTopology({
+        nodes: orderedNodes.map((id, position) => ({ blockId: id, position })),
+        edges: orderedLinks
+          .map((id) => snapshot.links.find((item) => item.id === id))
+          .filter(Boolean)
+          .map((item, position) => ({ linkId: item.id, sourceId: item.sourceId, targetId: item.targetId, position })),
+      })
+      : null;
+    const hardIssues = finalTopology?.issues.filter((issue) => issue.hard) ?? [{ code: 'unorderable', detail: 'Feature network cannot be topologically ordered' }];
+    const disconnected = finalTopology?.issues.filter((issue) => issue.code === 'disconnected' || issue.code === 'no_edges') ?? [];
+    const nodeChanged = JSON.stringify(orderedNodes ?? currentNodeIds) !== JSON.stringify(currentNodeIds);
+    const linkChanged = JSON.stringify(orderedLinks) !== JSON.stringify(currentEdgeIds);
+    const canApply = Boolean(orderedNodes) && hardIssues.length === 0 && disconnected.length === 0 && (nodeChanged || linkChanged);
+    let mutation = null;
+    if (canApply) {
+      try {
+        const operations = [{
+          action: 'set_chain_path',
+          id: chain.id,
+          expectedRevision: chain.currentRevision,
+          fields: { nodeIds: orderedNodes, linkIds: orderedLinks },
+        }];
+        if (chain.deliveryState === 'complete') {
+          operations.push({
+            action: 'update_chain',
+            id: chain.id,
+            expectedRevision: chain.currentRevision + 1,
+            fields: { deliveryState: 'implementing', healthState: 'warning' },
+            summary: 'Reopened after feature network reconciliation',
+          });
+        }
+        mutation = service.mutate({ reason, task: 'chain-network-reconcile', operations });
+        changedChainIds.push(chain.id);
+        snapshot = service.snapshot();
+      } catch (error) {
+        hardIssues.push({ code: 'mutation_failed', detail: error.message });
+      }
+    }
+    const reportChain = mutation
+      ? snapshot.chains.find((item) => item.id === chain.id) ?? chain
+      : chain;
+    const reportNodes = snapshot.chainNodes
+      .filter((node) => node.chainId === chain.id)
+      .sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));
+    const reportEdges = snapshot.chainEdges
+      .filter((edge) => edge.chainId === chain.id)
+      .sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+    const reportNetwork = inspectChainNetwork({
+      chain: reportChain,
+      nodes: reportNodes,
+      edges: reportEdges,
+      links: snapshot.links,
+      blocks: snapshot.blocks,
+    });
+    const affinityGaps = reportNetwork.candidateBlocks.filter((candidate) => candidate.requiresRouteLink);
+    reports.push({
+      chainId: chain.id,
+      complete: reportNetwork.complete,
+      candidateBlocks: reportNetwork.candidateBlocks,
+      autoExpandedBlockIds: canApply ? candidateNodeIds : [],
+      missingInternalLinks: reportNetwork.missingInternalLinks,
+      backwardInternalLinks: reportNetwork.backwardInternalLinks,
+      addedLinkIds: canApply ? orderedLinks.filter((id) => !currentEdgeIds.includes(id)) : [],
+      skippedLinkIds,
+      changed: Boolean(mutation),
+      issues: [
+        ...(hardIssues.length ? hardIssues : []),
+        ...(disconnected.length ? disconnected : []),
+        ...(skippedLinkIds.length ? [{ code: 'deferred_cycle_or_feedback', detail: `Deferred Link(s) to preserve DAG: ${skippedLinkIds.join(', ')}` }] : []),
+        ...affinityGaps.map((candidate) => ({
+          code: 'affinity_missing_route',
+          detail: `Block ${candidate.blockId} declares affinity for chain:${chain.id} but has no explicit route Link touching the Chain`,
+          blockId: candidate.blockId,
+        })),
+      ],
+    });
+  }
+  return {
+    changed: changedChainIds.length > 0,
+    changedChainIds,
+    reports,
+    graphRevision: service.project().graph_revision,
+  };
+}
+
+/**
+ * Run the membership/order pass to a fixed point. A newly attached Block can
+ * expose another affiliated Block through a second route Link, so one pass is
+ * insufficient for a long feature path. The bounded loop keeps the operation
+ * idempotent while preserving the pass-level cycle guard.
+ */
+export function reconcileChainNetwork(service, options = {}) {
+  const aggregate = new Map();
+  const changedChainIds = new Set();
+  let changed = false;
+  let graphRevision = service.project().graph_revision;
+  const maxPasses = 16;
+  let passes = 0;
+  let converged = false;
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    passes = pass + 1;
+    const revisionBefore = service.project().graph_revision;
+    const result = reconcileChainNetworkPass(service, options);
+    graphRevision = result.graphRevision;
+    changed = changed || result.changed;
+    result.changedChainIds.forEach((id) => changedChainIds.add(id));
+    for (const report of result.reports) {
+      const current = aggregate.get(report.chainId) ?? {
+        chainId: report.chainId,
+        autoExpandedBlockIds: new Set(),
+        addedLinkIds: new Set(),
+        skippedLinkIds: new Set(),
+        issues: [],
+      };
+      (report.autoExpandedBlockIds ?? []).forEach((id) => current.autoExpandedBlockIds.add(id));
+      (report.addedLinkIds ?? []).forEach((id) => current.addedLinkIds.add(id));
+      (report.skippedLinkIds ?? []).forEach((id) => current.skippedLinkIds.add(id));
+      for (const issue of report.issues ?? []) {
+        const key = issue.code + '|' + issue.detail;
+        if (!current.issues.some((item) => item.code + '|' + item.detail === key)) current.issues.push(issue);
+      }
+      current.complete = report.complete;
+      current.candidateBlocks = report.candidateBlocks;
+      current.missingInternalLinks = report.missingInternalLinks;
+      current.backwardInternalLinks = report.backwardInternalLinks;
+      current.passes = pass + 1;
+      current.changed = current.changed || report.changed;
+      aggregate.set(report.chainId, current);
+    }
+    if (!result.changed || graphRevision === revisionBefore) {
+      converged = true;
+      break;
+    }
+  }
+  if (!converged) {
+    for (const current of aggregate.values()) {
+      current.complete = false;
+      const detail = `Chain network reconciliation reached the ${maxPasses}-pass safety limit`;
+      if (!current.issues.some((issue) => issue.code === "max_passes")) {
+        current.issues.push({ code: "max_passes", detail });
+      }
+      current.passes = passes;
+    }
+  }
+  const reports = [...aggregate.values()].map((report) => ({
+    ...report,
+    autoExpandedBlockIds: [...report.autoExpandedBlockIds],
+    addedLinkIds: [...report.addedLinkIds],
+    skippedLinkIds: [...report.skippedLinkIds],
+  }));
+  return { changed, changedChainIds: [...changedChainIds], reports, graphRevision };
+}
+
+/**
  * Reconcile the declared order of one or all Chains with their explicit Link
  * network. Safe DAGs are reordered without changing membership or Links;
  * cycles, backward edges and disconnected components remain visible issues.
@@ -449,6 +682,11 @@ export function beginTask(service,{intent,blockIds=[],linkIds=[],chainId=null,pl
   let snapshot=service.snapshot();
   const existingFeatureChainId = feature?.id ?? chainId;
   if (existingFeatureChainId && snapshot.chains.some((chain) => chain.id === existingFeatureChainId)) {
+    service.reconcileChainNetwork({
+      chainId: existingFeatureChainId,
+      autoExpand: true,
+      reason: 'Reconcile existing feature Chain network before task begin',
+    });
     service.reconcileChainTopology({
       chainId: existingFeatureChainId,
       autoReorder: true,
@@ -499,8 +737,27 @@ export function reconcileTask(service,{taskId}={}) {
   const issues=[]; const add=(kind,target,detail)=>issues.push({kind,target,detail});
   let planCoverage={planId:scope.planId??null,appendedChangeIds:[],chainScopeId:null,changed:false};
   let network={changed:false,appendedNodeIds:[],appendedLinkIds:[],issue:null};
+  let chainNetwork={changed:false,changedChainIds:[],reports:[],graphRevision:service.project().graph_revision};
   let chainTopology = {changed:false,changedChainIds:[],issues:[],graphRevision:service.project().graph_revision};
   if(scope.chainId) {
+    chainNetwork=service.reconcileChainNetwork({
+      chainId:scope.chainId,
+      autoExpand:true,
+      reason:'Reconcile task feature network',
+    });
+    for (const report of chainNetwork.reports ?? []) {
+      for (const candidate of (report.candidateBlocks ?? []).filter((item) => item.requiresRouteLink)) {
+        add('chain_incomplete', `${scope.chainId}:${candidate.blockId}`, `Block ${candidate.blockId} declares affinity for chain:${scope.chainId} but has no explicit route Link touching the Chain`);
+      }
+    }
+    const expandedBlockIds=chainNetwork.reports.flatMap((report)=>report.autoExpandedBlockIds ?? []);
+    const expandedLinkIds=chainNetwork.reports.flatMap((report)=>report.addedLinkIds ?? []);
+    if(expandedBlockIds.length || expandedLinkIds.length) {
+      scope.blockIds=unique([...(scope.blockIds ?? []),...expandedBlockIds]);
+      scope.linkIds=unique([...(scope.linkIds ?? []),...expandedLinkIds]);
+      service.database.prepare('UPDATE task_sessions SET scope_json=?, updated_at=? WHERE id=?')
+        .run(JSON.stringify(scope),new Date().toISOString(),task.id);
+    }
     network=synchronizeTaskNetwork(service,{chainId:scope.chainId,blockIds:scope.blockIds,linkIds:scope.linkIds ?? []});
     if(network.issue) add('chain_incomplete',scope.chainId,network.issue);
     chainTopology=reconcileChainTopology(service,{chainId:scope.chainId,autoReorder:true,reason:'Reconcile task Chain topology'});
@@ -564,7 +821,7 @@ export function reconcileTask(service,{taskId}={}) {
       .run(hash(`${taskId}:${issue.kind}:${issue.target}`),taskId,issue.kind,issue.target,issue.detail,new Date().toISOString());
     service.database.prepare('UPDATE task_sessions SET source_revision=?,updated_at=? WHERE id=?').run(index.sourceRevision,new Date().toISOString(),taskId);
   });
-  return {taskId,updatedAt:session(service,taskId).updated_at,...index,autoReconciliation,chainTopology,planCoverage,network,issues,status:issues.length?'needs_work':'ready',graphRevision:service.project().graph_revision};
+  return {taskId,updatedAt:session(service,taskId).updated_at,...index,autoReconciliation,chainNetwork,chainTopology,planCoverage,network,issues,status:issues.length?'needs_work':'ready',graphRevision:service.project().graph_revision};
 }
 export function finishTask(service,{taskId,expectedGraphRevision,sourceRevision,idempotencyKey,summary=''}={}) {
   if(!idempotencyKey)throw new Error('idempotencyKey is required');

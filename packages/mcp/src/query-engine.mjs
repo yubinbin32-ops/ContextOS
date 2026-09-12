@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pluginRuntimeStatus } from "./plugin-runtime.mjs";
 import { inspectChainTopology } from "./chain-topology.mjs";
+import { inspectProjectNetworks } from "./chain-network.mjs";
 import {
   architectureCoverage,
   assertAllowed,
@@ -21,6 +22,7 @@ import {
   parseJson,
   entityExists,
   checkpointSatisfiesGate,
+  LINK_KINDS,
 } from "./schema.mjs";
 
 export function renderProjectMap(service, { locale = "en" } = {}) {
@@ -533,6 +535,7 @@ export function getChangesSince(service, { sequence = 0, sourceSyncRevision = nu
 export function validateGraph(service) {
   const snapshot = service.snapshot();
   const coverage = architectureCoverage(snapshot);
+  const networkAudit = inspectProjectNetworks(snapshot);
   const errors = [];
   const warnings = [];
   const refs = new Set([
@@ -542,6 +545,9 @@ export function validateGraph(service) {
   for (const link of snapshot.links) {
     if (!refs.has(`${link.sourceType}:${link.sourceId}`)) errors.push(`Dangling link source: link:${link.id}`);
     if (!refs.has(`${link.targetType}:${link.targetId}`)) errors.push(`Dangling link target: link:${link.id}`);
+    if (!LINK_KINDS.has(link.kind)) {
+      errors.push(`Invalid Link kind: link:${link.id} (${link.kind})`);
+    }
     if (["calls", "reads", "writes"].includes(link.kind) && !link.contract.trim()) {
       warnings.push(`Missing contract: link:${link.id}`);
     }
@@ -636,6 +642,32 @@ export function validateGraph(service) {
   if (coverage.chainGateMissingChainIds.length) {
     warnings.push(`${coverage.chainGateMissingChainIds.length} declared Chain integration gate(s) are not passed: ${coverage.chainGateMissingChainIds.slice(0, 20).map((id) => `chain:${id}`).join(", ")}${coverage.chainGateMissingChainIds.length > 20 ? " …" : ""}`);
   }
+  for (const gap of networkAudit.missingInternalLinks) {
+    const chain = snapshot.chains.find((item) => item.id === gap.chainId);
+    const nodes = snapshot.chainNodes.filter((node) => node.chainId === gap.chainId).sort((left, right) => left.position - right.position);
+    const source = nodes.find((node) => node.blockId === gap.sourceId);
+    const target = nodes.find((node) => node.blockId === gap.targetId);
+    const sourcePosition = source?.position ?? -1;
+    const targetPosition = target?.position ?? -1;
+    // A backward interaction edge is a deliberate cross-cutting relation;
+    // it cannot be inserted into a forward feature route without changing
+    // the route's meaning. Safe forward gaps are actionable validation errors
+    // until the next context boundary repairs them.
+    if (sourcePosition >= 0 && targetPosition >= 0 && sourcePosition < targetPosition) {
+      errors.push(`Chain network missing route Link: chain:${gap.chainId} -> link:${gap.linkId} (${gap.sourceId} -> ${gap.targetId})`);
+    } else if (chain) {
+      warnings.push(`Cross-cutting Link left outside Chain route: chain:${chain.id} -> link:${gap.linkId} (${gap.sourceId} -> ${gap.targetId})`);
+    }
+  }
+  for (const candidate of networkAudit.autoExpandCandidates) {
+    warnings.push(`Chain network candidate requires membership review: chain:${candidate.chainId} <- block:${candidate.blockId} (${candidate.linkIds.join(", ")})`);
+  }
+  for (const gap of networkAudit.membershipGaps ?? []) {
+    errors.push(`Chain network Block has no route Link: chain:${gap.chainId} <- block:${gap.blockId} (add an explicit forward route Link)`);
+  }
+  for (const block of networkAudit.unassignedBlocks ?? []) {
+    warnings.push(`Block has no feature Chain or standalone tag: block:${block.id} (${block.title})`);
+  }
   const staleCheckpoints = snapshot.checkpoints.filter((checkpoint) =>
     checkpoint.recordedStatus === "passed" && checkpoint.freshness?.status === "stale",
   );
@@ -675,7 +707,7 @@ export function validateGraph(service) {
     if (!hasChain && !hasChange && !hasStep) warnings.push(`Plan has no declared work target: plan:${plan.id}`);
   }
   const drift = analyzeGraphDrift(service, snapshot);
-  return { valid: errors.length === 0, errors, warnings, graphRevision: snapshot.project.graphRevision, drift };
+  return { valid: errors.length === 0, errors, warnings, graphRevision: snapshot.project.graphRevision, drift: { ...drift, networkAudit } };
 }
 
 export function analyzeGraphDrift(service, snapshot = service.snapshot()) {
@@ -762,6 +794,7 @@ export function analyzeGraphDrift(service, snapshot = service.snapshot()) {
       issues: actionable,
     }] : [];
   });
+  const networkAudit = inspectProjectNetworks(snapshot);
   const linksOutsideChains = snapshot.links
     .filter((link) => link.sourceType === "block" && link.targetType === "block")
     .filter((link) => !snapshot.chainEdges.some((edge) => edge.linkId === link.id))
@@ -776,7 +809,8 @@ export function analyzeGraphDrift(service, snapshot = service.snapshot()) {
     chainDisconnections: chainTopologyIssues,
     chainTopologyIssues,
     linksOutsideChains,
-    hasDrift: isolatedBlocks.length > 0 || ghostDrifts.length > 0 || retestRequired.length > 0 || semanticReviews.length > 0 || chainTopologyIssues.length > 0,
+    networkAudit,
+    hasDrift: isolatedBlocks.length > 0 || ghostDrifts.length > 0 || retestRequired.length > 0 || semanticReviews.length > 0 || chainTopologyIssues.length > 0 || networkAudit.unassignedBlocks.length > 0 || networkAudit.membershipGaps.length > 0 || networkAudit.missingInternalLinks.length > 0 || networkAudit.autoExpandCandidates.length > 0,
   };
 }
 
@@ -802,12 +836,11 @@ function collectSemanticReviews(service, snapshot) {
     if (latest.has(key)) continue;
     const changedFields = parseJson(row.changed_fields_json, []);
     const semanticFields = changedFields.filter((field) => SEMANTIC_FIELDS.has(field));
-    if (!semanticFields.length) continue;
     latest.set(key, { ...row, semanticFields });
   }
   const reviews = [];
   for (const item of latest.values()) {
-    if (item.action === "created") continue;
+    if (item.action === "created" || !item.semanticFields.length) continue;
     const related = relatedArchitecture(snapshot, item.entity_type, item.entity_id);
     if (!related.links.length && !related.decisions.length && !related.planChanges.length) continue;
     reviews.push({
@@ -865,6 +898,7 @@ export function renderGraphStatus(service, { locale = "en" } = {}) {
     `- Blocks: ${totalBlocks} (${solidBlocks} solid, ${ghostBlocks} ghost blueprints)`,
     `- Chains: ${totalChains} · Links: ${totalLinks}`,
     `- Links outside a Chain: ${drift.linksOutsideChains.length} (cross-cutting; review only when part of a feature path)`,
+    `- Blocks outside feature Chains: ${drift.networkAudit?.unassignedBlocks?.length ?? 0} · Chain network gaps: ${drift.networkAudit?.missingInternalLinks?.length ?? 0} · membership gaps: ${drift.networkAudit?.membershipGaps?.length ?? 0} · auto-expand candidates: ${drift.networkAudit?.autoExpandCandidates?.length ?? 0}`,
     `- Checkpoints: ${passedCheckpoints}/${totalCheckpoints} passed`,
     `- Plugin: ${plugin.stale ? "stale cache" : "in sync"}`,
     "",
@@ -893,6 +927,30 @@ export function renderGraphStatus(service, { locale = "en" } = {}) {
         lines.push(`- **chain:${chain.chainId}** (${chain.title})${issueText ? ` · ${issueText}` : ""}`);
         lines.push("  *Action*: let task reconciliation reorder a forward DAG, or revise the Chain path with `set_chain_path` and explicit Links.");
       }
+    }
+    if (drift.networkAudit?.missingInternalLinks?.length || drift.networkAudit?.autoExpandCandidates?.length) {
+      lines.push("### 🧩 Feature network membership needs attention");
+      for (const gap of (drift.networkAudit.missingInternalLinks ?? []).slice(0, 20)) {
+        lines.push(`- **chain:${gap.chainId}** is missing route Link \`${gap.linkId}\`: ${gap.sourceId} → ${gap.targetId}`);
+      }
+      for (const candidate of (drift.networkAudit.autoExpandCandidates ?? []).slice(0, 20)) {
+        lines.push(`- **chain:${candidate.chainId}** can absorb **block:${candidate.blockId}** via ${candidate.linkIds.join(", ")} (${candidate.reasons.join("; ")})`);
+      }
+      lines.push("  *Action*: run `chain_reconcile` or continue the task boundary; high-confidence candidates are appended with their explicit route Links.");
+    }
+    if (drift.networkAudit?.membershipGaps?.length) {
+      lines.push("### 🧭 Chain-affiliated Blocks waiting for a route");
+      for (const gap of drift.networkAudit.membershipGaps.slice(0, 20)) {
+        lines.push(`- **block:${gap.blockId}** declares **chain:${gap.chainId}** but has no explicit route Link into the feature path.`);
+      }
+      lines.push("  *Action*: add the forward route Link; reconciliation will then attach the Block and order the path.");
+    }
+    if (drift.networkAudit?.unassignedBlocks?.length) {
+      lines.push("### 🧱 Blocks awaiting feature ownership");
+      for (const block of drift.networkAudit.unassignedBlocks.slice(0, 20)) {
+        lines.push(`- **block:${block.id}** (${block.title}) has no Chain membership or standalone tag.`);
+      }
+      lines.push("  *Action*: add a feature Chain and route, or mark an intentional independent Block with `standalone:<reason>`.");
     }
     if (drift.linksOutsideChains.length > 0) {
       lines.push("### 🧭 Cross-cutting Links outside Chain paths");
@@ -950,6 +1008,10 @@ export function renderGraphStatus(service, { locale = "en" } = {}) {
       totalLinks,
       passedCheckpoints,
       totalCheckpoints,
+      chainNetworkGaps: drift.networkAudit?.missingInternalLinks?.length ?? 0,
+      chainNetworkCandidates: drift.networkAudit?.autoExpandCandidates?.length ?? 0,
+      chainMembershipGaps: drift.networkAudit?.membershipGaps?.length ?? 0,
+      unassignedBlocks: drift.networkAudit?.unassignedBlocks?.length ?? 0,
     },
     drift,
     markdown: lines.join("\n"),

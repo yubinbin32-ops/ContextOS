@@ -1,4 +1,4 @@
-import { indexSources, reconcileChainTopology } from "./reconciliation.mjs";
+import { indexSources, reconcileChainNetwork, reconcileChainTopology } from "./reconciliation.mjs";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -746,6 +746,11 @@ export class ContextOSService {
     // transient moved/changed status before the caller sees the code stream.
     const sourceSync = this.syncSourceBindings({ includeUnchanged: true });
     const streamBindingState = new Map(this.sourceBindingState);
+    const chainNetwork = this.reconcileChainNetwork({
+      chainId,
+      autoExpand: true,
+      reason: "Reconcile Chain feature network before code stream",
+    });
     const chainReconciliation = this.reconcileChainTopology({
       chainId,
       autoReorder: true,
@@ -839,12 +844,14 @@ export class ContextOSService {
         invalidBindingCount: sourceSync.invalidBindingCount,
         changes: sourceSync.changes.slice(0, 12),
       },
+      chainNetwork,
       chainReconciliation,
       nodes: streamNodes,
       codeStream,
       markdown: [
         `# Chain Code Stream: ${chain.title} (${chain.id})`,
         `Nodes: ${streamNodes.length} · Locator-only path + symbol indexes`,
+        ...(chainNetwork.changedChainIds?.length ? [`Chain network reconciled: ${chainNetwork.changedChainIds.map((id) => `chain:${id}`).join(", ")}`] : []),
         ...(chainReconciliation.changedChainIds?.length ? [`Chain order reconciled: ${chainReconciliation.changedChainIds.map((id) => `chain:${id}`).join(", ")}`] : []),
         ...(chainReconciliation.issues?.length ? ["Chain topology issues:", ...chainReconciliation.issues.map((issue) => `- ${issue.detail}`)] : []),
         `Source sync: r${sourceSync.revision} · ${sourceSync.changedBindingCount} binding change(s) · ${sourceSync.invalidBindingCount} invalid`,
@@ -1247,14 +1254,23 @@ export class ContextOSService {
     return reconcileChainTopology(this, { chainId, autoReorder, reason });
   }
 
+  reconcileChainNetwork({ chainId = null, autoExpand = true, reason = "Reconcile Chain feature network" } = {}) {
+    this.ensureSynced();
+    return reconcileChainNetwork(this, { chainId, autoExpand, reason });
+  }
+
   contextForTask(options = {}) {
     const repositorySync = indexSources(this);
     const autoReconciliation = this.reconcileSourceBackedBlocks();
+    const chainNetwork = this.reconcileChainNetwork({
+      autoExpand: true,
+      reason: "Reconcile Chain feature networks at context boundary",
+    });
     const chainReconciliation = this.reconcileChainTopology({
       autoReorder: true,
       reason: "Reconcile Chain topology at context boundary",
     });
-    return { ...buildContextForTask(this, {...options, repositorySync}), repositorySync, autoReconciliation, chainReconciliation };
+    return { ...buildContextForTask(this, {...options, repositorySync}), repositorySync, autoReconciliation, chainNetwork, chainReconciliation };
   }
 
   resolveHistoryContext(planId = null, chainScopeId = null) {
@@ -1305,6 +1321,14 @@ export class ContextOSService {
   }
 
   validate() {
+    this.reconcileChainNetwork({
+      autoExpand: true,
+      reason: "Reconcile Chain feature networks before validation",
+    });
+    this.reconcileChainTopology({
+      autoReorder: true,
+      reason: "Reconcile Chain topology before validation",
+    });
     return validateGraph(this);
   }
 

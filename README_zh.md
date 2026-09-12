@@ -68,28 +68,28 @@ npx -y github:yubinbin32-ops/ContextOS setup
 
 ## 可复现 benchmark
 
-下面的数据来自 2026 年 9 月 12 日对 graph revision 1052 隔离快照的测量，单位是 JavaScript UTF-16 字符；它展示 ContextOS 返回给 AI 的内容边界。
+下面的数据来自 2026 年 9 月 12 日对 graph revision 1093 隔离快照的测量，单位是 JavaScript UTF-16 字符；它展示 ContextOS 返回给 AI 的内容边界。
 
 | 测量内容 | 结果 |
 |---|---:|
-| 完整图谱参考大小 | 902,651 字符 |
+| 完整图谱参考大小 | 1,216,655 字符 |
 | 单次任务上下文预算 | 4,000 字符 |
-| 上下文缩减 | **99.56%**（902,651 → 4,000） |
+| 上下文缩减 | **99.67%**（1,216,655 → 4,000） |
 | 4 个完整源码文件 → Chain 定位流 | **99.09%**（226,522 → 2,071） |
 | 固定模拟构建日志 | **91.78%**（10,071 → 828），错误和失败信息保留 |
 | 查询样本 | 12 次本地调用 |
-| 查询延迟 p50 / p95 | **896.97 ms / 960.26 ms** |
+| 查询延迟 p50 / p95 | **1,161.29 ms / 1,349.72 ms** |
 
 四个任务查询都在 4,000 字符预算内返回了预期 Block 和可见定位信息：
 
 | 查询 | 预期 Block | 延迟（ms） | 缩减 |
 |---|---|---:|---:|
-| OpenCode 平台支持与 MCP 注入 | `in-app-plugin-install` | 944.04 · 896.06 · 901.90 | 99.56% |
-| Git Discard 撤回与 SQLite 热重载 | `sqlite-graph-store` | 915.15 · 894.62 · 896.94 | 99.56% |
-| CJK 分词与 BM25 字段加权检索 | `context-retrieval` | 942.46 · 960.26 · 896.97 | 99.56% |
-| SourceBinding 路径与符号同步 | `live-binding-refresh` | 927.23 · 895.67 · 895.24 | 99.56% |
+| OpenCode 平台支持与 MCP 注入 | `in-app-plugin-install` | 1226.01 · 1155.62 · 1160.94 | 99.67% |
+| Git Discard 撤回与 SQLite 热重载 | `sqlite-graph-store` | 1151.74 · 1161.29 · 1174.02 | 99.67% |
+| CJK 分词与 BM25 字段加权检索 | `context-retrieval` | 1150.43 · 1162.48 · 1151.02 | 99.67% |
+| SourceBinding 路径与符号同步 | `live-binding-refresh` | 1349.72 · 1173.70 · 1214.53 | 99.67% |
 
-Chain 测量使用 `chain-context-os`，返回了 4 个已锚定定位：`ast-facade-engine/extractSymbols`、`progressive-materializer/addSourceRef`、`terminal-sanitizer/sanitizeTerminalOutput`、`desktop-context-console/chainCodeStreamSection`。完整原始数据见 [`docs/benchmarks/2026-09-12-v040.json`](docs/benchmarks/2026-09-12-v040.json)。
+Chain 测量使用 `chain-context-os`，返回了 4 个已锚定定位：`ast-facade-engine/extractSymbols`、`progressive-materializer/addSourceRef`、`terminal-sanitizer/sanitizeTerminalOutput`、`desktop-context-console/chainCodeStreamSection`。完整原始数据见 [`docs/benchmarks/2026-09-12-v040-chain-network.json`](docs/benchmarks/2026-09-12-v040-chain-network.json)。
 
 日常使用体感上下文压缩频率大约减少 60%。
 
@@ -98,7 +98,7 @@ benchmark 记录服务响应、字符缩减和本地调用延迟；完整图谱�
 修改服务或图谱后，可以重新测量：
 
 ```bash
-npm run benchmark -- --output docs/benchmarks/2026-09-12-v040.json
+npm run benchmark -- --output docs/benchmarks/2026-09-12-v040-chain-network.json
 ```
 
 ## 开发者

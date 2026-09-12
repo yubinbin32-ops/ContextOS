@@ -25605,14 +25605,14 @@ function taskTerms(task) {
     "which",
     "with"
   ]);
-  const terms = task.toLowerCase().split(/[^\p{L}\p{N}_-]+/u).filter((term) => term.length > 1 && !stopWords.has(term));
+  const terms2 = task.toLowerCase().split(/[^\p{L}\p{N}_-]+/u).filter((term) => term.length > 1 && !stopWords.has(term));
   const cjkRuns = task.match(/[\p{Script=Han}]+/gu) ?? [];
   for (const run of cjkRuns) {
-    if (run.length >= 2) terms.push(run);
-    for (let index = 0; index < run.length - 1; index += 1) terms.push(run.slice(index, index + 2));
-    if (run.length === 1) terms.push(run);
+    if (run.length >= 2) terms2.push(run);
+    for (let index = 0; index < run.length - 1; index += 1) terms2.push(run.slice(index, index + 2));
+    if (run.length === 1) terms2.push(run);
   }
-  return [...new Set(terms)];
+  return [...new Set(terms2)];
 }
 function foundationBlockGroups(snapshot2, blocks) {
   const remaining = new Map(blocks.map((block) => [block.id, block]));
@@ -25701,7 +25701,7 @@ function candidateRole(relative, symbol) {
 }
 function suggestSourceBindings({ projectRoot, block, existingRefs = [], limit = 12, maxFiles = 600 } = {}) {
   if (!block?.id) throw new Error("block is required");
-  const terms = discoveryTerms([block.id, block.title, block.summary, block.contract, ...block.tags ?? []].join(" "));
+  const terms2 = discoveryTerms([block.id, block.title, block.summary, block.contract, ...block.tags ?? []].join(" "));
   const existing = new Set(existingRefs.map((ref) => `${ref.path}:${ref.symbol ?? ""}`));
   const candidates = [];
   const files = sourceFiles(projectRoot, maxFiles);
@@ -25716,9 +25716,9 @@ function suggestSourceBindings({ projectRoot, block, existingRefs = [], limit = 
     for (const symbol of extractSymbols(content, { filePath: relative })) {
       if (existing.has(`${relative}:${symbol.qualifiedName ?? symbol.name}`) || existing.has(`${relative}:${symbol.name}`)) continue;
       const haystack = `${relative} ${symbol.qualifiedName ?? symbol.name} ${symbol.signature ?? ""}`.toLowerCase();
-      const matchedTerms = terms.filter((term) => haystack.includes(term));
-      const exactName = discoveryTerms(symbol.qualifiedName ?? symbol.name).some((term) => terms.includes(term));
-      const pathMatches2 = terms.filter((term) => relative.toLowerCase().includes(term)).length;
+      const matchedTerms = terms2.filter((term) => haystack.includes(term));
+      const exactName = discoveryTerms(symbol.qualifiedName ?? symbol.name).some((term) => terms2.includes(term));
+      const pathMatches2 = terms2.filter((term) => relative.toLowerCase().includes(term)).length;
       const score = matchedTerms.length * 12 + pathMatches2 * 5 + (exactName ? 18 : 0);
       if (score < 12) continue;
       candidates.push({
@@ -25755,13 +25755,13 @@ function suggestBindingsForChangedFiles({ projectRoot, blocks = [], existingRefs
     }
     const symbols = extractSymbols(content, { filePath: relative });
     for (const block of blocks) {
-      const terms = discoveryTerms([block.id, block.title, block.summary, block.contract].join(" "));
+      const terms2 = discoveryTerms([block.id, block.title, block.summary, block.contract].join(" "));
       for (const symbol of symbols) {
         const name = symbol.qualifiedName ?? symbol.name;
         if (existing.has(`${relative}:${name}`) || existing.has(`${relative}:${symbol.name}`)) continue;
         const haystack = `${relative} ${name} ${symbol.signature ?? ""}`.toLowerCase();
-        const matchedTerms = terms.filter((term) => haystack.includes(term));
-        const exactName = discoveryTerms(name).some((term) => terms.includes(term));
+        const matchedTerms = terms2.filter((term) => haystack.includes(term));
+        const exactName = discoveryTerms(name).some((term) => terms2.includes(term));
         const score = matchedTerms.length * 12 + (exactName ? 20 : 0);
         if (score < 12) continue;
         candidates.push({
@@ -28965,6 +28965,193 @@ function executeRevertChangeSet(service, {
   });
 }
 
+// packages/mcp/src/chain-network.mjs
+var ROUTE_LINK_KINDS = /* @__PURE__ */ new Set(["flows_to", "calls", "writes", "implements"]);
+var STOP_WORDS = /* @__PURE__ */ new Set([
+  "and",
+  "the",
+  "with",
+  "from",
+  "into",
+  "this",
+  "that",
+  "for",
+  "via",
+  "one",
+  "only",
+  "path",
+  "flow",
+  "feature",
+  "network",
+  "chain",
+  "project",
+  "system",
+  "service",
+  "engine",
+  "manager",
+  "app",
+  "mcp",
+  "contextos"
+]);
+function terms(value) {
+  return new Set(
+    String(value ?? "").toLowerCase().replace(/[^a-z0-9:_-]+/g, " ").split(/\s+/).map((item) => item.trim()).filter((item) => item.length >= 3 && !STOP_WORDS.has(item))
+  );
+}
+function chainTerms(chain) {
+  return terms([
+    chain?.id,
+    chain?.title,
+    chain?.purpose,
+    chain?.intent,
+    chain?.inputContract,
+    chain?.outputContract
+  ].join(" "));
+}
+function blockTerms(block) {
+  return terms([
+    block?.id,
+    block?.title,
+    block?.summary,
+    block?.contract,
+    block?.scope,
+    ...Array.isArray(block?.tags) ? block.tags : []
+  ].join(" "));
+}
+function affinityTags(block) {
+  return new Set((Array.isArray(block?.tags) ? block.tags : []).map((tag) => String(tag).trim().toLowerCase()).filter(Boolean));
+}
+function hasAffinityTag(block, chainId) {
+  const tags = affinityTags(block);
+  const normalizedId = String(chainId).trim().toLowerCase();
+  return tags.has(`chain:${normalizedId}`) || tags.has(`chain-affinity:${normalizedId}`);
+}
+function isExplicitlyStandalone(block) {
+  return [...affinityTags(block)].some((tag) => tag === "standalone" || tag.startsWith("standalone:"));
+}
+function linkEndpoints(link) {
+  if (!link || link.sourceType !== "block" || link.targetType !== "block") return null;
+  return { sourceId: link.sourceId, targetId: link.targetId };
+}
+function scoreCandidate(block, chain, touchingLinks = []) {
+  const reasons = [];
+  if (hasAffinityTag(block, chain.id)) {
+    reasons.push(`explicit chain affinity tag chain:${chain.id}`);
+    if (!touchingLinks.length) reasons.push("no declared route Link touches the Chain yet");
+    return { score: 1, confidence: "high", reasons };
+  }
+  const chainSet = chainTerms(chain);
+  const blockSet = blockTerms(block);
+  const overlap = [...chainSet].filter((term) => blockSet.has(term));
+  if (overlap.length) reasons.push(`semantic terms: ${overlap.slice(0, 6).join(", ")}`);
+  if (touchingLinks.length) reasons.push(`${touchingLinks.length} declared route Link(s) touch the Chain`);
+  const distinctive = overlap.filter((term) => term.length >= 6);
+  const score = Math.min(
+    0.84,
+    (distinctive.length >= 2 ? 0.62 : distinctive.length === 1 ? 0.45 : 0) + (overlap.length >= 2 ? 0.12 : 0) + (touchingLinks.length >= 2 ? 0.15 : touchingLinks.length === 1 ? 0.06 : 0)
+  );
+  if (score >= 0.72) return { score, confidence: "high", reasons };
+  if (score >= 0.52) return { score, confidence: "medium", reasons };
+  return { score, confidence: "low", reasons };
+}
+function chainMembers(nodes = []) {
+  return new Set(nodes.map((node2) => typeof node2 === "string" ? node2 : node2?.blockId ?? node2?.block_id ?? node2?.id).filter(Boolean));
+}
+function chainEdgeIds(edges = []) {
+  return new Set(edges.map((edge) => typeof edge === "string" ? edge : edge?.linkId ?? edge?.link_id ?? edge?.id).filter(Boolean));
+}
+function inspectChainNetwork({ chain, nodes = [], edges = [], links = [], blocks = [] } = {}) {
+  if (!chain?.id) throw new Error("chain is required");
+  const memberIds = chainMembers(nodes);
+  const edgeIds = chainEdgeIds(edges);
+  const activeLinks = links.filter((link) => !link.archived);
+  const routeLinks = activeLinks.filter((link) => ROUTE_LINK_KINDS.has(link.kind)).map((link) => ({ link, endpoints: linkEndpoints(link) })).filter((item) => item.endpoints);
+  const internalRouteLinks = routeLinks.filter(({ endpoints }) => memberIds.has(endpoints.sourceId) && memberIds.has(endpoints.targetId));
+  const missingInternalLinks = internalRouteLinks.filter(({ link }) => !edgeIds.has(link.id)).map(({ link }) => link);
+  const touchingByBlock = /* @__PURE__ */ new Map();
+  for (const { link, endpoints } of routeLinks) {
+    const sourceMember = memberIds.has(endpoints.sourceId);
+    const targetMember = memberIds.has(endpoints.targetId);
+    if (sourceMember === targetMember) continue;
+    const candidateId = sourceMember ? endpoints.targetId : endpoints.sourceId;
+    const values = touchingByBlock.get(candidateId) ?? [];
+    values.push(link);
+    touchingByBlock.set(candidateId, values);
+  }
+  const blockById = new Map(blocks.map((block) => [block.id, block]));
+  const candidateBlockIds = new Set(touchingByBlock.keys());
+  for (const block of blocks) {
+    if (!memberIds.has(block.id) && !block.archived && block.deliveryState !== "deprecated" && hasAffinityTag(block, chain.id)) {
+      candidateBlockIds.add(block.id);
+    }
+  }
+  const candidateBlocks = [...candidateBlockIds].map((blockId) => {
+    const touchingLinks = touchingByBlock.get(blockId) ?? [];
+    const block = blockById.get(blockId);
+    if (!block || memberIds.has(blockId) || block.archived || block.deliveryState === "deprecated") return null;
+    const affinity = scoreCandidate(block, chain, touchingLinks);
+    const autoExpandable = affinity.confidence === "high" && touchingLinks.length > 0;
+    return {
+      blockId,
+      title: block.title,
+      scope: block.scope,
+      linkIds: touchingLinks.map((link) => link.id),
+      ...affinity,
+      autoExpandable,
+      requiresRouteLink: affinity.confidence === "high" && touchingLinks.length === 0
+    };
+  }).filter(Boolean).sort((left, right) => right.score - left.score || left.blockId.localeCompare(right.blockId));
+  const autoExpandIds = new Set(candidateBlocks.filter((candidate) => candidate.autoExpandable).map((candidate) => candidate.blockId));
+  const expansionLinks = routeLinks.filter(({ endpoints }) => {
+    const sourceMember = memberIds.has(endpoints.sourceId) || autoExpandIds.has(endpoints.sourceId);
+    const targetMember = memberIds.has(endpoints.targetId) || autoExpandIds.has(endpoints.targetId);
+    return sourceMember && targetMember;
+  }).map(({ link }) => link).filter((link) => !edgeIds.has(link.id));
+  const backwardInternalLinks = missingInternalLinks.filter((link) => {
+    const source = nodes.find((node2) => (node2.blockId ?? node2.block_id ?? node2.id) === link.sourceId);
+    const target = nodes.find((node2) => (node2.blockId ?? node2.block_id ?? node2.id) === link.targetId);
+    if (!source || !target) return false;
+    const sourcePosition = Number.isInteger(source.position) ? source.position : nodes.indexOf(source);
+    const targetPosition = Number.isInteger(target.position) ? target.position : nodes.indexOf(target);
+    return sourcePosition >= targetPosition;
+  });
+  return {
+    chainId: chain.id,
+    memberIds: [...memberIds],
+    internalRouteLinks: internalRouteLinks.map(({ link }) => link.id),
+    missingInternalLinks,
+    backwardInternalLinks,
+    candidateBlocks,
+    autoExpandBlockIds: [...autoExpandIds],
+    expansionLinks,
+    complete: missingInternalLinks.length === 0 && candidateBlocks.every((candidate) => !candidate.autoExpandable && !candidate.requiresRouteLink)
+  };
+}
+function inspectProjectNetworks(snapshot2) {
+  const reports = (snapshot2?.chains ?? []).map((chain) => {
+    const nodes = (snapshot2.chainNodes ?? []).filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position);
+    const edges = (snapshot2.chainEdges ?? []).filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position);
+    return inspectChainNetwork({ chain, nodes, edges, links: snapshot2.links ?? [], blocks: snapshot2.blocks ?? [] });
+  });
+  const chainIdsByBlock = /* @__PURE__ */ new Map();
+  for (const node2 of snapshot2.chainNodes ?? []) {
+    const values = chainIdsByBlock.get(node2.blockId) ?? [];
+    values.push(node2.chainId);
+    chainIdsByBlock.set(node2.blockId, values);
+  }
+  const membershipGapBlockIds = new Set(reports.flatMap((report) => report.candidateBlocks.filter((candidate) => candidate.requiresRouteLink).map((candidate) => candidate.blockId)));
+  const unassignedBlocks = (snapshot2.blocks ?? []).filter((block) => block.kind !== "decision" && block.deliveryState !== "deprecated" && !chainIdsByBlock.has(block.id) && !membershipGapBlockIds.has(block.id) && !isExplicitlyStandalone(block)).map((block) => ({ id: block.id, title: block.title, kind: block.kind, scope: block.scope, deliveryState: block.deliveryState }));
+  const standaloneBlocks = (snapshot2.blocks ?? []).filter((block) => block.kind !== "decision" && block.deliveryState !== "deprecated" && !chainIdsByBlock.has(block.id) && isExplicitlyStandalone(block)).map((block) => ({ id: block.id, title: block.title, kind: block.kind, scope: block.scope, deliveryState: block.deliveryState }));
+  return {
+    chains: reports,
+    unassignedBlocks,
+    standaloneBlocks,
+    missingInternalLinks: reports.flatMap((report) => report.missingInternalLinks.map((link) => ({ chainId: report.chainId, linkId: link.id, sourceId: link.sourceId, targetId: link.targetId, kind: link.kind }))),
+    autoExpandCandidates: reports.flatMap((report) => report.candidateBlocks.filter((candidate) => candidate.autoExpandable).map((candidate) => ({ chainId: report.chainId, ...candidate }))),
+    membershipGaps: reports.flatMap((report) => report.candidateBlocks.filter((candidate) => candidate.requiresRouteLink).map((candidate) => ({ chainId: report.chainId, ...candidate })))
+  };
+}
+
 // packages/mcp/src/reconciliation.mjs
 var hash = (value) => crypto6.createHash("sha256").update(value).digest("hex");
 var ignored = /* @__PURE__ */ new Set([".git", ".contextos", "node_modules", ".build", "build", "dist", "coverage", ".next", "release-assets"]);
@@ -29193,6 +29380,195 @@ function ensurePlanCoverage(service, { planId, chainId = null, blockIds = [], re
   }
   return { planId, appendedChangeIds, chainScopeId: scope?.id ?? null, changed: appendedChangeIds.length > 0 || Boolean(scope) };
 }
+function reconcileChainNetworkPass(service, {
+  chainId = null,
+  autoExpand = true,
+  reason = "Reconcile Chain feature network"
+} = {}) {
+  let snapshot2 = service.snapshot();
+  const chains = chainId ? snapshot2.chains.filter((chain) => chain.id === chainId) : snapshot2.chains;
+  const reports = [];
+  const changedChainIds = [];
+  if (chainId && !chains.length) {
+    return {
+      changed: false,
+      changedChainIds,
+      reports: [{ chainId, issues: [{ code: "missing_chain", detail: `Chain not found: ${chainId}` }] }],
+      graphRevision: service.project().graph_revision
+    };
+  }
+  for (const chain of chains) {
+    const currentNodes = snapshot2.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));
+    const currentEdges = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+    const network = inspectChainNetwork({
+      chain,
+      nodes: currentNodes,
+      edges: currentEdges,
+      links: snapshot2.links,
+      blocks: snapshot2.blocks
+    });
+    const currentNodeIds = currentNodes.map((node2) => node2.blockId);
+    const currentEdgeIds = currentEdges.map((edge) => edge.linkId);
+    const candidateNodeIds = autoExpand ? network.autoExpandBlockIds : [];
+    const finalNodeIds = [...currentNodeIds, ...candidateNodeIds.filter((id) => !currentNodeIds.includes(id))];
+    const selectedLinkIds = [...currentEdgeIds];
+    const skippedLinkIds = [];
+    const candidateLinks = network.expansionLinks.filter((link) => !selectedLinkIds.includes(link.id)).sort((left, right) => left.id.localeCompare(right.id));
+    for (const link of candidateLinks) {
+      const trialLinkIds = [...selectedLinkIds, link.id];
+      const trialLinks = trialLinkIds.map((id) => snapshot2.links.find((item) => item.id === id)).filter(Boolean).map((item, position) => ({
+        linkId: item.id,
+        sourceId: item.sourceId,
+        targetId: item.targetId,
+        position
+      }));
+      const trialNodes = finalNodeIds.map((id, position) => ({ blockId: id, position }));
+      if (!stableChainOrder(trialNodes, trialLinks)) {
+        skippedLinkIds.push(link.id);
+        continue;
+      }
+      selectedLinkIds.push(link.id);
+    }
+    const orderedNodes = stableChainOrder(
+      finalNodeIds.map((id, position) => ({ blockId: id, position })),
+      selectedLinkIds.map((id) => snapshot2.links.find((item) => item.id === id)).filter(Boolean).map((item, position) => ({ linkId: item.id, sourceId: item.sourceId, targetId: item.targetId, position }))
+    );
+    const orderedLinks = selectedLinkIds;
+    const finalTopology = orderedNodes ? inspectChainTopology({
+      nodes: orderedNodes.map((id, position) => ({ blockId: id, position })),
+      edges: orderedLinks.map((id) => snapshot2.links.find((item) => item.id === id)).filter(Boolean).map((item, position) => ({ linkId: item.id, sourceId: item.sourceId, targetId: item.targetId, position }))
+    }) : null;
+    const hardIssues = finalTopology?.issues.filter((issue2) => issue2.hard) ?? [{ code: "unorderable", detail: "Feature network cannot be topologically ordered" }];
+    const disconnected = finalTopology?.issues.filter((issue2) => issue2.code === "disconnected" || issue2.code === "no_edges") ?? [];
+    const nodeChanged = JSON.stringify(orderedNodes ?? currentNodeIds) !== JSON.stringify(currentNodeIds);
+    const linkChanged = JSON.stringify(orderedLinks) !== JSON.stringify(currentEdgeIds);
+    const canApply = Boolean(orderedNodes) && hardIssues.length === 0 && disconnected.length === 0 && (nodeChanged || linkChanged);
+    let mutation = null;
+    if (canApply) {
+      try {
+        const operations = [{
+          action: "set_chain_path",
+          id: chain.id,
+          expectedRevision: chain.currentRevision,
+          fields: { nodeIds: orderedNodes, linkIds: orderedLinks }
+        }];
+        if (chain.deliveryState === "complete") {
+          operations.push({
+            action: "update_chain",
+            id: chain.id,
+            expectedRevision: chain.currentRevision + 1,
+            fields: { deliveryState: "implementing", healthState: "warning" },
+            summary: "Reopened after feature network reconciliation"
+          });
+        }
+        mutation = service.mutate({ reason, task: "chain-network-reconcile", operations });
+        changedChainIds.push(chain.id);
+        snapshot2 = service.snapshot();
+      } catch (error2) {
+        hardIssues.push({ code: "mutation_failed", detail: error2.message });
+      }
+    }
+    const reportChain = mutation ? snapshot2.chains.find((item) => item.id === chain.id) ?? chain : chain;
+    const reportNodes = snapshot2.chainNodes.filter((node2) => node2.chainId === chain.id).sort((left, right) => left.position - right.position || left.blockId.localeCompare(right.blockId));
+    const reportEdges = snapshot2.chainEdges.filter((edge) => edge.chainId === chain.id).sort((left, right) => left.position - right.position || left.linkId.localeCompare(right.linkId));
+    const reportNetwork = inspectChainNetwork({
+      chain: reportChain,
+      nodes: reportNodes,
+      edges: reportEdges,
+      links: snapshot2.links,
+      blocks: snapshot2.blocks
+    });
+    const affinityGaps = reportNetwork.candidateBlocks.filter((candidate) => candidate.requiresRouteLink);
+    reports.push({
+      chainId: chain.id,
+      complete: reportNetwork.complete,
+      candidateBlocks: reportNetwork.candidateBlocks,
+      autoExpandedBlockIds: canApply ? candidateNodeIds : [],
+      missingInternalLinks: reportNetwork.missingInternalLinks,
+      backwardInternalLinks: reportNetwork.backwardInternalLinks,
+      addedLinkIds: canApply ? orderedLinks.filter((id) => !currentEdgeIds.includes(id)) : [],
+      skippedLinkIds,
+      changed: Boolean(mutation),
+      issues: [
+        ...hardIssues.length ? hardIssues : [],
+        ...disconnected.length ? disconnected : [],
+        ...skippedLinkIds.length ? [{ code: "deferred_cycle_or_feedback", detail: `Deferred Link(s) to preserve DAG: ${skippedLinkIds.join(", ")}` }] : [],
+        ...affinityGaps.map((candidate) => ({
+          code: "affinity_missing_route",
+          detail: `Block ${candidate.blockId} declares affinity for chain:${chain.id} but has no explicit route Link touching the Chain`,
+          blockId: candidate.blockId
+        }))
+      ]
+    });
+  }
+  return {
+    changed: changedChainIds.length > 0,
+    changedChainIds,
+    reports,
+    graphRevision: service.project().graph_revision
+  };
+}
+function reconcileChainNetwork(service, options = {}) {
+  const aggregate = /* @__PURE__ */ new Map();
+  const changedChainIds = /* @__PURE__ */ new Set();
+  let changed = false;
+  let graphRevision = service.project().graph_revision;
+  const maxPasses = 16;
+  let passes = 0;
+  let converged = false;
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    passes = pass + 1;
+    const revisionBefore = service.project().graph_revision;
+    const result = reconcileChainNetworkPass(service, options);
+    graphRevision = result.graphRevision;
+    changed = changed || result.changed;
+    result.changedChainIds.forEach((id) => changedChainIds.add(id));
+    for (const report of result.reports) {
+      const current = aggregate.get(report.chainId) ?? {
+        chainId: report.chainId,
+        autoExpandedBlockIds: /* @__PURE__ */ new Set(),
+        addedLinkIds: /* @__PURE__ */ new Set(),
+        skippedLinkIds: /* @__PURE__ */ new Set(),
+        issues: []
+      };
+      (report.autoExpandedBlockIds ?? []).forEach((id) => current.autoExpandedBlockIds.add(id));
+      (report.addedLinkIds ?? []).forEach((id) => current.addedLinkIds.add(id));
+      (report.skippedLinkIds ?? []).forEach((id) => current.skippedLinkIds.add(id));
+      for (const issue2 of report.issues ?? []) {
+        const key = issue2.code + "|" + issue2.detail;
+        if (!current.issues.some((item) => item.code + "|" + item.detail === key)) current.issues.push(issue2);
+      }
+      current.complete = report.complete;
+      current.candidateBlocks = report.candidateBlocks;
+      current.missingInternalLinks = report.missingInternalLinks;
+      current.backwardInternalLinks = report.backwardInternalLinks;
+      current.passes = pass + 1;
+      current.changed = current.changed || report.changed;
+      aggregate.set(report.chainId, current);
+    }
+    if (!result.changed || graphRevision === revisionBefore) {
+      converged = true;
+      break;
+    }
+  }
+  if (!converged) {
+    for (const current of aggregate.values()) {
+      current.complete = false;
+      const detail = `Chain network reconciliation reached the ${maxPasses}-pass safety limit`;
+      if (!current.issues.some((issue2) => issue2.code === "max_passes")) {
+        current.issues.push({ code: "max_passes", detail });
+      }
+      current.passes = passes;
+    }
+  }
+  const reports = [...aggregate.values()].map((report) => ({
+    ...report,
+    autoExpandedBlockIds: [...report.autoExpandedBlockIds],
+    addedLinkIds: [...report.addedLinkIds],
+    skippedLinkIds: [...report.skippedLinkIds]
+  }));
+  return { changed, changedChainIds: [...changedChainIds], reports, graphRevision };
+}
 function reconcileChainTopology(service, { chainId = null, autoReorder = true, reason = "Reconcile Chain topology" } = {}) {
   let snapshot2 = service.snapshot();
   const chains = chainId ? snapshot2.chains.filter((chain) => chain.id === chainId) : snapshot2.chains;
@@ -29387,6 +29763,11 @@ function beginTask(service, { intent, blockIds = [], linkIds = [], chainId = nul
   let snapshot2 = service.snapshot();
   const existingFeatureChainId = feature?.id ?? chainId;
   if (existingFeatureChainId && snapshot2.chains.some((chain) => chain.id === existingFeatureChainId)) {
+    service.reconcileChainNetwork({
+      chainId: existingFeatureChainId,
+      autoExpand: true,
+      reason: "Reconcile existing feature Chain network before task begin"
+    });
     service.reconcileChainTopology({
       chainId: existingFeatureChainId,
       autoReorder: true,
@@ -29439,8 +29820,26 @@ function reconcileTask(service, { taskId } = {}) {
   const add = (kind, target, detail) => issues.push({ kind, target, detail });
   let planCoverage = { planId: scope.planId ?? null, appendedChangeIds: [], chainScopeId: null, changed: false };
   let network = { changed: false, appendedNodeIds: [], appendedLinkIds: [], issue: null };
+  let chainNetwork = { changed: false, changedChainIds: [], reports: [], graphRevision: service.project().graph_revision };
   let chainTopology = { changed: false, changedChainIds: [], issues: [], graphRevision: service.project().graph_revision };
   if (scope.chainId) {
+    chainNetwork = service.reconcileChainNetwork({
+      chainId: scope.chainId,
+      autoExpand: true,
+      reason: "Reconcile task feature network"
+    });
+    for (const report of chainNetwork.reports ?? []) {
+      for (const candidate of (report.candidateBlocks ?? []).filter((item) => item.requiresRouteLink)) {
+        add("chain_incomplete", `${scope.chainId}:${candidate.blockId}`, `Block ${candidate.blockId} declares affinity for chain:${scope.chainId} but has no explicit route Link touching the Chain`);
+      }
+    }
+    const expandedBlockIds = chainNetwork.reports.flatMap((report) => report.autoExpandedBlockIds ?? []);
+    const expandedLinkIds = chainNetwork.reports.flatMap((report) => report.addedLinkIds ?? []);
+    if (expandedBlockIds.length || expandedLinkIds.length) {
+      scope.blockIds = unique([...scope.blockIds ?? [], ...expandedBlockIds]);
+      scope.linkIds = unique([...scope.linkIds ?? [], ...expandedLinkIds]);
+      service.database.prepare("UPDATE task_sessions SET scope_json=?, updated_at=? WHERE id=?").run(JSON.stringify(scope), (/* @__PURE__ */ new Date()).toISOString(), task.id);
+    }
     network = synchronizeTaskNetwork(service, { chainId: scope.chainId, blockIds: scope.blockIds, linkIds: scope.linkIds ?? [] });
     if (network.issue) add("chain_incomplete", scope.chainId, network.issue);
     chainTopology = reconcileChainTopology(service, { chainId: scope.chainId, autoReorder: true, reason: "Reconcile task Chain topology" });
@@ -29506,7 +29905,7 @@ function reconcileTask(service, { taskId } = {}) {
     for (const issue2 of issues) service.database.prepare("INSERT INTO sync_issues VALUES(?,?,?,?,?,'open',?) ON CONFLICT(id) DO UPDATE SET detail=excluded.detail,status='open',updated_at=excluded.updated_at").run(hash(`${taskId}:${issue2.kind}:${issue2.target}`), taskId, issue2.kind, issue2.target, issue2.detail, (/* @__PURE__ */ new Date()).toISOString());
     service.database.prepare("UPDATE task_sessions SET source_revision=?,updated_at=? WHERE id=?").run(index.sourceRevision, (/* @__PURE__ */ new Date()).toISOString(), taskId);
   });
-  return { taskId, updatedAt: session(service, taskId).updated_at, ...index, autoReconciliation, chainTopology, planCoverage, network, issues, status: issues.length ? "needs_work" : "ready", graphRevision: service.project().graph_revision };
+  return { taskId, updatedAt: session(service, taskId).updated_at, ...index, autoReconciliation, chainNetwork, chainTopology, planCoverage, network, issues, status: issues.length ? "needs_work" : "ready", graphRevision: service.project().graph_revision };
 }
 function finishTask(service, { taskId, expectedGraphRevision, sourceRevision, idempotencyKey, summary = "" } = {}) {
   if (!idempotencyKey) throw new Error("idempotencyKey is required");
@@ -30385,8 +30784,8 @@ function normalize(row) {
 }
 function listDocuments(service, { query = "" } = {}) {
   service.ensureSynced();
-  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-  return service.database.prepare("SELECT * FROM documents WHERE project_id = ? ORDER BY updated_at DESC").all(service.paths.descriptor.id).map(normalize).filter((d) => terms.every((t) => `${d.title} ${d.summary} ${d.body}`.toLowerCase().includes(t))).map(({ body, ...doc }) => ({ ...doc, sections: documentSections(body) }));
+  const terms2 = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return service.database.prepare("SELECT * FROM documents WHERE project_id = ? ORDER BY updated_at DESC").all(service.paths.descriptor.id).map(normalize).filter((d) => terms2.every((t) => `${d.title} ${d.summary} ${d.body}`.toLowerCase().includes(t))).map(({ body, ...doc }) => ({ ...doc, sections: documentSections(body) }));
 }
 function openDocument(service, { id, sectionId, maxChars = 6e3, revision } = {}) {
   service.ensureSynced();
@@ -30602,13 +31001,13 @@ function listDecisions(service, { locale = "en" } = {}) {
 }
 function searchEntities(service, { query, kinds = [], states = [], limit = 20, locale = "en" } = {}) {
   const term = `%${query.trim()}%`;
-  const terms = taskTerms(query);
+  const terms2 = taskTerms(query);
   const snapshot2 = service.snapshot();
   assertAllowed(locale, LOCALES, "locale");
   const translations = localizationMap(snapshot2);
   const kindSet = new Set(kinds);
   const stateSet = new Set(states);
-  const score = (text) => terms.reduce((total, item) => total + (text.toLowerCase().includes(item) ? 1 : 0), 0);
+  const score = (text) => terms2.reduce((total, item) => total + (text.toLowerCase().includes(item) ? 1 : 0), 0);
   const blocks = snapshot2.blocks.filter((block) => block.kind !== "decision").map((block) => {
     const text = `${block.title}
 ${block.summary}
@@ -30944,6 +31343,7 @@ function getChangesSince(service, { sequence = 0, sourceSyncRevision = null, lim
 function validateGraph(service) {
   const snapshot2 = service.snapshot();
   const coverage = architectureCoverage(snapshot2);
+  const networkAudit = inspectProjectNetworks(snapshot2);
   const errors = [];
   const warnings = [];
   const refs = /* @__PURE__ */ new Set([
@@ -30953,6 +31353,9 @@ function validateGraph(service) {
   for (const link of snapshot2.links) {
     if (!refs.has(`${link.sourceType}:${link.sourceId}`)) errors.push(`Dangling link source: link:${link.id}`);
     if (!refs.has(`${link.targetType}:${link.targetId}`)) errors.push(`Dangling link target: link:${link.id}`);
+    if (!LINK_KINDS.has(link.kind)) {
+      errors.push(`Invalid Link kind: link:${link.id} (${link.kind})`);
+    }
     if (["calls", "reads", "writes"].includes(link.kind) && !link.contract.trim()) {
       warnings.push(`Missing contract: link:${link.id}`);
     }
@@ -31042,6 +31445,28 @@ function validateGraph(service) {
   if (coverage.chainGateMissingChainIds.length) {
     warnings.push(`${coverage.chainGateMissingChainIds.length} declared Chain integration gate(s) are not passed: ${coverage.chainGateMissingChainIds.slice(0, 20).map((id) => `chain:${id}`).join(", ")}${coverage.chainGateMissingChainIds.length > 20 ? " \u2026" : ""}`);
   }
+  for (const gap of networkAudit.missingInternalLinks) {
+    const chain = snapshot2.chains.find((item) => item.id === gap.chainId);
+    const nodes = snapshot2.chainNodes.filter((node2) => node2.chainId === gap.chainId).sort((left, right) => left.position - right.position);
+    const source = nodes.find((node2) => node2.blockId === gap.sourceId);
+    const target = nodes.find((node2) => node2.blockId === gap.targetId);
+    const sourcePosition = source?.position ?? -1;
+    const targetPosition = target?.position ?? -1;
+    if (sourcePosition >= 0 && targetPosition >= 0 && sourcePosition < targetPosition) {
+      errors.push(`Chain network missing route Link: chain:${gap.chainId} -> link:${gap.linkId} (${gap.sourceId} -> ${gap.targetId})`);
+    } else if (chain) {
+      warnings.push(`Cross-cutting Link left outside Chain route: chain:${chain.id} -> link:${gap.linkId} (${gap.sourceId} -> ${gap.targetId})`);
+    }
+  }
+  for (const candidate of networkAudit.autoExpandCandidates) {
+    warnings.push(`Chain network candidate requires membership review: chain:${candidate.chainId} <- block:${candidate.blockId} (${candidate.linkIds.join(", ")})`);
+  }
+  for (const gap of networkAudit.membershipGaps ?? []) {
+    errors.push(`Chain network Block has no route Link: chain:${gap.chainId} <- block:${gap.blockId} (add an explicit forward route Link)`);
+  }
+  for (const block of networkAudit.unassignedBlocks ?? []) {
+    warnings.push(`Block has no feature Chain or standalone tag: block:${block.id} (${block.title})`);
+  }
   const staleCheckpoints = snapshot2.checkpoints.filter(
     (checkpoint) => checkpoint.recordedStatus === "passed" && checkpoint.freshness?.status === "stale"
   );
@@ -31081,7 +31506,7 @@ function validateGraph(service) {
     if (!hasChain && !hasChange && !hasStep) warnings.push(`Plan has no declared work target: plan:${plan.id}`);
   }
   const drift = analyzeGraphDrift(service, snapshot2);
-  return { valid: errors.length === 0, errors, warnings, graphRevision: snapshot2.project.graphRevision, drift };
+  return { valid: errors.length === 0, errors, warnings, graphRevision: snapshot2.project.graphRevision, drift: { ...drift, networkAudit } };
 }
 function analyzeGraphDrift(service, snapshot2 = service.snapshot()) {
   const projectRoot = service.paths?.projectRoot ?? process.cwd();
@@ -31145,6 +31570,7 @@ function analyzeGraphDrift(service, snapshot2 = service.snapshot()) {
       issues: actionable
     }] : [];
   });
+  const networkAudit = inspectProjectNetworks(snapshot2);
   const linksOutsideChains = snapshot2.links.filter((link) => link.sourceType === "block" && link.targetType === "block").filter((link) => !snapshot2.chainEdges.some((edge) => edge.linkId === link.id)).map((link) => ({ id: link.id, sourceId: link.sourceId, targetId: link.targetId, kind: link.kind }));
   return {
     isolatedBlocks,
@@ -31155,7 +31581,8 @@ function analyzeGraphDrift(service, snapshot2 = service.snapshot()) {
     chainDisconnections: chainTopologyIssues,
     chainTopologyIssues,
     linksOutsideChains,
-    hasDrift: isolatedBlocks.length > 0 || ghostDrifts.length > 0 || retestRequired.length > 0 || semanticReviews.length > 0 || chainTopologyIssues.length > 0
+    networkAudit,
+    hasDrift: isolatedBlocks.length > 0 || ghostDrifts.length > 0 || retestRequired.length > 0 || semanticReviews.length > 0 || chainTopologyIssues.length > 0 || networkAudit.unassignedBlocks.length > 0 || networkAudit.membershipGaps.length > 0 || networkAudit.missingInternalLinks.length > 0 || networkAudit.autoExpandCandidates.length > 0
   };
 }
 var SEMANTIC_FIELDS = /* @__PURE__ */ new Set(["title", "summary", "contract", "intent", "inputContract", "outputContract"]);
@@ -31179,12 +31606,11 @@ function collectSemanticReviews(service, snapshot2) {
     if (latest.has(key)) continue;
     const changedFields = parseJson(row.changed_fields_json, []);
     const semanticFields = changedFields.filter((field) => SEMANTIC_FIELDS.has(field));
-    if (!semanticFields.length) continue;
     latest.set(key, { ...row, semanticFields });
   }
   const reviews = [];
   for (const item of latest.values()) {
-    if (item.action === "created") continue;
+    if (item.action === "created" || !item.semanticFields.length) continue;
     const related = relatedArchitecture(snapshot2, item.entity_type, item.entity_id);
     if (!related.links.length && !related.decisions.length && !related.planChanges.length) continue;
     reviews.push({
@@ -31232,6 +31658,7 @@ function renderGraphStatus(service, { locale = "en" } = {}) {
     `- Blocks: ${totalBlocks} (${solidBlocks} solid, ${ghostBlocks} ghost blueprints)`,
     `- Chains: ${totalChains} \xB7 Links: ${totalLinks}`,
     `- Links outside a Chain: ${drift.linksOutsideChains.length} (cross-cutting; review only when part of a feature path)`,
+    `- Blocks outside feature Chains: ${drift.networkAudit?.unassignedBlocks?.length ?? 0} \xB7 Chain network gaps: ${drift.networkAudit?.missingInternalLinks?.length ?? 0} \xB7 membership gaps: ${drift.networkAudit?.membershipGaps?.length ?? 0} \xB7 auto-expand candidates: ${drift.networkAudit?.autoExpandCandidates?.length ?? 0}`,
     `- Checkpoints: ${passedCheckpoints}/${totalCheckpoints} passed`,
     `- Plugin: ${plugin.stale ? "stale cache" : "in sync"}`,
     ""
@@ -31259,6 +31686,30 @@ function renderGraphStatus(service, { locale = "en" } = {}) {
         lines.push(`- **chain:${chain.chainId}** (${chain.title})${issueText ? ` \xB7 ${issueText}` : ""}`);
         lines.push("  *Action*: let task reconciliation reorder a forward DAG, or revise the Chain path with `set_chain_path` and explicit Links.");
       }
+    }
+    if (drift.networkAudit?.missingInternalLinks?.length || drift.networkAudit?.autoExpandCandidates?.length) {
+      lines.push("### \u{1F9E9} Feature network membership needs attention");
+      for (const gap of (drift.networkAudit.missingInternalLinks ?? []).slice(0, 20)) {
+        lines.push(`- **chain:${gap.chainId}** is missing route Link \`${gap.linkId}\`: ${gap.sourceId} \u2192 ${gap.targetId}`);
+      }
+      for (const candidate of (drift.networkAudit.autoExpandCandidates ?? []).slice(0, 20)) {
+        lines.push(`- **chain:${candidate.chainId}** can absorb **block:${candidate.blockId}** via ${candidate.linkIds.join(", ")} (${candidate.reasons.join("; ")})`);
+      }
+      lines.push("  *Action*: run `chain_reconcile` or continue the task boundary; high-confidence candidates are appended with their explicit route Links.");
+    }
+    if (drift.networkAudit?.membershipGaps?.length) {
+      lines.push("### \u{1F9ED} Chain-affiliated Blocks waiting for a route");
+      for (const gap of drift.networkAudit.membershipGaps.slice(0, 20)) {
+        lines.push(`- **block:${gap.blockId}** declares **chain:${gap.chainId}** but has no explicit route Link into the feature path.`);
+      }
+      lines.push("  *Action*: add the forward route Link; reconciliation will then attach the Block and order the path.");
+    }
+    if (drift.networkAudit?.unassignedBlocks?.length) {
+      lines.push("### \u{1F9F1} Blocks awaiting feature ownership");
+      for (const block of drift.networkAudit.unassignedBlocks.slice(0, 20)) {
+        lines.push(`- **block:${block.id}** (${block.title}) has no Chain membership or standalone tag.`);
+      }
+      lines.push("  *Action*: add a feature Chain and route, or mark an intentional independent Block with `standalone:<reason>`.");
     }
     if (drift.linksOutsideChains.length > 0) {
       lines.push("### \u{1F9ED} Cross-cutting Links outside Chain paths");
@@ -31313,7 +31764,11 @@ function renderGraphStatus(service, { locale = "en" } = {}) {
       totalChains,
       totalLinks,
       passedCheckpoints,
-      totalCheckpoints
+      totalCheckpoints,
+      chainNetworkGaps: drift.networkAudit?.missingInternalLinks?.length ?? 0,
+      chainNetworkCandidates: drift.networkAudit?.autoExpandCandidates?.length ?? 0,
+      chainMembershipGaps: drift.networkAudit?.membershipGaps?.length ?? 0,
+      unassignedBlocks: drift.networkAudit?.unassignedBlocks?.length ?? 0
     },
     drift,
     markdown: lines.join("\n")
@@ -31326,7 +31781,7 @@ function buildContextForTask(service, { task, focusRefs = [], maxChars = 6e3, lo
   const coverage = architectureCoverage(snapshot2);
   assertAllowed(locale, LOCALES, "locale");
   const translations = localizationMap(snapshot2);
-  const terms = taskTerms(task);
+  const terms2 = taskTerms(task);
   const focusIds = (kind) => new Set(focusRefs.filter((ref) => ref.startsWith(`${kind}:`)).flatMap((ref) => {
     const id = ref.slice(`${kind}:`.length);
     return [id, `${kind}:${id}`];
@@ -31336,14 +31791,14 @@ function buildContextForTask(service, { task, focusRefs = [], maxChars = 6e3, lo
   const focusPlanIds = focusIds("plan");
   const backgroundRuleIds = new Set(snapshot2.backgroundScopes.map((scope) => scope.blockId));
   const planSignals = /* @__PURE__ */ new Set(["plan", "todo", "roadmap", "progress", "status", "next", "blocker", "blocked", "release", "readiness", "\u8BA1\u5212", "\u8FDB\u5EA6", "\u963B\u585E", "\u53D1\u5E03"]);
-  const taskMentionsPlan = terms.some((term) => planSignals.has(term));
+  const taskMentionsPlan = terms2.some((term) => planSignals.has(term));
   const corpus = snapshot2.blocks.map((b) => `${b.id} ${b.title} ${b.summary} ${b.body} ${b.contract} ${b.tags.join(" ")} ${localizedSearchText(snapshot2, "block", b.id)}`.toLowerCase());
-  const termWeights = new Map(terms.map((term) => [term, 1 + Math.log((corpus.length + 1) / (corpus.filter((text) => text.includes(term)).length + 1))]));
+  const termWeights = new Map(terms2.map((term) => [term, 1 + Math.log((corpus.length + 1) / (corpus.filter((text) => text.includes(term)).length + 1))]));
   const scoreText = (text, weight = 1) => {
     if (!text) return 0;
     const lower = text.toLowerCase();
     let matchCount = 0;
-    for (const term of terms) {
+    for (const term of terms2) {
       if (lower.includes(term)) {
         matchCount += weight * (term.length >= 4 ? 2 : 1) * (termWeights.get(term) ?? 1);
       }
@@ -31391,7 +31846,7 @@ function buildContextForTask(service, { task, focusRefs = [], maxChars = 6e3, lo
   const timeline = service.getTimeline();
   const activeCursor = timeline.activeCursor;
   const continuationSignals = /* @__PURE__ */ new Set(["\u7EE7\u7EED", "\u5F00\u53D1", "\u4E0B\u4E00\u6B65", "\u63A8\u8FDB", "\u6062\u590D", "\u63A5\u624B", "\u5F00\u59CB", "continue", "next", "resume", "status", "start"]);
-  const isContinuation = terms.some((term) => continuationSignals.has(term)) || terms.length === 0;
+  const isContinuation = terms2.some((term) => continuationSignals.has(term)) || terms2.length === 0;
   if (activeCursor.activePlanId) {
     const activeEntry = scoredPlans.find((e) => e.plan.id === activeCursor.activePlanId);
     if (activeEntry) {
@@ -31457,11 +31912,11 @@ function buildContextForTask(service, { task, focusRefs = [], maxChars = 6e3, lo
     }
   }
   const applicableRuleScopes = snapshot2.backgroundScopes.filter(
-    (scope) => scope.scopeType === "project" || scope.scopeType === "lens" && terms.some((term) => scope.scopeValue.toLowerCase().includes(term)) || scope.scopeType === "chain" && selectedChainIds.has(scope.scopeValue) || scope.scopeType === "repo" && (terms.some((term) => scope.scopeValue.toLowerCase().includes(term)) || focusRefs.some((ref) => ref.includes(scope.scopeValue)))
+    (scope) => scope.scopeType === "project" || scope.scopeType === "lens" && terms2.some((term) => scope.scopeValue.toLowerCase().includes(term)) || scope.scopeType === "chain" && selectedChainIds.has(scope.scopeValue) || scope.scopeType === "repo" && (terms2.some((term) => scope.scopeValue.toLowerCase().includes(term)) || focusRefs.some((ref) => ref.includes(scope.scopeValue)))
   );
   const applicableRuleIds = [...new Set(applicableRuleScopes.map((scope) => scope.blockId))];
   const applicableDecisionScopes = snapshot2.decisionScopes.filter(
-    (scope) => scope.scopeType === "project" || scope.scopeType === "lens" && terms.some((term) => scope.scopeValue.toLowerCase().includes(term)) || scope.scopeType === "chain" && selectedChainIds.has(scope.scopeValue) || scope.scopeType === "repo" && (terms.some((term) => scope.scopeValue.toLowerCase().includes(term)) || focusRefs.some((ref) => ref.includes(scope.scopeValue)))
+    (scope) => scope.scopeType === "project" || scope.scopeType === "lens" && terms2.some((term) => scope.scopeValue.toLowerCase().includes(term)) || scope.scopeType === "chain" && selectedChainIds.has(scope.scopeValue) || scope.scopeType === "repo" && (terms2.some((term) => scope.scopeValue.toLowerCase().includes(term)) || focusRefs.some((ref) => ref.includes(scope.scopeValue)))
   );
   const applicableDecisionIds = [...new Set(applicableDecisionScopes.map((scope) => scope.decisionId))];
   const applicableDecisions = snapshot2.decisions.filter((decision) => applicableDecisionIds.includes(decision.id)).sort((left, right) => left.title.localeCompare(right.title) || left.id.localeCompare(right.id));
@@ -31577,13 +32032,13 @@ function buildContextForTask(service, { task, focusRefs = [], maxChars = 6e3, lo
       const changeTexts = changes.map(
         (change) => `${change.title} ${change.summary} ${change.currentBehavior} ${change.proposedBehavior} ${change.rationale}`.toLowerCase()
       );
-      const changeTermFrequency = new Map(terms.map((term) => [term, changeTexts.filter((text) => text.includes(term)).length]));
+      const changeTermFrequency = new Map(terms2.map((term) => [term, changeTexts.filter((text) => text.includes(term)).length]));
       const broadChangeTermLimit = Math.max(2, Math.ceil(changes.length / 2));
       const explicitBlockIDs = focusBlockIds;
       const explicitChainIDs = focusChainIds;
       const taskChanges = changes.map((change) => {
         const text = `${change.title} ${change.summary} ${change.currentBehavior} ${change.proposedBehavior} ${change.rationale}`.toLowerCase();
-        const semanticScore = terms.reduce((score, term) => score + (term.length > 2 && (changeTermFrequency.get(term) ?? 0) < broadChangeTermLimit && text.includes(term) ? 1 : 0), 0);
+        const semanticScore = terms2.reduce((score, term) => score + (term.length > 2 && (changeTermFrequency.get(term) ?? 0) < broadChangeTermLimit && text.includes(term) ? 1 : 0), 0);
         const focused = explicitBlockIDs.has(change.entityId) || change.entityType === "chain" && explicitChainIDs.has(change.entityId);
         return { change, semanticScore, focused };
       }).filter((entry) => entry.focused || entry.semanticScore > 0).sort((left, right) => Number(right.focused) - Number(left.focused) || right.semanticScore - left.semanticScore || left.change.position - right.change.position).slice(0, 3).map((entry) => entry.change);
@@ -32829,6 +33284,11 @@ var ContextOSService = class {
     this.ensureSynced();
     const sourceSync = this.syncSourceBindings({ includeUnchanged: true });
     const streamBindingState = new Map(this.sourceBindingState);
+    const chainNetwork = this.reconcileChainNetwork({
+      chainId,
+      autoExpand: true,
+      reason: "Reconcile Chain feature network before code stream"
+    });
     const chainReconciliation = this.reconcileChainTopology({
       chainId,
       autoReorder: true,
@@ -32907,12 +33367,14 @@ var ContextOSService = class {
         invalidBindingCount: sourceSync.invalidBindingCount,
         changes: sourceSync.changes.slice(0, 12)
       },
+      chainNetwork,
       chainReconciliation,
       nodes: streamNodes,
       codeStream,
       markdown: [
         `# Chain Code Stream: ${chain.title} (${chain.id})`,
         `Nodes: ${streamNodes.length} \xB7 Locator-only path + symbol indexes`,
+        ...chainNetwork.changedChainIds?.length ? [`Chain network reconciled: ${chainNetwork.changedChainIds.map((id) => `chain:${id}`).join(", ")}`] : [],
         ...chainReconciliation.changedChainIds?.length ? [`Chain order reconciled: ${chainReconciliation.changedChainIds.map((id) => `chain:${id}`).join(", ")}`] : [],
         ...chainReconciliation.issues?.length ? ["Chain topology issues:", ...chainReconciliation.issues.map((issue2) => `- ${issue2.detail}`)] : [],
         `Source sync: r${sourceSync.revision} \xB7 ${sourceSync.changedBindingCount} binding change(s) \xB7 ${sourceSync.invalidBindingCount} invalid`,
@@ -33289,14 +33751,22 @@ ${stderr}` : ""].filter(Boolean).join("\n");
     this.ensureSynced();
     return reconcileChainTopology(this, { chainId, autoReorder, reason });
   }
+  reconcileChainNetwork({ chainId = null, autoExpand = true, reason = "Reconcile Chain feature network" } = {}) {
+    this.ensureSynced();
+    return reconcileChainNetwork(this, { chainId, autoExpand, reason });
+  }
   contextForTask(options = {}) {
     const repositorySync = indexSources(this);
     const autoReconciliation = this.reconcileSourceBackedBlocks();
+    const chainNetwork = this.reconcileChainNetwork({
+      autoExpand: true,
+      reason: "Reconcile Chain feature networks at context boundary"
+    });
     const chainReconciliation = this.reconcileChainTopology({
       autoReorder: true,
       reason: "Reconcile Chain topology at context boundary"
     });
-    return { ...buildContextForTask(this, { ...options, repositorySync }), repositorySync, autoReconciliation, chainReconciliation };
+    return { ...buildContextForTask(this, { ...options, repositorySync }), repositorySync, autoReconciliation, chainNetwork, chainReconciliation };
   }
   resolveHistoryContext(planId = null, chainScopeId = null) {
     let resolvedPlanId = planId || null;
@@ -33338,6 +33808,14 @@ ${stderr}` : ""].filter(Boolean).join("\n");
     return recordCheckpoint(this, options);
   }
   validate() {
+    this.reconcileChainNetwork({
+      autoExpand: true,
+      reason: "Reconcile Chain feature networks before validation"
+    });
+    this.reconcileChainTopology({
+      autoReorder: true,
+      reason: "Reconcile Chain topology before validation"
+    });
     return validateGraph(this);
   }
   validateGraph() {
@@ -33978,7 +34456,7 @@ var router = new ProjectServiceRouter();
 var server = new McpServer(
   { name: "contextos", version: "0.4.0" },
   {
-    instructions: "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools."
+    instructions: "contextos is project-scoped and runs in the background after installation; the user does not need to mention ContextOS in every conversation. At task start call context_for_task with the absolute projectRoot instead of reading documentation files broadly. For Plan work call plan_context: Plans contain direct Block work, ordered ChainScopes, canonical per-entity PlanChanges, and checkpoint gates. A Block is an independent architecture unit and may own its own Checkpoint; Blocks can form serial or parallel Chains, and a Chain may own a separate integration Checkpoint. A Plan records development intent and scope over that architecture; it does not own every Block or Chain, and unplanned architecture is valid. A Chain gate is required only when an integration Checkpoint is explicitly declared or bound to a Plan ChainScope. Active source bindings are rescanned at context, stream, validation, checkpoint, and project-command boundaries; file plus symbol/method name is stable identity, line ranges are derived. Use source_sync or changes_since(sourceSyncRevision=...) for compact drift deltas. An explicitly allowed external shell/IDE edit is detected at the next contextos boundary, not treated as a blocker. Chain reconciliation audits feature membership and order together: a related new Block should carry chain:<chain-id> and an explicit route Link, while safe forward route Links and high-confidence affiliated Blocks are attached automatically; an affinity tag without a route stays as an actionable membership gap; an intentional standalone Block carries standalone:<reason>. Feedback, read and dependency relations remain visible as cross-cutting edges when they would create a cycle. Repeat projectRoot when practical and change it explicitly when switching projects. Use graph_mutate for durable architecture/progress changes, checkpoint_record for evidence, changes_since for compact synchronization, change_set_revert only for safe update-only rollback, and graph_validate after structural or completion updates. Register an uninitialized directory with project_register before other tools."
   }
 );
 var projectRootInput = {
@@ -34790,10 +35268,11 @@ server.registerTool(
 server.registerTool(
   "chain_reconcile",
   {
-    description: "Reconcile an existing Chain's declared order with its explicit Link network. Safe forward DAGs are reordered automatically; cycles, backward edges, and disconnected components are returned as actionable issues.",
+    description: "Reconcile an existing Chain's feature membership and declared order. Explicitly affiliated or high-confidence linked Blocks and missing forward route Links are added automatically; an affinity Block without a route is returned as a membership gap. Feedback, read and dependency relations stay visible as cross-cutting edges when they would create a cycle. Cycles, backward edges and disconnected components remain actionable issues.",
     inputSchema: {
       ...projectRootInput,
       chainId: string2().min(1),
+      autoExpand: boolean2().default(true),
       autoReorder: boolean2().default(true),
       actor: string2().optional(),
       reason: string2().optional(),
@@ -34801,11 +35280,15 @@ server.registerTool(
     }
   },
   async (input) => {
-    const data = withProject(input, (service, payload) => service.reconcileChainTopology(payload));
+    const data = withProject(input, (service, payload) => {
+      const network = service.reconcileChainNetwork({ chainId: payload.chainId, autoExpand: payload.autoExpand, reason: payload.reason || "Reconcile Chain feature network" });
+      const topology = service.reconcileChainTopology({ chainId: payload.chainId, autoReorder: payload.autoReorder, reason: payload.reason || "Reconcile Chain topology" });
+      return { ...network, topology, changedChainIds: [.../* @__PURE__ */ new Set([...network.changedChainIds || [], ...topology.changedChainIds || []])], issues: [...(network.reports || []).flatMap((report) => report.issues || []), ...topology.issues || []], graphRevision: service.project().graph_revision };
+    });
     const markdown = [
       `# Chain topology reconciliation: ${input.chainId}`,
       `- Graph revision: ${data.graphRevision}`,
-      `- Reordered: ${data.changedChainIds?.length ? data.changedChainIds.map((id) => `chain:${id}`).join(", ") : "none"}`,
+      `- Reconciled: ${data.changedChainIds?.length ? data.changedChainIds.map((id) => `chain:${id}`).join(", ") : "none"}`,
       ...data.issues?.length ? ["", "## Issues", ...data.issues.map((issue2) => `- ${issue2.detail}`)] : ["- Topology is ordered and connected."]
     ].join("\n");
     return writeResult(data, markdown, input.includeStructured, "chain_reconcile");

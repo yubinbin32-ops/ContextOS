@@ -68,28 +68,28 @@ Describe the feature, fix, review, or design in the same way you would with a te
 
 ## Reproducible benchmark
 
-The measurements below were run on September 12, 2026 against an isolated graph revision 1052 snapshot. They measure service responses and JavaScript UTF-16 characters, showing the content boundary returned to the AI.
+The measurements below were run on September 12, 2026 against an isolated graph revision 1093 snapshot. They measure service responses and JavaScript UTF-16 characters, showing the content boundary returned to the AI.
 
 | Measurement | Result |
 |---|---:|
-| Full graph reference | 902,651 characters |
+| Full graph reference | 1,216,655 characters |
 | Task context budget | 4,000 characters |
-| Context reduction | **99.56%** (902,651 → 4,000) |
+| Context reduction | **99.67%** (1,216,655 → 4,000) |
 | Four complete source files → locator stream | **99.09%** (226,522 → 2,071) |
 | Fixed synthetic build log | **91.78%** (10,071 → 828), with the error and failure retained |
 | Context query samples | 12 local calls |
-| Query latency p50 / p95 | **896.97 ms / 960.26 ms** |
+| Query latency p50 / p95 | **1,161.29 ms / 1,349.72 ms** |
 
 Each of the four task queries returned the expected Block and visible locator within the 4,000-character budget:
 
 | Query | Expected Block | Latencies (ms) | Reduction |
 |---|---|---:|---:|
-| OpenCode platform support and MCP injection | `in-app-plugin-install` | 944.04 · 896.06 · 901.90 | 99.56% |
-| Git Discard and SQLite hot reload | `sqlite-graph-store` | 915.15 · 894.62 · 896.94 | 99.56% |
-| CJK tokenization and BM25 weighted search | `context-retrieval` | 942.46 · 960.26 · 896.97 | 99.56% |
-| SourceBinding path and symbol synchronization | `live-binding-refresh` | 927.23 · 895.67 · 895.24 | 99.56% |
+| OpenCode platform support and MCP injection | `in-app-plugin-install` | 1226.01 · 1155.62 · 1160.94 | 99.67% |
+| Git Discard and SQLite hot reload | `sqlite-graph-store` | 1151.74 · 1161.29 · 1174.02 | 99.67% |
+| CJK tokenization and BM25 weighted search | `context-retrieval` | 1150.43 · 1162.48 · 1151.02 | 99.67% |
+| SourceBinding path and symbol synchronization | `live-binding-refresh` | 1349.72 · 1173.70 · 1214.53 | 99.67% |
 
-The Chain measurement used `chain-context-os` and returned four anchored locators: `ast-facade-engine/extractSymbols`, `progressive-materializer/addSourceRef`, `terminal-sanitizer/sanitizeTerminalOutput`, and `desktop-context-console/chainCodeStreamSection`. The full raw data is in [`docs/benchmarks/2026-09-12-v040.json`](docs/benchmarks/2026-09-12-v040.json).
+The Chain measurement used `chain-context-os` and returned four anchored locators: `ast-facade-engine/extractSymbols`, `progressive-materializer/addSourceRef`, `terminal-sanitizer/sanitizeTerminalOutput`, and `desktop-context-console/chainCodeStreamSection`. The full raw data is in [`docs/benchmarks/2026-09-12-v040-chain-network.json`](docs/benchmarks/2026-09-12-v040-chain-network.json).
 
 In daily use, context compaction feels roughly 60% less frequent.
 
@@ -98,7 +98,7 @@ The benchmark records service responses, character reduction, and local call lat
 Run the measurement again after changing the service or graph:
 
 ```bash
-npm run benchmark -- --output docs/benchmarks/2026-09-12-v040.json
+npm run benchmark -- --output docs/benchmarks/2026-09-12-v040-chain-network.json
 ```
 
 ## For contributors

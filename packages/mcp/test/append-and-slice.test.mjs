@@ -235,3 +235,120 @@ test("context boundary advances a bound ghost Block without marking it complete"
   router.close();
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
+
+test("Chain network reconciliation absorbs an explicitly affiliated linked Block", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-network-affinity-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-network-affinity-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create affiliated feature network", operations: [
+    { action: "create_block", id: "plugin-root", fields: { title: "Plugin root", kind: "integration", architectureLayer: "boundary", scope: "codex", tags: ["plugin"] } },
+    { action: "create_block", id: "plugin-lifecycle", fields: { title: "Plugin lifecycle", kind: "service", architectureLayer: "application", scope: "codex", tags: ["plugin", "chain:plugin-release"] } },
+    { action: "create_link", id: "plugin-root-to-lifecycle", fields: { sourceType: "block", sourceId: "plugin-root", targetType: "block", targetId: "plugin-lifecycle", kind: "calls", contract: "Plugin root calls lifecycle" } },
+    { action: "create_chain", id: "plugin-release", fields: { title: "Plugin release", purpose: "delivery", intent: "Install and reload the plugin", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "plugin-release", expectedRevision: 1, fields: { nodeIds: ["plugin-root"], linkIds: [] } },
+  ] });
+  service.database.prepare("UPDATE chains SET delivery_state = 'complete', health_state = 'healthy' WHERE id = 'plugin-release'").run();
+  const result = service.reconcileChainNetwork({ chainId: "plugin-release", autoExpand: true });
+  assert.deepEqual(result.changedChainIds, ["plugin-release"]);
+  assert.equal(result.reports[0].complete, true);
+  assert.deepEqual(result.reports[0].missingInternalLinks, []);
+  assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "plugin-release").sort((a, b) => a.position - b.position).map((item) => item.blockId), ["plugin-root", "plugin-lifecycle"]);
+  assert.deepEqual(service.snapshot().chainEdges.filter((item) => item.chainId === "plugin-release").map((item) => item.linkId), ["plugin-root-to-lifecycle"]);
+  assert.equal(service.snapshot().chains.find((item) => item.id === "plugin-release")?.deliveryState, "implementing");
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("Chain network reconciliation attaches a safe internal route Link and leaves feedback cycles outside", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-network-link-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-network-link-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create internal route fixture", operations: [
+    ...["first", "second"].map((id) => ({ action: "create_block", id, fields: { title: id, kind: "service", architectureLayer: "application", scope: "feature" } })),
+    { action: "create_link", id: "first-second", fields: { sourceType: "block", sourceId: "first", targetType: "block", targetId: "second", kind: "flows_to", contract: "first -> second" } },
+    { action: "create_link", id: "second-first", fields: { sourceType: "block", sourceId: "second", targetType: "block", targetId: "first", kind: "flows_to", contract: "feedback" } },
+    { action: "create_chain", id: "route-chain", fields: { title: "Route", intent: "first to second", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "route-chain", expectedRevision: 1, fields: { nodeIds: ["first", "second"], linkIds: [] } },
+  ] });
+  const result = service.reconcileChainNetwork({ chainId: "route-chain", autoExpand: true });
+  assert.equal(result.changed, true);
+  assert.equal(result.reports[0].complete, false);
+  assert.deepEqual(result.reports[0].missingInternalLinks.map((link) => link.id), ["second-first"]);
+  assert.deepEqual(service.snapshot().chainEdges.filter((item) => item.chainId === "route-chain").map((item) => item.linkId), ["first-second"]);
+  assert.ok(result.reports[0].skippedLinkIds.includes("second-first"));
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("Chain network reconciliation reaches affiliated Blocks transitively in one boundary", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-network-fixed-point-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-network-fixed-point-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create transitive feature fixture", operations: [
+    { action: "create_block", id: "root", fields: { title: "Root", kind: "service", architectureLayer: "application", scope: "feature" } },
+    { action: "create_block", id: "middle", fields: { title: "Middle", kind: "service", architectureLayer: "application", scope: "feature", tags: ["chain:fixed-point"] } },
+    { action: "create_block", id: "leaf", fields: { title: "Leaf", kind: "service", architectureLayer: "application", scope: "feature", tags: ["chain:fixed-point"] } },
+    { action: "create_link", id: "root-middle", fields: { sourceType: "block", sourceId: "root", targetType: "block", targetId: "middle", kind: "calls", contract: "root calls middle" } },
+    { action: "create_link", id: "middle-leaf", fields: { sourceType: "block", sourceId: "middle", targetType: "block", targetId: "leaf", kind: "calls", contract: "middle calls leaf" } },
+    { action: "create_chain", id: "fixed-point", fields: { title: "Fixed point", intent: "root to leaf", deliveryState: "planned" } },
+    { action: "set_chain_path", id: "fixed-point", expectedRevision: 1, fields: { nodeIds: ["root"], linkIds: [] } },
+  ] });
+  const result = service.reconcileChainNetwork({ chainId: "fixed-point", autoExpand: true });
+  assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "fixed-point").sort((a, b) => a.position - b.position).map((item) => item.blockId), ["root", "middle", "leaf"]);
+  assert.deepEqual(service.snapshot().chainEdges.filter((item) => item.chainId === "fixed-point").sort((a, b) => a.position - b.position).map((item) => item.linkId), ["root-middle", "middle-leaf"]);
+  assert.deepEqual(result.reports[0].autoExpandedBlockIds, ["middle", "leaf"]);
+  assert.ok(result.reports[0].passes >= 3);
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("Chain network reconciliation surfaces an affinity Block that is waiting for its route Link", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-network-gap-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-network-gap-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create affinity gap fixture", operations: [
+    { action: "create_block", id: "plugin-root", fields: { title: "Plugin root", kind: "integration", architectureLayer: "boundary", scope: "codex" } },
+    { action: "create_block", id: "plugin-orphan", fields: { title: "Plugin lifecycle", kind: "service", architectureLayer: "application", scope: "codex", tags: ["chain:plugin-release"] } },
+    { action: "create_chain", id: "plugin-release", fields: { title: "Plugin release", intent: "Install and reload the plugin" } },
+    { action: "set_chain_path", id: "plugin-release", expectedRevision: 1, fields: { nodeIds: ["plugin-root"], linkIds: [] } },
+  ] });
+  const result = service.reconcileChainNetwork({ chainId: "plugin-release", autoExpand: true });
+  assert.equal(result.changed, false);
+  assert.equal(result.reports[0].complete, false);
+  assert.deepEqual(result.reports[0].candidateBlocks.map((candidate) => candidate.blockId), ["plugin-orphan"]);
+  assert.equal(result.reports[0].candidateBlocks[0].requiresRouteLink, true);
+  assert.ok(result.reports[0].issues.some((issue) => issue.code === "affinity_missing_route"));
+  const audit = service.validate();
+  assert.ok(audit.errors.some((error) => error.includes("Chain network Block has no route Link")));
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+test("context boundary reconciles a newly written Block into a completed Chain", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-chain-context-boundary-test-"));
+  const router = new ProjectServiceRouter();
+  router.register({ projectRoot: tmpDir, name: "chain-context-boundary-test" });
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  service.mutate({ reason: "Create completed feature baseline", operations: [
+    { action: "create_block", id: "entry", fields: { title: "Entry", kind: "service", architectureLayer: "application", scope: "feature" } },
+    { action: "create_chain", id: "boundary-chain", fields: { title: "Boundary", intent: "Entry to newly written handler", inputContract: "input", outputContract: "output" } },
+    { action: "set_chain_path", id: "boundary-chain", expectedRevision: 1, fields: { nodeIds: ["entry"], linkIds: [] } },
+  ] });
+  service.database.prepare("UPDATE blocks SET delivery_state = 'complete', health_state = 'healthy' WHERE id = 'entry'").run();
+  service.database.prepare("UPDATE chains SET delivery_state = 'complete', health_state = 'healthy' WHERE id = 'boundary-chain'").run();
+  service.mutate({ reason: "Write a new feature Block and route", operations: [
+    { action: "create_block", id: "handler", fields: { title: "Handler", kind: "service", architectureLayer: "application", scope: "feature", tags: ["chain:boundary-chain"], deliveryState: "proposed" } },
+    { action: "create_link", id: "entry-handler", fields: { sourceType: "block", sourceId: "entry", targetType: "block", targetId: "handler", kind: "calls", contract: "Entry calls Handler" } },
+  ] });
+  const context = service.contextForTask({ task: "continue the boundary feature", maxChars: 1800 });
+  assert.deepEqual(context.chainNetwork.changedChainIds, ["boundary-chain"]);
+  assert.deepEqual(service.snapshot().chainNodes.filter((item) => item.chainId === "boundary-chain").sort((a, b) => a.position - b.position).map((item) => item.blockId), ["entry", "handler"]);
+  assert.deepEqual(service.snapshot().chainEdges.filter((item) => item.chainId === "boundary-chain").map((item) => item.linkId), ["entry-handler"]);
+  assert.equal(service.snapshot().chains.find((item) => item.id === "boundary-chain")?.deliveryState, "implementing");
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
