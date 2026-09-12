@@ -1,6 +1,6 @@
-# Contributing to mdflow
+# Contributing to contextos
 
-Thanks for helping improve mdflow. Focused bug reports, reproducible benchmark results, documentation fixes, and small pull requests are especially useful while the project is young.
+Thanks for helping improve contextos. Focused bug reports, reproducible benchmark results, documentation fixes, and small pull requests are especially useful while the project is young.
 
 ## Before opening an issue
 
@@ -29,12 +29,17 @@ The macOS app can be compiled with:
 npm run desktop:build
 ```
 
+### macOS Packaging & Distribution Policy (No DMG)
+
+- **Mandatory Packaging**: Always package `contextos.app` directly into a `.zip` archive (`contextos-macos.zip`) using `zip -r -y -q release-assets/contextos-macos.zip contextos.app`. The `-y` flag is required to preserve symlinks within the app bundle.
+- **Strictly Prohibit `.dmg`**: Do **not** use DMG disk images for distributing `contextos`. On modern macOS, launching ad-hoc signed apps from mounted read-only DMG volumes triggers macOS Gatekeeper App Translocation (`/private/var/folders/.../AppTranslocation`), causing read-only volume errors, theme and appearance rendering abnormalities, and runtime cache initialization failures. Direct `.zip` distribution extracts a clean, standard, writable `contextos.app` that runs without translocation anomalies.
+
 ## Pull requests
 
 - Keep the change focused and explain the concrete trigger and resulting behavior.
 - Add or update tests when behavior, storage, parsing, or rollback semantics change.
-- Keep `.mdflow/graph.json` synchronized when the change alters architecture, plans, or verification evidence.
-- Do not commit `.mdflow/mdflow.sqlite`, local credentials, generated build directories, or private project data.
+- Keep `.contextos/graph.json` synchronized when the change alters architecture, plans, or verification evidence.
+- Do not commit `.contextos/contextos.sqlite`, local credentials, generated build directories, or private project data.
 - Include screenshots for visible macOS app changes.
 
 By contributing, you agree that your work is licensed under the repository's [MIT License](LICENSE).

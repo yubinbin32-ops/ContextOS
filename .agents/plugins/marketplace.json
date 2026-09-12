@@ -1,14 +1,14 @@
 {
-  "name": "mdflow-development",
+  "name": "contextos-development",
   "interface": {
-    "displayName": "Mdflow Development"
+    "displayName": "ContextOS Development"
   },
   "plugins": [
     {
-      "name": "mdflow",
+      "name": "contextos",
       "source": {
         "source": "local",
-        "path": "./plugins/mdflow"
+        "path": "./plugins/contextos"
       },
       "policy": {
         "installation": "AVAILABLE",

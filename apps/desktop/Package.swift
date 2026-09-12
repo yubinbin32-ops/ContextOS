@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "mdflow-desktop",
+    name: "contextos-desktop",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "mdflow-desktop", targets: ["MdflowDesktop"])
+        .executable(name: "contextos-desktop", targets: ["ContextOSDesktop"])
     ],
     targets: [
         .systemLibrary(name: "CSQLite"),
         .executableTarget(
-            name: "MdflowDesktop",
+            name: "ContextOSDesktop",
             dependencies: ["CSQLite"]
         ),
     ]

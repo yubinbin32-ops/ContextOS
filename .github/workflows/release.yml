@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mdflow-release-${{ github.ref }}
+  group: contextos-release-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
@@ -54,8 +54,8 @@ jobs:
       - name: Build macOS app
         shell: bash
         run: |
-          xcodebuild -project apps/desktop/mdflow-desktop.xcodeproj \
-            -scheme mdflow-desktop \
+          xcodebuild -project apps/desktop/contextos-desktop.xcodeproj \
+            -scheme contextos-desktop \
             -configuration Release \
             -derivedDataPath dist/build \
             CODE_SIGN_IDENTITY="-" \
@@ -68,18 +68,15 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-assets
-          hdiutil create -volname "mdflow" \
-            -srcfolder dist/build/Build/Products/Release/mdflow.app \
-            -ov -format UDZO \
-            release-assets/mdflow-macos.dmg
-          cp plugins/mdflow/server/mdflow-mcp.mjs release-assets/mdflow-mcp.mjs
+          (cd dist/build/Build/Products/Release && zip -r -y -q "$GITHUB_WORKSPACE/release-assets/ContextOS-macos.zip" ContextOS.app)
+          cp plugins/contextos/server/contextos-mcp.mjs release-assets/contextos-mcp.mjs
           cd release-assets
-          shasum -a 256 mdflow-macos.dmg mdflow-mcp.mjs > SHA256SUMS
+          shasum -a 256 ContextOS-macos.zip contextos-mcp.mjs > SHA256SUMS
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: mdflow-${{ github.ref_name }}-${{ github.run_number }}
+          name: ContextOS-${{ github.ref_name }}-${{ github.run_number }}
           path: release-assets/*
           if-no-files-found: error
           retention-days: 14
@@ -93,22 +90,22 @@ jobs:
           prerelease: false
           generate_release_notes: true
           body: |
-            ## mdflow ${{ github.ref_name }}
+            ## ContextOS ${{ github.ref_name }}
 
-            A context operating system for AI coding agents: map the system on a native Canvas, stream task-scoped AST code, and apply verified mutations with automatic rollback.
+            Spatial architecture canvas and context optimization OS for AI coding agents. Task-focused code locators, persistent project knowledge, read-only README previews, and verified task completion via MCP.
 
             ### Highlights
 
             - Git-tracked architecture graph with Ghost Blueprints and AST-bound Solid Anchors
-            - Cross-file `chain_code_stream` with 99.2% fewer tokens in the included benchmark
+            - Cross-file `chain_code_stream` returning compact code locators; reproducible character measurements are documented in the README
             - Atomic `block_code_mutate` with verification and failure rollback
             - `log_sanitize` for compact agent-ready terminal evidence
-            - Native macOS Context Console plus cross-platform headless MCP and CLI
+            - Native macOS ContextOS app plus cross-platform headless MCP and CLI
 
             ### Get started
 
-            - **macOS 14+ app:** download `mdflow-macos.dmg`
-            - **MCP / CLI:** `npx -y github:yubinbin32-ops/Mdflow-Canvas@${{ github.ref_name }} init --scan`
+            - **macOS 14+ app:** download `ContextOS-macos.zip` (unzip and run `ContextOS.app`)
+            - **MCP / CLI:** `npx -y github:yubinbin32-ops/ContextOS@${{ github.ref_name }} init --scan`
             - **Integrity:** compare your downloads with `SHA256SUMS`
 
             The macOS build is currently ad-hoc signed. On first launch, Control-click the app and choose **Open** if macOS blocks it.

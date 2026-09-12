@@ -4,15 +4,15 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { openDatabase, exportGraphToJson, importGraphFromJson } from "../src/database.mjs";
-import { MdflowService } from "../src/service.mjs";
+import { ContextOSService } from "../src/service.mjs";
 
 test("storage: exportGraphToJson and importGraphFromJson round-trip", async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdflow-test-storage-"));
-  const mdflowDir = path.join(tmpDir, ".mdflow");
-  await fs.mkdir(mdflowDir, { recursive: true });
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-test-storage-"));
+  const contextosDir = path.join(tmpDir, ".contextos");
+  await fs.mkdir(contextosDir, { recursive: true });
 
-  const dbPath = path.join(mdflowDir, "mdflow.sqlite");
-  const jsonPath = path.join(mdflowDir, "graph.json");
+  const dbPath = path.join(contextosDir, "contextos.sqlite");
+  const jsonPath = path.join(contextosDir, "graph.json");
 
   const db = openDatabase(dbPath);
 
@@ -41,10 +41,10 @@ test("storage: exportGraphToJson and importGraphFromJson round-trip", async () =
   assert.equal(parsed.data.blocks[0].id, "block:test-1");
 
   // Create a second DB and import from graph.json
-  const tmpDir2 = await fs.mkdtemp(path.join(os.tmpdir(), "mdflow-test-import-"));
-  const mdflowDir2 = path.join(tmpDir2, ".mdflow");
-  await fs.mkdir(mdflowDir2, { recursive: true });
-  const dbPath2 = path.join(mdflowDir2, "mdflow.sqlite");
+  const tmpDir2 = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-test-import-"));
+  const contextosDir2 = path.join(tmpDir2, ".contextos");
+  await fs.mkdir(contextosDir2, { recursive: true });
+  const dbPath2 = path.join(contextosDir2, "contextos.sqlite");
 
   const db2 = openDatabase(dbPath2);
   const importResult = importGraphFromJson(db2, jsonPath);
@@ -62,16 +62,16 @@ test("storage: exportGraphToJson and importGraphFromJson round-trip", async () =
 });
 
 test("service: ensureSynced detects external graph.json modification", async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdflow-test-sync-"));
-  const mdflowDir = path.join(tmpDir, ".mdflow");
-  await fs.mkdir(mdflowDir, { recursive: true });
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-test-sync-"));
+  const contextosDir = path.join(tmpDir, ".contextos");
+  await fs.mkdir(contextosDir, { recursive: true });
 
   await fs.writeFile(
-    path.join(mdflowDir, "project.json"),
+    path.join(contextosDir, "project.json"),
     JSON.stringify({ id: "sync-test", name: "Sync Test" }, null, 2)
   );
 
-  const service = new MdflowService({ projectRoot: tmpDir });
+  const service = new ContextOSService({ projectRoot: tmpDir });
 
   // Mutate graph via service
   service.mutate({
@@ -83,7 +83,7 @@ test("service: ensureSynced detects external graph.json modification", async () 
         fields: {
           title: "Original Name",
           kind: "service",
-          deliveryState: "complete",
+          deliveryState: "implementing",
           healthState: "healthy",
           summary: "Original summary",
           scope: "test",
@@ -97,7 +97,7 @@ test("service: ensureSynced detects external graph.json modification", async () 
   assert.equal(blockBefore.entity.title, "Original Name");
 
   // Verify graph.json was auto-exported
-  const jsonPath = path.join(mdflowDir, "graph.json");
+  const jsonPath = path.join(contextosDir, "graph.json");
   const raw = await fs.readFile(jsonPath, "utf8");
   const graph = JSON.parse(raw);
   assert.equal(graph.data.blocks[0].title, "Original Name");
@@ -120,16 +120,16 @@ test("service: ensureSynced detects external graph.json modification", async () 
 });
 
 test("service: revertChangeSet rolls back created entities", async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdflow-test-revert-"));
-  const mdflowDir = path.join(tmpDir, ".mdflow");
-  await fs.mkdir(mdflowDir, { recursive: true });
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-test-revert-"));
+  const contextosDir = path.join(tmpDir, ".contextos");
+  await fs.mkdir(contextosDir, { recursive: true });
 
   await fs.writeFile(
-    path.join(mdflowDir, "project.json"),
+    path.join(contextosDir, "project.json"),
     JSON.stringify({ id: "revert-test", name: "Revert Test" }, null, 2)
   );
 
-  const service = new MdflowService({ projectRoot: tmpDir });
+  const service = new ContextOSService({ projectRoot: tmpDir });
 
   const mutationResult = service.mutate({
     reason: "Create temporary block",
@@ -168,3 +168,30 @@ test("service: revertChangeSet rolls back created entities", async () => {
   service.close();
   await fs.rm(tmpDir, { recursive: true, force: true });
 });
+
+test("router: serviceFor auto-registers uninitialized project on cold start", async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-test-autoreg-"));
+  // Note: NO .contextos directory created!
+  const { ProjectServiceRouter } = await import("../src/project-router.mjs");
+  const router = new ProjectServiceRouter();
+
+  // serviceFor should automatically create .contextos/project.json and initialize
+  const service = router.serviceFor({ projectRoot: tmpDir });
+  assert.ok(service);
+
+  // Check project.json was created
+  const projectJson = JSON.parse(await fs.readFile(path.join(tmpDir, ".contextos", "project.json"), "utf8"));
+  assert.ok(projectJson.id);
+  assert.ok(projectJson.name);
+
+  // Check graph.json was created
+  assert.ok(await fs.stat(path.join(tmpDir, ".contextos", "graph.json")));
+
+  // Check context_for_task runs smoothly
+  const context = service.contextForTask({ task: "Initial development" });
+  assert.ok(context.markdown.includes("# Task Context"));
+
+  router.close();
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+

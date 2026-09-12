@@ -49,3 +49,24 @@ test("sanitizer: captures error context and collapses intermediate noise", () =>
   assert.ok(res.text.includes("non-error output collapsed"));
   assert.ok(parseFloat(res.reductionRatio) > 50);
 });
+
+test("sanitizer: redacts credentials and local paths before returning context", () => {
+  const res = sanitizeTerminalOutput(
+    "OPENAI_API_KEY=sk-proj-secret123\nAuthorization: Bearer eyJsecret\n/Users/tester/project/src/app.ts:12",
+    { exitCode: 0, projectRoot: "/Users/tester/project", homeDirectory: "/Users/tester" },
+  );
+
+  assert.equal(res.hasErrors, false);
+  assert.ok(!res.text.includes("sk-proj-secret123"));
+  assert.ok(!res.text.includes("eyJsecret"));
+  assert.ok(!res.text.includes("/Users/tester/project"));
+  assert.ok(res.text.includes("[REDACTED]"));
+  assert.ok(res.text.includes("$PROJECT"));
+  assert.ok(res.redactions >= 3);
+});
+
+test("sanitizer: explicit success exit code overrides failure words and maxChars is enforced", () => {
+  const res = sanitizeTerminalOutput("test error context\n".repeat(50), { exitCode: 0, maxChars: 100 });
+  assert.equal(res.hasErrors, false);
+  assert.ok(res.finalChars <= 100);
+});

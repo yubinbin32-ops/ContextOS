@@ -1,3 +1,4 @@
+import { WORKSPACE_SCHEMA } from "./workspace-schema.mjs";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,6 +11,8 @@ CREATE TABLE IF NOT EXISTS projects (
   repo_root TEXT NOT NULL,
   graph_revision INTEGER NOT NULL DEFAULT 0,
   schema_version INTEGER NOT NULL DEFAULT 1,
+  handoff_json TEXT NOT NULL DEFAULT '{}',
+  timeline_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -62,6 +65,7 @@ CREATE TABLE IF NOT EXISTS chains (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  chain_type TEXT NOT NULL DEFAULT 'leaf' CHECK(chain_type IN ('leaf', 'composite')),
   purpose TEXT NOT NULL DEFAULT 'feature',
   intent TEXT NOT NULL DEFAULT '',
   input_contract TEXT NOT NULL DEFAULT '',
@@ -193,6 +197,8 @@ CREATE TABLE IF NOT EXISTS chain_members (
   member_type TEXT NOT NULL CHECK(member_type IN ('block', 'chain')),
   member_id TEXT NOT NULL,
   position INTEGER NOT NULL DEFAULT 0,
+  role TEXT NOT NULL DEFAULT 'stage',
+  required INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY(chain_id, member_type, member_id)
 );
 
@@ -280,6 +286,35 @@ CREATE TABLE IF NOT EXISTS checkpoints (
   current_revision INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+
+-- Runtime evidence produced by the controlled command gateway.  Receipts are
+-- deliberately compact: raw stdout/stderr never enters the graph projection.
+CREATE TABLE IF NOT EXISTS execution_receipts (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  command TEXT NOT NULL,
+  cwd TEXT NOT NULL DEFAULT '.',
+  execution_kind TEXT NOT NULL DEFAULT 'command',
+  status TEXT NOT NULL,
+  exit_code INTEGER,
+  timed_out INTEGER NOT NULL DEFAULT 0,
+  signal TEXT,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  stdout_bytes INTEGER NOT NULL DEFAULT 0,
+  stderr_bytes INTEGER NOT NULL DEFAULT 0,
+  output TEXT NOT NULL DEFAULT '',
+  original_chars INTEGER NOT NULL DEFAULT 0,
+  final_chars INTEGER NOT NULL DEFAULT 0,
+  redactions INTEGER NOT NULL DEFAULT 0,
+  git_head TEXT,
+  dirty_diff_hash TEXT,
+  source_sync_revision INTEGER,
+  source_revision TEXT,
+  test_summary_json TEXT NOT NULL DEFAULT '{}',
+  artifact_summary_json TEXT NOT NULL DEFAULT '{}',
+  external INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS checkpoint_bindings (
@@ -449,6 +484,8 @@ function addColumnIfMissing(database, table, column, definition) {
 }
 
 function migratePlanWorkflow(database) {
+  addColumnIfMissing(database, "projects", "handoff_json", "TEXT NOT NULL DEFAULT '{}'");
+  addColumnIfMissing(database, "projects", "timeline_json", "TEXT NOT NULL DEFAULT '{}'");
   addColumnIfMissing(database, "plans", "phase", "TEXT NOT NULL DEFAULT 'implementation'");
   addColumnIfMissing(database, "plans", "plan_order", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(database, "plans", "completion_policy_json", "TEXT NOT NULL DEFAULT '{}'");
@@ -575,16 +612,41 @@ function migratePlanWorkflow(database) {
   `);
 }
 
+function migrateChainComposition(database) {
+  addColumnIfMissing(database, "chains", "chain_type", "TEXT NOT NULL DEFAULT 'leaf'");
+  addColumnIfMissing(database, "chain_members", "role", "TEXT NOT NULL DEFAULT 'stage'");
+  addColumnIfMissing(database, "chain_members", "required", "INTEGER NOT NULL DEFAULT 1");
+  database.exec("CREATE INDEX IF NOT EXISTS idx_chain_members_chain ON chain_members(chain_id, position, member_type, member_id);");
+  // A legacy chain_members row with a child Chain already expresses a
+  // Composite Chain. Preserve it and make the type explicit for new readers.
+  database.exec(`
+    UPDATE chains SET chain_type = 'composite'
+    WHERE id IN (SELECT chain_id FROM chain_members WHERE member_type = 'chain')
+      AND COALESCE(chain_type, 'leaf') <> 'composite';
+  `);
+}
+
 function backfillChainPaths(database) {
-  const legacyMemberCount = database.prepare("SELECT COUNT(*) AS count FROM chain_members").get().count;
-  if (legacyMemberCount > 0) {
-    database.exec(`
-      INSERT OR IGNORE INTO chain_nodes(chain_id, block_id, position, role)
-      SELECT chain_id, member_id, position, 'path'
-      FROM chain_members WHERE member_type = 'block';
-      DELETE FROM chain_members;
-    `);
+  const legacyBlockRows = database.prepare(`
+    SELECT cm.chain_id, cm.member_id, cm.position
+    FROM chain_members cm
+    JOIN chains c ON c.id = cm.chain_id
+    WHERE cm.member_type = 'block' AND COALESCE(c.chain_type, 'leaf') = 'leaf'
+      AND NOT EXISTS (SELECT 1 FROM chain_nodes cn WHERE cn.chain_id = cm.chain_id)
+  `).all();
+  for (const row of legacyBlockRows) {
+    database.prepare("INSERT OR IGNORE INTO chain_nodes(chain_id, block_id, position, role) VALUES (?, ?, ?, 'path')")
+      .run(row.chain_id, row.member_id, row.position);
+    database.prepare("DELETE FROM chain_members WHERE chain_id = ? AND member_type = 'block' AND member_id = ?")
+      .run(row.chain_id, row.member_id);
   }
+  // Rows left on a Leaf Chain are legacy duplicates of chain_nodes. Remove
+  // only those rows; Composite Chain memberships remain durable.
+  database.exec(`
+    DELETE FROM chain_members
+    WHERE member_type = 'block'
+      AND EXISTS (SELECT 1 FROM chains c WHERE c.id = chain_members.chain_id AND COALESCE(c.chain_type, 'leaf') = 'leaf');
+  `);
 
   const missingEdgeCount = database.prepare(`
     SELECT COUNT(*) AS count
@@ -625,15 +687,20 @@ export function openDatabase(databasePath) {
   database.exec("PRAGMA journal_mode = DELETE;");
   database.exec("PRAGMA foreign_keys = ON;");
   database.exec(SCHEMA);
+  database.exec(WORKSPACE_SCHEMA);
   migratePlanCapableTables(database);
   migrateBlockArchitecture(database);
   migratePlanWorkflow(database);
+  migrateChainComposition(database);
   backfillChainPaths(database);
   return database;
 }
 
+const activeTransactions = new WeakSet();
+export const inTransaction = database => activeTransactions.has(database);
 export function transaction(database, callback) {
   database.exec("BEGIN IMMEDIATE;");
+  activeTransactions.add(database);
   try {
     const result = callback();
     database.exec("COMMIT;");
@@ -641,14 +708,19 @@ export function transaction(database, callback) {
   } catch (error) {
     database.exec("ROLLBACK;");
     throw error;
+  } finally {
+    activeTransactions.delete(database);
   }
 }
 
 export const GRAPH_TABLES = [
+  { name: "documents", orderBy: "id" },
+  { name: "document_versions", orderBy: "document_id, revision" },
   { name: "projects", orderBy: "id" },
   { name: "blocks", orderBy: "id" },
   { name: "source_refs", orderBy: "block_id, id" },
   { name: "chains", orderBy: "id" },
+  { name: "chain_members", orderBy: "chain_id, position, member_type, member_id" },
   { name: "chain_nodes", orderBy: "chain_id, position, block_id" },
   { name: "chain_edges", orderBy: "chain_id, position, link_id" },
   { name: "links", orderBy: "id" },
@@ -664,6 +736,9 @@ export const GRAPH_TABLES = [
   { name: "plan_changes", orderBy: "plan_id, position, id" },
   { name: "plan_chain_change_refs", orderBy: "chain_scope_id, plan_change_id" },
   { name: "checkpoints", orderBy: "id" },
+  // Execution receipts are runtime evidence, not architecture. Keep them in
+  // the project database so checkpoints can reference them, but do not copy
+  // command output into graph.json or every architecture diff becomes noisy.
   { name: "checkpoint_bindings", orderBy: "checkpoint_id, position, subject_type, subject_id, role" },
   { name: "checkpoint_dependencies", orderBy: "parent_checkpoint_id, position, child_checkpoint_id" },
   { name: "localized_text", orderBy: "entity_type, entity_id, locale, field" },
@@ -700,7 +775,7 @@ export function queryRecentHistory(database, limit = 50) {
   return { changeSets, history, changeFeed };
 }
 
-export function exportGraphToJson(database, jsonPath, options = {}) {
+function graphProjection(database, options = {}) {
   const limit = options.maxChangeSets ?? 50;
   const project = database.prepare("SELECT * FROM projects LIMIT 1").get();
   const exportData = {};
@@ -726,9 +801,16 @@ export function exportGraphToJson(database, jsonPath, options = {}) {
   const jsonString = `${JSON.stringify(payload, null, 2)}\n`;
   const hash = crypto.createHash("sha256").update(jsonString).digest("hex");
 
+  return { jsonString, hash, payload };
+}
+
+export function exportGraphToJson(database, jsonPath, options = {}) {
+  const { jsonString, hash, payload } = graphProjection(database, options);
   const directory = path.dirname(jsonPath);
   fs.mkdirSync(directory, { recursive: true });
   const temporaryPath = `${jsonPath}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  const pending = getSyncMeta(database).projection_pending;
+  if (pending) setSyncMeta(database, "projection_pending", JSON.stringify({ ...JSON.parse(pending), targetHash: hash }));
   fs.writeFileSync(temporaryPath, jsonString, "utf8");
   fs.renameSync(temporaryPath, jsonPath);
 
@@ -742,25 +824,21 @@ export function exportGraphToJson(database, jsonPath, options = {}) {
     // If sync_meta doesn't exist yet, ignore
   }
 
+  setSyncMeta(database, "projection_pending", "");
   return { jsonPath, hash, graphRevision: payload.graphRevision, mtimeMs: stat.mtimeMs };
 }
 
 export function importGraphFromJson(database, jsonPath) {
-  if (!fs.existsSync(jsonPath)) {
-    throw new Error(`graph.json not found at ${jsonPath}`);
-  }
-  const content = fs.readFileSync(jsonPath, "utf8");
-  const payload = JSON.parse(content);
-  if (!payload || !payload.data || typeof payload.data !== "object") {
-    throw new Error(`Invalid graph.json at ${jsonPath}: missing data object`);
-  }
-
-  const stat = fs.statSync(jsonPath);
-  const hash = crypto.createHash("sha256").update(content).digest("hex");
-
+  let hash, stat, payload;
   database.exec("PRAGMA foreign_keys = OFF;");
   try {
     database.exec("BEGIN IMMEDIATE;");
+    if (getSyncMeta(database).projection_pending) throw new Error("Pending projection must be recovered before importing an external graph; retry synchronization");
+    const content = fs.readFileSync(jsonPath, "utf8");
+    payload = JSON.parse(content);
+    if (!payload || !payload.data || typeof payload.data !== "object") throw new Error(`Invalid graph.json at ${jsonPath}: missing data object`);
+    stat = fs.statSync(jsonPath);
+    hash = crypto.createHash("sha256").update(content).digest("hex");
 
     const allTables = [
       ...GRAPH_TABLES.map((t) => t.name),
@@ -814,13 +892,33 @@ export function getSyncMeta(database) {
 }
 
 export function setSyncMeta(database, key, value) {
-  try {
-    database.prepare(`
-      INSERT INTO sync_meta(key, value) VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `).run(key, String(value));
-  } catch {
-    // ignore
-  }
+  database.prepare(`INSERT INTO sync_meta(key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, String(value));
 }
 
+// Call inside the same transaction as the graph write. Recovery never overwrites
+// an externally changed canonical graph without reporting a conflict.
+export function markProjectionPending(database) {
+  const meta = getSyncMeta(database);
+  if (!meta.projection_pending) setSyncMeta(database, "projection_pending", JSON.stringify({ baseHash: meta.graph_json_hash ?? null }));
+}
+export function flushProjection(database, jsonPath) {
+  return transaction(database, () => publishPendingProjection(database, jsonPath));
+}
+function publishPendingProjection(database, jsonPath) {
+  const meta = getSyncMeta(database);
+  if (!meta.projection_pending) return { status: "synced" };
+  const pending = JSON.parse(meta.projection_pending);
+  if (fs.existsSync(jsonPath)) {
+    const current = crypto.createHash("sha256").update(fs.readFileSync(jsonPath)).digest("hex");
+    if (current === graphProjection(database).hash) {
+      setSyncMeta(database, "graph_json_hash", current);
+      setSyncMeta(database, "projection_pending", "");
+      return { status: "synced", recovered: true };
+    }
+    if (pending.baseHash && current !== pending.baseHash && current !== meta.graph_json_hash) {
+      throw new Error("Projection conflict: graph.json changed externally while a database export was pending; preserve both versions and reconcile before writing");
+    }
+  }
+  return { status: "synced", ...exportGraphToJson(database, jsonPath) };
+}

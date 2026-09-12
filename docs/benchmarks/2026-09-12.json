@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-09-12T08:30:45.524Z",
+  "environment": {
+    "node": "v22.22.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1"
+  },
+  "source": {
+    "gitHead": "bf1968e157be1b324197cfc318ed47fa2747d8ba",
+    "graphRevision": 921,
+    "graphSha256": "80c31e032f7de10857374e7562307dde1b32e57d634ed6eaba1fdf1ab665a32a",
+    "scriptSha256": "5ae4576145fa83da478546f3f05315c24cb548ccbbf2ecd03ac862fbe5ea30ae",
+    "sourceManifest": [
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift",
+        "sha256": "2c85ab48a495223e36b7aa936cbc517bd85184903a715987b734b7b71be04190"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+        "sha256": "50ea0a2cc713c1d1bb7fe46604c1a03a6d6dfc99ba24542871278c5ac0e59a68"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+        "sha256": "86dff19d203ae11a8c10f87b404219b4c46f800c26e2e160030241ef86f9f84b"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
+        "sha256": "2bb19be8700674017cd53e32418cfe9d3f72ca4f7e0ac5567c0c7234c789b40c"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift",
+        "sha256": "672b309f85d7e93ac0ff0faa5680d18fdb4e5383fdea23e452548abec0b381c6"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+        "sha256": "912b45aaf850abdb98447432093a4e3edf58e38bb48388b7f62f2ed0625860c5"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+        "sha256": "69b840a8d0e549201d59a0daecb6a36f1ac952c12ef241480d0f9f56c5aeed13"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
+        "sha256": "33e27d4d24f5e0e8689c60e0c0ab7a52b0f4a6ce7ef6eaac5e9c1bf5bf171a3c"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+        "sha256": "5c6e37aa5045aa5338a8b6b6318e4b97dff77f6376d28313567e36d2bdad0a0d"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+        "sha256": "5a6e2a8e29d4d3184d7377413e91de4fca8dcc57df5a4a105bb1ae0ab0e630f5"
+      },
+      {
+        "path": "apps/desktop/Sources/ContextOSDesktop/Theme.swift",
+        "sha256": "ffb35332198052003084f48c6d9d6c9523581678d7bd9dd71bf7605081203fc9"
+      },
+      {
+        "path": "packages/mcp/src/architecture-link.mjs",
+        "sha256": "9f56d6e1d2f27182184b9ca0ed470d35e6802c97f368d65b5073446a83ca249c"
+      },
+      {
+        "path": "packages/mcp/src/ast.mjs",
+        "sha256": "e38785721037f00999ca665170f7dabea86bedcb7b3deec477c1eb256a3d7622"
+      },
+      {
+        "path": "packages/mcp/src/checkpoint-engine.mjs",
+        "sha256": "82f4c45e3166bce476b3dfd95753e46f0dcb93d4eabcb91c0bee8a86e91e9c5a"
+      },
+      {
+        "path": "packages/mcp/src/checkpoint-freshness.mjs",
+        "sha256": "3d078f29ce730d6573f95a993cc4b2535d5e02f230167330a2f811c4d53aa99c"
+      },
+      {
+        "path": "packages/mcp/src/context-engine.mjs",
+        "sha256": "a7ae36e18ae1c2117a5bf80ba6d126e07f93d87d52d8fc31721488e77248a538"
+      },
+      {
+        "path": "packages/mcp/src/database.mjs",
+        "sha256": "d074c4ad97ba4e86a7cd95af2c475e1b2bbb7a00dbaaa5b2c898da51007a2bf6"
+      },
+      {
+        "path": "packages/mcp/src/flow.mjs",
+        "sha256": "2b2459af0670c6ba4182b2822094d77d5d47040b7e5a25f574a49a956f4d3c94"
+      },
+      {
+        "path": "packages/mcp/src/mutation-engine.mjs",
+        "sha256": "f044bb44089d1d5db999037b89bb4db0b6d646242b7ce24f82c6ddcf943538f1"
+      },
+      {
+        "path": "packages/mcp/src/patch.mjs",
+        "sha256": "e027d7214bea8c38944b013e746b7af20a3159c22cb4eb6039c336030a032c53"
+      },
+      {
+        "path": "packages/mcp/src/paths.mjs",
+        "sha256": "92b8e6e487948b3cfe008d7f1ec429bbcb94b348fbbc3ed7be7793e32312659c"
+      },
+      {
+        "path": "packages/mcp/src/plan-engine.mjs",
+        "sha256": "04a15e8d578dc0d2f188f7c8a9ce87f7a33e9585c8d2f4cda0baf2567e3aa7dd"
+      },
+      {
+        "path": "packages/mcp/src/plugin-runtime.mjs",
+        "sha256": "c524752a09544b533fbe24f104a88cbaad07ff31e326efadced9081ec181d2f1"
+      },
+      {
+        "path": "packages/mcp/src/project-router.mjs",
+        "sha256": "e20838697977a59288db9c808a02461700c3376cd3fab5f8b38ed690f8a1d33c"
+      },
+      {
+        "path": "packages/mcp/src/query-engine.mjs",
+        "sha256": "63171c1f3c2abea6692d4fec49930cffb77233cd897df050d015bd068d5d9931"
+      },
+      {
+        "path": "packages/mcp/src/reference.mjs",
+        "sha256": "e253fe67f0a5e9b53415c7a180ab07eeb2b863b5329290d34354de2595861c75"
+      },
+      {
+        "path": "packages/mcp/src/sanitizer.mjs",
+        "sha256": "3a1bf972010554bd4c34824caef35964ab3ae5e975e88c98726d1cb3467a7e33"
+      },
+      {
+        "path": "packages/mcp/src/schema.mjs",
+        "sha256": "dd9d0133b1a44c54a9f7195f0c2de91005ce50bee876f307c441c62f44448835"
+      },
+      {
+        "path": "packages/mcp/src/server.mjs",
+        "sha256": "63d6fd3d2661f30cf5ec064a0152cc0e5a1a2b019b861efeceb322a001b9fbbb"
+      },
+      {
+        "path": "packages/mcp/src/service.mjs",
+        "sha256": "8d4c332023cb48ee389e284eb5cd5a8046c5c1ad41a59141e9a979fdf4ae4df8"
+      },
+      {
+        "path": "packages/mcp/src/source-binding.mjs",
+        "sha256": "b7a8787c5ff5f3793cadab77345f4e92d2ea2a0204c881d63a826555e031f2a7"
+      },
+      {
+        "path": "packages/mcp/src/task-budget.mjs",
+        "sha256": "c9e7e27ea5b729674c1f1ddefcc9c8d746e9c102827c23ab2ec178a585fe9235"
+      },
+      {
+        "path": "packages/mcp/src/timeline.mjs",
+        "sha256": "580d200e505ee7aa774bfbf51a2ad8c95eda88ed88bb5cce1b25a62ae1518a24"
+      },
+      {
+        "path": "plugins/contextos/.codex-plugin/plugin.json",
+        "sha256": "27e6d7544691cbfdadf159c2c60bef6192296934650347f3d57cdac0d30f2028"
+      },
+      {
+        "path": "plugins/contextos/skills/contextos/SKILL.md",
+        "sha256": "81ccfac82aee357272b7647c643b41bf98671268ebe1558d8a24ea48d3a64b53"
+      },
+      {
+        "path": "scripts/benchmark.mjs",
+        "sha256": "5ae4576145fa83da478546f3f05315c24cb548ccbbf2ecd03ac862fbe5ea30ae"
+      }
+    ],
+    "isolatedCopyWithoutGitOrExecutionReceipts": true,
+    "sourceGraphUnchanged": true
+  },
+  "scope": {
+    "blocks": 55,
+    "chains": 8,
+    "links": 81,
+    "checkpoints": 19
+  },
+  "unit": "JavaScript UTF-16 string length; not model tokens",
+  "taskContext": {
+    "fullGraphChars": 664887,
+    "budgetChars": 4000,
+    "cases": [
+      {
+        "task": "OpenCode 平台支持与 MCP 注入",
+        "expected": "in-app-plugin-install",
+        "chars": 3993,
+        "latencyMs": [
+          329.25,
+          319.53,
+          323.67
+        ],
+        "expectedRefReturned": false,
+        "expectedRefVisible": false,
+        "truncated": true,
+        "versusFullGraphReductionPercent": 99.4
+      },
+      {
+        "task": "Git Discard 撤回与本地 SQLite 热重载",
+        "expected": "sqlite-graph-store",
+        "chars": 3993,
+        "latencyMs": [
+          317.91,
+          318.54,
+          316.07
+        ],
+        "expectedRefReturned": true,
+        "expectedRefVisible": false,
+        "truncated": true,
+        "versusFullGraphReductionPercent": 99.4
+      },
+      {
+        "task": "CJK 中文分词与 BM25 字段加权检索",
+        "expected": "context-retrieval",
+        "chars": 3993,
+        "latencyMs": [
+          308.38,
+          308.96,
+          309.43
+        ],
+        "expectedRefReturned": false,
+        "expectedRefVisible": false,
+        "truncated": true,
+        "versusFullGraphReductionPercent": 99.4
+      },
+      {
+        "task": "源码 SourceBinding 路径符号同步",
+        "expected": "live-binding-refresh",
+        "chars": 3993,
+        "latencyMs": [
+          307.76,
+          310.46,
+          322.36
+        ],
+        "expectedRefReturned": true,
+        "expectedRefVisible": true,
+        "truncated": true,
+        "versusFullGraphReductionPercent": 99.4
+      }
+    ],
+    "samples": 12,
+    "p50Ms": 316.07,
+    "p95Ms": 329.25
+  },
+  "chain": {
+    "chainId": "chain-context-os",
+    "files": [
+      "packages/mcp/src/ast.mjs",
+      "packages/mcp/src/mutation-engine.mjs",
+      "packages/mcp/src/sanitizer.mjs",
+      "apps/desktop/Sources/ContextOSDesktop/DetailView.swift"
+    ],
+    "fullFileChars": 207727,
+    "locatorChars": 2059,
+    "reductionPercent": 99.01,
+    "nodes": [
+      {
+        "blockId": "ast-facade-engine",
+        "filePath": "packages/mcp/src/ast.mjs",
+        "symbol": "extractSymbols",
+        "sourceStatus": "anchored"
+      },
+      {
+        "blockId": "progressive-materializer",
+        "filePath": "packages/mcp/src/mutation-engine.mjs",
+        "symbol": "addSourceRef",
+        "sourceStatus": "anchored"
+      },
+      {
+        "blockId": "terminal-sanitizer",
+        "filePath": "packages/mcp/src/sanitizer.mjs",
+        "symbol": "sanitizeTerminalOutput",
+        "sourceStatus": "anchored"
+      },
+      {
+        "blockId": "desktop-context-console",
+        "filePath": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+        "symbol": "chainCodeStreamSection",
+        "sourceStatus": "anchored"
+      }
+    ],
+    "truncated": false
+  },
+  "syntheticLog": {
+    "fixture": "200 deterministic compilation lines plus one module error; NOT a real build",
+    "rawChars": 10071,
+    "compressedChars": 828,
+    "reductionPercent": 91.78,
+    "errorRetained": true,
+    "failureRetained": true
+  },
+  "limitations": [
+    "Service-level only: excludes MCP envelope, tool definitions, skill, follow-up source reads and reasoning.",
+    "Full graph and full files are size references, not a controlled competent-agent baseline.",
+    "12 local calls include mixed first/warm reads; not production latency percentiles.",
+    "Four expected refs are diagnostics, not general recall; hidden structured refs are not visible recall.",
+    "No session compaction count, model token usage, cost or task success comparison measured."
+  ]
+}

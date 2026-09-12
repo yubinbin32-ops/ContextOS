@@ -1,0 +1,38 @@
+{
+  "name": "contextos",
+  "version": "0.4.1",
+  "description": "Task-focused code locators, persistent project knowledge, read-only README previews and verified task completion via MCP.",
+  "author": {
+    "name": "ContextOS"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "ContextOS",
+    "shortDescription": "Task-scoped project context and live architecture sync.",
+    "longDescription": "Read only the project context needed for the current task, then keep blocks, chains, links, code references, progress, and checkpoints synchronized as the implementation changes.",
+    "developerName": "ContextOS",
+    "brandColor": "#111111",
+    "composerIcon": "./assets/topic-logo.png",
+    "logo": "./assets/topic-logo.png",
+    "logoDark": "./assets/topic-logo-dark.png",
+    "category": "Productivity",
+    "capabilities": [
+      "Project context retrieval",
+      "Contract-first AST code streams",
+      "Live source binding synchronization",
+      "Task-scoped shared context budgets",
+      "Redacted project-local command gateway",
+      "AST locators and source-drift protection",
+      "Checkpoint freshness and retest gating",
+      "Architecture and progress synchronization",
+      "Checkpoint evidence",
+      "OS Markdown documents and chapter retrieval",
+      "Persistent task reconciliation and resumable handoffs",
+      "Read-only README in the knowledge reader"
+    ],
+    "defaultPrompt": [
+      "Use ContextOS to understand this task and keep its project graph synchronized."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

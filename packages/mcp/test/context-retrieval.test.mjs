@@ -3,19 +3,19 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { MdflowService } from "../src/service.mjs";
+import { ContextOSService } from "../src/service.mjs";
 
 test("context retrieval: CJK tokens and field-weighted relevance ranking", async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdflow-test-retrieval-"));
-  const mdflowDir = path.join(tmpDir, ".mdflow");
-  await fs.mkdir(mdflowDir, { recursive: true });
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-test-retrieval-"));
+  const contextosDir = path.join(tmpDir, ".contextos");
+  await fs.mkdir(contextosDir, { recursive: true });
 
   await fs.writeFile(
-    path.join(mdflowDir, "project.json"),
+    path.join(contextosDir, "project.json"),
     JSON.stringify({ id: "retrieval-test", name: "Retrieval Test" }, null, 2)
   );
 
-  const service = new MdflowService({ projectRoot: tmpDir });
+  const service = new ContextOSService({ projectRoot: tmpDir });
 
   // Create blocks with different field matches
   service.mutate({
@@ -27,7 +27,7 @@ test("context retrieval: CJK tokens and field-weighted relevance ranking", async
         fields: {
           title: "用户认证接口",
           kind: "service",
-          deliveryState: "complete",
+          deliveryState: "implementing",
           healthState: "healthy",
           summary: "处理 JWT Token 校验与用户会话状态",
           scope: "auth",
@@ -40,7 +40,7 @@ test("context retrieval: CJK tokens and field-weighted relevance ranking", async
         fields: {
           title: "持久化存储引擎",
           kind: "database",
-          deliveryState: "complete",
+          deliveryState: "implementing",
           healthState: "healthy",
           summary: "基于 SQLite 与 JSON 的原子提交管理",
           scope: "database",
@@ -53,7 +53,7 @@ test("context retrieval: CJK tokens and field-weighted relevance ranking", async
         fields: {
           title: "Git 版本同步与原子撤回",
           kind: "service",
-          deliveryState: "complete",
+          deliveryState: "implementing",
           healthState: "healthy",
           summary: "支持通过 Git Discard 撤回代码与图谱真理源",
           scope: "sync",

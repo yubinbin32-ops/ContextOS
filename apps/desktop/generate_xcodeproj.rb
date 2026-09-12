@@ -4,7 +4,7 @@ require "fileutils"
 require "xcodeproj"
 
 root = File.expand_path(__dir__)
-project_path = File.join(root, "mdflow-desktop.xcodeproj")
+project_path = File.join(root, "contextos-desktop.xcodeproj")
 FileUtils.rm_rf(project_path)
 
 project = Xcodeproj::Project.new(project_path)
@@ -13,15 +13,15 @@ project.root_object.compatibility_version = "Xcode 3.2"
 project.root_object.development_region = "en"
 project.root_object.known_regions = ["en", "Base"]
 
-target = project.new_target(:application, "mdflow-desktop", :osx, "14.0")
-target.product_name = "mdflow"
+target = project.new_target(:application, "contextos-desktop", :osx, "14.0")
+target.product_name = "contextos"
 
 sources_group = project.main_group.new_group("Sources", "Sources")
-app_group = sources_group.new_group("MdflowDesktop", "MdflowDesktop")
+app_group = sources_group.new_group("ContextOSDesktop", "ContextOSDesktop")
 sqlite_group = sources_group.new_group("CSQLite", "CSQLite")
 resources_group = project.main_group.new_group("Resources", "Resources")
 
-swift_files = Dir[File.join(root, "Sources", "MdflowDesktop", "*.swift")].sort
+swift_files = Dir[File.join(root, "Sources", "ContextOSDesktop", "*.swift")].sort
 swift_files.each do |path|
   target.add_file_references([app_group.new_file(path)])
 end
@@ -32,12 +32,12 @@ shim_header = sqlite_group.new_file(File.join(root, "Sources", "CSQLite", "shim.
 app_icon = resources_group.new_file(File.join(root, "Resources", "AppIcon.icns"))
 target.resources_build_phase.add_file_reference(app_icon)
 
-plugin_phase = target.new_shell_script_build_phase("Embed mdflow Codex plugin")
+plugin_phase = target.new_shell_script_build_phase("Embed contextos Codex plugin")
 plugin_phase.shell_script = <<~'SCRIPT'
   set -eu
   marketplace_root="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/MarketplaceRoot"
   mkdir -p "${marketplace_root}/plugins" "${marketplace_root}/.agents/plugins"
-  /usr/bin/rsync -a "${SRCROOT}/../../plugins/mdflow/" "${marketplace_root}/plugins/mdflow/"
+  /usr/bin/rsync -a "${SRCROOT}/../../plugins/contextos/" "${marketplace_root}/plugins/contextos/"
   /usr/bin/rsync -a "${SRCROOT}/../../.agents/plugins/" "${marketplace_root}/.agents/plugins/"
 SCRIPT
 plugin_phase.run_only_for_deployment_postprocessing = false
@@ -46,8 +46,8 @@ plugin_phase.output_paths = [
 ]
 
 common_settings = {
-  "PRODUCT_BUNDLE_IDENTIFIER" => "com.mdflow.desktop",
-  "PRODUCT_NAME" => "mdflow",
+  "PRODUCT_BUNDLE_IDENTIFIER" => "com.contextos.desktop",
+  "PRODUCT_NAME" => "contextos",
   "INFOPLIST_FILE" => "Resources/Info.plist",
   "GENERATE_INFOPLIST_FILE" => "NO",
   "MACOSX_DEPLOYMENT_TARGET" => "14.0",
@@ -91,7 +91,7 @@ scheme = Xcodeproj::XCScheme.new
 scheme.configure_with_targets(target, nil, launch_target: true)
 scheme.archive_action = Xcodeproj::XCScheme::ArchiveAction.new
 scheme.archive_action.build_configuration = "Release"
-scheme.save_as(project_path, "mdflow-desktop", true)
+scheme.save_as(project_path, "contextos-desktop", true)
 
 project.save
 puts "Generated #{project_path}"

@@ -1,0 +1,11 @@
+.git
+.github
+.contextos
+node_modules
+dist
+release-assets
+apps
+assets
+plugins
+coverage
+*.log

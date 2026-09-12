@@ -1,23 +1,26 @@
+import { indexSources, reconcileTask } from "./reconciliation.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { registerProject, resolveProjectPaths } from "./paths.mjs";
 import { exportGraphToJson, importGraphFromJson } from "./database.mjs";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.1";
 
 const HELP = `
-mdflow v${VERSION}: A context operating system for AI coding agents.
+ContextOS v${VERSION}: A context operating system for AI coding agents.
 
 Usage:
-  mdflow [command] [options]
+  contextos [command] [options]
 
 Commands:
   serve                 Start MCP stdio server (default when invoked by AI editors)
-  init [--scan]         Initialize .mdflow project (optionally scan code to seed blocks)
+  init [--scan]         Initialize .contextos project (optionally scan code to seed blocks)
+  sync                  Reconcile source inventory and unfinished tasks
   status                Show graph revision, blocks, chains, and active plans
-  export                Export .mdflow/graph.json from local SQLite cache
-  import                Import .mdflow/graph.json into local SQLite cache
+  code --path <file>    Read one bounded source range returned by a locator
+  export                Export .contextos/graph.json from local SQLite cache
+  import                Import .contextos/graph.json into local SQLite cache
   setup                 Configure MCP in Cursor, Claude Desktop, and VS Code
 
 Options:
@@ -34,23 +37,98 @@ export async function runCli(args, router) {
   }
 
   if (command === "-v" || command === "--version" || command === "version") {
-    console.log(`mdflow v${VERSION}`);
+    console.log(`ContextOS v${VERSION}`);
     return;
   }
 
+  if (command === "code" || command === "source") {
+    const projectRoot = process.cwd();
+    const value = (name) => {
+      const index = args.findIndex((item) => item === name);
+      return index >= 0 ? args[index + 1] : undefined;
+    };
+    const filePath = value("--path") ?? value("--file");
+    const symbol = value("--symbol");
+    const startLine = value("--start") ?? value("--start-line");
+    const endLine = value("--end") ?? value("--end-line");
+    const maxLines = value("--max-lines");
+    const maxChars = value("--max-chars");
+    const expectedHash = value("--hash");
+    const asJson = args.includes("--json");
+    try {
+      if (!filePath) throw new Error("code requires --path <file>");
+      if (!symbol && (!startLine || !endLine)) {
+        throw new Error("code requires --symbol <name> or --start <line> --end <line>");
+      }
+      const service = router.serviceFor({ projectRoot, autoRegister: false });
+      const result = service.readSourceSlice({
+        filePath,
+        symbol: symbol ?? null,
+        startLine: startLine ? Number(startLine) : null,
+        endLine: endLine ? Number(endLine) : null,
+        maxLines: maxLines ? Number(maxLines) : 240,
+        maxChars: maxChars ? Number(maxChars) : 12000,
+        expectedHash: expectedHash ?? null,
+      });
+      if (asJson) console.log(JSON.stringify(result, null, 2));
+      else {
+        console.log(`# ${result.path}${result.symbol ? ` :: ${result.symbol}` : ""}`);
+        console.log(`# Lines: ${result.startLine ?? "?"}-${result.endLine ?? "?"} · Status: ${result.status}${result.truncated ? " · truncated" : ""}`);
+        if (result.reason) console.log(`# Note: ${result.reason}`);
+        if (result.code) console.log(result.code);
+      }
+      if (!result.found) process.exitCode = 2;
+    } catch (error) {
+      console.error(`Code read failed: ${error.message}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (command === "sync") {
+    try {
+      const service = router.serviceFor({ projectRoot: process.cwd(), autoRegister: false });
+      const index = indexSources(service);
+      const tasks = service.database.prepare("SELECT id FROM task_sessions WHERE status='active'").all();
+      const results = tasks.map(t => reconcileTask(service, {taskId:t.id}));
+      service.snapshot();
+      console.log(JSON.stringify({revision:index.revision, changed:index.changes.length, unbound:index.unboundCount, tasks:results.map(r=>({taskId:r.taskId,status:r.status,issues:r.issues.length}))}));
+    } catch (error) { console.error(error.message); process.exitCode = 1; }
+    return;
+  }
   if (command === "status") {
     const projectRoot = process.cwd();
     try {
-      const service = router.serviceFor({ projectRoot });
+      const service = router.serviceFor({ projectRoot, autoRegister: false });
       const snap = service.snapshot();
+      const timeline = service.getTimeline();
       console.log(`Project: ${snap.project.name} (${snap.project.id})`);
       console.log(`Graph Revision: ${snap.project.graphRevision}`);
       console.log(`Blocks: ${snap.blocks.length} | Chains: ${snap.chains.length} | Plans: ${snap.plans.length} | Checkpoints: ${snap.checkpoints.length}`);
+      if (timeline?.activeCursor?.nowDoing) {
+        console.log(`Timeline Focus: ${timeline.activeCursor.nowDoing}`);
+        if (timeline.activeCursor.nextUp) {
+          console.log(`Next Up: ${timeline.activeCursor.nextUp}`);
+        }
+      }
       const activePlans = snap.plans.filter((p) => p.status === "active");
       if (activePlans.length > 0) {
         console.log(`Active Plans (${activePlans.length}):`);
         for (const p of activePlans) {
           console.log(`  - [${p.id}] ${p.title} (${p.status})`);
+        }
+      }
+      const statusReport = service.graphStatus();
+      if (statusReport.drift?.hasDrift) {
+        console.log(`\n⚠️  Architecture Drift Alerts:`);
+        for (const g of statusReport.drift.ghostDrifts) {
+          console.log(`  - 👻 Ghost with code: block:${g.blockId} (${g.path}) -> update deliveryState to complete`);
+        }
+        for (const b of statusReport.drift.isolatedBlocks) {
+          console.log(`  - ⛓️  Isolated block: block:${b.id} -> connect to chain/link`);
+        }
+        for (const r of statusReport.drift.retestRequired) {
+          console.log(`  - 🔄 Retest required: checkpoint:${r.id}`);
         }
       }
     } catch (err) {
@@ -65,7 +143,7 @@ export async function runCli(args, router) {
     const shouldScan = args.includes("--scan") || args.includes("-s");
     try {
       const reg = registerProject({ projectRoot, name: path.basename(projectRoot) });
-      console.log(`✓ ${reg.created ? "Initialized new" : "Opened existing"} mdflow project at ${projectRoot}`);
+      console.log(`✓ ${reg.created ? "Initialized new" : "Opened existing"} contextos project at ${projectRoot}`);
       
       const service = router.serviceFor({ projectRoot });
       if (shouldScan && reg.created) {
@@ -77,9 +155,9 @@ export async function runCli(args, router) {
       // Ensure graph.json exists
       if (!fs.existsSync(service.paths.graphJsonPath)) {
         exportGraphToJson(service.database, service.paths.graphJsonPath);
-        console.log(`✓ Created .mdflow/graph.json text source of truth`);
+        console.log(`✓ Created .contextos/graph.json text source of truth`);
       }
-      console.log("\nReady! Launch the Mdflow Desktop App or connect your AI editor via MCP.");
+      console.log("\nReady! Launch the ContextOS Desktop App or connect your AI editor via MCP.");
     } catch (err) {
       console.error(`Failed to initialize project: ${err.message}`);
       process.exitCode = 1;
@@ -92,7 +170,7 @@ export async function runCli(args, router) {
     try {
       const service = router.serviceFor({ projectRoot });
       const res = exportGraphToJson(service.database, service.paths.graphJsonPath);
-      console.log(`✓ Exported .mdflow/graph.json (revision ${res.graphRevision}, hash: ${res.hash.slice(0, 12)})`);
+      console.log(`✓ Exported .contextos/graph.json (revision ${res.graphRevision}, hash: ${res.hash.slice(0, 12)})`);
     } catch (err) {
       console.error(`Export failed: ${err.message}`);
       process.exitCode = 1;
@@ -105,7 +183,7 @@ export async function runCli(args, router) {
     try {
       const service = router.serviceFor({ projectRoot });
       const res = importGraphFromJson(service.database, service.paths.graphJsonPath);
-      console.log(`✓ Imported .mdflow/graph.json (revision ${res.graphRevision}, hash: ${res.hash.slice(0, 12)})`);
+      console.log(`✓ Imported .contextos/graph.json (revision ${res.graphRevision}, hash: ${res.hash.slice(0, 12)})`);
     } catch (err) {
       console.error(`Import failed: ${err.message}`);
       process.exitCode = 1;
@@ -215,7 +293,7 @@ function bootstrapProject(service, projectRoot) {
 
 function setupEditors() {
   const cwd = process.cwd();
-  console.log("=== Setting up Mdflow MCP Server ===");
+  console.log("=== Setting up ContextOS MCP Server ===");
 
   // 1. Cursor Setup
   const cursorDir = path.join(cwd, ".cursor");
@@ -227,9 +305,9 @@ function setupEditors() {
       try { cursorConfig = JSON.parse(fs.readFileSync(cursorMcpFile, "utf8")); } catch {}
     }
     cursorConfig.mcpServers = cursorConfig.mcpServers || {};
-    cursorConfig.mcpServers.mdflow = {
+    cursorConfig.mcpServers.contextos = {
       command: "npx",
-      args: ["-y", "github:yubinbin32-ops/Mdflow-Canvas", "serve"],
+      args: ["-y", "github:yubinbin32-ops/ContextOS", "serve"],
     };
     fs.writeFileSync(cursorMcpFile, JSON.stringify(cursorConfig, null, 2));
     console.log(`✓ Configured Cursor: ${cursorMcpFile}`);
@@ -246,9 +324,9 @@ function setupEditors() {
         try { claudeConfig = JSON.parse(fs.readFileSync(claudeConfigPath, "utf8")); } catch {}
       }
       claudeConfig.mcpServers = claudeConfig.mcpServers || {};
-      claudeConfig.mcpServers.mdflow = {
+      claudeConfig.mcpServers.contextos = {
         command: "npx",
-        args: ["-y", "github:yubinbin32-ops/Mdflow-Canvas", "serve"],
+        args: ["-y", "github:yubinbin32-ops/ContextOS", "serve"],
       };
       fs.writeFileSync(claudeConfigPath, JSON.stringify(claudeConfig, null, 2));
       console.log(`✓ Configured Claude Desktop: ${claudeConfigPath}`);
@@ -259,9 +337,9 @@ function setupEditors() {
 
   console.log("\nMCP server configuration for other tools (Windsurf / VS Code / Roo Code):");
   console.log(JSON.stringify({
-    mdflow: {
+    contextos: {
       command: "npx",
-      args: ["-y", "github:yubinbin32-ops/Mdflow-Canvas", "serve"]
+      args: ["-y", "github:yubinbin32-ops/ContextOS", "serve"]
     }
   }, null, 2));
 }

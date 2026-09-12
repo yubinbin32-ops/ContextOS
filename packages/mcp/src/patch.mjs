@@ -1,5 +1,5 @@
-const HEADER_PATTERN = /^mdflow\/(\d+)(?:\s+(.*))?$/;
-const TARGET_PATTERN = /^(block|chain|link|plan|decision|checkpoint|plan_change|plan_scope|source):([^@]+?)(?:@(\d+))?$/;
+const HEADER_PATTERN = /^contextos\/(\d+)(?:\s+(.*))?$/;
+const TARGET_PATTERN = /^(block|chain|link|plan|decision|checkpoint|plan_change|plan_step|plan_scope|source):([^@]+?)(?:@(\d+))?$/;
 
 function tokenize(input, lineNumber) {
   const tokens = [];
@@ -93,7 +93,7 @@ function parseCommand(line, lineNumber) {
   const tokens = tokenize(line, lineNumber);
   if (tokens.length < 2) throw new Error(`Compact patch line ${lineNumber} requires an action and target`);
   const action = tokens.shift();
-  if (!["create", "update", "checkpoint", "source"].includes(action)) {
+  if (!["create", "update", "checkpoint", "source", "delete"].includes(action)) {
     throw new Error(`Compact patch line ${lineNumber} has unsupported action ${action}`);
   }
   const target = parseTarget(tokens.shift(), lineNumber);
@@ -124,9 +124,9 @@ function assignField(operation, parsed, scalarValue) {
 
 function parseHeader(line, lineNumber) {
   const match = HEADER_PATTERN.exec(line.trim());
-  if (!match) throw new Error(`Compact patch must start with mdflow/1 (line ${lineNumber})`);
+  if (!match) throw new Error(`Compact patch must start with contextos/1 (line ${lineNumber})`);
   const version = Number(match[1]);
-  if (version !== 1) throw new Error(`Unsupported compact patch version mdflow/${version}`);
+  if (version !== 1) throw new Error(`Unsupported compact patch version contextos/${version}`);
   const inline = parseInlineFields(match[2] ? tokenize(match[2], lineNumber) : [], lineNumber);
   return { version, metadata: inline.fields };
 }
@@ -147,7 +147,7 @@ export function parseGraphPatch(input) {
   let current = null;
   const flush = () => {
     if (!current) return;
-    if (Object.keys(current.fields).length === 0 && current.action !== "source") {
+    if (Object.keys(current.fields).length === 0 && current.action !== "source" && current.action !== "delete") {
       throw new Error(`Compact patch line ${current.line} has no fields; add key=value or end the operation`);
     }
     operations.push(current);
@@ -162,7 +162,18 @@ export function parseGraphPatch(input) {
       flush();
       continue;
     }
-    if (/^(create|update|checkpoint|source)\s/.test(line)) {
+    if (/^flow[:\s]/.test(line)) {
+      flush();
+      const flowExpr = line.replace(/^flow[:\s]+/, "").trim();
+      if (!flowExpr) throw new Error(`Compact patch line ${index + 1} has an empty flow expression`);
+      operations.push({
+        action: "flow",
+        flow: flowExpr,
+        line: index + 1,
+      });
+      continue;
+    }
+    if (/^(create|update|checkpoint|source|delete)\s/.test(line)) {
       flush();
       current = parseCommand(line, index + 1);
       continue;

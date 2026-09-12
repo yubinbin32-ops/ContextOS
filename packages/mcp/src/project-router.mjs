@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { createService } from "./service.mjs";
-import { registerProject, resolveProjectPaths } from "./paths.mjs";
+import { registerProject, resolveProjectPaths, findTargetProjectRoot } from "./paths.mjs";
 
 function databaseFileIdentity(databasePath) {
   try {
@@ -14,9 +14,11 @@ function databaseFileIdentity(databasePath) {
 
 export class ProjectServiceRouter {
   constructor(options = {}) {
-    this.defaultProjectRoot = options.projectRoot ?? process.env.MDFLOW_PROJECT_ROOT;
+    this.defaultProjectRoot =
+      options.projectRoot ??
+      process.env.CONTEXTOS_PROJECT_ROOT;
     this.activeProjectRoot = this.defaultProjectRoot;
-    this.dataRoot = options.dataRoot ?? process.env.MDFLOW_DATA_DIR;
+    this.dataRoot = options.dataRoot ?? process.env.CONTEXTOS_DATA_DIR;
     // Keep at most three live SQLite services.  The MCP projectRoot is the
     // source of truth; evicted services are reopened on demand, so this bound
     // limits file descriptors and watcher-like state without losing projects.
@@ -30,14 +32,29 @@ export class ProjectServiceRouter {
   }
 
   serviceFor(input = {}) {
-    const paths = resolveProjectPaths({ projectRoot: this.projectRoot(input), dataRoot: this.dataRoot });
+    const rawRoot = this.projectRoot(input);
+    let paths;
+    try {
+      paths = resolveProjectPaths({ projectRoot: rawRoot, dataRoot: this.dataRoot });
+    } catch (err) {
+      if (
+        input.autoRegister !== false &&
+        err.message?.includes("project.json found")
+      ) {
+        const rootToRegister = findTargetProjectRoot(rawRoot);
+        registerProject({ projectRoot: rootToRegister });
+        paths = resolveProjectPaths({ projectRoot: rootToRegister, dataRoot: this.dataRoot });
+      } else {
+        throw err;
+      }
+    }
     const key = path.resolve(paths.projectRoot);
     this.activeProjectRoot = key;
     const cached = this.services.get(key);
     if (cached) {
       const currentIdentity = databaseFileIdentity(paths.databasePath);
       const cachedIdentity = this.serviceIdentities.get(key);
-      // Git checkout replaces mdflow.sqlite by rename.  A cached
+      // Git checkout replaces contextos.sqlite by rename.  A cached
       // better-sqlite3/DatabaseSync handle can keep reading the unlinked old
       // inode, so never route a new MCP call through it after the file changes.
       if (currentIdentity !== cachedIdentity) {
@@ -66,6 +83,10 @@ export class ProjectServiceRouter {
   register(input = {}) {
     const registered = registerProject(input);
     this.activeProjectRoot = registered.projectRoot;
+    const service = this.serviceFor({ projectRoot: registered.projectRoot });
+    if (!fs.existsSync(service.paths.graphJsonPath)) {
+      service.ensureSynced();
+    }
     return registered;
   }
 

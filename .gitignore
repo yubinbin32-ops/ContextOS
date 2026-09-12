@@ -3,6 +3,7 @@ node_modules/
 apps/desktop/.build/
 apps/desktop/.swiftpm/
 dist/
+release-assets/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
@@ -13,3 +14,6 @@ dist/
 # Local capture sources; the curated README uses stable English asset names.
 assets/录屏*.mov
 assets/截屏*.png
+
+# Local process handshake (never canonical project knowledge)
+.contextos/runtime.json*

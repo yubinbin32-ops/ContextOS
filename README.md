@@ -1,158 +1,123 @@
 <div align="center">
-  <img src="assets/logo.png" width="92" alt="mdflow logo" />
-  <h1>mdflow</h1>
-  <p><strong>A context operating system for AI coding agents.</strong></p>
-  <p>Map the system for humans. Stream only the relevant code to agents.<br />Let agents change code through verified, rollback-safe boundaries.</p>
-  <p>
-    <a href="README_zh.md">中文</a> ·
-    <a href="https://dashend.cn">Website</a> ·
-    <a href="https://github.com/yubinbin32-ops/Mdflow-Canvas/releases/latest">Download for macOS</a>
-  </p>
-  <p>
-    <a href="https://github.com/yubinbin32-ops/Mdflow-Canvas/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/yubinbin32-ops/Mdflow-Canvas?style=flat-square&color=111111" /></a>
-    <a href="https://github.com/yubinbin32-ops/Mdflow-Canvas/actions/workflows/release.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/yubinbin32-ops/Mdflow-Canvas/release.yml?style=flat-square&label=build" /></a>
-    <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/yubinbin32-ops/Mdflow-Canvas?style=flat-square" /></a>
-    <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-43853d?style=flat-square" />
-    <img alt="MCP compatible" src="https://img.shields.io/badge/MCP-compatible-7c3aed?style=flat-square" />
-  </p>
+  <img src="assets/logo.png" width="76" alt="ContextOS" />
+  <h1>Let the AI remember the project and continue from the last conversation.</h1>
+  <p><strong>ContextOS keeps architecture, progress, command results, and exact code locations in one synchronized project memory.</strong></p>
+  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download the macOS App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文</a></p>
 </div>
 
-<p align="center">
-  <img src="assets/mdflow-demo.gif" alt="mdflow filters an architecture graph, rearranges the Canvas, follows an impact path, and opens checkpoint evidence" width="100%" />
-</p>
+![ContextOS architecture and workflow](assets/contextos-demo.gif)
 
-<p align="center"><sub>Filter the architecture → follow an impact path → inspect the exact code and verification evidence.</sub></p>
+## What problem does ContextOS solve?
 
-## The problem
+An AI coding conversation often starts by rebuilding the project map: reading files, finding module relationships, checking design decisions, and locating unfinished work. As the repository grows, architecture notes, progress updates, and build logs compete with the task itself for context space.
 
-Coding agents repeatedly scan the same repository, read entire files to understand one function, consume raw terminal noise, and lose architectural decisions between sessions. Markdown specs help at first, then drift away from the code they describe.
+ContextOS stores that working memory beside the code in one OS graph. Each conversation receives the architecture and progress relevant to its task, and the App shows the same information. A new conversation can continue from the recorded state.
 
-mdflow keeps a Git-tracked architecture graph beside the source. Its MCP server turns that graph into a narrow, verified working context for each task—and can apply symbol-level code changes with tests and automatic rollback.
+## What changes in daily development?
 
-| For developers | For AI agents |
-| --- | --- |
-| A native Canvas for architecture, dependencies, plans, progress, and evidence | Task-scoped context instead of repository-wide scanning |
-| Ghost blueprints for planned work and solid anchors for implemented code | AST symbol slices across a complete execution chain |
-| Impact paths before a change reaches the codebase | Atomic symbol mutation with verification and rollback |
-| Git-native history: code and architecture move together | Sanitized terminal output that preserves useful failures |
+**1. Architecture becomes a map.** Blocks describe modules and responsibilities, typed Links describe real relationships, and Chains describe observable feature paths. The agent can understand how a feature connects before opening implementation code.
 
-## Try it on a repository
+**2. Progress stays synchronized.** Plans, PlanChanges, ChainScopes, source bindings, checkpoints, and handoffs record the state of the work. Block transitions from ghost to implementing to complete cross the same synchronization boundary, and extending a feature also updates its existing Chain nodes and Links.
 
-Requires Node.js 22 or later. No global install is needed.
+**3. Commands return a useful summary.** `run_command` stores a traceable execution receipt with redacted output, failure clues, and verification state. Routine build output remains available in the receipt while the current task receives an actionable summary.
 
-```bash
-cd your-project
-npx -y github:yubinbin32-ops/Mdflow-Canvas init --scan
-npx -y github:yubinbin32-ops/Mdflow-Canvas status
-npx -y github:yubinbin32-ops/Mdflow-Canvas setup
-```
+**4. Code locations stay precise.** Source bindings keep a file, symbol, signature, and derived line range. `chain_code_stream` returns locator-only feature paths, while `block_code_stream` returns a bounded AST slice for one implementation when code is needed.
 
-On macOS 14+, download the native app from [GitHub Releases](https://github.com/yubinbin32-ops/Mdflow-Canvas/releases/latest) to explore the graph, focus dependencies, inspect code streams, and configure supported agents visually. The CLI and MCP server also run headlessly on Windows, Linux, CI, and remote machines.
+**5. Knowledge has one clear entrance.** Proposals, audits, designs, and guides live as OS Documents and are read by chapter in the App. `README.md` and `README_zh.md` remain at the repository root and appear read-only in the App Knowledge view, with images and relative links intact.
 
-## One closed loop
+## A large feature stays readable
 
-```mermaid
-flowchart LR
-  Human["Developer\nCanvas + plans"] --> Graph[".mdflow/graph.json\nGit-tracked truth"]
-  Graph --> Context["Task slice\ncontracts + impact path"]
-  Context --> Agent["AI coding agent\nvia MCP"]
-  Agent --> Mutation["AST symbol mutation"]
-  Mutation --> Verify{"Tests pass?"}
-  Verify -->|yes| Graph
-  Verify -->|no| Rollback["Automatic rollback"]
-  Rollback --> Agent
-```
+A long feature does not have to be one flat Chain. A **Leaf Chain** owns a focused Block path. A **Composite Chain** groups several Leaf Chains (and, when useful, a few direct Blocks) into a short macro route. The parent shows stages such as boundary → context → source → knowledge → verification; opening a stage reveals its own Blocks, Links, source symbols, and AST locators.
 
-The runtime uses a local SQLite cache for fast reads. The durable source of truth is deterministic plain-text JSON, so a Git checkout or discard restores code and architecture together.
+The current feedback-loop pilot turns 42 implementation Blocks into 7 stage Chains. The parent route has 7 members and 6 explicit `flows_to` Links, so a new conversation can understand the feature in seven items and expand only the stage it needs. The same model supports nested Composite Chains, fan-out, optional stages, cycle detection, and automatic state propagation from children to parents.
 
-## Measured on mdflow itself
+![A feature path with exact code locations](assets/path-impact.png)
 
-Run `npm run benchmark` to reproduce the measurements locally. Results vary by repository and task; these numbers come from the current mdflow codebase.
+![OS Documents and README in the same Knowledge drawer](assets/knowledge-reader.png)
 
-| Operation | Baseline | mdflow | Reduction / speed |
-| --- | ---: | ---: | ---: |
-| Task context | 112,738 tokens | 1,197 tokens | **98.9% fewer tokens** |
-| Four-module code chain | 84,227 tokens | 654 tokens | **99.2% fewer tokens** |
-| Build and test log | 4,042 tokens | 212 tokens | **94.8% fewer tokens** |
-| Structured context retrieval | repeated file scans | 3.11 ms P50 | local indexed lookup |
+After installation, describe the work in ordinary language. ContextOS reads and updates project memory in the background and brings the relevant architecture, progress, command receipt, or code locator into the conversation when the task calls for it.
 
-The benchmark also checks target-module recall, related-topology capture, irrelevant-module isolation, checkpoint persistence, change-set reversal, and Git graph synchronization.
+## Start in three minutes
 
-## What makes it different
+### macOS App
 
-### Architecture that can start before code
+1. [Download the latest App](https://github.com/yubinbin32-ops/ContextOS/releases/latest), unzip it, and open **ContextOS**.
+2. Open **Settings**, choose the detected AI editor, and click **Install / Sync Plugin**.
+3. Open the project in Codex, confirm **ContextOS** appears in the installed plugin list, and start working.
 
-Planned features live as **Ghost Blueprints** without fake file bindings. As implementation lands, blocks become **Solid Anchors** connected to real AST symbols. The same object moves from intent to code to evidence.
+The desktop App supports macOS 14 or later. The MCP runtime uses Node.js 22 or later. The App writes the editor configuration and plugin entry for you.
 
-### Code context at symbol boundaries
+![One-click editor and MCP synchronization](assets/settings-sync.png)
 
-`chain_code_stream` follows an execution path across files and returns the relevant functions, classes, and contracts. Agents see the code that participates in the task instead of every line in every file.
+### Other operating systems
 
-### Code changes with a verification boundary
-
-`block_code_mutate` locates a bound symbol, replaces it atomically, runs the configured verification command, and restores the original file when verification fails.
-
-### Evidence as part of architecture
-
-Plans and blocks can require Checkpoints backed by tests, static checks, or review receipts. Completion is tied to evidence rather than a chat claim.
-
-### Terminal output built for agent context
-
-`log_sanitize` removes ANSI control sequences, spinner rewrites, and repetitive successful output while keeping failure summaries and stack context.
-
-## Native macOS Canvas
-
-<p align="center">
-  <img src="assets/canvas-overview.png" alt="Native mdflow Canvas showing architecture blocks, orthogonal dependency paths, project groups, and the inspector" width="100%" />
-</p>
-
-- Compact orthogonal routing keeps large dependency graphs readable.
-- Double-click focus reveals one-hop dependencies and related Chains.
-- The Inspector shows AST bindings, code streams, plans, progress, and Checkpoint evidence.
-- Settings can configure Google Antigravity, Cursor, Claude Desktop, OpenCode, and Codex workflows.
-
-<table>
-  <tr>
-    <td width="50%"><img src="assets/path-impact.png" alt="Selected impact path" /></td>
-    <td width="50%"><img src="assets/checkpoint-detail.png" alt="Checkpoint evidence" /></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>Trace the impact path before editing.</sub></td>
-    <td align="center"><sub>Inspect the evidence behind completion.</sub></td>
-  </tr>
-</table>
-
-## Connect an MCP client
-
-The desktop app can write supported configurations for you. For manual setup, point your client at the bundled server:
-
-```json
-{
-  "mcpServers": {
-    "mdflow": {
-      "command": "npx",
-      "args": ["-y", "github:yubinbin32-ops/Mdflow-Canvas", "serve"]
-    }
-  }
-}
-```
-
-This standard shape works with Cursor, Claude Desktop, OpenCode, and other stdio MCP clients. Google Antigravity can use the bundled server path with `MDFLOW_PROJECT_ROOT` set to the workspace.
-
-## Develop locally
+Install the ContextOS plugin / MCP entry in the AI editor you use. The repository also provides a headless CLI:
 
 ```bash
+npx -y github:yubinbin32-ops/ContextOS init --scan
+npx -y github:yubinbin32-ops/ContextOS setup
+```
+
+Use `serve` as the MCP command when your editor asks for a server. After installation, `status` and `sync` show whether the project memory is connected.
+
+## A normal conversation
+
+Installation is a one-time step. These examples cover the usual entry points:
+
+- **Starting an existing project:** Write the project architecture to OS.
+- **Continuing across conversations:** Check OS and assess the current progress.
+- **Development documentation:** Write this development document to OS, then begin the implementation.
+
+Describe the feature, fix, review, or design in the same way you would with a teammate. At the end of a task, the agent records source locations, command receipts, verification, and the next action in project memory.
+
+![The App's project map and detail drawer](assets/readme-reader.png)
+
+## Reproducible benchmark
+
+The measurements below were run on September 12, 2026 against an isolated graph revision 1093 snapshot. They measure service responses and JavaScript UTF-16 characters, showing the content boundary returned to the AI.
+
+| Measurement | Result |
+|---|---:|
+| Full graph reference | 1,216,655 characters |
+| Task context budget | 4,000 characters |
+| Context reduction | **99.67%** (1,216,655 → 4,000) |
+| Four complete source files → locator stream | **99.09%** (226,522 → 2,071) |
+| Fixed synthetic build log | **91.78%** (10,071 → 828), with the error and failure retained |
+| Context query samples | 12 local calls |
+| Query latency p50 / p95 | **1,161.29 ms / 1,349.72 ms** |
+
+Each of the four task queries returned the expected Block and visible locator within the 4,000-character budget:
+
+| Query | Expected Block | Latencies (ms) | Reduction |
+|---|---|---:|---:|
+| OpenCode platform support and MCP injection | `in-app-plugin-install` | 1226.01 · 1155.62 · 1160.94 | 99.67% |
+| Git Discard and SQLite hot reload | `sqlite-graph-store` | 1151.74 · 1161.29 · 1174.02 | 99.67% |
+| CJK tokenization and BM25 weighted search | `context-retrieval` | 1150.43 · 1162.48 · 1151.02 | 99.67% |
+| SourceBinding path and symbol synchronization | `live-binding-refresh` | 1349.72 · 1173.70 · 1214.53 | 99.67% |
+
+The Chain measurement used `chain-context-os` and returned four anchored locators: `ast-facade-engine/extractSymbols`, `progressive-materializer/addSourceRef`, `terminal-sanitizer/sanitizeTerminalOutput`, and `desktop-context-console/chainCodeStreamSection`. The full raw data is in [`docs/benchmarks/2026-09-12-v040-chain-network.json`](docs/benchmarks/2026-09-12-v040-chain-network.json).
+
+In daily use, context compaction feels roughly 60% less frequent.
+
+The benchmark records service responses, character reduction, and local call latency. Full graph size, full-file size, MCP tool descriptions, skills, follow-up source reads, model tokens, cost, and task success are separate observation dimensions. The 12 calls cover both first reads and warm reads, so the latency values are useful for version-to-version comparison.
+
+Run the measurement again after changing the service or graph:
+
+```bash
+npm run benchmark -- --output docs/benchmarks/2026-09-12-v040-chain-network.json
+```
+
+## For contributors
+
+```bash
+git clone https://github.com/yubinbin32-ops/ContextOS.git
+cd ContextOS
 npm ci
-npm test                 # 17 tests
-npm run benchmark        # reproducible context/AST/log benchmark
-npm run plugin:build     # rebuild the bundled MCP server
-npm run desktop:build    # build the Swift macOS app
+npm test
+npm run plugin:verify
+npm run desktop:build       # macOS + Swift/Xcode
 ```
 
-## Project status
+The versioned `.contextos/graph.json` is the project's portable graph projection. Internal proposals, audits, and guides belong in OS Documents; benchmark JSON and public README files remain repository artifacts.
 
-mdflow is early-stage open-source software and its graph format and MCP surface may evolve. The project currently targets macOS 14+ for the native app and Node.js 22+ for the cross-platform CLI/server. Issues, reproducible benchmark results, and focused pull requests are welcome.
-
-## License
-
-[MIT](LICENSE) © mdflow contributors
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT License](LICENSE)

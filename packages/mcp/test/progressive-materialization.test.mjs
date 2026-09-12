@@ -3,17 +3,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { MdflowService } from "../src/service.mjs";
+import { ContextOSService } from "../src/service.mjs";
 
 test("progressive materialization: virtual blueprint vs anchored code facades", async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdflow-test-materialization-"));
-  const mdflowDir = path.join(tmpDir, ".mdflow");
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "contextos-test-materialization-"));
+  const contextosDir = path.join(tmpDir, ".contextos");
   const srcDir = path.join(tmpDir, "src");
-  await fs.mkdir(mdflowDir, { recursive: true });
+  await fs.mkdir(contextosDir, { recursive: true });
   await fs.mkdir(srcDir, { recursive: true });
 
   await fs.writeFile(
-    path.join(mdflowDir, "project.json"),
+    path.join(contextosDir, "project.json"),
     JSON.stringify({
       schemaVersion: "2.0.0",
       id: "materialization-test",
@@ -33,7 +33,7 @@ export class PaymentService {
 `;
   await fs.writeFile(path.join(srcDir, "payment.ts"), tsCode);
 
-  const service = new MdflowService({ projectRoot: tmpDir, autoSync: true });
+  const service = new ContextOSService({ projectRoot: tmpDir, autoSync: true });
 
   // 1. Create a virtual (Ghost) block for a future feature and a solid block for payment
   service.mutate({
@@ -58,7 +58,7 @@ export class PaymentService {
           title: "真实支付服务",
           kind: "service",
           architectureLayer: "application",
-          deliveryState: "complete",
+          deliveryState: "implementing",
           summary: "微信支付宝网关支付",
           contract: "processPayment(amount) -> Result",
         },
@@ -96,11 +96,41 @@ export class PaymentService {
   assert.ok(taskRes.markdown.includes("src/payment.ts :: processPayment"));
 
   // 3. Verify chainCodeStream produces stream across solid (real code) and ghost (planned contract)
+  const contractStreamRes = service.chainCodeStream({ chainId: "checkout-chain" });
+  assert.equal(contractStreamRes.mode, "contract");
+  assert.ok(contractStreamRes.codeStream.includes("processPayment"));
+  assert.ok(!contractStreamRes.codeStream.includes('return { status: "success"'));
+  assert.ok(contractStreamRes.codeStream.includes("evaluate(tx) -> RiskScore"));
+
   const streamRes = service.chainCodeStream({ chainId: "checkout-chain" });
   assert.equal(streamRes.nodes.length, 2);
-  assert.ok(streamRes.codeStream.includes("PaymentService"));
-  assert.ok(streamRes.codeStream.includes("Planned Contract"));
+  assert.ok(streamRes.codeStream.includes("processPayment"));
+  assert.ok(streamRes.codeStream.includes("Contract:"));
   assert.ok(streamRes.codeStream.includes("evaluate(tx) -> RiskScore"));
+  assert.ok(!streamRes.codeStream.includes('return { status: "success"'));
+  assert.throws(
+    () => service.chainCodeStream({ chainId: "checkout-chain", mode: "slice" }),
+    /locator-only/,
+  );
+
+  const commandResult = service.runCommand({
+    command: "printf 'OPENAI_API_KEY=sk-test-secret\\n%s\\n' \"$PWD/src/payment.ts\"",
+    maxChars: 500,
+  });
+  assert.equal(commandResult.success, true);
+  assert.ok(!commandResult.output.includes("sk-test-secret"));
+  assert.ok(!commandResult.output.includes(tmpDir));
+  assert.ok(commandResult.output.includes("[REDACTED]"));
+
+  const failedCommand = service.runCommand({
+    command: "printf 'Error: verification failed\\n' 1>&2; exit 2",
+    maxChars: 500,
+  });
+  assert.equal(failedCommand.success, false);
+  assert.equal(failedCommand.exitCode, 2);
+  assert.equal(failedCommand.hasErrors, true);
+  assert.ok(failedCommand.output.includes("verification failed"));
+
 
   service.close();
   await fs.rm(tmpDir, { recursive: true, force: true });
