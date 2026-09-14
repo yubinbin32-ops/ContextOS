@@ -69,6 +69,16 @@ final class ProjectDatabase {
     }
 
     func refreshToken() throws -> String {
+        if (try? optionalRows("SELECT name FROM sqlite_master WHERE type='table' AND name='artifact_refs'", table: "artifact_refs", bindings: []).isEmpty == false) ?? false {
+            let project = (try? rows("SELECT graph_revision, exported_at FROM projects LIMIT 1", bindings: []))?.first
+            let rev = project?.int("graph_revision") ?? 0
+            let exp = project?.text("exported_at") ?? ""
+            let b = (try? rows("SELECT count(*) as c FROM blocks", bindings: []).first?.int("c")) ?? 0
+            let c = (try? rows("SELECT count(*) as c FROM chains", bindings: []).first?.int("c")) ?? 0
+            let l = (try? rows("SELECT count(*) as c FROM links", bindings: []).first?.int("c")) ?? 0
+            let a = (try? rows("SELECT count(*) as c FROM artifact_refs", bindings: []).first?.int("c")) ?? 0
+            return "v2:\(rev):\(exp):\(b):\(c):\(l):\(a)"
+        }
         let project = try rows("SELECT graph_revision,updated_at FROM projects LIMIT 1", bindings: []).first
         let coordinates = try rows("SELECT id,path,symbol,role,start_line,end_line FROM source_refs ORDER BY id", bindings: []).map { "\($0.text("id")):\($0.text("path")):\($0.text("symbol")):\($0.text("role")):\($0.int("start_line")):\($0.int("end_line"))" }.joined(separator: "|")
         let chainTypes = try optionalRows("SELECT id,chain_type,current_revision FROM chains ORDER BY id", table: "chains", bindings: []).map { "\($0.text("id")):\($0.text("chain_type")):\($0.int("current_revision"))" }.joined(separator: "|")
@@ -80,7 +90,10 @@ final class ProjectDatabase {
     }
 
     func changeSequence() throws -> Int {
-        try scalarInt(
+        if (try? optionalRows("SELECT name FROM sqlite_master WHERE type='table' AND name='artifact_refs'", table: "artifact_refs", bindings: []).isEmpty == false) ?? false {
+            return 0
+        }
+        return try scalarInt(
             "SELECT COALESCE(MAX(sequence), 0) FROM change_feed WHERE project_id = ?",
             bindings: [location.descriptor.id]
         )
@@ -113,6 +126,9 @@ final class ProjectDatabase {
     }
 
     func loadSnapshot() throws -> GraphSnapshot {
+        if (try? optionalRows("SELECT name FROM sqlite_master WHERE type='table' AND name='artifact_refs'", table: "artifact_refs", bindings: []).isEmpty == false) ?? false {
+            return try loadV2Snapshot()
+        }
         let projectRows = try rows(
             "SELECT id, name, repo_root, graph_revision FROM projects WHERE id = ?",
             bindings: [location.descriptor.id]
@@ -506,6 +522,175 @@ final class ProjectDatabase {
             localizations: localizations,
             history: history,
             latestChanges: latestChanges
+        )
+    }
+
+    private func loadV2Snapshot() throws -> GraphSnapshot {
+        let projectRows = try rows("SELECT id, repo_root, graph_revision FROM projects WHERE id = ?", bindings: [location.descriptor.id])
+        let projectRow = try (projectRows.first ?? rows("SELECT id, repo_root, graph_revision FROM projects LIMIT 1", bindings: []).first)
+        guard let projectRow else {
+            throw DatabaseError.step("Project metadata is missing")
+        }
+        let project = ProjectInfo(
+            id: projectRow.text("id"),
+            name: location.descriptor.name,
+            root: location.root.path,
+            graphRevision: projectRow.int("graph_revision")
+        )
+
+        let blocks = try rows("SELECT id, project_id, title, summary, details FROM blocks WHERE project_id = ? ORDER BY title", bindings: [project.id]).map { row in
+            BlockItem(
+                id: row.text("id"),
+                kind: "service",
+                title: row.text("title"),
+                summary: row.text("summary"),
+                body: row.text("details"),
+                contract: "",
+                scope: "general",
+                architectureLayer: "core",
+                localOrder: 0,
+                deliveryState: "complete",
+                healthState: "healthy",
+                priority: "normal",
+                revision: 1
+            )
+        }
+
+        var chainNodes: [ChainNode] = []
+        var chainMembers: [ChainMemberItem] = []
+        var chainEdges: [ChainEdge] = []
+
+        let chains = try rows("SELECT id, project_id, title, summary, kind, member_ids_json FROM chains WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
+            let chainId = row.text("id")
+            let memberIDs = Self.jsonStringArray(row.text("member_ids_json"))
+            for (index, mId) in memberIDs.enumerated() {
+                chainNodes.append(ChainNode(chainId: chainId, blockId: mId, position: index, role: "stage"))
+                chainMembers.append(ChainMemberItem(chainId: chainId, memberType: "block", memberId: mId, position: index, role: "stage", required: true))
+            }
+            return ChainItem(
+                id: chainId,
+                title: row.text("title"),
+                chainType: row.text("kind").isEmpty ? "leaf" : row.text("kind"),
+                purpose: row.text("summary"),
+                intent: "",
+                inputContract: "",
+                outputContract: "",
+                deliveryState: "complete",
+                healthState: "healthy",
+                priority: "normal",
+                revision: 1
+            )
+        }
+
+        let links = try rows("SELECT id, project_id, from_id, to_id, kind FROM links WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
+            LinkItem(
+                id: row.text("id"),
+                sourceType: "block",
+                sourceId: row.text("from_id"),
+                targetType: "block",
+                targetId: row.text("to_id"),
+                kind: row.text("kind"),
+                label: row.text("kind"),
+                contract: "",
+                healthState: "healthy",
+                revision: 1
+            )
+        }
+
+        for (index, link) in links.enumerated() {
+            for chain in chains {
+                let memberBlockIDs = chainNodes.filter { $0.chainId == chain.id }.map(\.blockId)
+                if memberBlockIDs.contains(link.sourceId) && memberBlockIDs.contains(link.targetId) {
+                    chainEdges.append(ChainEdge(chainId: chain.id, linkId: link.id, position: index))
+                }
+            }
+        }
+
+        let sourceReferences = try rows("SELECT id, block_id, path, symbol, start_line, end_line, role FROM artifact_refs ORDER BY path, start_line", bindings: []).map { row in
+            SourceReference(
+                id: row.text("id"),
+                blockId: row.text("block_id"),
+                path: row.text("path"),
+                startLine: row.optionalInt("start_line"),
+                endLine: row.optionalInt("end_line"),
+                symbol: row.optionalText("symbol"),
+                role: row.text("role"),
+                gitCommit: nil
+            )
+        }
+
+        let plans = try rows("SELECT id, project_id, title, priority, status, summary FROM plans WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
+            PlanItem(
+                id: row.text("id"),
+                title: row.text("title"),
+                summary: row.text("summary"),
+                goal: row.text("summary"),
+                status: row.text("status"),
+                derivedStatus: row.text("status"),
+                statusReason: "",
+                priority: row.text("priority"),
+                phase: "P0",
+                order: 0,
+                proposedDelta: "{}",
+                completionPolicy: "{}",
+                nextAction: "",
+                blockers: "[]",
+                startedAt: nil,
+                completedAt: nil,
+                invalidatedAt: nil,
+                progress: .empty,
+                revision: 1
+            )
+        }
+
+        let checkpoints = (try? rows("SELECT id, plan_id, phase_id, title, criteria, status FROM checkpoints WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?) ORDER BY id", bindings: [project.id]))?.map { row in
+            CheckpointItem(
+                id: row.text("id"),
+                targetType: "plan",
+                targetId: row.text("plan_id"),
+                title: row.text("title"),
+                criteria: row.text("criteria"),
+                status: row.text("status"),
+                kind: "atomic",
+                aggregationPolicy: "{}",
+                eligibleAfterChildren: false,
+                evidenceLevel: "none",
+                requiredEvidenceLevel: "static",
+                coverage: "complete",
+                evidence: "[]",
+                invalidatedAt: nil,
+                revision: 1,
+                updatedAt: ""
+            )
+        } ?? []
+
+        return GraphSnapshot(
+            project: project,
+            changeSequence: 0,
+            blocks: blocks,
+            chains: chains,
+            plans: plans,
+            links: links,
+            chainMembers: chainMembers,
+            chainNodes: chainNodes,
+            chainEdges: chainEdges,
+            planChainReferences: [],
+            planDependencies: [],
+            planSteps: [],
+            planCheckpointReferences: [],
+            planChainScopes: [],
+            planChanges: [],
+            planChainChangeReferences: [],
+            backgroundScopes: [],
+            decisions: [],
+            decisionScopes: [],
+            sourceReferences: sourceReferences,
+            checkpoints: checkpoints,
+            checkpointBindings: [],
+            checkpointDependencies: [],
+            localizations: [],
+            history: [],
+            latestChanges: []
         )
     }
 

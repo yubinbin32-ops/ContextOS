@@ -22,6 +22,7 @@ final class GraphStore: ObservableObject {
     @Published var settingsPresented = false
     @Published private(set) var pluginInstallStatus: PluginInstallStatus = .checking
     @Published private(set) var editorStatuses: [EditorPlatformStatus] = []
+    @Published private(set) var runningProcesses: [RunningProcessItem] = []
     @Published var syncingPlatformId: String?
     @Published var syncErrorMessage: String?
     @Published var canvasScale: CGFloat = 1
@@ -90,6 +91,7 @@ final class GraphStore: ObservableObject {
         restoreProjectViewState(for: snapshot.project.id)
         startLiveUpdates()
         refreshPluginStatus(autoInstallIfNeeded: true)
+        refreshRunningProcesses()
     }
 
     func chooseProject() {
@@ -532,6 +534,7 @@ final class GraphStore: ObservableObject {
     }
 
     func refreshIfChanged() {
+        refreshRunningProcesses()
         do {
             guard let location else { return }
             var databaseWasReplaced = false
@@ -595,6 +598,41 @@ final class GraphStore: ObservableObject {
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+        refreshRunningProcesses()
+    }
+
+    func refreshRunningProcesses() {
+        guard let location else { return }
+        let file = location.root.appending(path: ".contextos/processes.json")
+        guard FileManager.default.fileExists(atPath: file.path),
+              let data = try? Data(contentsOf: file),
+              let items = try? JSONDecoder().decode([RunningProcessItem].self, from: data) else {
+            if !runningProcesses.isEmpty {
+                runningProcesses = []
+            }
+            return
+        }
+        if runningProcesses != items {
+            runningProcesses = items
+        }
+    }
+
+    func stopProcess(id: String) {
+        guard let location else { return }
+        let file = location.root.appending(path: ".contextos/processes.json")
+        guard FileManager.default.fileExists(atPath: file.path),
+              let data = try? Data(contentsOf: file),
+              var items = try? JSONDecoder().decode([RunningProcessItem].self, from: data) else {
+            return
+        }
+        if let proc = items.first(where: { $0.id == id }) {
+            Darwin.kill(pid_t(proc.pid), SIGTERM)
+            items.removeAll { $0.id == id }
+            if let encoded = try? JSONEncoder().encode(items) {
+                try? encoded.write(to: file)
+            }
+            runningProcesses = items
         }
     }
 

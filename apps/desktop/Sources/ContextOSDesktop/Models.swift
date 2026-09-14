@@ -481,3 +481,18 @@ enum AppearancePreference: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 }
+
+struct RunningProcessItem: Identifiable, Equatable, Codable {
+    let id: String
+    let pid: Int
+    let command: String
+    let cwd: String?
+    let status: String
+    let port: Int?
+    let startedAt: String?
+
+    var isRunning: Bool {
+        status == "running"
+    }
+}
+

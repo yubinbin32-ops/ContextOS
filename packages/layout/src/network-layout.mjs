@@ -1,10 +1,12 @@
 /**
- * Deterministic DAG Layout Engine for Architecture Graph.
- * Solves the long-snake layout issue through:
- * - Chain clustering
- * - DAG topological ranking
- * - Grid wrapping on max horizontal width
- * - Deterministic coordinate projection
+ * Metro Map Layout Engine for Architecture Graph.
+ *
+ * Models the architecture as a Transit / Subway Network:
+ * - Each Chain is an independent Metro Rail Line running horizontally along its assigned Track Y.
+ * - Blocks in each Chain are adjacent Stations positioned sequentially from left to right.
+ * - Cross-Chain Links form orthogonal 90° transfer corridors between lines.
+ * - Standalone Blocks reside neatly on dedicated baseline tracks.
+ * - Eliminates long-snake looping, scattered diamond searches, and nested box envelopes.
  */
 
 export class NetworkLayoutEngine {
@@ -16,135 +18,102 @@ export class NetworkLayoutEngine {
   }) {
     const nodeWidth = options.nodeWidth || 220;
     const nodeHeight = options.nodeHeight || 100;
-    const gapX = options.gapX || 60;
-    const gapY = options.gapY || 80;
-    const maxColumns = options.maxColumns || 4;
+    const gapX = options.gapX || 80;
+    const gapY = options.gapY || 100;
+    const paddingX = options.paddingX || 120;
+    const paddingY = options.paddingY || 120;
 
     const blockMap = new Map();
     for (const b of blocks) {
       blockMap.set(b.id, b);
     }
 
-    // 1. Cluster: Determine primary chain for each block
-    const blockToChain = new Map();
-    for (const chain of chains) {
-      for (const mId of chain.memberIds || []) {
-        if (!blockToChain.has(mId)) {
-          blockToChain.set(mId, chain.id);
-        }
-      }
-    }
-
-    // 2. Build adjacency for ranking
-    const inDegree = new Map();
-    const adj = new Map();
-    for (const b of blocks) {
-      inDegree.set(b.id, 0);
-      adj.set(b.id, []);
-    }
-
-    for (const link of links) {
-      if (adj.has(link.from) && inDegree.has(link.to)) {
-        adj.get(link.from).push(link.to);
-        inDegree.set(link.to, (inDegree.get(link.to) || 0) + 1);
-      }
-    }
-
-    // 3. Topological Rank (Kahn's algorithm with cycle tolerance)
-    const queue = [];
-    const ranks = new Map();
-
-    for (const [id, deg] of inDegree.entries()) {
-      if (deg === 0) {
-        queue.push(id);
-        ranks.set(id, 0);
-      }
-    }
-
-    while (queue.length > 0) {
-      const u = queue.shift();
-      const currentRank = ranks.get(u) || 0;
-
-      for (const v of adj.get(u) || []) {
-        const nextRank = currentRank + 1;
-        if (!ranks.has(v) || nextRank > ranks.get(v)) {
-          ranks.set(v, nextRank);
-        }
-        const newDeg = inDegree.get(v) - 1;
-        inDegree.set(v, newDeg);
-        if (newDeg === 0) {
-          queue.push(v);
-        }
-      }
-    }
-
-    // Fallback for cyclic or isolated components
-    for (const b of blocks) {
-      if (!ranks.has(b.id)) {
-        ranks.set(b.id, 0);
-      }
-    }
-
-    // 4. Group by rank and apply grid wrapping
-    const rankGroups = new Map();
-    for (const b of blocks) {
-      const r = ranks.get(b.id) || 0;
-      if (!rankGroups.has(r)) rankGroups.set(r, []);
-      rankGroups.get(r).push(b);
-    }
-
-    const sortedRanks = Array.from(rankGroups.keys()).sort((a, b) => a - b);
-
+    const occupied = new Set();
+    const cellKey = (x, y) => `${x},${y}`;
     const placedNodes = [];
-    let currentY = 40;
+    const placedMap = new Map();
 
-    for (const r of sortedRanks) {
-      const group = rankGroups.get(r).sort((a, b) => a.id.localeCompare(b.id));
+    let currentTrackY = 0;
 
-      // Wrap lines if group exceeds maxColumns
-      for (let i = 0; i < group.length; i += maxColumns) {
-        const row = group.slice(i, i + maxColumns);
-        for (let col = 0; col < row.length; col++) {
-          const b = row[col];
-          const x = 40 + col * (nodeWidth + gapX);
-          const y = currentY;
+    // 1. Place each Chain as a clean horizontal metro track
+    for (const chain of chains) {
+      const memberIds = chain.memberIds || [];
+      if (memberIds.length === 0) continue;
 
-          placedNodes.push({
-            id: b.id,
-            title: b.title,
-            chainId: blockToChain.get(b.id) || null,
-            kind: 'block',
-            x,
-            y,
-            width: nodeWidth,
-            height: nodeHeight,
-            rank: r,
-          });
+      const trackY = currentTrackY;
+      currentTrackY += 1;
+      let nextX = 0;
+
+      for (const mId of memberIds) {
+        if (placedMap.has(mId)) {
+          // Interchange station already placed on a previous track
+          continue;
         }
-        currentY += nodeHeight + gapY;
+        while (occupied.has(cellKey(nextX, trackY))) {
+          nextX += 1;
+        }
+        occupied.add(cellKey(nextX, trackY));
+        placedMap.set(mId, { x: nextX, y: trackY });
+        const b = blockMap.get(mId) || { id: mId, title: mId };
+        placedNodes.push({
+          id: mId,
+          title: b.title,
+          chainId: chain.id,
+          kind: 'block',
+          x: paddingX + nextX * (nodeWidth + gapX),
+          y: paddingY + trackY * (nodeHeight + gapY),
+          width: nodeWidth,
+          height: nodeHeight,
+        });
+        nextX += 1;
       }
     }
 
-    // Calculate bounding box
+    // 2. Place unchained standalone blocks on bottom tracks
+    const unchained = blocks.filter((b) => !placedMap.has(b.id)).sort((a, b) => a.id.localeCompare(b.id));
+    if (unchained.length > 0) {
+      let nextX = 0;
+      let trackY = currentTrackY;
+      for (const b of unchained) {
+        while (occupied.has(cellKey(nextX, trackY))) {
+          nextX += 1;
+        }
+        occupied.add(cellKey(nextX, trackY));
+        placedMap.set(b.id, { x: nextX, y: trackY });
+        placedNodes.push({
+          id: b.id,
+          title: b.title,
+          chainId: null,
+          kind: 'block',
+          x: paddingX + nextX * (nodeWidth + gapX),
+          y: paddingY + trackY * (nodeHeight + gapY),
+          width: nodeWidth,
+          height: nodeHeight,
+        });
+        nextX += 1;
+        if (nextX >= 4) {
+          nextX = 0;
+          trackY += 1;
+        }
+      }
+    }
+
     let maxX = 0;
     let maxY = 0;
     for (const n of placedNodes) {
-      maxX = Math.max(maxX, n.x + n.width + 40);
-      maxY = Math.max(maxY, n.y + n.height + 40);
+      maxX = Math.max(maxX, n.x + n.width + paddingX);
+      maxY = Math.max(maxY, n.y + n.height + paddingY);
     }
 
     return {
       nodes: placedNodes,
       edges: links.map((l) => ({
         id: l.id,
-        from: l.from,
-        to: l.to,
-        kind: l.kind,
+        from: l.from || l.sourceId,
+        to: l.to || l.targetId,
+        kind: l.kind || 'depends_on',
       })),
-      bounds: {
-        width: Math.max(800, maxX),
-        height: Math.max(600, maxY),
-      },
+      bounds: { width: Math.max(1200, maxX), height: Math.max(800, maxY) },
     };
   }
 }

@@ -1,78 +1,10 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 1129,
-  "exportedAt": "2026-09-14T14:02:32.452Z",
+  "graphRevision": 1,
+  "exportedAt": "2026-09-14T14:30:29.149Z",
   "data": {
     "plans": [
-      {
-        "id": "contextos-core-repair",
-        "projectId": "contextos",
-        "title": "contextos 核心闭环修复",
-        "priority": "P0",
-        "status": "active",
-        "summary": "修复终端日志安全网关、任务级上下文预算、AST 最小切片与安全修改、防漂移证据、详情 UI 冗余和 Codex 插件交付链路。",
-        "completedSummary": null,
-        "historyRef": null,
-        "ruleRefs": [],
-        "decisionRefs": [],
-        "dependencyRefs": [],
-        "phases": [],
-        "checkpoints": [],
-        "createdAt": "2026-09-09T11:14:14.709Z",
-        "updatedAt": "2026-09-09T15:01:17.797Z"
-      },
-      {
-        "id": "contextos-execution-os",
-        "projectId": "contextos",
-        "title": "代码执行操作系统闭环",
-        "priority": "P0",
-        "status": "active",
-        "summary": "把 contextos 从架构记录与同步系统推进为具有可信执行证据、候选源码绑定和状态封存能力的代码操作系统。",
-        "completedSummary": null,
-        "historyRef": null,
-        "ruleRefs": [],
-        "decisionRefs": [],
-        "dependencyRefs": [],
-        "phases": [],
-        "checkpoints": [],
-        "createdAt": "2026-09-10T11:13:35.623Z",
-        "updatedAt": "2026-09-10T15:27:13.192Z"
-      },
-      {
-        "id": "contextos-usability-repair",
-        "projectId": "contextos",
-        "title": "使用闭环与隐形缺口修复",
-        "priority": "P0",
-        "status": "active",
-        "summary": "把 contextos 从可用的架构记录系统推进成默认开发路径。优先修复插件加载、编辑路径、事后同步、检查点过期、语义审查噪音和 UI 文案。",
-        "completedSummary": null,
-        "historyRef": null,
-        "ruleRefs": [],
-        "decisionRefs": [],
-        "dependencyRefs": [],
-        "phases": [],
-        "checkpoints": [],
-        "createdAt": "2026-09-10T15:45:04.348Z",
-        "updatedAt": "2026-09-10T16:01:22.800Z"
-      },
-      {
-        "id": "knowledge-sync-delivery",
-        "projectId": "contextos",
-        "title": "统一知识阅读与同步闭环交付",
-        "priority": "P0",
-        "status": "verifying",
-        "summary": "用户2026-09-12授权实施与推送。",
-        "completedSummary": null,
-        "historyRef": null,
-        "ruleRefs": [],
-        "decisionRefs": [],
-        "dependencyRefs": [],
-        "phases": [],
-        "checkpoints": [],
-        "createdAt": "2026-09-12T09:22:17.187Z",
-        "updatedAt": "2026-09-12T12:03:12.961Z"
-      },
       {
         "id": "plan-v2-rebuild",
         "projectId": "contextos",
@@ -159,17 +91,17 @@
             "objective": "Self-Adopt ContextOS Repository",
             "scope": "",
             "deliverables": [],
-            "status": "active",
+            "status": "completed",
             "taskIds": [],
             "acceptance": []
           },
           {
             "id": "P7",
             "order": 7,
-            "objective": "Swift App Daemon Client Decoupling",
+            "objective": "Swift App Metro Layout & Process Host",
             "scope": "",
             "deliverables": [],
-            "status": "pending",
+            "status": "active",
             "taskIds": [],
             "acceptance": []
           },
@@ -193,7 +125,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T14:02:27.075Z"
+            "completedAt": "2026-09-14T14:30:29.089Z"
           },
           {
             "id": "cp-p6-self-adopted",
@@ -203,17 +135,17 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T14:02:27.075Z"
+            "completedAt": "2026-09-14T14:30:29.089Z"
           },
           {
             "id": "cp-p7-desktop-verified",
             "planId": "plan-v2-rebuild",
             "phaseId": null,
-            "title": "Swift Desktop App builds and connects to daemon",
+            "title": "Swift Desktop App Metro Layout & Process Host verified",
             "criteria": "",
-            "status": "pending",
+            "status": "passed",
             "evidenceRefs": [],
-            "completedAt": null
+            "completedAt": "2026-09-14T14:30:29.089Z"
           },
           {
             "id": "cp-p8-reduction-proven",
@@ -226,8 +158,8 @@
             "completedAt": null
           }
         ],
-        "createdAt": "2026-09-14T14:02:27.075Z",
-        "updatedAt": "2026-09-14T14:02:27.075Z"
+        "createdAt": "2026-09-14T14:30:29.089Z",
+        "updatedAt": "2026-09-14T14:30:29.089Z"
       }
     ],
     "tasks": [
@@ -238,10 +170,11 @@
         "title": "Self-Adopt ContextOS Codebase into V2 Architecture",
         "status": "completed",
         "contextSlice": {
-          "objective": "Index all V2 packages, register real Blocks, and sync graph.json.",
+          "objective": "Index all 10 V2 packages, register real Blocks, and sync pure graph.json.",
           "constraints": [
             "Zero ghost blocks",
-            "All modified code bound to Blocks"
+            "All modified code bound to Blocks",
+            "Subway rail track chains"
           ],
           "references": {},
           "locators": [],
@@ -255,20 +188,23 @@
             "packages/domain/src/block.mjs",
             "packages/storage/src/database.mjs",
             "packages/storage/src/sync-engine.mjs",
+            "apps/daemon/src/osd.mjs",
             "packages/code-intel/src/code-tools.mjs",
             "packages/code-intel/src/language-registry.mjs",
             "packages/code-intel/src/coverage.mjs",
             "packages/process-host/src/runner.mjs",
             "packages/process-host/src/sanitizer.mjs",
             "packages/process-host/src/process-manager.mjs",
+            "packages/context/src/markdown-renderer.mjs",
             "packages/layout/src/network-layout.mjs",
             "packages/application/src/plan-service.mjs",
             "packages/application/src/task-service.mjs",
             "packages/application/src/knowledge-service.mjs",
-            "packages/context/src/markdown-renderer.mjs",
             "packages/mcp/src/v2-server.mjs",
             "packages/mcp/src/v2-service.mjs",
-            "apps/daemon/src/osd.mjs"
+            "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
+            "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift"
           ],
           "symbols": [],
           "candidateBlockIds": []
@@ -285,38 +221,39 @@
         },
         "notes": [
           {
-            "id": "note-1789394547084-v3oez",
+            "id": "note-1789396229137-nlo70",
             "text": "All V2 packages indexed and ready for binding.",
             "kind": "journal",
-            "createdAt": "2026-09-14T14:02:27.084Z"
+            "createdAt": "2026-09-14T14:30:29.137Z"
           }
         ],
         "checks": [
           {
-            "id": "check-1789394547084-a57n8",
+            "id": "check-1789396229138-s2fch",
             "receiptId": null,
-            "description": "All 24 V2 unit tests pass across domain, storage, code-intel, process-host, layout, application, and mcp.",
+            "description": "All V2 unit tests pass across domain, storage, code-intel, process-host, layout, application, and mcp.",
             "passed": true,
             "evidence": "",
-            "recordedAt": "2026-09-14T14:02:27.084Z"
+            "recordedAt": "2026-09-14T14:30:29.138Z"
           }
         ],
         "syncResult": {
           "createdBlockIds": [
             "block-domain-core",
             "block-storage-engine",
+            "block-daemon-host",
             "block-code-gateway",
             "block-command-gateway",
+            "block-context-renderer",
             "block-layout-engine",
             "block-lifecycle-services",
-            "block-context-renderer",
             "block-mcp-facades",
-            "block-daemon-host"
+            "block-desktop-app"
           ],
           "updatedChainIds": [
             "chain-core-engine",
             "chain-gateways",
-            "chain-mcp-application"
+            "chain-application-presentation"
           ],
           "updatedLinkIds": [
             "link-1",
@@ -324,123 +261,21 @@
             "link-3",
             "link-4",
             "link-5",
-            "link-6"
+            "link-6",
+            "link-7",
+            "link-8"
           ],
-          "completedAt": "2026-09-14T14:02:27.085Z"
+          "completedAt": "2026-09-14T14:30:29.139Z"
         },
-        "createdAt": "2026-09-14T14:02:27.083Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
-      },
-      {
-        "id": "task-test-1789394552283",
-        "planId": "plan-v2-rebuild",
-        "phaseId": "P8",
-        "title": "Practical Verification: Add assertChainHasValidMembers Invariant",
-        "status": "completed",
-        "contextSlice": {
-          "objective": "",
-          "constraints": [],
-          "references": {},
-          "locators": [],
-          "nextSteps": [],
-          "openQuestions": []
-        },
-        "workingSet": {
-          "files": [],
-          "symbols": [],
-          "candidateBlockIds": []
-        },
-        "references": {
-          "rules": [],
-          "decisionSections": [],
-          "blockIds": []
-        },
-        "baseline": {
-          "gitHead": null,
-          "dirtyHash": null,
-          "indexRevision": 0
-        },
-        "notes": [],
-        "checks": [
-          {
-            "id": "check-1789394552441-kc9cv",
-            "receiptId": null,
-            "description": "Existing domain unit test suite passes after invariant addition",
-            "passed": true,
-            "evidence": "",
-            "recordedAt": "2026-09-14T14:02:32.441Z"
-          }
-        ],
-        "syncResult": {
-          "createdBlockIds": [],
-          "updatedChainIds": [],
-          "updatedLinkIds": [],
-          "completedAt": "2026-09-14T14:02:32.441Z"
-        },
-        "createdAt": "2026-09-14T14:02:32.283Z",
-        "updatedAt": "2026-09-14T14:02:32.441Z"
+        "createdAt": "2026-09-14T14:30:29.137Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       }
     ],
     "blocks": [
       {
-        "id": "architecture-classification",
-        "projectId": "contextos",
-        "title": "架构分类与空间语义",
-        "summary": "为每个 Block 保存明确的 scope、架构层级和 localOrder；scope 只表达语义，不决定画布位置。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T11:22:16.990Z",
-        "updatedAt": "2026-09-12T13:51:01.527Z"
-      },
-      {
-        "id": "architecture-link-engine",
-        "projectId": "contextos",
-        "title": "架构智能推荐引擎 (Architecture Link Engine)",
-        "summary": "基于 AST 源码 import 依赖与分层架构契约，推荐并一键连接架构块",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:35:55.232Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "ast-facade-engine",
-        "projectId": "contextos",
-        "title": "AST 门面切片引擎",
-        "summary": "多语言 AST 符号提取与精准切片，消除全量代码文件带来的巨大 Token 冗余",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-08T09:57:17.172Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "atomic-mutation",
-        "projectId": "contextos",
-        "title": "原子图谱写入",
-        "summary": "通过小型、带 revision 的 MCP 写入和紧凑 checkpoint 查询更新架构、Plan、证据与历史，并保留跨表引用。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.644Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "bilingual-content",
-        "projectId": "contextos",
-        "title": "App 界面本地化",
-        "summary": "App 固定界面支持中英文；项目实体只保存并呈现作者或 AI 写入的单一原文。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.647Z",
-        "updatedAt": "2026-09-12T14:29:15.157Z"
-      },
-      {
         "id": "block-code-gateway",
         "projectId": "contextos",
-        "title": "Code Gateway & Coverage Checker",
+        "title": "Code Gateway & AST Intel",
         "summary": "Multi-language AST parsing, progressive outline, surgical read/edit with re-anchoring, and coverage gap detection.",
         "details": "",
         "artifactRefs": [
@@ -488,8 +323,8 @@
             "path": "packages/code-intel/src/language-registry.mjs",
             "symbol": "LanguageRegistry",
             "startLine": 8,
-            "endLine": 408,
-            "hash": "96bc80d44d72c76b",
+            "endLine": 501,
+            "hash": "2c7c124139e9aa50",
             "role": "implementation"
           },
           {
@@ -526,8 +361,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "block-command-gateway",
@@ -556,8 +391,8 @@
             "path": "packages/process-host/src/sanitizer.mjs",
             "symbol": "redactSecrets",
             "startLine": 13,
-            "endLine": 20,
-            "hash": "9256c98d3f50078d",
+            "endLine": 89,
+            "hash": "98a3287750e3875c",
             "role": "implementation"
           },
           {
@@ -572,38 +407,38 @@
             "path": "packages/process-host/src/process-manager.mjs",
             "symbol": "ProcessManager",
             "startLine": 6,
-            "endLine": 207,
-            "hash": "583a6e11650fe49f",
+            "endLine": 221,
+            "hash": "327aed2a9c8ab823",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/process-host/src/process-manager.mjs",
+            "symbol": "ProcessManager._persistProcesses",
+            "startLine": 97,
+            "endLine": 103,
+            "hash": "c055ca2f2892ffdb",
             "role": "implementation"
           },
           {
             "path": "packages/process-host/src/process-manager.mjs",
             "symbol": "ProcessManager.listProcesses",
-            "startLine": 94,
-            "endLine": 96,
+            "startLine": 105,
+            "endLine": 107,
             "hash": "7086395e1a76bb0a",
             "role": "implementation"
           },
           {
             "path": "packages/process-host/src/process-manager.mjs",
             "symbol": "ProcessManager.getProcess",
-            "startLine": 98,
-            "endLine": 101,
+            "startLine": 109,
+            "endLine": 112,
             "hash": "dc2df982d4fbef73",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/process-host/src/process-manager.mjs",
-            "symbol": "ProcessManager.getLogs",
-            "startLine": 103,
-            "endLine": 103,
-            "hash": "00cb5d34ba2f2e96",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "block-context-renderer",
@@ -616,8 +451,8 @@
             "path": "packages/context/src/markdown-renderer.mjs",
             "symbol": "MarkdownRenderer",
             "startLine": 6,
-            "endLine": 165,
-            "hash": "423fbafcc9c39e26",
+            "endLine": 61,
+            "hash": "25a0f2b5748cb355",
             "role": "implementation"
           },
           {
@@ -627,27 +462,11 @@
             "endLine": 7,
             "hash": "13581dcaa8961e61",
             "role": "implementation"
-          },
-          {
-            "path": "packages/context/src/markdown-renderer.mjs",
-            "symbol": "MarkdownRenderer.renderPlan",
-            "startLine": 63,
-            "endLine": 96,
-            "hash": "94dd5926a6f7d322",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/context/src/markdown-renderer.mjs",
-            "symbol": "MarkdownRenderer.renderTask",
-            "startLine": 98,
-            "endLine": 137,
-            "hash": "68d2fa2714f97bf0",
-            "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "block-daemon-host",
@@ -690,8 +509,116 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
+      },
+      {
+        "id": "block-desktop-app",
+        "projectId": "contextos",
+        "title": "SwiftUI Desktop Visualizer",
+        "summary": "Native macOS desktop client with subway map visualization and long-running process manager.",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "symbol": "ContentView",
+            "startLine": 3,
+            "endLine": 448,
+            "hash": "7d0752461d91b10d",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "symbol": "ContentView.body",
+            "startLine": 13,
+            "endLine": 67,
+            "hash": "8b8cb93099b15251",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "symbol": "ContentView.openDocument",
+            "startLine": 69,
+            "endLine": 74,
+            "hash": "2a407d2b71e12afa",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "symbol": "ContentView.closeDocument",
+            "startLine": 75,
+            "endLine": 75,
+            "hash": "67d81e0b610df2f7",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
+            "symbol": "GraphCanvasView",
+            "startLine": 5,
+            "endLine": 663,
+            "hash": "5178f3421fabf5e9",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
+            "symbol": "GraphCanvasView.body",
+            "startLine": 15,
+            "endLine": 85,
+            "hash": "71502c47d306686d",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
+            "symbol": "GraphCanvasView.rebuildScene",
+            "startLine": 98,
+            "endLine": 118,
+            "hash": "714b48c97387c072",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
+            "symbol": "GraphCanvasView.grid",
+            "startLine": 142,
+            "endLine": 157,
+            "hash": "deefc3307623b2f2",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "symbol": "LayoutEdge",
+            "startLine": 3,
+            "endLine": 7,
+            "hash": "149c1226dfc52218",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "symbol": "LayoutNodeMetadata",
+            "startLine": 9,
+            "endLine": 13,
+            "hash": "2303bc420eeed383",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "symbol": "LayoutBand",
+            "startLine": 15,
+            "endLine": 19,
+            "hash": "0ba246663fc8f911",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "symbol": "NetworkLayoutSnapshot",
+            "startLine": 21,
+            "endLine": 27,
+            "hash": "1748237ec9a9e07e",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "block-domain-core",
@@ -798,28 +725,28 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.138Z",
+        "updatedAt": "2026-09-14T14:30:29.138Z"
       },
       {
         "id": "block-layout-engine",
         "projectId": "contextos",
-        "title": "DAG Topological Layout Engine",
-        "summary": "Solves the long-snake layout issue with chain clustering, DAG ranking, and width-constrained wrapping.",
+        "title": "Metro Map DAG Layout Engine",
+        "summary": "Subway rail track placement, adjacent station ordering, and orthogonal transfer routing.",
         "details": "",
         "artifactRefs": [
           {
             "path": "packages/layout/src/network-layout.mjs",
             "symbol": "NetworkLayoutEngine",
-            "startLine": 10,
-            "endLine": 150,
-            "hash": "9ba9cfa4c2c503fa",
+            "startLine": 12,
+            "endLine": 119,
+            "hash": "bd1abadf2fc36529",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "block-lifecycle-services",
@@ -926,8 +853,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "block-mcp-facades",
@@ -994,19 +921,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
-      },
-      {
-        "id": "block-seal-engine",
-        "projectId": "contextos",
-        "title": "Block Seal Engine",
-        "summary": "在源码绑定和可信验证证据满足条件后，正式封存 Block 的实现状态。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "block-storage-engine",
@@ -1081,714 +997,26 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
-      },
-      {
-        "id": "chain-route-overlay",
-        "projectId": "contextos",
-        "title": "Chain 方向包围框",
-        "summary": "每条 Chain 只用沿真实顺序路线的带方向圆角正交包围框表示，Chain 详情放在侧栏和检视器。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.646Z",
-        "updatedAt": "2026-09-12T14:29:15.157Z"
-      },
-      {
-        "id": "chain-topology-engine",
-        "projectId": "contextos",
-        "title": "Chain 拓扑协调引擎 (Chain Topology Engine)",
-        "summary": "校验 Chain 的显式 Link 网络，检测回路、断开组件和反向边，并在安全 DAG 中稳定重排节点。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-12T13:08:16.647Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "checkpoint-coverage-map",
-        "projectId": "contextos",
-        "title": "Checkpoint Coverage Map",
-        "summary": "测试回执可映射到受影响 Block，减少手工重测 stale checkpoint。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T15:45:04.348Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "city-layout",
-        "projectId": "contextos",
-        "title": "Chain 主路城市网络布局",
-        "summary": "用确定性的 Chain-first 正交街道网络排布 Block、Link 和 Chain 包围框，并在主项目与隔离大图中保持有界、可预测的布局耗时。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.644Z",
-        "updatedAt": "2026-09-12T14:29:15.157Z"
-      },
-      {
-        "id": "codex-plugin",
-        "projectId": "contextos",
-        "title": "Codex 插件集成",
-        "summary": "内置 contextos MCP 与 Skill；App 一键安装后由 Codex 在新任务中按需自动拉起服务，公开交付为中文 README、功能 GIF、多张真实界面截图与 MIT License。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.644Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "codex-plugin-lifecycle",
-        "projectId": "contextos",
-        "title": "Codex Plugin Lifecycle Manager",
-        "summary": "管理 Codex 规范插件的安装、清理与个人市场注册，杜绝外部市场源污染。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T10:29:10.521Z",
-        "updatedAt": "2026-09-12T13:51:01.527Z"
-      },
-      {
-        "id": "compact-block-card",
-        "projectId": "contextos",
-        "title": "紧凑 Block 卡片",
-        "summary": "统一卡片展示 Block 身份、summary、交付状态、健康状态和 Chain 归属，不用多种造型制造歧义。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.646Z",
-        "updatedAt": "2026-09-12T14:29:15.485Z"
-      },
-      {
-        "id": "context-retrieval",
-        "projectId": "contextos",
-        "title": "预算化上下文读取",
-        "summary": "任务预算化读取：CJK 中文分词、字段加权与稀有词优先检索，优先返回目标模块坐标、规则正文、简短 Decision、Document 章节索引和可恢复任务。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.640Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "coverage-integrity",
-        "projectId": "contextos",
-        "title": "Checkpoint 覆盖完整性",
-        "summary": "MCP 与 App 统一派生每个 Block 的 checkpoint、Plan、Chain、有效验证和 gate 完整性。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-05T10:52:00.712Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "desktop-context-console",
-        "projectId": "contextos",
-        "title": "Context 操作系统桌面控制台",
-        "summary": "macOS Canvas 只展示契约优先流和验证证据，不在 UI 内读取或复制完整实现函数体",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-08T09:57:17.172Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "detail-inspector",
-        "projectId": "contextos",
-        "title": "唯一详情检视器",
-        "summary": "右侧检视器展示 Block 级 Plan 工作、完整 Chain 路径和 checkpoint 阻塞关系；passed 证据保留但不占用默认验证收件箱。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.646Z",
-        "updatedAt": "2026-09-12T14:29:15.157Z"
-      },
-      {
-        "id": "editor-detector",
-        "projectId": "contextos",
-        "title": "Editor Platform Detector",
-        "summary": "检测系统已安装的 AI 编辑器 (Claude, Cursor, Antigravity, OpenCode, Codex) 并读取版本比对状态。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T10:29:10.521Z",
-        "updatedAt": "2026-09-12T13:51:01.527Z"
-      },
-      {
-        "id": "execution-receipt-ledger",
-        "projectId": "contextos",
-        "title": "Execution Receipt Ledger",
-        "summary": "持久化受控命令执行结果、Git/source identity、摘要和可引用 executionId。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "foundation-plan-bootstrap",
-        "projectId": "contextos",
-        "title": "Foundation Plan 自动编排",
-        "summary": "自动从完整架构生成覆盖全部未实现 Block（含 standalone）的 Foundation Plan。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-05T10:52:00.712Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "gesture-navigation",
-        "projectId": "contextos",
-        "title": "连续画布导航",
-        "summary": "支持触控板平移、捏合缩放、Command 滚轮和双击缩放；所有缩放入口统一以 Canvas 可视区域正中心为锚点。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.646Z",
-        "updatedAt": "2026-09-12T14:29:15.485Z"
-      },
-      {
-        "id": "in-app-plugin-install",
-        "projectId": "contextos",
-        "title": "App 内插件安装",
-        "summary": "Settings 提供 Codex、Claude、Cursor、Windsurf、OpenCode 等编辑器的 MCP 配置入口；Codex 安装完整插件并检查 skill、版本与构建指纹。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.647Z",
-        "updatedAt": "2026-09-12T13:51:01.527Z"
-      },
-      {
-        "id": "knowledge-document-engine",
-        "projectId": "contextos",
-        "title": "OS原生文档与章节检索",
-        "summary": "版本化Markdown Document、章节检索与迁移，正文在canonical graph中唯一存储。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-12T09:02:15.612Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "knowledge-reader-ui",
-        "projectId": "contextos",
-        "title": "统一知识阅读器",
-        "summary": "左侧知识抽屉列出 README 与 OS 文档；点击后在右侧详情阅读，架构画布保持挂载。后台读取、解析与缓存文档，避免导航时重建画布。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-12T09:02:15.612Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "large-system-benchmark",
-        "projectId": "contextos",
-        "title": "全栈大图基准",
-        "summary": "300 Block、599 Link、6 Chain 的产品级 Canvas 视觉表现已验收；可重复基准脚本与外部模型对比不属于当前仓库。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T11:22:16.990Z",
-        "updatedAt": "2026-09-12T16:00:27.200Z"
-      },
-      {
-        "id": "live-binding-refresh",
-        "projectId": "contextos",
-        "title": "Live Binding Refresh",
-        "summary": "源码 SourceBinding 路径与符号同步：保存当前行号和持久化同步游标；新增文件进入源码索引，缺失/歧义绑定需要确认，候选通过显式 accept 写入。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T15:45:04.348Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "live-desktop-reader",
-        "projectId": "contextos",
-        "title": "桌面实时只读投影",
-        "summary": "macOS App 在 250ms 轮询边界内观察已提交的 change sequence，无需手动刷新即可重绘。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.644Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "mcp-checkpoint-engine",
-        "projectId": "contextos",
-        "title": "MCP 验证门禁与检查点引擎 (Checkpoint Engine)",
-        "summary": "负责质量检查点审计、源码身份快照与 retest 门禁，校验四级验证凭据并驱动 Block 与 Plan 状态级联。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:46:20.913Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "mcp-context-engine",
-        "projectId": "contextos",
-        "title": "MCP 上下文智能检索引擎 (Context Engine)",
-        "summary": "提供任务驱动的最小上下文投影与共享预算，执行 CJK/英文相关度检索并防止重复 Markdown/结构化展开。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:46:20.913Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "mcp-mutation-engine",
-        "projectId": "contextos",
-        "title": "MCP 原子变更与语法补丁引擎 (Mutation Engine)",
-        "summary": "负责图谱原子变更事务管理、contextos/1 紧凑补丁语法解析与执行，以及变更集（ChangeSet）安全回滚。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:46:20.913Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "mcp-operation-envelope",
-        "projectId": "contextos",
-        "title": "MCP Operation Envelope",
-        "summary": "为所有工具提供稳定的 ok、operation、revision、changed、truncated、budget 和 error 状态头。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-12T16:04:08.390Z"
-      },
-      {
-        "id": "mcp-plan-engine",
-        "projectId": "contextos",
-        "title": "MCP 计划编排与基础骨架引擎 (Plan Engine)",
-        "summary": "负责 Plan 计划编排与上下文渲染，支持创建带阶段依赖的基础计划与自动挂载质量门禁。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:46:20.913Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "mcp-protocol-server",
-        "projectId": "contextos",
-        "title": "MCP 协议服务网关 (MCP Protocol Server)",
-        "summary": "暴露标准 MCP 工具集，提供项目内命令安全网关、契约优先 Chain 流和多项目路由",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:35:55.232Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "mcp-query-engine",
-        "projectId": "contextos",
-        "title": "MCP 图谱查询与映射引擎 (Query Engine)",
-        "summary": "负责全景图谱只读查询、决策列表检索、实体详情打开、版本差异比对与图谱一致性完整性校验。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:46:20.913Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "mcp-schema-engine",
-        "projectId": "contextos",
-        "title": "MCP 领域模型与归一化引擎 (Schema Engine)",
-        "summary": "集中管理领域模型定义、实体 Normalizer、状态机推导、架构覆盖率计算与分词常量。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:46:20.913Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "mcp-service-facade",
-        "projectId": "contextos",
-        "title": "MCP 核心服务门面 (Service Facade)",
-        "summary": "统一聚合调度六大领域引擎，对外暴露 ContextOSService，提供轻量统一 API 并 100% 保持向后兼容。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:46:20.913Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "mutation-path-router",
-        "projectId": "contextos",
-        "title": "Mutation Path Router",
-        "summary": "区分已绑定单符号补丁、新符号/多文件原生编辑，和绑定失效后的重绑定路径。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T15:45:04.348Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "native-app-package",
-        "projectId": "contextos",
-        "title": "原生 App 打包与图标",
-        "summary": "macOS App 目标包含可验证的可执行文件、Info.plist 和完整多分辨率图标集；当前公开交付以 MIT License、中文 GitHub README、功能 GIF 和多张真实界面截图为准。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.647Z",
-        "updatedAt": "2026-09-12T13:51:01.527Z"
-      },
-      {
-        "id": "natural-flow-engine",
-        "projectId": "contextos",
-        "title": "自然箭头流引擎 (Natural Flow Engine)",
-        "summary": "解析 A -> B -> C 业务管线与箭头语义，自动生成并维护拓扑 Link",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:35:55.232Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "orthogonal-street-router",
-        "projectId": "contextos",
-        "title": "多折线正交道路路由",
-        "summary": "将全局 Link 通过避障的横竖街道走廊连接，先分配 Chain 主路，再连接普通支路。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.646Z",
-        "updatedAt": "2026-09-12T14:29:15.157Z"
-      },
-      {
-        "id": "plan-workflow",
-        "projectId": "contextos",
-        "title": "独立 Plan 工作流",
-        "summary": "Plan 直接编排 Block、Chain 与 Link 变化并分别计算五类工作/gate 进度；Chain 仅为路径。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.647Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "plugin-hot-reload",
-        "projectId": "contextos",
-        "title": "Plugin Hot Reload",
-        "summary": "仓库插件 bundle 变化后，Codex cache 和运行中 MCP 必须显示已过期并提供一键重装。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T15:45:04.348Z",
-        "updatedAt": "2026-09-12T13:51:01.527Z"
-      },
-      {
-        "id": "product-contract",
-        "projectId": "contextos",
-        "title": "文档替代契约",
-        "summary": "contextos 是开发期唯一上下文；AI 读取的是确定性 Markdown 投影，只有公开发布 Markdown 才作为独立人类材料保留。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.640Z",
-        "updatedAt": "2026-09-12T14:28:51.692Z"
-      },
-      {
-        "id": "progressive-materializer",
-        "projectId": "contextos",
-        "title": "虚实蓝图渐进物化状态机",
-        "summary": "无缝统合 Ghost 虚拟规划蓝图（0 Token 消耗）与 Solid 实体落地代码门面",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-08T09:57:17.172Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "project-registration",
-        "projectId": "contextos",
-        "title": "项目注册",
-        "summary": "用极小的 descriptor 将一个仓库根目录绑定到稳定的 contextos 项目身份。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.640Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "project-service-router",
-        "projectId": "contextos",
-        "title": "项目级服务路由",
-        "summary": "每次 MCP 调用都按明确的 projectRoot 解析到隔离的图谱服务。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.640Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "project-switcher",
-        "projectId": "contextos",
-        "title": "多项目切换器",
-        "summary": "多项目切换隔离数据库、UI 状态、验证收件箱、watcher 与 MCP 路由；恢复时丢弃已不存在的 selection/focus/Chain 高亮，并持久化每项目 camera。真实进程重启与 error/reconnect watcher 刷新已验证。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.647Z",
-        "updatedAt": "2026-09-12T14:29:15.485Z"
-      },
-      {
-        "id": "projection-outbox",
-        "projectId": "contextos",
-        "title": "图谱投影补写队列",
-        "summary": "数据库提交和graph.json投影的可恢复发布状态。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-12T09:02:15.612Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "quiet-status-copy",
-        "projectId": "contextos",
-        "title": "Quiet Status Copy",
-        "summary": "去掉误导性文案：独立检查点不是错误，Decision 不用对用户解释为项目记忆。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T15:45:04.348Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "reproducible-context-benchmark",
-        "projectId": "contextos",
-        "title": "可复现上下文基准",
-        "summary": "隔离快照测量上下文和日志字符，保留负结果并说明基线。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-12T08:27:28.730Z",
-        "updatedAt": "2026-09-12T16:00:27.200Z"
-      },
-      {
-        "id": "semantic-zoom",
-        "projectId": "contextos",
-        "title": "语义架构缩放",
-        "summary": "在不改变拓扑、归属或 summary 的前提下，用连续镜头查看全网和细节密度。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T11:22:16.990Z",
-        "updatedAt": "2026-09-12T13:51:01.527Z"
-      },
-      {
-        "id": "source-binding-discovery",
-        "projectId": "contextos",
-        "title": "SourceBinding Discovery",
-        "summary": "根据 AST symbol、导入调用关系、测试和架构契约生成可确认的源码绑定候选。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "source-binding-index",
-        "projectId": "contextos",
-        "title": "Source Binding Index",
-        "summary": "以文件内稳定 symbol 为锚点，扫描外部代码变化并为 Block/Chain/Checkpoint 提供当前源状态。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T12:55:49.090Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "sqlite-graph-store",
-        "projectId": "contextos",
-        "title": "SQLite 语义图存储",
-        "summary": "项目级 SQLite 保存唯一语义图；Git checkout 替换数据库文件时桌面 reader 与长驻 MCP router 都能检测文件身份、重开连接并重新对齐 snapshot。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.640Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "stable-view-state",
-        "projectId": "contextos",
-        "title": "稳定画布状态机",
-        "summary": "选择、聚焦、缩放和项目切换只改变视图状态，不重排同一份项目网络。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T11:22:16.990Z",
-        "updatedAt": "2026-09-12T13:51:01.527Z"
-      },
-      {
-        "id": "task-reconciliation-engine",
-        "projectId": "contextos",
-        "title": "持久化同步与任务收尾",
-        "summary": "任务session、增量文件索引、同步待办、功能Chain和可恢复收尾。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-12T09:02:15.612Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "terminal-sanitizer",
-        "projectId": "contextos",
-        "title": "终端日志智能脱敏压缩器",
-        "summary": "统一捕获 stdout/stderr，先脱敏凭据与本机路径，再压缩常规输出并保留失败上下文",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-08T09:57:17.172Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "timeline-engine",
-        "projectId": "contextos",
-        "title": "时间线与执行游标引擎 (Timeline Engine)",
-        "summary": "管理全局阶段编排 (Phase)、优先级排序 (P0-P3) 与跨会话活跃游标 (Active Cursor)",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-09T04:35:55.232Z",
-        "updatedAt": "2026-09-12T16:00:27.121Z"
-      },
-      {
-        "id": "verification-suite",
-        "projectId": "contextos",
-        "title": "跨层验证套件",
-        "summary": "MCP、图谱、Canvas、覆盖、生命周期和可访问性契约已记录；GitHub 公开页的媒体与文案复核仍开放。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.647Z",
-        "updatedAt": "2026-09-12T16:00:27.159Z"
-      },
-      {
-        "id": "view-lenses",
-        "projectId": "contextos",
-        "title": "按 Block 类型筛选视图",
-        "summary": "Canvas 顶部 checkbox 只筛选实际架构 Block.kind；可见子图变化时重新计算布局并以 0.28 秒过渡呈现，后台规则不进入 Canvas。",
-        "details": "",
-        "artifactRefs": [],
-        "history": [],
-        "createdAt": "2026-09-04T08:43:41.644Z",
-        "updatedAt": "2026-09-12T14:29:15.485Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       }
     ],
     "chains": [
       {
-        "id": "agent-feedback-benchmark",
+        "id": "chain-application-presentation",
         "projectId": "contextos",
-        "title": "上下文基准",
+        "title": "Application & Presentation",
         "summary": "",
         "kind": "leaf",
-        "memberIds": [],
+        "memberIds": [
+          "block-lifecycle-services",
+          "block-mcp-facades",
+          "block-layout-engine",
+          "block-desktop-app"
+        ],
         "metadata": {},
-        "createdAt": "2026-09-12T16:00:18.046Z",
-        "updatedAt": "2026-09-12T16:00:18.052Z"
-      },
-      {
-        "id": "agent-feedback-boundary",
-        "projectId": "contextos",
-        "title": "边界与核心编排",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-12T16:00:18.046Z",
-        "updatedAt": "2026-09-12T16:00:18.049Z"
-      },
-      {
-        "id": "agent-feedback-checkpoints",
-        "projectId": "contextos",
-        "title": "回执与检查点",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-12T16:00:18.046Z",
-        "updatedAt": "2026-09-12T16:00:18.051Z"
-      },
-      {
-        "id": "agent-feedback-context",
-        "projectId": "contextos",
-        "title": "上下文与持久化",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-12T16:00:18.046Z",
-        "updatedAt": "2026-09-12T16:00:18.050Z"
-      },
-      {
-        "id": "agent-feedback-knowledge",
-        "projectId": "contextos",
-        "title": "知识同步投影",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-12T16:00:18.046Z",
-        "updatedAt": "2026-09-12T16:00:18.051Z"
-      },
-      {
-        "id": "agent-feedback-loop",
-        "projectId": "contextos",
-        "title": "AI 上下文反馈闭环（分层组合链）",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-04T08:45:21.407Z",
-        "updatedAt": "2026-09-12T16:03:59.074Z"
-      },
-      {
-        "id": "agent-feedback-source",
-        "projectId": "contextos",
-        "title": "源码定位与安全物化",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-12T16:00:18.046Z",
-        "updatedAt": "2026-09-12T16:00:18.050Z"
-      },
-      {
-        "id": "agent-feedback-verification",
-        "projectId": "contextos",
-        "title": "验证与封存",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-12T16:00:18.046Z",
-        "updatedAt": "2026-09-12T16:00:18.052Z"
-      },
-      {
-        "id": "bilingual-flow",
-        "projectId": "contextos",
-        "title": "界面语言投影",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-04T08:45:21.407Z",
-        "updatedAt": "2026-09-06T09:50:42.819Z"
-      },
-      {
-        "id": "chain-context-os",
-        "projectId": "contextos",
-        "title": "AI Context 操作系统生命周期流",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-08T09:57:17.172Z",
-        "updatedAt": "2026-09-08T11:44:54.797Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "chain-core-engine",
@@ -1802,8 +1030,8 @@
           "block-daemon-host"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "chain-gateways",
@@ -1817,622 +1045,11 @@
           "block-context-renderer"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
-      },
-      {
-        "id": "chain-mcp-application",
-        "projectId": "contextos",
-        "title": "Application & MCP Facade",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [
-          "block-lifecycle-services",
-          "block-mcp-facades"
-        ],
-        "metadata": {},
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
-      },
-      {
-        "id": "chain-mcp-modular-architecture",
-        "projectId": "contextos",
-        "title": "MCP 领域引擎分层架构链路 (MCP Modular Architecture)",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-09T04:47:03.789Z",
-        "updatedAt": "2026-09-12T13:11:12.982Z"
-      },
-      {
-        "id": "city-canvas-projection",
-        "projectId": "contextos",
-        "title": "Chain 主路城市画布",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-04T08:45:21.407Z",
-        "updatedAt": "2026-09-12T13:56:16.864Z"
-      },
-      {
-        "id": "continuous-navigation",
-        "projectId": "contextos",
-        "title": "连续画布导航",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-04T08:45:21.407Z",
-        "updatedAt": "2026-09-06T09:50:42.819Z"
-      },
-      {
-        "id": "knowledge-delivery",
-        "projectId": "contextos",
-        "title": "AI写入到用户阅读",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-12T09:02:15.612Z",
-        "updatedAt": "2026-09-12T12:41:30.709Z"
-      },
-      {
-        "id": "knowledge-sync-delivery-flow",
-        "projectId": "contextos",
-        "title": "项目知识与同步交付闭环",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-12T09:22:54.155Z",
-        "updatedAt": "2026-09-12T14:37:27.026Z"
-      },
-      {
-        "id": "plugin-release",
-        "projectId": "contextos",
-        "title": "Codex 插件与 App 发布",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-04T08:45:21.407Z",
-        "updatedAt": "2026-09-12T13:56:16.620Z"
-      },
-      {
-        "id": "project-lifecycle",
-        "projectId": "contextos",
-        "title": "项目注册与实时打开",
-        "summary": "",
-        "kind": "leaf",
-        "memberIds": [],
-        "metadata": {},
-        "createdAt": "2026-09-04T08:45:21.407Z",
-        "updatedAt": "2026-09-05T08:54:42.938Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       }
     ],
     "links": [
-      {
-        "id": "architecture-guides-layout",
-        "projectId": "contextos",
-        "from": "architecture-classification",
-        "to": "city-layout",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T11:22:16.990Z",
-        "updatedAt": "2026-09-05T10:00:54.006Z"
-      },
-      {
-        "id": "atomic-verify",
-        "projectId": "contextos",
-        "from": "atomic-mutation",
-        "to": "verification-suite",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.414Z",
-        "updatedAt": "2026-09-04T08:45:21.414Z"
-      },
-      {
-        "id": "benchmark-validates-context",
-        "projectId": "contextos",
-        "from": "reproducible-context-benchmark",
-        "to": "context-retrieval",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T08:27:28.730Z",
-        "updatedAt": "2026-09-12T08:27:28.730Z"
-      },
-      {
-        "id": "benchmark-verification-link",
-        "projectId": "contextos",
-        "from": "verification-suite",
-        "to": "large-system-benchmark",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T10:25:13.012Z",
-        "updatedAt": "2026-09-12T13:49:51.849Z"
-      },
-      {
-        "id": "buildings-inspector",
-        "projectId": "contextos",
-        "from": "compact-block-card",
-        "to": "detail-inspector",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "chain-buildings",
-        "projectId": "contextos",
-        "from": "chain-route-overlay",
-        "to": "compact-block-card",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "chain-inspector",
-        "projectId": "contextos",
-        "from": "chain-route-overlay",
-        "to": "detail-inspector",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "chain-network-checkpoint-map",
-        "projectId": "contextos",
-        "from": "mcp-checkpoint-engine",
-        "to": "checkpoint-coverage-map",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:49:35.597Z",
-        "updatedAt": "2026-09-12T13:49:35.597Z"
-      },
-      {
-        "id": "chain-network-envelope-protocol",
-        "projectId": "contextos",
-        "from": "mcp-operation-envelope",
-        "to": "mcp-protocol-server",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:49:35.597Z",
-        "updatedAt": "2026-09-12T13:49:35.597Z"
-      },
-      {
-        "id": "chain-network-mutation-router",
-        "projectId": "contextos",
-        "from": "mcp-mutation-engine",
-        "to": "mutation-path-router",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:55:10.937Z",
-        "updatedAt": "2026-09-12T13:55:10.937Z"
-      },
-      {
-        "id": "chain-network-plan-quiet-status",
-        "projectId": "contextos",
-        "from": "mcp-plan-engine",
-        "to": "quiet-status-copy",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:49:35.597Z",
-        "updatedAt": "2026-09-12T13:49:35.597Z"
-      },
-      {
-        "id": "chain-network-plan-workflow",
-        "projectId": "contextos",
-        "from": "mcp-plan-engine",
-        "to": "plan-workflow",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:49:35.597Z",
-        "updatedAt": "2026-09-12T13:49:35.597Z"
-      },
-      {
-        "id": "chain-network-project-router-service",
-        "projectId": "contextos",
-        "from": "project-service-router",
-        "to": "mcp-service-facade",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:49:35.597Z",
-        "updatedAt": "2026-09-12T13:49:35.597Z"
-      },
-      {
-        "id": "chain-network-task-knowledge",
-        "projectId": "contextos",
-        "from": "task-reconciliation-engine",
-        "to": "knowledge-document-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:49:35.597Z",
-        "updatedAt": "2026-09-12T13:49:35.597Z"
-      },
-      {
-        "id": "chain-network-verification-seal",
-        "projectId": "contextos",
-        "from": "verification-suite",
-        "to": "block-seal-engine",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:49:35.597Z",
-        "updatedAt": "2026-09-12T13:49:35.597Z"
-      },
-      {
-        "id": "city-chain-focus",
-        "projectId": "contextos",
-        "from": "city-layout",
-        "to": "chain-route-overlay",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "city-streets",
-        "projectId": "contextos",
-        "from": "city-layout",
-        "to": "orthogonal-street-router",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "codex-mutation",
-        "projectId": "contextos",
-        "from": "codex-plugin",
-        "to": "atomic-mutation",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
-      },
-      {
-        "id": "composite-agent-boundary-context",
-        "projectId": "contextos",
-        "from": "agent-feedback-boundary",
-        "to": "agent-feedback-context",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T16:00:18.094Z",
-        "updatedAt": "2026-09-12T16:00:18.094Z"
-      },
-      {
-        "id": "composite-agent-checkpoints-verification",
-        "projectId": "contextos",
-        "from": "agent-feedback-checkpoints",
-        "to": "agent-feedback-verification",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T16:00:18.094Z",
-        "updatedAt": "2026-09-12T16:00:18.094Z"
-      },
-      {
-        "id": "composite-agent-context-source",
-        "projectId": "contextos",
-        "from": "agent-feedback-context",
-        "to": "agent-feedback-source",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T16:00:18.094Z",
-        "updatedAt": "2026-09-12T16:00:18.094Z"
-      },
-      {
-        "id": "composite-agent-knowledge-checkpoints",
-        "projectId": "contextos",
-        "from": "agent-feedback-knowledge",
-        "to": "agent-feedback-checkpoints",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T16:00:18.094Z",
-        "updatedAt": "2026-09-12T16:00:18.094Z"
-      },
-      {
-        "id": "composite-agent-source-knowledge",
-        "projectId": "contextos",
-        "from": "agent-feedback-source",
-        "to": "agent-feedback-knowledge",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T16:00:18.094Z",
-        "updatedAt": "2026-09-12T16:00:18.094Z"
-      },
-      {
-        "id": "composite-agent-verification-benchmark",
-        "projectId": "contextos",
-        "from": "agent-feedback-verification",
-        "to": "agent-feedback-benchmark",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T16:00:18.094Z",
-        "updatedAt": "2026-09-12T16:00:18.094Z"
-      },
-      {
-        "id": "context-ast-facade",
-        "projectId": "contextos",
-        "from": "context-retrieval",
-        "to": "ast-facade-engine",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T10:25:13.012Z",
-        "updatedAt": "2026-09-08T10:25:13.012Z"
-      },
-      {
-        "id": "context-codex",
-        "projectId": "contextos",
-        "from": "context-retrieval",
-        "to": "codex-plugin",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
-      },
-      {
-        "id": "context-console-inspector",
-        "projectId": "contextos",
-        "from": "desktop-context-console",
-        "to": "detail-inspector",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T10:25:13.012Z",
-        "updatedAt": "2026-09-12T13:49:51.849Z"
-      },
-      {
-        "id": "coverage-verification-link",
-        "projectId": "contextos",
-        "from": "verification-suite",
-        "to": "coverage-integrity",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T10:25:13.012Z",
-        "updatedAt": "2026-09-08T10:25:13.012Z"
-      },
-      {
-        "id": "detect-install",
-        "projectId": "contextos",
-        "from": "editor-detector",
-        "to": "in-app-plugin-install",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T05:12:47.690Z",
-        "updatedAt": "2026-09-10T05:12:47.690Z"
-      },
-      {
-        "id": "gesture-city",
-        "projectId": "contextos",
-        "from": "gesture-navigation",
-        "to": "city-layout",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "install-codex-lifecycle",
-        "projectId": "contextos",
-        "from": "in-app-plugin-install",
-        "to": "codex-plugin-lifecycle",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T05:15:40.782Z",
-        "updatedAt": "2026-09-12T13:49:51.849Z"
-      },
-      {
-        "id": "install-package",
-        "projectId": "contextos",
-        "from": "in-app-plugin-install",
-        "to": "native-app-package",
-        "kind": "depends_on",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.414Z",
-        "updatedAt": "2026-09-04T08:45:21.414Z"
-      },
-      {
-        "id": "knowledge-publishes",
-        "projectId": "contextos",
-        "from": "knowledge-document-engine",
-        "to": "projection-outbox",
-        "kind": "writes",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T09:22:17.187Z",
-        "updatedAt": "2026-09-12T09:22:17.187Z"
-      },
-      {
-        "id": "knowledge-reader-loads-documents",
-        "projectId": "contextos",
-        "from": "knowledge-reader-ui",
-        "to": "knowledge-document-engine",
-        "kind": "reads",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T09:02:15.612Z",
-        "updatedAt": "2026-09-12T09:43:37.560Z"
-      },
-      {
-        "id": "layout-drives-semantic-zoom",
-        "projectId": "contextos",
-        "from": "city-layout",
-        "to": "semantic-zoom",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T11:22:16.990Z",
-        "updatedAt": "2026-09-05T10:00:54.006Z"
-      },
-      {
-        "id": "lenses-city",
-        "projectId": "contextos",
-        "from": "view-lenses",
-        "to": "city-layout",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "link_3f24b30d-8867-451d-aca7-b30b9eb7daac",
-        "projectId": "contextos",
-        "from": "plugin-hot-reload",
-        "to": "codex-plugin",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T15:45:40.645Z",
-        "updatedAt": "2026-09-10T15:45:40.645Z"
-      },
-      {
-        "id": "link_9e1b9ba3-8631-4c97-98f8-118891271cbd",
-        "projectId": "contextos",
-        "from": "mutation-path-router",
-        "to": "live-binding-refresh",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T15:45:40.645Z",
-        "updatedAt": "2026-09-10T15:45:40.645Z"
-      },
-      {
-        "id": "link_a7cd6a1c-5e16-46c8-a189-2b3fc05192e1",
-        "projectId": "contextos",
-        "from": "checkpoint-coverage-map",
-        "to": "execution-receipt-ledger",
-        "kind": "reads",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T15:45:40.645Z",
-        "updatedAt": "2026-09-12T09:49:50.531Z"
-      },
-      {
-        "id": "link_af9d9e35-f3a9-41a6-a847-72a23c437c3d",
-        "projectId": "contextos",
-        "from": "live-binding-refresh",
-        "to": "source-binding-discovery",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T15:45:40.645Z",
-        "updatedAt": "2026-09-12T09:49:50.531Z"
-      },
       {
         "id": "link-1",
         "projectId": "contextos",
@@ -2443,8 +1060,8 @@
         "confidence": 1,
         "reason": "",
         "revision": 1,
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "link-2",
@@ -2456,8 +1073,8 @@
         "confidence": 1,
         "reason": "",
         "revision": 1,
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "link-3",
@@ -2469,8 +1086,8 @@
         "confidence": 1,
         "reason": "",
         "revision": 1,
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "link-4",
@@ -2482,8 +1099,8 @@
         "confidence": 1,
         "reason": "",
         "revision": 1,
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "link-5",
@@ -2495,8 +1112,8 @@
         "confidence": 1,
         "reason": "",
         "revision": 1,
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
         "id": "link-6",
@@ -2508,827 +1125,34 @@
         "confidence": 1,
         "reason": "",
         "revision": 1,
-        "createdAt": "2026-09-14T14:02:27.085Z",
-        "updatedAt": "2026-09-14T14:02:27.085Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
-        "id": "link-architecture-link-engine-to-ast-facade-engine",
+        "id": "link-7",
         "projectId": "contextos",
-        "from": "architecture-link-engine",
-        "to": "ast-facade-engine",
-        "kind": "reads",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:35:55.340Z",
-        "updatedAt": "2026-09-09T04:35:55.340Z"
-      },
-      {
-        "id": "link-ast-to-materializer",
-        "projectId": "contextos",
-        "from": "ast-facade-engine",
-        "to": "progressive-materializer",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T09:57:17.172Z",
-        "updatedAt": "2026-09-08T09:57:17.172Z"
-      },
-      {
-        "id": "link-atomic-mutation-to-verification-suite",
-        "projectId": "contextos",
-        "from": "atomic-mutation",
-        "to": "verification-suite",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T11:16:33.067Z",
-        "updatedAt": "2026-09-12T13:49:51.849Z"
-      },
-      {
-        "id": "link-binding-discovery-index",
-        "projectId": "contextos",
-        "from": "source-binding-discovery",
-        "to": "source-binding-index",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-10T11:15:45.048Z"
-      },
-      {
-        "id": "link-chain-topology-engine-to-mcp-mutation-engine",
-        "projectId": "contextos",
-        "from": "chain-topology-engine",
-        "to": "mcp-mutation-engine",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:08:16.647Z",
-        "updatedAt": "2026-09-12T13:08:16.647Z"
-      },
-      {
-        "id": "link-chain-topology-engine-to-mcp-query-engine",
-        "projectId": "contextos",
-        "from": "chain-topology-engine",
-        "to": "mcp-query-engine",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:08:16.647Z",
-        "updatedAt": "2026-09-12T13:08:16.647Z"
-      },
-      {
-        "id": "link-chain-topology-engine-to-task-reconciliation",
-        "projectId": "contextos",
-        "from": "chain-topology-engine",
-        "to": "task-reconciliation-engine",
+        "from": "block-desktop-app",
+        "to": "block-layout-engine",
         "kind": "calls",
         "provenance": "authored",
         "confidence": 1,
         "reason": "",
         "revision": 1,
-        "createdAt": "2026-09-12T13:08:16.647Z",
-        "updatedAt": "2026-09-12T13:08:16.647Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       },
       {
-        "id": "link-context-retrieval-to-project-service-router",
+        "id": "link-8",
         "projectId": "contextos",
-        "from": "context-retrieval",
-        "to": "project-service-router",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T16:56:33.827Z",
-        "updatedAt": "2026-09-12T13:49:51.849Z"
-      },
-      {
-        "id": "link-context-retrieval-to-timeline-engine",
-        "projectId": "contextos",
-        "from": "context-retrieval",
-        "to": "timeline-engine",
-        "kind": "reads",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:35:55.318Z",
-        "updatedAt": "2026-09-09T04:35:55.318Z"
-      },
-      {
-        "id": "link-detail-inspector-to-progressive-materializer",
-        "projectId": "contextos",
-        "from": "detail-inspector",
-        "to": "progressive-materializer",
-        "kind": "reads",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T11:16:45.062Z",
-        "updatedAt": "2026-09-09T11:16:45.062Z"
-      },
-      {
-        "id": "link-materializer-to-sanitizer",
-        "projectId": "contextos",
-        "from": "progressive-materializer",
-        "to": "terminal-sanitizer",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T09:57:17.172Z",
-        "updatedAt": "2026-09-08T09:57:17.172Z"
-      },
-      {
-        "id": "link-mcp-mutation-engine-to-mcp-schema-engine",
-        "projectId": "contextos",
-        "from": "mcp-mutation-engine",
-        "to": "mcp-schema-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:24.602Z",
-        "updatedAt": "2026-09-09T04:46:24.602Z"
-      },
-      {
-        "id": "link-mcp-protocol-server-to-architecture-link-engine",
-        "projectId": "contextos",
-        "from": "mcp-protocol-server",
-        "to": "architecture-link-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:35:55.308Z",
-        "updatedAt": "2026-09-09T04:35:55.308Z"
-      },
-      {
-        "id": "link-mcp-protocol-server-to-context-retrieval",
-        "projectId": "contextos",
-        "from": "mcp-protocol-server",
-        "to": "context-retrieval",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:35:55.257Z",
-        "updatedAt": "2026-09-09T04:35:55.257Z"
-      },
-      {
-        "id": "link-mcp-protocol-server-to-mcp-service-facade",
-        "projectId": "contextos",
-        "from": "mcp-protocol-server",
-        "to": "mcp-service-facade",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:24.602Z",
-        "updatedAt": "2026-09-09T04:46:24.602Z"
-      },
-      {
-        "id": "link-mcp-protocol-server-to-natural-flow-engine",
-        "projectId": "contextos",
-        "from": "mcp-protocol-server",
-        "to": "natural-flow-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:35:55.298Z",
-        "updatedAt": "2026-09-09T04:35:55.298Z"
-      },
-      {
-        "id": "link-mcp-protocol-server-to-terminal-sanitizer",
-        "projectId": "contextos",
-        "from": "mcp-protocol-server",
-        "to": "terminal-sanitizer",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T11:16:33.067Z",
-        "updatedAt": "2026-09-09T11:16:33.067Z"
-      },
-      {
-        "id": "link-mcp-protocol-server-to-timeline-engine",
-        "projectId": "contextos",
-        "from": "mcp-protocol-server",
-        "to": "timeline-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:35:55.287Z",
-        "updatedAt": "2026-09-09T04:35:55.287Z"
-      },
-      {
-        "id": "link-mcp-query-engine-to-mcp-schema-engine",
-        "projectId": "contextos",
-        "from": "mcp-query-engine",
-        "to": "mcp-schema-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:24.602Z",
-        "updatedAt": "2026-09-09T04:46:24.602Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-architecture-link-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "architecture-link-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:27.493Z",
-        "updatedAt": "2026-09-09T04:46:27.493Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-chain-topology-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "chain-topology-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T13:08:16.647Z",
-        "updatedAt": "2026-09-12T13:08:16.647Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-context-retrieval",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "context-retrieval",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:27.493Z",
-        "updatedAt": "2026-09-09T04:46:27.493Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-mcp-checkpoint-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "mcp-checkpoint-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:24.602Z",
-        "updatedAt": "2026-09-09T04:46:24.602Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-mcp-context-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "mcp-context-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:24.602Z",
-        "updatedAt": "2026-09-09T04:46:24.602Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-mcp-mutation-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "mcp-mutation-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:24.602Z",
-        "updatedAt": "2026-09-09T04:46:24.602Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-mcp-plan-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "mcp-plan-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:24.602Z",
-        "updatedAt": "2026-09-09T04:46:24.602Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-mcp-query-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "mcp-query-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:24.602Z",
-        "updatedAt": "2026-09-09T04:46:24.602Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-natural-flow-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "natural-flow-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:27.493Z",
-        "updatedAt": "2026-09-09T04:46:27.493Z"
-      },
-      {
-        "id": "link-mcp-service-facade-to-timeline-engine",
-        "projectId": "contextos",
-        "from": "mcp-service-facade",
-        "to": "timeline-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:46:27.493Z",
-        "updatedAt": "2026-09-09T04:46:27.493Z"
-      },
-      {
-        "id": "link-natural-flow-engine-to-sqlite-graph-store",
-        "projectId": "contextos",
-        "from": "natural-flow-engine",
-        "to": "sqlite-graph-store",
-        "kind": "writes",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T04:35:55.329Z",
-        "updatedAt": "2026-09-09T04:35:55.329Z"
-      },
-      {
-        "id": "link-operation-envelope-receipt",
-        "projectId": "contextos",
-        "from": "mcp-operation-envelope",
-        "to": "execution-receipt-ledger",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-10T11:15:45.048Z"
-      },
-      {
-        "id": "link-quiet-status-copy-to-coverage-integrity",
-        "projectId": "contextos",
-        "from": "quiet-status-copy",
-        "to": "coverage-integrity",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T16:06:27.974Z",
-        "updatedAt": "2026-09-10T16:06:27.974Z"
-      },
-      {
-        "id": "link-receipt-checkpoint",
-        "projectId": "contextos",
-        "from": "execution-receipt-ledger",
-        "to": "mcp-checkpoint-engine",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-10T11:15:45.048Z"
-      },
-      {
-        "id": "link-sanitizer-to-console",
-        "projectId": "contextos",
-        "from": "terminal-sanitizer",
-        "to": "desktop-context-console",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T09:57:17.172Z",
-        "updatedAt": "2026-09-08T09:57:17.172Z"
-      },
-      {
-        "id": "link-seal-checkpoint",
-        "projectId": "contextos",
-        "from": "block-seal-engine",
-        "to": "mcp-checkpoint-engine",
+        "from": "block-desktop-app",
+        "to": "block-daemon-host",
         "kind": "depends_on",
         "provenance": "authored",
         "confidence": 1,
         "reason": "",
         "revision": 1,
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-10T11:15:45.048Z"
-      },
-      {
-        "id": "link-seal-source-binding",
-        "projectId": "contextos",
-        "from": "block-seal-engine",
-        "to": "source-binding-index",
-        "kind": "depends_on",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T11:15:45.048Z",
-        "updatedAt": "2026-09-10T11:15:45.048Z"
-      },
-      {
-        "id": "link-source-binding-index-to-ast-facade-engine",
-        "projectId": "contextos",
-        "from": "source-binding-index",
-        "to": "ast-facade-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T12:56:21.476Z",
-        "updatedAt": "2026-09-09T12:56:21.476Z"
-      },
-      {
-        "id": "link-source-binding-index-to-mcp-checkpoint-engine",
-        "projectId": "contextos",
-        "from": "source-binding-index",
-        "to": "mcp-checkpoint-engine",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T12:56:51.388Z",
-        "updatedAt": "2026-09-09T12:56:51.388Z"
-      },
-      {
-        "id": "link-source-binding-index-to-mcp-context-engine",
-        "projectId": "contextos",
-        "from": "source-binding-index",
-        "to": "mcp-context-engine",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T12:57:08.845Z",
-        "updatedAt": "2026-09-09T12:57:08.845Z"
-      },
-      {
-        "id": "link-terminal-sanitizer-to-atomic-mutation",
-        "projectId": "contextos",
-        "from": "terminal-sanitizer",
-        "to": "atomic-mutation",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-09T11:16:33.067Z",
-        "updatedAt": "2026-09-09T11:16:33.067Z"
-      },
-      {
-        "id": "locale-context",
-        "projectId": "contextos",
-        "from": "bilingual-content",
-        "to": "context-retrieval",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.414Z",
-        "updatedAt": "2026-09-05T04:35:24.453Z"
-      },
-      {
-        "id": "locale-lenses",
-        "projectId": "contextos",
-        "from": "bilingual-content",
-        "to": "view-lenses",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.414Z",
-        "updatedAt": "2026-09-05T04:35:24.453Z"
-      },
-      {
-        "id": "materializer-atomic-mutation",
-        "projectId": "contextos",
-        "from": "progressive-materializer",
-        "to": "atomic-mutation",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T10:25:13.012Z",
-        "updatedAt": "2026-09-08T10:25:13.012Z"
-      },
-      {
-        "id": "mutation-store",
-        "projectId": "contextos",
-        "from": "atomic-mutation",
-        "to": "sqlite-graph-store",
-        "kind": "writes",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
-      },
-      {
-        "id": "package-verify",
-        "projectId": "contextos",
-        "from": "native-app-package",
-        "to": "verification-suite",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.414Z",
-        "updatedAt": "2026-09-04T08:45:21.414Z"
-      },
-      {
-        "id": "plan-chain",
-        "projectId": "contextos",
-        "from": "plan-workflow",
-        "to": "chain-route-overlay",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "plan-foundation-link",
-        "projectId": "contextos",
-        "from": "plan-workflow",
-        "to": "foundation-plan-bootstrap",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T10:25:13.012Z",
-        "updatedAt": "2026-09-08T10:25:13.012Z"
-      },
-      {
-        "id": "plugin-detect",
-        "projectId": "contextos",
-        "from": "codex-plugin",
-        "to": "editor-detector",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-10T05:12:47.690Z",
-        "updatedAt": "2026-09-10T05:12:47.690Z"
-      },
-      {
-        "id": "plugin-install",
-        "projectId": "contextos",
-        "from": "codex-plugin",
-        "to": "in-app-plugin-install",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.414Z",
-        "updatedAt": "2026-09-04T08:45:21.414Z"
-      },
-      {
-        "id": "projection-shows",
-        "projectId": "contextos",
-        "from": "projection-outbox",
-        "to": "knowledge-reader-ui",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T09:22:17.187Z",
-        "updatedAt": "2026-09-12T09:22:17.187Z"
-      },
-      {
-        "id": "reader-switcher",
-        "projectId": "contextos",
-        "from": "live-desktop-reader",
-        "to": "project-switcher",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-12T13:49:51.849Z"
-      },
-      {
-        "id": "reader-verification",
-        "projectId": "contextos",
-        "from": "live-desktop-reader",
-        "to": "verification-suite",
-        "kind": "validates",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
-      },
-      {
-        "id": "reconcile-writes-outbox",
-        "projectId": "contextos",
-        "from": "task-reconciliation-engine",
-        "to": "projection-outbox",
-        "kind": "writes",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-12T09:02:15.612Z",
-        "updatedAt": "2026-09-12T09:43:37.560Z"
-      },
-      {
-        "id": "registration-contract-link",
-        "projectId": "contextos",
-        "from": "project-registration",
-        "to": "product-contract",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-08T10:25:13.012Z",
-        "updatedAt": "2026-09-08T10:25:13.012Z"
-      },
-      {
-        "id": "registration-router",
-        "projectId": "contextos",
-        "from": "project-registration",
-        "to": "project-service-router",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
-      },
-      {
-        "id": "registration-store",
-        "projectId": "contextos",
-        "from": "project-registration",
-        "to": "sqlite-graph-store",
-        "kind": "writes",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
-      },
-      {
-        "id": "router-context",
-        "projectId": "contextos",
-        "from": "project-service-router",
-        "to": "context-retrieval",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
-      },
-      {
-        "id": "semantic-zoom-preserves-space",
-        "projectId": "contextos",
-        "from": "semantic-zoom",
-        "to": "stable-view-state",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T11:22:16.990Z",
-        "updatedAt": "2026-09-05T10:00:54.006Z"
-      },
-      {
-        "id": "stable-view-frames-routes",
-        "projectId": "contextos",
-        "from": "stable-view-state",
-        "to": "chain-route-overlay",
-        "kind": "constrains",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T11:22:16.990Z",
-        "updatedAt": "2026-09-05T10:00:54.006Z"
-      },
-      {
-        "id": "store-lenses",
-        "projectId": "contextos",
-        "from": "sqlite-graph-store",
-        "to": "view-lenses",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "store-reader",
-        "projectId": "contextos",
-        "from": "sqlite-graph-store",
-        "to": "live-desktop-reader",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
-      },
-      {
-        "id": "streets-chain",
-        "projectId": "contextos",
-        "from": "orthogonal-street-router",
-        "to": "chain-route-overlay",
-        "kind": "flows_to",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.413Z",
-        "updatedAt": "2026-09-04T08:45:21.413Z"
-      },
-      {
-        "id": "switcher-registration",
-        "projectId": "contextos",
-        "from": "project-switcher",
-        "to": "project-registration",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "",
-        "revision": 1,
-        "createdAt": "2026-09-04T08:45:21.411Z",
-        "updatedAt": "2026-09-04T08:45:21.411Z"
+        "createdAt": "2026-09-14T14:30:29.139Z",
+        "updatedAt": "2026-09-14T14:30:29.139Z"
       }
     ]
   }

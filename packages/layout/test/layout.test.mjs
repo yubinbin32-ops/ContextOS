@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NetworkLayoutEngine } from '../src/index.mjs';
 
-test('NetworkLayoutEngine computes deterministic DAG layout without long snake', () => {
+test('NetworkLayoutEngine computes deterministic Metro Map layout without long snake', () => {
   const blocks = [
     { id: 'b1', title: 'Input Gateway' },
     { id: 'b2', title: 'Auth Service' },
@@ -29,25 +29,34 @@ test('NetworkLayoutEngine computes deterministic DAG layout without long snake',
     blocks,
     chains,
     links,
-    options: { maxColumns: 3 },
   });
 
   assert.equal(layout.nodes.length, 6);
   assert.equal(layout.edges.length, 5);
-  assert.ok(layout.bounds.width > 0);
-  assert.ok(layout.bounds.height > 0);
+  assert.ok(layout.bounds.width >= 1200);
+  assert.ok(layout.bounds.height >= 800);
 
-  // Nodes in earlier ranks should have smaller Y than subsequent ranks
+  // Metro Track validation:
+  // Nodes in chain-core (track 0) share the same Y
   const nodeB1 = layout.nodes.find((n) => n.id === 'b1');
+  const nodeB2 = layout.nodes.find((n) => n.id === 'b2');
   const nodeB6 = layout.nodes.find((n) => n.id === 'b6');
-  assert.ok(nodeB1.y < nodeB6.y);
+  assert.equal(nodeB1.y, nodeB2.y);
+  assert.equal(nodeB2.y, nodeB6.y);
+
+  // Consecutive stations along the line proceed from left to right
+  assert.ok(nodeB1.x < nodeB2.x);
+  assert.ok(nodeB2.x < nodeB6.x);
+
+  // Nodes in chain-business reside on a subsequent track (track 1) with higher Y
+  const nodeB3 = layout.nodes.find((n) => n.id === 'b3');
+  assert.ok(nodeB1.y < nodeB3.y);
 
   // Re-running layout must be 100% deterministic (same positions)
   const layout2 = NetworkLayoutEngine.computeLayout({
     blocks,
     chains,
     links,
-    options: { maxColumns: 3 },
   });
   assert.deepEqual(layout.nodes, layout2.nodes);
 });

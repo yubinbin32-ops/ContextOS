@@ -67,13 +67,14 @@ enum NetworkLayoutEngine {
         let cells = place(nodes: nodes, edges: validEdges, chains: chains, metadata: metadata, districts: districts)
         let minimumX = cells.values.map(\.x).min() ?? 0
         let minimumY = cells.values.map(\.y).min() ?? 0
-        let xStep = cardSize.width + horizontalStreetWidth
-        let yStep = cardSize.height + verticalStreetWidth
-        let sideInset: CGFloat = 66
+        let xStep = cardSize.width + 80
+        let yStep = cardSize.height + 90
+        let sideInset: CGFloat = 120
+        let effectiveTopInset: CGFloat = 120
         let positions = cells.mapValues { cell in
             CGPoint(
                 x: sideInset + CGFloat(cell.x - minimumX) * xStep,
-                y: topInset + CGFloat(cell.y - minimumY) * yStep
+                y: effectiveTopInset + CGFloat(cell.y - minimumY) * yStep
             )
         }
         let frames = positions.mapValues { CGRect(origin: $0, size: cardSize) }
@@ -84,11 +85,9 @@ enum NetworkLayoutEngine {
         return NetworkLayoutSnapshot(
             positions: positions,
             routes: routes,
-            // Scope and architecture layer remain semantic metadata. They never
-            // partition the Canvas or create empty spatial bands.
             layerBands: [],
             scopeBands: [],
-            size: CGSize(width: max(900, bounds.maxX + sideInset), height: max(620, bounds.maxY + 70))
+            size: CGSize(width: max(1200, bounds.maxX + sideInset + 60), height: max(800, bounds.maxY + effectiveTopInset + 60))
         )
     }
 
@@ -106,7 +105,7 @@ enum NetworkLayoutEngine {
         return (CGFloat(index) - CGFloat(count - 1) / 2) * step
     }
 
-    // MARK: - Chain-first grid placement
+    // MARK: - Metro Map Rail Placement
 
     private static func place(
         nodes: [String], edges: [LayoutEdge], chains: [[String]],
@@ -114,178 +113,56 @@ enum NetworkLayoutEngine {
     ) -> [String: Cell] {
         var result: [String: Cell] = [:]
         var occupied: Set<Cell> = []
-        let adjacency = undirectedAdjacency(nodes: nodes, edges: edges)
 
         func reserve(_ node: String, at cell: Cell) {
             result[node] = cell
             occupied.insert(cell)
         }
 
-        func nextComponentOrigin() -> Cell {
-            guard !occupied.isEmpty else { return Cell(x: 0, y: 0) }
-            let minX = occupied.map(\.x).min() ?? 0
-            let maxX = occupied.map(\.x).max() ?? 0
-            let minY = occupied.map(\.y).min() ?? 0
-            let maxY = occupied.map(\.y).max() ?? 0
-            let width = maxX - minX
-            let height = maxY - minY
-            if height >= width {
-                return Cell(x: maxX + 1, y: minY)
-            } else {
-                return Cell(x: minX, y: maxY + 1)
-            }
-        }
+        var currentTrackY = 0
 
-        func bestCell(for node: String, pathNeighbors: [String], preferred: Direction?) -> Cell {
-            let anchors = pathNeighbors.compactMap { result[$0] }
-            let graphAnchors = (adjacency[node] ?? []).compactMap { result[$0] }
-            let origins: [Cell]
-            if !anchors.isEmpty {
-                origins = anchors
-            } else if !graphAnchors.isEmpty {
-                origins = graphAnchors
-            } else if !occupied.isEmpty {
-                let minX = occupied.map(\.x).min() ?? 0
-                let maxX = occupied.map(\.x).max() ?? 0
-                let minY = occupied.map(\.y).min() ?? 0
-                let maxY = occupied.map(\.y).max() ?? 0
-                origins = [Cell(x: (minX + maxX) / 2, y: (minY + maxY) / 2)]
-            } else {
-                origins = [nextComponentOrigin()]
-            }
-            var candidates = Set<Cell>()
-            for origin in origins {
-                for radius in 1...6 {
-                    for dx in -radius...radius {
-                        let dy = radius - abs(dx)
-                        candidates.insert(Cell(x: origin.x + dx, y: origin.y + dy))
-                        candidates.insert(Cell(x: origin.x + dx, y: origin.y - dy))
-                    }
-                }
-            }
-            candidates.subtract(occupied)
-            if candidates.isEmpty { return nextComponentOrigin() }
-
-            return candidates.min { lhs, rhs in
-                let left = placementScore(lhs, anchors: anchors, graphAnchors: graphAnchors, occupied: occupied, preferred: preferred)
-                let right = placementScore(rhs, anchors: anchors, graphAnchors: graphAnchors, occupied: occupied, preferred: preferred)
-                if left != right { return left < right }
-                if lhs.y != rhs.y { return lhs.y < rhs.y }
-                return lhs.x < rhs.x
-            }!
-        }
-
-        for (chainIndex, path) in chains.enumerated() {
+        // 1. Place each Chain as a distinct horizontal rail line track
+        for path in chains {
             guard !path.isEmpty else { continue }
-            if !path.contains(where: { result[$0] != nil }) {
-                var cell = chainIndex == 0 ? Cell(x: 0, y: 0) : nextComponentOrigin()
-                for (index, node) in path.enumerated() where result[node] == nil {
-                    if index > 0 { cell = cell.moved(primaryDirection(at: index - 1)) }
-                    if occupied.contains(cell) {
-                        cell = bestCell(for: node, pathNeighbors: index > 0 ? [path[index - 1]] : [], preferred: nil)
-                    }
-                    reserve(node, at: cell)
-                }
-                continue
-            }
+            let trackY = currentTrackY
+            currentTrackY += 1
 
-            var remaining = Set(path.filter { result[$0] == nil })
-            while !remaining.isEmpty {
-                var changed = false
-                for index in path.indices {
-                    let node = path[index]
-                    guard remaining.contains(node) else { continue }
-                    let neighbors = [index > 0 ? path[index - 1] : nil, index + 1 < path.count ? path[index + 1] : nil]
-                        .compactMap { $0 }
-                        .filter { result[$0] != nil }
-                    guard !neighbors.isEmpty else { continue }
-                    let preferred = preferredDirection(for: index, in: path, positions: result)
-                    reserve(node, at: bestCell(for: node, pathNeighbors: neighbors, preferred: preferred))
-                    remaining.remove(node)
-                    changed = true
+            var nextX = 0
+            for node in path {
+                if result[node] != nil {
+                    // Interchange station already placed on an earlier line
+                    continue
                 }
-                if !changed {
-                    let node = remaining.sorted().first!
-                    reserve(node, at: bestCell(for: node, pathNeighbors: [], preferred: nil))
-                    remaining.remove(node)
+                while occupied.contains(Cell(x: nextX, y: trackY)) {
+                    nextX += 1
+                }
+                reserve(node, at: Cell(x: nextX, y: trackY))
+                nextX += 1
+            }
+        }
+
+        // 2. Place remaining unchained Blocks on bottom tracks
+        let remaining = nodes.filter { result[$0] == nil }.sorted()
+        if !remaining.isEmpty {
+            var unchainedX = 0
+            var trackY = currentTrackY
+            for node in remaining {
+                while occupied.contains(Cell(x: unchainedX, y: trackY)) {
+                    unchainedX += 1
+                }
+                reserve(node, at: Cell(x: unchainedX, y: trackY))
+                unchainedX += 1
+                if unchainedX >= 4 {
+                    unchainedX = 0
+                    trackY += 1
                 }
             }
         }
 
-        // Attach Blocks outside Chains to the nearest occupied architectural road.
-        var remaining = Set(nodes.filter { result[$0] == nil })
-        while !remaining.isEmpty {
-            let attachable = remaining.sorted { lhs, rhs in
-                let left = (adjacency[lhs] ?? []).filter { result[$0] != nil }.count
-                let right = (adjacency[rhs] ?? []).filter { result[$0] != nil }.count
-                if left != right { return left > right }
-                let leftOrder = metadata[lhs]?.order ?? 0
-                let rightOrder = metadata[rhs]?.order ?? 0
-                if leftOrder != rightOrder { return leftOrder < rightOrder }
-                let leftDistrict = districts[lhs, default: 0]
-                let rightDistrict = districts[rhs, default: 0]
-                return leftDistrict == rightDistrict ? lhs < rhs : leftDistrict < rightDistrict
-            }.first!
-            reserve(attachable, at: bestCell(for: attachable, pathNeighbors: [], preferred: nil))
-            remaining.remove(attachable)
-        }
         return result
     }
 
-    private static func primaryDirection(at index: Int) -> Direction {
-        // A compact boulevard with repeated right-angle turns keeps long Chains
-        // from stretching across a single enormous row.
-        let pattern: [Direction] = [.right, .right, .down, .down, .right, .right, .up, .up]
-        return pattern[index % pattern.count]
-    }
 
-    private static func preferredDirection(for index: Int, in path: [String], positions: [String: Cell]) -> Direction? {
-        if index >= 2, let a = positions[path[index - 2]], let b = positions[path[index - 1]],
-           let dir = Direction(from: a, to: b) {
-            if index >= 3, let prevPrev = positions[path[index - 3]],
-               Direction(from: prevPrev, to: a) == dir {
-                return (dir == .down || dir == .up) ? .right : .down
-            }
-            return dir
-        }
-        if index + 2 < path.count, let a = positions[path[index + 2]], let b = positions[path[index + 1]],
-           let dir = Direction(from: a, to: b) {
-            return dir
-        }
-        return nil
-    }
-
-    private static func placementScore(
-        _ candidate: Cell, anchors: [Cell], graphAnchors: [Cell], occupied: Set<Cell>, preferred: Direction?
-    ) -> Int {
-        let chainDistance = anchors.reduce(0) { $0 + candidate.distance(to: $1) } * 120
-        let graphDistance = graphAnchors.reduce(0) { $0 + candidate.distance(to: $1) } * 12
-        let crowding = Direction.allCases.reduce(0) { $0 + (occupied.contains(candidate.moved($1)) ? 7 : 0) }
-        let directionPenalty: Int
-        if let preferred, let anchor = anchors.first {
-            directionPenalty = candidate == anchor.moved(preferred) ? 0 : 9
-        } else {
-            directionPenalty = 0
-        }
-        let centerPull: Int
-        if !occupied.isEmpty {
-            let cx = occupied.map(\.x).reduce(0, +) / occupied.count
-            let cy = occupied.map(\.y).reduce(0, +) / occupied.count
-            centerPull = abs(candidate.x - cx) + abs(candidate.y - cy)
-        } else {
-            centerPull = abs(candidate.x) + abs(candidate.y)
-        }
-        return chainDistance + graphDistance + crowding + directionPenalty + centerPull
-    }
-
-    private static func undirectedAdjacency(nodes: [String], edges: [LayoutEdge]) -> [String: Set<String>] {
-        var result = Dictionary(uniqueKeysWithValues: nodes.map { ($0, Set<String>()) })
-        for edge in edges {
-            result[edge.sourceID, default: []].insert(edge.targetID)
-            result[edge.targetID, default: []].insert(edge.sourceID)
-        }
-        return result
-    }
 
     private static func prioritizedEdges(edges: [LayoutEdge], chains: [[String]]) -> [String: Int] {
         var pairPriority: [Pair: Int] = [:]

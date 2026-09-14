@@ -176,6 +176,8 @@ struct ContentView: View {
                 .padding(.bottom, 16)
             }
             Divider().padding(.horizontal, 14)
+            runningProcessesSection
+            Divider().padding(.horizontal, 14)
             legend
         }
         .background(ContextOSTheme.surface.opacity(0.97))
@@ -302,6 +304,13 @@ struct ContentView: View {
                 .foregroundStyle(ContextOSTheme.ink)
             }
             Spacer()
+            Button { store.fitOverview() } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(ContextOSTheme.ink)
+            }
+            .buttonStyle(.plain)
+            .help(store.activeLocale == "zh-Hans" ? "居中自适应视图" : "Fit overview")
             Text("\(Int((store.canvasScale * 100).rounded()))%")
                 .font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(ContextOSTheme.muted)
                 .help(store.activeLocale == "zh-Hans" ? "触控板捏合、⌘滚动或双击缩放" : "Pinch, ⌘-scroll, or double-click to zoom")
@@ -346,6 +355,86 @@ struct ContentView: View {
     private func legendItem(color: Color, text: String) -> some View {
         HStack(spacing: 4) { Circle().fill(color).frame(width: 6, height: 6); Text(text) }
             .font(.system(size: 8.5, weight: .medium, design: .rounded)).foregroundStyle(ContextOSTheme.ink.opacity(0.8))
+    }
+
+    private var runningProcessesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(store.activeLocale == "zh-Hans" ? "持续运行命令" : "RUNNING PROCESSES")
+                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundStyle(ContextOSTheme.muted)
+                Spacer()
+                if !store.runningProcesses.isEmpty {
+                    Text("\(store.runningProcesses.count)")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(ContextOSTheme.focus.opacity(0.15))
+                        .foregroundStyle(ContextOSTheme.focus)
+                        .clipShape(Capsule())
+                }
+            }
+
+            if store.runningProcesses.isEmpty {
+                HStack(spacing: 5) {
+                    Circle().fill(ContextOSTheme.muted.opacity(0.3)).frame(width: 5, height: 5)
+                    Text(store.activeLocale == "zh-Hans" ? "暂无运行中的长期任务" : "No active background tasks")
+                        .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                        .foregroundStyle(ContextOSTheme.muted)
+                }
+                .padding(.vertical, 2)
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(store.runningProcesses) { proc in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(proc.isRunning ? ContextOSTheme.success : ContextOSTheme.muted)
+                                .frame(width: 6, height: 6)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(proc.command)
+                                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(ContextOSTheme.ink)
+                                    .lineLimit(1)
+
+                                HStack(spacing: 6) {
+                                    Text("PID \(proc.pid)")
+                                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(ContextOSTheme.muted)
+                                    if let port = proc.port {
+                                        Text(":\(port)")
+                                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(ContextOSTheme.focus)
+                                    }
+                                }
+                            }
+
+                            Spacer()
+
+                            Button {
+                                store.stopProcess(id: proc.id)
+                            } label: {
+                                Image(systemName: "stop.circle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(ContextOSTheme.failure.opacity(0.85))
+                            }
+                            .buttonStyle(.plain)
+                            .help(store.activeLocale == "zh-Hans" ? "停止此长期任务" : "Stop process")
+                        }
+                        .padding(6)
+                        .background(ContextOSTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(ContextOSTheme.hairline, lineWidth: 0.8)
+                        )
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 
     private var projectRuleBlocks: [BlockItem] {

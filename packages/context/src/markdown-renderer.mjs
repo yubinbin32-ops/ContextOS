@@ -4,6 +4,8 @@
  */
 
 export class MarkdownRenderer {
+  // Practical Test Hook: OS V2 Active Verification
+  // Practical Test Hook: OS V2 Active Verification
   static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [] }) {
     const lines = [];
     lines.push(`# ContextOS Project Brief: \`${project.id}\` (rev: ${project.graph_revision || 0})`);

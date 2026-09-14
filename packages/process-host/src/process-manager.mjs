@@ -73,6 +73,7 @@ export class ProcessManager {
       session.exitCode = code;
       session.stoppedAt = new Date().toISOString();
       logStream.end();
+      this._persistProcesses();
     });
 
     child.on('error', (err) => {
@@ -80,6 +81,7 @@ export class ProcessManager {
       session.error = err.message;
       session.stoppedAt = new Date().toISOString();
       logStream.end();
+      this._persistProcesses();
     });
 
     // Short grace wait to see if it immediately fails or stays running
@@ -87,8 +89,17 @@ export class ProcessManager {
     if (session.status === 'starting') {
       session.status = 'running';
     }
+    this._persistProcesses();
 
     return this._sessionSummary(session);
+  }
+
+  _persistProcesses() {
+    try {
+      const procFile = path.join(this.projectRoot, '.contextos', 'processes.json');
+      fs.mkdirSync(path.dirname(procFile), { recursive: true });
+      fs.writeFileSync(procFile, JSON.stringify(this.listProcesses(), null, 2), 'utf8');
+    } catch (_) {}
   }
 
   listProcesses() {
@@ -169,6 +180,7 @@ export class ProcessManager {
       session.stoppedAt = new Date().toISOString();
     }
 
+    this._persistProcesses();
     return this._sessionSummary(session);
   }
 
@@ -178,6 +190,7 @@ export class ProcessManager {
         this.sessions.delete(id);
       }
     }
+    this._persistProcesses();
   }
 
   async stopAll() {
@@ -188,12 +201,14 @@ export class ProcessManager {
         } catch (_) {}
       }
     }
+    this._persistProcesses();
   }
 
   _sessionSummary(s) {
     return {
       id: s.id,
       command: s.command,
+      cwd: s.cwd,
       pid: s.pid,
       status: s.status,
       startedAt: s.startedAt,

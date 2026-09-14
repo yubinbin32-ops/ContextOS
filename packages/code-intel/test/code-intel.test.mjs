@@ -56,12 +56,73 @@ test('LanguageRegistry parses JS/TS symbols and imports', () => {
 test('LanguageRegistry parses Python symbols and imports', () => {
   const structure = LanguageRegistry.parseStructure('app/proc.py', PYTHON_CODE);
   assert.equal(structure.language, 'python');
+  assert.equal(structure.capability, 'L3');
   assert.equal(structure.imports.length, 2);
 
   const symbols = structure.symbols;
   assert.ok(symbols.some((s) => s.name === 'DataProcessor' && s.kind === 'class'));
   assert.ok(symbols.some((s) => s.name === 'DataProcessor.process' && s.kind === 'method'));
   assert.ok(symbols.some((s) => s.name === 'clean_record' && s.kind === 'function'));
+});
+
+test('LanguageRegistry handles complex JS/TS with strings containing braces and comments', () => {
+  const codeWithEdgeCases = `
+export interface UserConfig {
+  apiKey: string;
+  timeout: number;
+}
+
+export class RobustParser {
+  constructor() {
+    this.rawJson = '{"nested": {"brace": true}}';
+    // Comment with { and } braces
+    /* Block comment with {
+       nested braces
+    } */
+    this.regex = /\\{\\d+\\}/;
+  }
+
+  calculate() {
+    return 42;
+  }
+}
+
+export const arrowHandler = async (evt) => {
+  return evt.data;
+};
+`;
+  const structure = LanguageRegistry.parseStructure('src/robust.ts', codeWithEdgeCases);
+  assert.equal(structure.language, 'typescript');
+  assert.ok(structure.symbols.some((s) => s.name === 'UserConfig' && s.kind === 'interface'));
+  const parserClass = structure.symbols.find((s) => s.name === 'RobustParser');
+  assert.ok(parserClass);
+  // Ensure the class did NOT get truncated prematurely due to strings or comments with braces!
+  const calcMethod = structure.symbols.find((s) => s.name === 'RobustParser.calculate');
+  assert.ok(calcMethod, 'RobustParser.calculate must be recognized inside RobustParser despite string braces');
+  assert.ok(structure.symbols.some((s) => s.name === 'arrowHandler' && s.kind === 'function'));
+});
+
+test('LanguageRegistry parses Swift structs, classes, and view body', () => {
+  const swiftCode = `import SwiftUI
+import Foundation
+
+struct MyView: View {
+    @State private var count = 0
+
+    var body: some View {
+        Text("Count: \\(count)")
+    }
+
+    func increment() {
+        count += 1
+    }
+}
+`;
+  const structure = LanguageRegistry.parseStructure('App/MyView.swift', swiftCode);
+  assert.equal(structure.language, 'swift');
+  assert.ok(structure.symbols.some((s) => s.name === 'MyView' && s.kind === 'struct'));
+  assert.ok(structure.symbols.some((s) => s.name === 'MyView.body' && s.kind === 'method'));
+  assert.ok(structure.symbols.some((s) => s.name === 'MyView.increment' && s.kind === 'method'));
 });
 
 test('CodeTools.outline produces clean Markdown', () => {

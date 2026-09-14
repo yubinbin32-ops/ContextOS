@@ -1,7 +1,7 @@
 {
   "name": "contextos",
-  "version": "0.4.1",
-  "description": "Task-focused code locators, persistent project knowledge, read-only README previews and verified task completion via MCP.",
+  "version": "2.0.0",
+  "description": "Spatial architecture canvas and context optimization OS for AI coding agents with C-D-C-S workflow.",
   "author": {
     "name": "ContextOS"
   },

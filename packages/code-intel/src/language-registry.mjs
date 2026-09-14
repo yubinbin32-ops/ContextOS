@@ -40,15 +40,15 @@ export class LanguageRegistry {
     const imports = [];
 
     if (lang === 'javascript' || lang === 'typescript') {
-      this._parseJsTs(lines, symbols, imports);
+      this._parseJsTs(lines, symbols, imports, content);
     } else if (lang === 'python') {
-      this._parsePython(lines, symbols, imports);
+      this._parsePython(lines, symbols, imports, content);
     } else if (lang === 'go') {
-      this._parseGo(lines, symbols, imports);
+      this._parseGo(lines, symbols, imports, content);
     } else if (lang === 'rust') {
-      this._parseRust(lines, symbols, imports);
+      this._parseRust(lines, symbols, imports, content);
     } else if (lang === 'swift') {
-      this._parseSwift(lines, symbols, imports);
+      this._parseSwift(lines, symbols, imports, content);
     } else {
       // Fallback L1
       symbols.push({
@@ -65,7 +65,7 @@ export class LanguageRegistry {
       capability,
       imports: options.imports !== false ? imports : [],
       symbols: symbols.filter((s) => {
-        if (options.classes === false && s.kind === 'class') return false;
+        if (options.classes === false && (s.kind === 'class' || s.kind === 'interface' || s.kind === 'struct')) return false;
         if (options.functions === false && (s.kind === 'function' || s.kind === 'method')) return false;
         return true;
       }),
@@ -73,22 +73,39 @@ export class LanguageRegistry {
     };
   }
 
-  static _parseJsTs(lines, symbols, imports) {
+  static _parseJsTs(lines, symbols, imports, fullText) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+      const trimmed = line.trim();
       const lineNum = i + 1;
 
       // Imports
-      const importMatch = line.match(/^import\s+(?:(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]/);
+      const importMatch = line.match(/^\s*import\s+(?:(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]/);
       if (importMatch) {
         imports.push({ source: importMatch[1], line: lineNum });
         continue;
       }
 
+      // TypeScript Interface / Type / Enum
+      const typeMatch = line.match(/^\s*(?:export\s+)?(?:default\s+)?(?:interface|type|enum)\s+([A-Za-z0-9_$]+)/);
+      if (typeMatch) {
+        const typeName = typeMatch[1];
+        const endLine = line.includes('{') ? this._findClosingBrace(lines, i) : lineNum;
+        const snippet = lines.slice(i, endLine).join('\n');
+        symbols.push({
+          name: typeName,
+          kind: 'interface',
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(snippet),
+        });
+        continue;
+      }
+
       // Class
-      const classMatch = line.match(/^(?:export\s+)?(?:default\s+)?class\s+([A-Za-z0-9_$]+)/);
+      const classMatch = line.match(/^\s*(?:export\s+)?(?:default\s+)?class\s+([A-Za-z0-9_$]+)/);
       if (classMatch) {
         const className = classMatch[1];
         const endLine = this._findClosingBrace(lines, i);
@@ -105,9 +122,9 @@ export class LanguageRegistry {
         continue;
       }
 
-      // Method inside class
+      // Method inside class (supports async, static, getters, setters)
       if (currentClass && lineNum <= currentClass.endLine) {
-        const methodMatch = line.match(/^\s*(?:async\s+)?(?:static\s+)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{/);
+        const methodMatch = line.match(/^\s*(?:async\s+)?(?:static\s+)?(?:get\s+|set\s+)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{/);
         if (methodMatch && !['if', 'for', 'while', 'switch', 'catch'].includes(methodMatch[1])) {
           const methodName = methodMatch[1];
           const endLine = this._findClosingBrace(lines, i);
@@ -121,17 +138,19 @@ export class LanguageRegistry {
           };
           symbols.push(methodSymbol);
           currentClass.methods.push(methodSymbol);
+          continue;
         }
       } else if (currentClass && lineNum > currentClass.endLine) {
         currentClass = null;
       }
 
-      // Standalone function
-      const fnMatch = line.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/)
-        || line.match(/^(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/);
+      // Standalone function or async arrow function
+      const fnMatch =
+        line.match(/^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/) ||
+        line.match(/^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>\s*\{?/);
       if (fnMatch) {
         const fnName = fnMatch[1];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = line.includes('{') ? this._findClosingBrace(lines, i) : lineNum;
         const fnSnippet = lines.slice(i, endLine).join('\n');
         symbols.push({
           name: fnName,
@@ -144,7 +163,7 @@ export class LanguageRegistry {
     }
   }
 
-  static _parsePython(lines, symbols, imports) {
+  static _parsePython(lines, symbols, imports, fullText) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -176,8 +195,8 @@ export class LanguageRegistry {
         continue;
       }
 
-      // Function or method
-      const defMatch = line.match(/^(\s*)def\s+([A-Za-z0-9_]+)\s*\([^)]*\):/);
+      // Function or method (supports def, async def)
+      const defMatch = line.match(/^(\s*)(?:async\s+)?def\s+([A-Za-z0-9_]+)\s*\(/);
       if (defMatch) {
         const indent = defMatch[1].length;
         const name = defMatch[2];
@@ -207,7 +226,7 @@ export class LanguageRegistry {
     }
   }
 
-  static _parseGo(lines, symbols, imports) {
+  static _parseGo(lines, symbols, imports, fullText) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const lineNum = i + 1;
@@ -218,7 +237,7 @@ export class LanguageRegistry {
         const endLine = this._findClosingBrace(lines, i);
         symbols.push({
           name: typeMatch[1],
-          kind: 'class',
+          kind: 'struct',
           startLine: lineNum,
           endLine,
           hash: calculateHash(lines.slice(i, endLine).join('\n')),
@@ -257,20 +276,20 @@ export class LanguageRegistry {
     }
   }
 
-  static _parseRust(lines, symbols, imports) {
+  static _parseRust(lines, symbols, imports, fullText) {
     let currentImpl = null;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const lineNum = i + 1;
 
-      // struct or enum
+      // struct, enum, trait
       const typeMatch = line.match(/^(?:pub\s+)?(?:struct|enum|trait)\s+([A-Za-z0-9_]+)/);
       if (typeMatch) {
         const endLine = this._findClosingBrace(lines, i);
         symbols.push({
           name: typeMatch[1],
-          kind: 'class',
+          kind: 'struct',
           startLine: lineNum,
           endLine,
           hash: calculateHash(lines.slice(i, endLine).join('\n')),
@@ -315,7 +334,7 @@ export class LanguageRegistry {
     }
   }
 
-  static _parseSwift(lines, symbols, imports) {
+  static _parseSwift(lines, symbols, imports, fullText) {
     let currentType = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -329,14 +348,16 @@ export class LanguageRegistry {
         continue;
       }
 
-      // class / struct / enum
-      const typeMatch = line.match(/^(?:public\s+|private\s+|open\s+|internal\s+)?(?:final\s+)?(class|struct|enum|protocol)\s+([A-Za-z0-9_]+)/);
+      // class / struct / enum / protocol / extension
+      const typeMatch = line.match(
+        /^(?:@\w+\s+)?(?:public\s+|private\s+|open\s+|internal\s+)?(?:final\s+)?(class|struct|enum|protocol|extension)\s+([A-Za-z0-9_]+)/
+      );
       if (typeMatch) {
         const typeName = typeMatch[2];
         const endLine = this._findClosingBrace(lines, i);
         currentType = {
           name: typeName,
-          kind: 'class',
+          kind: typeMatch[1] === 'class' ? 'class' : 'struct',
           startLine: lineNum,
           endLine,
           hash: calculateHash(lines.slice(i, endLine).join('\n')),
@@ -368,28 +389,99 @@ export class LanguageRegistry {
             hash: calculateHash(snippet),
           });
         }
+        continue;
+      }
+
+      // Swift View body: var body: some View {
+      const bodyMatch = line.match(/^(?:\s*)var\s+(body)\s*:\s*some\s+View\s*\{/);
+      if (bodyMatch && currentType) {
+        const endLine = this._findClosingBrace(lines, i);
+        const snippet = lines.slice(i, endLine).join('\n');
+        symbols.push({
+          name: `${currentType.name}.body`,
+          kind: 'method',
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(snippet),
+        });
       }
     }
   }
 
+  /**
+   * String- and Comment-Aware Brace Matcher.
+   * Completely immune to braces inside strings (single/double/backtick) and comments (//, /*).
+   */
   static _findClosingBrace(lines, startIndex) {
     let depth = 0;
     let foundOpen = false;
+    let inString = null;
+    let inLineComment = false;
+    let inBlockComment = false;
 
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i];
-      for (const char of line) {
-        if (char === '{') {
+      inLineComment = false; // Reset line comment on newline
+
+      for (let j = 0; j < line.length; j++) {
+        const ch = line[j];
+        const next = j + 1 < line.length ? line[j + 1] : '';
+
+        // Line comment
+        if (inLineComment) break;
+
+        // Block comment
+        if (inBlockComment) {
+          if (ch === '*' && next === '/') {
+            inBlockComment = false;
+            j++;
+          }
+          continue;
+        }
+
+        // String literal
+        if (inString !== null) {
+          if (ch === '\\') {
+            j++; // Skip escaped char
+            continue;
+          }
+          if (ch === inString) {
+            inString = null;
+          }
+          continue;
+        }
+
+        // Check for comment start
+        if (ch === '/' && next === '/') {
+          inLineComment = true;
+          j++;
+          continue;
+        }
+        if (ch === '/' && next === '*') {
+          inBlockComment = true;
+          j++;
+          continue;
+        }
+
+        // Check for string start
+        if (ch === '"' || ch === "'" || ch === '`') {
+          inString = ch;
+          continue;
+        }
+
+        // Check for brace
+        if (ch === '{') {
           depth++;
           foundOpen = true;
-        } else if (char === '}') {
+        } else if (ch === '}') {
           depth--;
           if (foundOpen && depth === 0) {
-            return i + 1;
+            return i + 1; // 1-indexed line
           }
         }
       }
     }
+
     return lines.length;
   }
 
