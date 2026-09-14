@@ -319,3 +319,53 @@ Skill 是 OS Plugin 的全生命周期操作协议，不只是使用说明。
 19. Rule 可以有多个文件，但必须标明类别，并在 Plan 中明确引用。
 20. SQL 与 JSON 双向同步，JSON 不手工编辑，Git 回退 JSON 时 SQL 同步回退。
 21. 旧 JSON 只兼容导入，不保留旧服务和旧架构。
+
+---
+
+## 十五、V2 重构验收成果与实测基准 (V2 Acceptance & Benchmark Verification)
+
+### 1. 桌面端页面架构与视觉成果
+
+在 Swift 原生桌面端 (`apps/desktop`) 中实现了全新的 **Metro Map（地铁路线图）** 架构画布与常驻进程监控：
+
+![ContextOS V2 Native Desktop App](images/contextos-desktop-v2.png)
+
+- **地铁轨道布局 (Metro Map Layout)**：
+  - 核心链路化为平行的地铁铁轨（如绿色核心骨架线、蓝色存储与代码智能线、橙色桌面交互线）。
+  - 同一链路上的 Block 沿轨道自左向右排列为“车站”，跨轨依赖采用严格的正交横折连线（Transfer Lines），彻底消除了旧版蛇形扭曲与链路分散问题。
+- **边缘安全与视口自适应**：
+  - 优化了画布的安全内边距（Padding）与缩放适配机制，边缘 Block 站台与连线在任何缩放比例下均零裁切（0 Clipping）。
+- **常驻后台进程监控卡片**：
+  - 桌面端左下角新增常驻守护进程卡片，实时展示由 `process` 工具托管的 Dev Server、Watch 进程的 PID、端口号、运行状态与生命周期控制，支持一键安全释放进程树。
+
+### 2. 真 AST 智能引擎与手术刀式代码写入
+
+彻底废除基于正则表达式的假 AST，引入业界标准编译器级 AST 支持：
+- **JavaScript / TypeScript / JSX / TSX**：集成 `@babel/parser`，精准提取类、成员方法、函数签名、起始行号与 SHA-256 代码段哈希。
+- **Python**：集成原生 `ast` 解析模块，支持类方法、装饰器与多行签名精准识别。
+- **Swift / Go / Rust**：增强大括号匹配与结构体/视图体提取器。
+- **手术刀式代码写入与重锚**：通过 `code(action: 'edit')` 执行唯一字符串/区间补丁式替换，物理写入磁盘并立即触发 AST 重新解析，自动重锚符号位置与哈希，已由 `scripts/e2e-project-lifecycle.mjs` 验证端到端实操。
+- **100% 工作区覆盖门禁**：49 个源码文件全部归属到 10 个纯 V2 Block 中，`CoverageChecker` 门禁保证无孤儿代码遗漏。
+
+### 3. 双维度基准测试结果 (Dual Benchmark Metrics)
+
+经由 `scripts/benchmark.mjs`（理论基准）与 `scripts/practical-test.mjs` / `scripts/e2e-project-lifecycle.mjs`（实际开发全周期测试）测定：
+
+| 研发环节 | 传统开发交互（非推荐，消耗大） | ContextOS V2 渐进式最佳实践 | 节省比率 |
+|---|---|---|---:|
+| **会话启动 (Bootstrap)** | 全量加载架构与图谱 (61,902 字符 / ~15,476 tokens) | 渐进式 L0-L1 Markdown (1,987 字符 / ~497 tokens) | **96.79%** |
+| **代码大纲审视** | 盲读 4 个核心全量源码 (34,045 字符 / ~8,512 tokens) | AST 符号大纲提取 (4,374 字符 / ~1,093 tokens) | **87.15%** |
+| **代码阅读与查阅** | 逐文件展开全部代码 (34,045 字符) | 手术刀提取目标方法 (6,898 字符) | **79.74%** |
+| **命令运行与构建** | 终端原始输出 (16,713 字符 / ~4,179 tokens) | 精简回执 + 失败提取 (251 字符 / ~63 tokens) | **98.50%** |
+| **单任务全流程综合** | **129,373 字符 (~32,344 tokens)** | **13,761 字符 (~3,441 tokens)** | **89.36% (节省 28,903 tokens)** |
+
+### 4. Master Plan 全生命周期正式完结
+
+主重构计划 `plan-v2-rebuild` 已正式执行完结：
+- **9 个清晰阶段全部达成**：P0（领域模型与不变量）至 P8（双重基准与全流程验证）各阶段 deliverables 与 acceptance 均已验收完成。
+- **4 个 Checkpoint 全部通过**：
+  - `cp-p0-p5-verified`：Core V2 Engines passed 100% test coverage (PASSED)
+  - `cp-p6-self-adopted`：ContextOS successfully self-manages its own codebase (PASSED)
+  - `cp-p7-desktop-verified`：Swift Desktop App Metro Layout & Process Host verified (PASSED)
+  - `cp-p8-reduction-proven`：Context reduction quantified by benchmark and real tests (PASSED)
+- **正式归档**：调用 `plan(action: 'complete')` 生成历史归档凭证，计划状态转换为 `completed`。

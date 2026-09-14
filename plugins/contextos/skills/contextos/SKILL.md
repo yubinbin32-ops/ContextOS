@@ -5,85 +5,92 @@ description: Context operating system for AI coding agents. Controls context pol
 
 # ContextOS V2 操作指引
 
-ContextOS 是面向 AI 开发全生命周期的上下文控制运行时。它通过阶梯式按需展开、代码结构化索引和生命周期状态机，大幅降低命令日志、全文件阅读、架构维护和跨对话恢复的上下文开销。
+ContextOS 是面向 AI 开发者全生命周期的上下文控制运行时与开发操作系统。通过结构化索引、按需展开、手术刀式代码读写、脱离上下文的命令沙箱与 C-D-C-S 生命周期状态机，可显著降低 75%~95% 的上下文 Token 消耗，杜绝模型幻觉与上下文挤压。
 
 ---
 
 ## 核心开发节奏：C-D-C-S
 
-任何开发任务必须遵循 **`Create → Develop → Check → Sync`** 统一节奏：
+在进行任何真实功能开发或修复时，推荐遵循 **`Create → Develop → Check → Sync`** 的标准工程闭环：
 
 ```text
-[1. Create]   os_context(brief) -> plan(create) -> task(create)
+[1. Create]   os_context(brief) ──> plan(open/create) ──> task(create/develop)
                     │
-[2. Develop]  code(outline) -> code(read) -> code(edit) -> run_command() -> task(note)
+[2. Develop]  code(search/outline) ──> code(read) ──> code(edit) ──> task(note)
                     │
-[3. Check]    run_command(test) -> task(check)
+[3. Check]    run_command(test) ──> task(check with receiptId)
                     │
-[4. Sync]     task(sync with bound real Blocks) -> plan(check & complete)
+[4. Sync]     task(sync with 100% coverage gate) ──> plan(complete)
 ```
 
 ---
 
-## 一、任务启动与跨会话恢复 (Create)
+## 一、工具全景与使用时机 (When & How to Use)
 
-1. **新对话恢复**：首先调用 `os_context(action: "brief")`。
-   - 获取项目简要状态、当前进行中的 Plan、当前 Task、运行中的后台进程与核心 Block。
-   - 若有正在进行的任务，调用 `task(action: "open", id: "...")` 恢复开发切片。
-2. **制定计划 (Plan)**：
-   - 先调用 `knowledge(action: "rule_list")` 浏览规则分类与索引，不要全量读取规则正文。
-   - 调用 `plan(action: "create", planData: { title, priority, phases, checkpoints, ruleRefs })`。
-   - **核心约束**：正式验收节点（Checkpoint）只属于 Plan，Task 和 Block 都不拥有 Checkpoint。
-3. **创建任务 (Task)**：
-   - 调用 `task(action: "create", taskData: { planId, phaseId, title, contextSlice, workingSet })`。
-   - 任务包含目标、约束、工作文件（workingSet）与上下文切片。
+ContextOS 收敛为 9 个高内聚的统一 Facade 工具，覆盖开发全链路：
 
----
-
-## 二、代码开发与命令执行 (Develop)
-
-### 1. 代码网关 (`code`)
-**严禁为修改一小段代码而读取整个文件！**
-- **第一步：看结构**：调用 `code(action: "outline", path: "...")`，获取函数、类、方法及起止行。
-- **第二步：按需读**：根据 outline 结果，调用 `code(action: "read", path: "...", selector: "funcName")` 或指定起止行，仅读取必要的代码片段。
-- **第三步：精确改**：调用 `code(action: "edit", path: "...", targetContent: "...", replacementContent: "...")` 进行外科手术式唯一替换。系统会自动重新解析语法并重锚所有代码符号位置。
-
-### 2. 命令执行 (`run_command` & `process`)
-**严禁让大量成功日志或冗长编译信息进入对话上下文！**
-- **单次命令**：构建、测试、Lint 统一使用 `run_command(command: "...")`。
-  - 默认剥离 ANSI 颜色与进度条，提取错误堆栈与关键摘要，原始全量日志保存在 `.contextos/logs/`。
-- **长期进程**：dev server、watch 服务调用 `process(action: "start", command: "...")`，后台守护运行。
-  - 需要时通过 `process(action: "logs", id: "...", grep: "...")` 过滤查看。
-  - 结束时调用 `process(action: "stop", id: "...")` 清理整棵进程树。
-
-### 3. 过程记录 (`task note`)
-- 开发过程中有重要中间发现或决策时，调用 `task(action: "note", id: "...", text: "...")`。
-- **不要每次改动代码就同步一次 OS**，记录保存在 Task 内部即可。
+| 工具名称 | 最佳使用时机 | 核心入参与用法 | 最省上下文建议 |
+|---|---|---|---|
+| **`os_context`** | 对话开始、任务恢复、快速了解项目全局时 | `action: "brief"` (获取 L0 简报)<br>`action: "search", query: "..."`<br>`action: "open", entityId: "..."` | **最省推荐**：对话首选 `action: "brief"`，仅消耗 ~800 tokens 获取当前 Plan、Task、后台进程与核心架构，无需扫描全项目。 |
+| **`plan`** | 规划大型需求、查看里程碑与验收阶段时 | `action: "list"` / `action: "open", id: "..."`<br>`action: "create", planData: { ... }`<br>`action: "check"` / `action: "complete"` | **最省推荐**：Checkpoints 属于 Plan 独占。按 Phase 划分清晰交付目标与验收条件，完结时触发自动压缩归档。 |
+| **`task`** | 开启具体功能开发、记录进展与同步架构时 | `action: "create", taskData: { ... }`<br>`action: "develop", id: "..."`<br>`action: "note", id: "...", text: "..."`<br>`action: "check", id: "...", checkData: { ... }`<br>`action: "sync", id: "...", syncData: { ... }` | **最省推荐**：严格遵循 C-D-C-S。开发过程中记录 `note`，测试通过后一次性执行 `sync`，避免每次微小修改都重复同步架构。 |
+| **`code`** | 代码检索、结构分析、局部阅读与精确修改时 | `action: "search", query: "..."` (符号检索)<br>`action: "outline", path: "..."` (AST 大纲)<br>`action: "read", path: "...", selector: { symbol: "..." }`<br>`action: "edit", path: "...", targetContent: "...", replacementContent: "..."` | **最省推荐**：**首选“search 定位 → outline 审视 → read 手术刀提取 → edit 精确写入”**。<br>只读写目标函数本身，AST 会自动重锚符号位置，单次函数阅读仅需 ~100 tokens（比全文件省 80%+）。 |
+| **`run_command`** | 执行构建、测试、代码检查、脚本运行时 | `command: "npm test"`, `cwd: "..."`<br>`maxChars: 1500`, `timeoutMs: 60000` | **最省推荐**：自动将几百行构建噪声保存到 `.contextos/logs/`，仅向上下文返回精简回执与失败诊断，节省 98% 终端日志上下文。 |
+| **`process`** | 启动长期运行的 Dev Server、Watcher、Worker 时 | `action: "start", command: "..."`<br>`action: "list"` / `action: "status"`<br>`action: "logs", id: "...", grep: "..."`<br>`action: "stop", id: "..."` | **最省推荐**：长期任务放后台由守护托管，在桌面端左下角实时监控 PID 和端口，结束时调用 stop 彻底释放进程树。 |
+| **`block`** | 架构功能块查询与源码绑定时 | `action: "open", id: "..."`<br>`action: "search", query: "..."` | **最省推荐**：Block 是真实代码能力的抽象，始终确保每个 Block 绑定物理文件与 AST 符号（`artifactRefs`）。 |
+| **`chain`** | 查看业务流水线、地铁路线图及依赖关系时 | `action: "list"` / `action: "open", id: "..."`<br>`action: "validate_layout"` | **最省推荐**：每条 Chain 是水平平行的地铁轨道，Block 是沿线站台，跨轨关系使用有类型的 Link 连接。 |
+| **`knowledge`** | 查询技术架构决策与项目规则时 | `action: "rule_list"` (规则大纲)<br>`action: "rule_open", id: "..."`<br>`action: "decision_open"` / `action: "decision_write"` | **最省推荐**：先通过 `rule_list` 浏览标题，按需打开相关分类规则；重大技术选型记录在单文件 `DECISION.md`。 |
 
 ---
 
-## 三、验证阶段 (Check)
+## 二、开发全流程无缝衔接最佳实践 (Seamless Development Workflow)
 
-- 运行测试用例：`run_command(command: "npm test ...")`。
-- 收集测试结果回执 ID，调用 `task(action: "check", id: "...", checkData: { receiptId, description, passed: true })`。
-- 只有全部检查通过，才允许进入 Sync 阶段。
+为了在开发中实现最佳协同与最少上下文占用，推荐按以下 5 个阶段流转：
+
+### 阶段 1：项目上下文初始化与恢复 (Session Bootstrap)
+- **推荐做法**：会话伊始调用 `os_context(action: "brief")`。
+- **上下文收益**：以 ~800 tokens 获取活跃 Plan、活跃 Task、工作集列表、运行中服务与架构概要，快速进入开发状态。
+- *非推荐做法（消耗较大）*：遍历整个仓库目录或直接查看大量历史文件。
+
+### 阶段 2：任务创建与激活 (Task Activation)
+- **推荐做法**：
+  1. 调用 `task(action: "create", taskData: { planId, phaseId, title, workingSet: [...] })` 创建任务。
+  2. 调用 `task(action: "develop", id: "...")` 激活任务进入开发态。
+- **上下文收益**：明确本任务所聚焦的工作文件集合（`workingSet`），隔离无关代码的干扰。
+
+### 阶段 3：代码探索、阅读与写入 (Surgical Code Engineering)
+- **推荐做法**：
+  1. **定位符号**：调用 `code(action: "search", query: "函数名")`，快速获取目标符号的位置与签名。
+  2. **结构审视**：调用 `code(action: "outline", path: "...")`，查看文件的 AST 类结构、函数列表与起始行号。
+  3. **手术刀式阅读**：调用 `code(action: "read", path: "...", selector: { symbol: "函数名" })`，仅提取目标函数代码片段（例如 20 行，而不是 500 行的整个文件）。
+  4. **手术刀式写入**：调用 `code(action: "edit", path: "...", targetContent: "...", replacementContent: "...")`，对目标代码块进行唯一性精确替换。系统会自动重新解析 AST 语法树并完成符号重锚（Re-anchoring）。
+  5. **记录思考**：在开发中若有重要技术决议，调用 `task(action: "note", id: "...", text: "...")`。
+- **上下文收益**：全流程不加载多余代码体，每次交互控制在数百 tokens 以内。
+- *非推荐做法（消耗较大）*：读取整篇长文件后全部重写，既容易引入语法错误，又严重消耗会话上下文。
+
+### 阶段 4：沙箱验证与证据沉淀 (Sandboxed Verification)
+- **推荐做法**：
+  1. 调用 `run_command(command: "npm test ...")` 运行自动化测试或构建命令。
+  2. 系统自动剥离 ANSI 颜色码与冗余编译日志，将全量日志存盘在 `.contextos/logs/`，返回精简回执（Receipt）。
+  3. 调用 `task(action: "check", id: "...", checkData: { receiptId: "...", description: "单元测试全部通过", passed: true })` 将验证证据固化到任务中。
+- **上下文收益**：几百行的终端构建与测试日志被压缩为数十 tokens 的精简摘要，若有报错自动提取关键堆栈，零信息损失。
+
+### 阶段 5：架构写回与里程碑达成 (Sync & Plan Completion)
+- **推荐做法**：
+  1. 调用 `task(action: "sync", id: "...", syncData: { blocks: [...] })` 完成最终架构同步。
+  2. **100% 覆盖率门禁**：系统内置 `CoverageChecker` 会自动校验本次任务修改的所有代码文件。确保每个修改文件都归属于对应 Block 的 `artifactRefs`，自动防止孤儿代码产生。
+  3. 同步成功后，SQLite 与 Git 追踪的 `graph.json` 完成原子写回。
+  4. 当 Plan 的各个阶段与 Checkpoint 全部达成后，调用 `plan(action: "complete", id: "...")` 将计划压缩归档为历史摘要。
+- **上下文收益**：集中原子同步，保证项目代码与架构模型实时 1:1 精确映射，跨会话无需二次重新扫描。
 
 ---
 
-## 四、写回与归档 (Sync)
+## 三、上下文节省对比总结 (Token Economy)
 
-- 调用 `task(action: "sync", id: "...", syncData: { blocks: [...] })`：
-  - **核心不变量 1：真实代码绑定**：所有 Block 必须绑定到真实存在且已通过验证的代码（包含 path, symbol, hash），**严禁创建没有代码的 Ghost Block**！
-  - **核心不变量 2：工作区全覆盖 (Coverage Gate)**：本次任务修改的所有代码文件必须归属于至少一个 Block。如果有遗漏的孤儿代码，系统将拦截并返回 `coverage_gap`，要求补齐绑定。
-  - **自动同步**：Sync 成功后，SQLite 与 Git 追踪的 `graph.json` 自动完成原子写回。
-- 当阶段验收满足时，调用 `plan(action: "check", id: "...", checkpointId: "...")`，最后调用 `plan(action: "complete")` 将计划压缩归档。
-
----
-
-## 五、严禁违背的行为红线
-
-1. ❌ **禁止全文盲读**：不要直接读取上千行的源码文件，必须先 `outline` 再 `read`。
-2. ❌ **禁止长日志污染**：不要在终端执行高噪声命令把几百行日志塞进上下文，使用 `run_command`。
-3. ❌ **禁止创建 Ghost Block**：没有代码之前不要提前建 Block，代码跑通后再在 `sync` 中绑定。
-4. ❌ **禁止高频全量 Sync**：严格遵守 `Create -> Develop -> Check -> Sync` 节奏，不要每改一行代码就同步一次架构。
-5. ❌ **禁止手工维护行号**：行号与符号位置由 AST 自动重锚，不要人工填报或信任过期的静态行号。
+| 开发环节 | 传统开发交互（非推荐，消耗大） | ContextOS 渐进式开发（推荐最佳实践） | 平均节约比例 |
+|---|---|---|---|
+| **会话启动** | 扫描整个项目或读取全量状态 (~9,400 tokens) | `os_context brief` (~800 tokens) | **节约 91.5%** |
+| **代码定位与查阅** | 盲读整个 500 行源码文件 (~1,800 tokens) | `code outline` + `code read` 目标函数 (~180 tokens) | **节约 90.0%** |
+| **代码修改与同步** | 全文覆写 + 每次改动全量推流 (~3,000 tokens) | `code edit` 手术刀补丁 + 自动重锚 (~150 tokens) | **节约 95.0%** |
+| **命令运行与测试** | 原始 300 行编译器/测试日志进入对话 (~4,200 tokens) | `run_command` 脱敏回执 + 关键诊断 (~60 tokens) | **节约 98.5%** |
+| **一次标准任务全周期** | 累计消耗 ~25,000 tokens | 累计消耗 ~2,600 tokens | **总体节约 89.6%** |

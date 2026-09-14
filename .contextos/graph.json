@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 1,
-  "exportedAt": "2026-09-14T15:38:09.657Z",
+  "graphRevision": 4,
+  "exportedAt": "2026-09-14T17:08:39.052Z",
   "data": {
     "plans": [
       {
@@ -29,91 +29,163 @@
             "id": "P0",
             "order": 0,
             "objective": "Freeze Domain Models & Invariants",
-            "scope": "",
-            "deliverables": [],
+            "scope": "packages/domain/src/",
+            "deliverables": [
+              "Plan, Phase, PlanCheckpoint models",
+              "Task, TaskCheck, TaskReceipt models",
+              "Block, Chain, Link models",
+              "Core invariants enforcement"
+            ],
             "status": "completed",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Zero ghost blocks invariant enforced",
+              "Task C-D-C-S state machine validated",
+              "Checkpoint ownership restricted to Plan"
+            ]
           },
           {
             "id": "P1",
             "order": 1,
             "objective": "Storage Engine & Daemon IPC",
-            "scope": "",
-            "deliverables": [],
+            "scope": "packages/storage/src/",
+            "deliverables": [
+              "WAL-mode SQLite schema & migrations",
+              "Atomic transaction wrappers",
+              "Deterministic Git graph.json sync",
+              "Git checkout rollback detector"
+            ],
             "status": "completed",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Bidirectional sync between SQLite and graph.json passes all roundtrip tests"
+            ]
           },
           {
             "id": "P2",
             "order": 2,
             "objective": "Code Gateway & Coverage Checker",
-            "scope": "",
-            "deliverables": [],
+            "scope": "packages/code-intel/src/",
+            "deliverables": [
+              "Babel parser AST extractor for JS/TS/JSX/TSX",
+              "Python stdlib AST extractor",
+              "VS Code style symbol search",
+              "Surgical code edit & re-anchoring",
+              "Workspace 100% coverage checker"
+            ],
             "status": "completed",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Precision method extraction verified",
+              "Surgical code edits update file on disk & hash",
+              "Coverage gap stops task sync"
+            ]
           },
           {
             "id": "P3",
             "order": 3,
             "objective": "Command Gateway & Process Host",
-            "scope": "",
-            "deliverables": [],
+            "scope": "packages/execution/src/",
+            "deliverables": [
+              "Out-of-context command runner",
+              "ANSI escape code stripping",
+              "Receipt generation & log truncation",
+              "Long-running process host with tree termination"
+            ],
             "status": "completed",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Terminal noise reduced by >95%",
+              "Daemon processes managed cleanly without zombie processes"
+            ]
           },
           {
             "id": "P4",
             "order": 4,
             "objective": "Lifecycle Services & DAG Layout",
-            "scope": "",
-            "deliverables": [],
+            "scope": "packages/lifecycle/src/",
+            "deliverables": [
+              "PlanService (create/open/list/checkpoint/complete)",
+              "TaskService (create/develop/check/sync)",
+              "Metro Line Layout Engine (parallel rails & ordered stations)"
+            ],
             "status": "completed",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Subway map ordering valid",
+              "Blocks on same chain grouped without zigzag distortion"
+            ]
           },
           {
             "id": "P5",
             "order": 5,
             "objective": "9 MCP Facades & Progressive Markdown",
-            "scope": "",
-            "deliverables": [],
+            "scope": "packages/mcp/src/ and packages/context/src/",
+            "deliverables": [
+              "9 action-based MCP facades",
+              "L0/L1 progressive context renderer",
+              "MCP tool registration in contextos-mcp.mjs"
+            ],
             "status": "completed",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Replaces 49 micro-tools",
+              "L0 brief < 1,000 tokens"
+            ]
           },
           {
             "id": "P6",
             "order": 6,
             "objective": "Self-Adopt ContextOS Repository",
-            "scope": "",
-            "deliverables": [],
+            "scope": "Entire mdflow repository",
+            "deliverables": [
+              "10 pure V2 architectural blocks",
+              "49 source files 100% indexed",
+              "12 typed architectural links",
+              "DECISION.md ADR records"
+            ],
             "status": "completed",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Coverage checker reports 49/49 (100%)",
+              "Zero legacy ghost blocks"
+            ]
           },
           {
             "id": "P7",
             "order": 7,
             "objective": "Swift App Metro Layout & Process Host",
-            "scope": "",
-            "deliverables": [],
-            "status": "active",
+            "scope": "apps/desktop/",
+            "deliverables": [
+              "SwiftUI Canvas Metro rail lines",
+              "Station block cards with real metrics",
+              "Sidebar running process monitor card",
+              "Zero border clipping layout"
+            ],
+            "status": "completed",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Native desktop app builds and runs",
+              "Live screenshot verifies metro lines and process monitor card"
+            ]
           },
           {
             "id": "P8",
             "order": 8,
             "objective": "Dual Benchmark & Context Reduction Verification",
-            "scope": "",
-            "deliverables": [],
-            "status": "pending",
+            "scope": "scripts/benchmark-dual.mjs and scripts/e2e-project-lifecycle.mjs",
+            "deliverables": [
+              "Dual token reduction benchmark (theoretical & empirical)",
+              "Real-world C-D-C-S task lifecycle automated test",
+              "Master plan formal completion"
+            ],
+            "status": "active",
             "taskIds": [],
-            "acceptance": []
+            "acceptance": [
+              "Total token reduction > 85%",
+              "Code edit verified on disk",
+              "Plan-v2-rebuild formally marked completed"
+            ]
           }
         ],
         "checkpoints": [
@@ -125,7 +197,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T15:38:09.522Z"
+            "completedAt": "2026-09-14T16:15:34.774Z"
           },
           {
             "id": "cp-p6-self-adopted",
@@ -135,7 +207,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T15:38:09.522Z"
+            "completedAt": "2026-09-14T16:15:34.774Z"
           },
           {
             "id": "cp-p7-desktop-verified",
@@ -145,7 +217,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T15:38:09.522Z"
+            "completedAt": "2026-09-14T16:15:34.774Z"
           },
           {
             "id": "cp-p8-reduction-proven",
@@ -153,28 +225,30 @@
             "phaseId": null,
             "title": "Context reduction quantified by benchmark and real tests",
             "criteria": "",
-            "status": "pending",
-            "evidenceRefs": [],
-            "completedAt": null
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1789405667919-450547"
+            ],
+            "completedAt": "2026-09-14T17:07:48.152Z"
           }
         ],
-        "createdAt": "2026-09-14T15:38:09.523Z",
-        "updatedAt": "2026-09-14T15:38:09.523Z"
+        "createdAt": "2026-09-14T16:15:34.774Z",
+        "updatedAt": "2026-09-14T16:15:34.774Z"
       }
     ],
     "tasks": [
       {
-        "id": "task-self-adopt",
+        "id": "task-1789405718736",
         "planId": "plan-v2-rebuild",
-        "phaseId": "P6",
-        "title": "Self-Adopt ContextOS Codebase into V2 Architecture",
+        "phaseId": "P8",
+        "title": "E2E Real Code Writing, Verification & Plan Completion",
         "status": "completed",
         "contextSlice": {
-          "objective": "Index all 10 V2 packages, register real Blocks with 100% file coverage, and sync pure graph.json.",
+          "objective": "Execute real code edit, capture test receipts, verify 100% coverage, and complete Master Plan.",
           "constraints": [
-            "Zero ghost blocks",
-            "100% source file coverage",
-            "Subway rail track chains"
+            "No full file rewrites",
+            "Surgical replacement only",
+            "100% coverage gate must pass"
           ],
           "references": {},
           "locators": [],
@@ -182,57 +256,7 @@
           "openQuestions": []
         },
         "workingSet": {
-          "files": [
-            "packages/domain/src/plan.mjs",
-            "packages/domain/src/task.mjs",
-            "packages/domain/src/block.mjs",
-            "packages/domain/src/chain.mjs",
-            "packages/domain/src/link.mjs",
-            "packages/domain/src/invariants.mjs",
-            "packages/domain/src/knowledge.mjs",
-            "packages/domain/src/index.mjs",
-            "packages/storage/src/database.mjs",
-            "packages/storage/src/sync-engine.mjs",
-            "packages/storage/src/schema.mjs",
-            "packages/storage/src/index.mjs",
-            "apps/daemon/src/osd.mjs",
-            "packages/protocol/src/ipc.mjs",
-            "packages/protocol/src/index.mjs",
-            "packages/code-intel/src/code-tools.mjs",
-            "packages/code-intel/src/language-registry.mjs",
-            "packages/code-intel/src/coverage.mjs",
-            "packages/code-intel/src/index.mjs",
-            "packages/process-host/src/runner.mjs",
-            "packages/process-host/src/sanitizer.mjs",
-            "packages/process-host/src/process-manager.mjs",
-            "packages/process-host/src/index.mjs",
-            "packages/context/src/markdown-renderer.mjs",
-            "packages/context/src/index.mjs",
-            "packages/layout/src/network-layout.mjs",
-            "packages/layout/src/index.mjs",
-            "packages/application/src/plan-service.mjs",
-            "packages/application/src/task-service.mjs",
-            "packages/application/src/knowledge-service.mjs",
-            "packages/application/src/index.mjs",
-            "packages/mcp/src/v2-server.mjs",
-            "packages/mcp/src/v2-service.mjs",
-            "packages/mcp/src/server.mjs",
-            "packages/mcp/src/service.mjs",
-            "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
-            "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
-            "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
-            "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift",
-            "apps/desktop/Sources/ContextOSDesktop/ContextOSDesktopApp.swift",
-            "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
-            "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift",
-            "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift",
-            "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift",
-            "apps/desktop/Sources/ContextOSDesktop/Models.swift",
-            "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
-            "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
-            "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
-            "apps/desktop/Sources/ContextOSDesktop/Theme.swift"
-          ],
+          "files": [],
           "symbols": [],
           "candidateBlockIds": []
         },
@@ -246,22 +270,15 @@
           "dirtyHash": null,
           "indexRevision": 0
         },
-        "notes": [
-          {
-            "id": "note-1789400289645-nggzu",
-            "text": "All V2 packages indexed with 100% file coverage and ready for binding.",
-            "kind": "journal",
-            "createdAt": "2026-09-14T15:38:09.645Z"
-          }
-        ],
+        "notes": [],
         "checks": [
           {
-            "id": "check-1789400289646-aenxo",
-            "receiptId": null,
-            "description": "All V2 unit tests pass and all 49 project source files covered by Block artifactRefs.",
+            "id": "check-1789405719036-hstgp",
+            "receiptId": "receipt-1789405718822-24c6dd",
+            "description": "AST parser, surgical code read & edit, and code intel unit tests 100% passed.",
             "passed": true,
             "evidence": "",
-            "recordedAt": "2026-09-14T15:38:09.646Z"
+            "recordedAt": "2026-09-14T17:08:39.036Z"
           }
         ],
         "syncResult": {
@@ -277,29 +294,12 @@
             "block-mcp-facades",
             "block-desktop-app"
           ],
-          "updatedChainIds": [
-            "chain-core-engine",
-            "chain-gateways",
-            "chain-application-presentation"
-          ],
-          "updatedLinkIds": [
-            "link-1",
-            "link-2",
-            "link-3",
-            "link-4",
-            "link-5",
-            "link-6",
-            "link-7",
-            "link-8",
-            "link-9",
-            "link-10",
-            "link-11",
-            "link-12"
-          ],
-          "completedAt": "2026-09-14T15:38:09.648Z"
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "completedAt": "2026-09-14T17:08:39.042Z"
         },
-        "createdAt": "2026-09-14T15:38:09.645Z",
-        "updatedAt": "2026-09-14T15:38:09.648Z"
+        "createdAt": "2026-09-14T17:08:38.736Z",
+        "updatedAt": "2026-09-14T17:08:39.042Z"
       }
     ],
     "blocks": [
@@ -400,8 +400,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       },
       {
         "id": "block-command-gateway",
@@ -484,8 +484,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       },
       {
         "id": "block-context-renderer",
@@ -498,8 +498,8 @@
             "path": "packages/context/src/markdown-renderer.mjs",
             "symbol": "MarkdownRenderer",
             "startLine": 6,
-            "endLine": 167,
-            "hash": "c77b735cea26ee71",
+            "endLine": 170,
+            "hash": "5805d59e361779e3",
             "role": "implementation"
           },
           {
@@ -514,15 +514,15 @@
             "path": "packages/context/src/markdown-renderer.mjs",
             "symbol": "MarkdownRenderer.renderPlan",
             "startLine": 65,
-            "endLine": 98,
-            "hash": "94dd5926a6f7d322",
+            "endLine": 101,
+            "hash": "2fc8cd117c6bf036",
             "role": "implementation"
           },
           {
             "path": "packages/context/src/markdown-renderer.mjs",
             "symbol": "MarkdownRenderer.renderTask",
-            "startLine": 100,
-            "endLine": 139,
+            "startLine": 103,
+            "endLine": 142,
             "hash": "68d2fa2714f97bf0",
             "role": "implementation"
           },
@@ -536,8 +536,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       },
       {
         "id": "block-daemon-host",
@@ -620,8 +620,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       },
       {
         "id": "block-desktop-app",
@@ -1056,8 +1056,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       },
       {
         "id": "block-domain-core",
@@ -1292,8 +1292,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.646Z",
-        "updatedAt": "2026-09-14T15:38:09.646Z"
+        "createdAt": "2026-09-14T17:08:39.040Z",
+        "updatedAt": "2026-09-14T17:08:39.040Z"
       },
       {
         "id": "block-layout-engine",
@@ -1328,8 +1328,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       },
       {
         "id": "block-lifecycle-services",
@@ -1444,8 +1444,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       },
       {
         "id": "block-mcp-facades",
@@ -1536,8 +1536,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       },
       {
         "id": "block-storage-engine",
@@ -1628,8 +1628,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T17:08:39.041Z",
+        "updatedAt": "2026-09-14T17:08:39.041Z"
       }
     ],
     "chains": [
@@ -1646,8 +1646,8 @@
           "block-desktop-app"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "chain-core-engine",
@@ -1661,8 +1661,8 @@
           "block-daemon-host"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "chain-gateways",
@@ -1676,8 +1676,8 @@
           "block-context-renderer"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       }
     ],
     "links": [
@@ -1691,8 +1691,8 @@
         "confidence": 1,
         "reason": "MCP routes plan, task, block, chain, knowledge requests to application services",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-10",
@@ -1704,8 +1704,8 @@
         "confidence": 1,
         "reason": "Desktop SwiftUI client calls layout engine to compute node positions and envelopes",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.648Z",
-        "updatedAt": "2026-09-14T15:38:09.648Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-11",
@@ -1717,8 +1717,8 @@
         "confidence": 1,
         "reason": "Desktop app connects to state.sqlite and polls changes from graph.json",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.648Z",
-        "updatedAt": "2026-09-14T15:38:09.648Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-12",
@@ -1730,8 +1730,8 @@
         "confidence": 1,
         "reason": "Desktop app inspects .contextos/processes.json and terminates running processes",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.648Z",
-        "updatedAt": "2026-09-14T15:38:09.648Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-2",
@@ -1743,8 +1743,8 @@
         "confidence": 1,
         "reason": "Lifecycle services instantiate and validate domain models and invariants",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-3",
@@ -1756,8 +1756,8 @@
         "confidence": 1,
         "reason": "Lifecycle services persist and query graph state via V2Database",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-4",
@@ -1769,8 +1769,8 @@
         "confidence": 1,
         "reason": "MCP code facade delegates outline, surgical read/edit, and symbol search to CodeTools",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-5",
@@ -1782,8 +1782,8 @@
         "confidence": 1,
         "reason": "MCP run_command and process facades execute commands and manage background processes",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-6",
@@ -1795,8 +1795,8 @@
         "confidence": 1,
         "reason": "MCP os_context delegates brief and entity rendering to MarkdownRenderer",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-7",
@@ -1808,8 +1808,8 @@
         "confidence": 1,
         "reason": "Database schema and sync engine serialize and deserialize domain entities",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-8",
@@ -1821,8 +1821,8 @@
         "confidence": 1,
         "reason": "ContextOS daemon loads state database and watches bidirectional sync events",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       },
       {
         "id": "link-9",
@@ -1834,8 +1834,8 @@
         "confidence": 1,
         "reason": "Layout engine positions domain Blocks, Chains, and Links onto 2D Metro tracks",
         "revision": 1,
-        "createdAt": "2026-09-14T15:38:09.647Z",
-        "updatedAt": "2026-09-14T15:38:09.647Z"
+        "createdAt": "2026-09-14T16:15:34.859Z",
+        "updatedAt": "2026-09-14T16:15:34.859Z"
       }
     ]
   }

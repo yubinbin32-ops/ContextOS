@@ -23533,8 +23533,8 @@ var V2Database = class {
     };
   }
   listPlans(projectId) {
-    const stmt = this.db.prepare("SELECT id FROM plans WHERE project_id = ? ORDER BY created_at DESC");
-    const rows = stmt.all(projectId);
+    const stmt = projectId ? this.db.prepare("SELECT id FROM plans WHERE project_id = ? ORDER BY created_at DESC") : this.db.prepare("SELECT id FROM plans ORDER BY created_at DESC");
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => this.getPlan(r.id));
   }
   // --- Task ---
@@ -23669,8 +23669,8 @@ var V2Database = class {
     };
   }
   listBlocks(projectId) {
-    const stmt = this.db.prepare("SELECT id FROM blocks WHERE project_id = ? ORDER BY created_at ASC");
-    const rows = stmt.all(projectId);
+    const stmt = projectId ? this.db.prepare("SELECT id FROM blocks WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT id FROM blocks ORDER BY created_at ASC");
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => this.getBlock(r.id));
   }
   // --- Chain ---
@@ -23709,8 +23709,8 @@ var V2Database = class {
     };
   }
   listChains(projectId) {
-    const stmt = this.db.prepare("SELECT * FROM chains WHERE project_id = ? ORDER BY created_at ASC");
-    const rows = stmt.all(projectId);
+    const stmt = projectId ? this.db.prepare("SELECT * FROM chains WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM chains ORDER BY created_at ASC");
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => ({
       id: r.id,
       projectId: r.project_id,
@@ -23745,8 +23745,8 @@ var V2Database = class {
     );
   }
   listLinks(projectId) {
-    const stmt = this.db.prepare("SELECT * FROM links WHERE project_id = ? ORDER BY created_at ASC");
-    const rows = stmt.all(projectId);
+    const stmt = projectId ? this.db.prepare("SELECT * FROM links WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM links ORDER BY created_at ASC");
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => ({
       id: r.id,
       projectId: r.project_id,
@@ -40483,6 +40483,9 @@ var MarkdownRenderer = class {
       if (p.scope) lines.push(`- Scope: ${p.scope}`);
       if (p.deliverables?.length > 0) {
         lines.push(`- Deliverables: ${p.deliverables.join(", ")}`);
+      }
+      if (p.acceptance?.length > 0) {
+        lines.push(`- Acceptance: ${p.acceptance.join(", ")}`);
       }
     }
     lines.push("\n## Checkpoints (Formal Acceptance):");

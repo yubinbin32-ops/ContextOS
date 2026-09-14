@@ -187,8 +187,10 @@ export class V2Database {
   }
 
   listPlans(projectId) {
-    const stmt = this.db.prepare('SELECT id FROM plans WHERE project_id = ? ORDER BY created_at DESC');
-    const rows = stmt.all(projectId);
+    const stmt = projectId
+      ? this.db.prepare('SELECT id FROM plans WHERE project_id = ? ORDER BY created_at DESC')
+      : this.db.prepare('SELECT id FROM plans ORDER BY created_at DESC');
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => this.getPlan(r.id));
   }
 
@@ -335,8 +337,10 @@ export class V2Database {
   }
 
   listBlocks(projectId) {
-    const stmt = this.db.prepare('SELECT id FROM blocks WHERE project_id = ? ORDER BY created_at ASC');
-    const rows = stmt.all(projectId);
+    const stmt = projectId
+      ? this.db.prepare('SELECT id FROM blocks WHERE project_id = ? ORDER BY created_at ASC')
+      : this.db.prepare('SELECT id FROM blocks ORDER BY created_at ASC');
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => this.getBlock(r.id));
   }
 
@@ -378,8 +382,10 @@ export class V2Database {
   }
 
   listChains(projectId) {
-    const stmt = this.db.prepare('SELECT * FROM chains WHERE project_id = ? ORDER BY created_at ASC');
-    const rows = stmt.all(projectId);
+    const stmt = projectId
+      ? this.db.prepare('SELECT * FROM chains WHERE project_id = ? ORDER BY created_at ASC')
+      : this.db.prepare('SELECT * FROM chains ORDER BY created_at ASC');
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => ({
       id: r.id,
       projectId: r.project_id,
@@ -416,8 +422,10 @@ export class V2Database {
   }
 
   listLinks(projectId) {
-    const stmt = this.db.prepare('SELECT * FROM links WHERE project_id = ? ORDER BY created_at ASC');
-    const rows = stmt.all(projectId);
+    const stmt = projectId
+      ? this.db.prepare('SELECT * FROM links WHERE project_id = ? ORDER BY created_at ASC')
+      : this.db.prepare('SELECT * FROM links ORDER BY created_at ASC');
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => ({
       id: r.id,
       projectId: r.project_id,

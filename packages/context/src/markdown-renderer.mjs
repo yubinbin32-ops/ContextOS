@@ -81,6 +81,9 @@ export class MarkdownRenderer {
       if (p.deliverables?.length > 0) {
         lines.push(`- Deliverables: ${p.deliverables.join(', ')}`);
       }
+      if (p.acceptance?.length > 0) {
+        lines.push(`- Acceptance: ${p.acceptance.join(', ')}`);
+      }
     }
 
     lines.push('\n## Checkpoints (Formal Acceptance):');
