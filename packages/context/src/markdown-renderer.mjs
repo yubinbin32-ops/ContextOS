@@ -143,7 +143,7 @@ export class MarkdownRenderer {
 
   static renderBlock(block) {
     const lines = [];
-    lines.push(`# Block: [${block.id}] ${block.title}`);
+    lines.push(`# Block: [${block.id}] ${block.title} (${block.kind || 'service'})`);
     if (block.summary) lines.push(`**Summary**: ${block.summary}`);
     if (block.details) lines.push(`\n${block.details}`);
 

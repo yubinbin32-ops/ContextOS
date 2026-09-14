@@ -270,13 +270,14 @@ export class V2Database {
   saveBlock(block) {
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO blocks (
-        id, project_id, title, summary, details, history_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, title, kind, summary, details, history_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       block.id,
       block.projectId || block.project_id || 'contextos',
       block.title || block.id,
+      block.kind || 'service',
       block.summary || '',
       block.details || '',
       JSON.stringify(block.history || []),
@@ -327,6 +328,7 @@ export class V2Database {
       id: row.id,
       projectId: row.project_id,
       title: row.title,
+      kind: row.kind || 'service',
       summary: row.summary,
       details: row.details,
       artifactRefs: refs,

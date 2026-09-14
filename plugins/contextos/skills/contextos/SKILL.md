@@ -94,3 +94,27 @@ ContextOS 收敛为 9 个高内聚的统一 Facade 工具，覆盖开发全链�
 | **代码修改与同步** | 全文覆写 + 每次改动全量推流 (~3,000 tokens) | `code edit` 手术刀补丁 + 自动重锚 (~150 tokens) | **节约 95.0%** |
 | **命令运行与测试** | 原始 300 行编译器/测试日志进入对话 (~4,200 tokens) | `run_command` 脱敏回执 + 关键诊断 (~60 tokens) | **节约 98.5%** |
 | **一次标准任务全周期** | 累计消耗 ~25,000 tokens | 累计消耗 ~2,600 tokens | **总体节约 89.6%** |
+
+---
+
+## 四、架构抽象与 Block 划分设计指南 (Block Design & AI Navigation)
+
+### 1. Block 是抽象功能的单一职责单元
+- **抽象功能定义**：Block 是代码能力的抽象封装，代表系统中的一个独立能力站台（例如“Metro 地铁画布”、“SQLite WAL 引擎”、“代码 AST 抽取工具”）。
+- **合理拆分，拒绝臃肿**：避免把整条功能链路或包含十几个文件的子包压入单一 Block。若一个 Block 包含了整个模块所有文件，其实质已经变成了 Chain，不仅使图谱失去拓扑意义，还会导致 AI 调阅 Block 时产生大量冗余 Outline。
+- **推荐粒度**：每个 Block 推荐绑定 **1 ~ 3 个高内聚的代码文件与关键符号**。保持 Block 职责精炼，AI 即可一眼识别该模块的作用并实现精准导航。
+
+### 2. 开放灵活的 Block 类型 (`kind`)
+- ContextOS 对 Block 的 `kind` 保持完全自由开放，不设僵硬限制，AI 可根据语义自由写入：
+  - 常见界面类：`ui`, `view`, `presentation`
+  - 常见数据与存储类：`database`, `data`, `storage`, `model`
+  - 常见服务与逻辑类：`service`, `engine`, `worker`, `lifecycle`
+  - 常见网关与通信类：`gateway`, `api`, `protocol`, `router`
+- 准确的 `kind` 将使桌面端 Metro 画布呈现出清晰的颜色区分（蓝色 UI、绿色 Service、橙色 Data/Database、青色 Gateway/API）与多维视图透镜。
+
+### 3. AI 架构导航三级流转法则
+在开发与定位代码时，AI 推荐遵循自顶向下的三级导航，杜绝盲目倾倒代码：
+1. **第一级：宏观查 Chain** —— 通过 `chain(action: "list")` 理解系统主干地铁线（如业务流水线、内核引擎线、网关调度线）；
+2. **第二级：微观定 Block** —— 沿线找到具体负责该能力的 Block 站台，通过 `block(action: "open", id: "...")` 获悉其责任范围与关联源码；
+3. **第三级：手术刀级提取** —— 通过 `code(action: "search")` 与 `code(action: "read")` 精准提取目标函数体，只把必要的几十行代码装入当前上下文。
+

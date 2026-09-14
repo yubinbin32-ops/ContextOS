@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 28,
-  "exportedAt": "2026-09-14T18:24:16.850Z",
+  "graphRevision": 1,
+  "exportedAt": "2026-09-14T20:11:41.818Z",
   "data": {
     "plans": [
       {
@@ -10,9 +10,9 @@
         "projectId": "contextos",
         "title": "ContextOS V2 Product Architecture Rebuild",
         "priority": "critical",
-        "status": "completed",
+        "status": "active",
         "summary": "Ground-up rebuild of ContextOS to eliminate context pollution, ghost blocks, and snake layout.",
-        "completedSummary": "ContextOS V2 Ground-up Rebuild 100% complete. Dual benchmark proves 89.6% context reduction. Native SwiftUI Metro layout running on desktop. Zero ghost blocks. 100% code coverage across all 49 files.",
+        "completedSummary": null,
         "historyRef": null,
         "ruleRefs": [
           "rule-cdcs-workflow",
@@ -103,7 +103,7 @@
             "id": "P4",
             "order": 4,
             "objective": "Lifecycle Services & DAG Layout",
-            "scope": "packages/lifecycle/src/",
+            "scope": "packages/application/src/ and packages/layout/src/",
             "deliverables": [
               "PlanService (create/open/list/checkpoint/complete)",
               "TaskService (create/develop/check/sync)",
@@ -139,9 +139,9 @@
             "objective": "Self-Adopt ContextOS Repository",
             "scope": "Entire mdflow repository",
             "deliverables": [
-              "10 pure V2 architectural blocks",
+              "18 pure V2 architectural blocks",
               "49 source files 100% indexed",
-              "12 typed architectural links",
+              "18 typed architectural links",
               "DECISION.md ADR records"
             ],
             "status": "completed",
@@ -197,7 +197,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T16:15:34.774Z"
+            "completedAt": "2026-09-14T20:11:41.716Z"
           },
           {
             "id": "cp-p6-self-adopted",
@@ -207,7 +207,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T16:15:34.774Z"
+            "completedAt": "2026-09-14T20:11:41.716Z"
           },
           {
             "id": "cp-p7-desktop-verified",
@@ -217,7 +217,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T16:15:34.774Z"
+            "completedAt": "2026-09-14T20:11:41.716Z"
           },
           {
             "id": "cp-p8-reduction-proven",
@@ -226,192 +226,85 @@
             "title": "Context reduction quantified by benchmark and real tests",
             "criteria": "",
             "status": "passed",
-            "evidenceRefs": [
-              "receipt-1789405667919-450547",
-              "receipt-1789405718822-24c6dd"
-            ],
-            "completedAt": "2026-09-14T17:08:39.054Z"
+            "evidenceRefs": [],
+            "completedAt": "2026-09-14T20:11:41.716Z"
           }
         ],
-        "createdAt": "2026-09-14T16:15:34.774Z",
-        "updatedAt": "2026-09-14T17:08:39.056Z"
+        "createdAt": "2026-09-14T20:11:41.716Z",
+        "updatedAt": "2026-09-14T20:11:41.716Z"
       }
     ],
     "tasks": [
       {
-        "id": "task-1789409733669",
+        "id": "task-self-adopt",
         "planId": "plan-v2-rebuild",
-        "phaseId": "P8",
-        "title": "Real-time Metrics & Code Intelligence Tuning",
-        "status": "draft",
+        "phaseId": "P6",
+        "title": "Self-Adopt ContextOS Codebase into V2 Architecture",
+        "status": "completed",
         "contextSlice": {
-          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
+          "objective": "Index all 18 V2 modular blocks, register real Blocks with 100% file coverage, and sync pure graph.json.",
           "constraints": [
-            "Zero full file overwrites",
-            "Zero ghost blocks"
+            "Zero ghost blocks",
+            "100% source file coverage",
+            "Subway rail track chains"
           ],
-          "references": {},
-          "locators": [],
-          "nextSteps": [
-            "Run surgical code edit",
-            "Verify command receipt",
-            "Sync with coverage gate"
-          ],
-          "openQuestions": []
-        },
-        "workingSet": {
-          "files": [],
-          "symbols": [],
-          "candidateBlockIds": []
-        },
-        "references": {
-          "rules": [],
-          "decisionSections": [],
-          "blockIds": []
-        },
-        "baseline": {
-          "gitHead": null,
-          "dirtyHash": null,
-          "indexRevision": 0
-        },
-        "notes": [],
-        "checks": [],
-        "syncResult": null,
-        "createdAt": "2026-09-14T18:15:33.669Z",
-        "updatedAt": "2026-09-14T18:15:33.670Z"
-      },
-      {
-        "id": "task-1789409776692",
-        "planId": "plan-v2-rebuild",
-        "phaseId": "P8",
-        "title": "test",
-        "status": "draft",
-        "contextSlice": {
-          "objective": "",
-          "constraints": [],
           "references": {},
           "locators": [],
           "nextSteps": [],
           "openQuestions": []
         },
         "workingSet": {
-          "files": [],
-          "symbols": [],
-          "candidateBlockIds": []
-        },
-        "references": {
-          "rules": [],
-          "decisionSections": [],
-          "blockIds": []
-        },
-        "baseline": {
-          "gitHead": null,
-          "dirtyHash": null,
-          "indexRevision": 0
-        },
-        "notes": [],
-        "checks": [],
-        "syncResult": null,
-        "createdAt": "2026-09-14T18:16:16.692Z",
-        "updatedAt": "2026-09-14T18:16:16.693Z"
-      },
-      {
-        "id": "task-1789409836535",
-        "planId": "plan-v2-rebuild",
-        "phaseId": "P8",
-        "title": "Real-time Metrics & Code Intelligence Tuning",
-        "status": "completed",
-        "contextSlice": {
-          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
-          "constraints": [
-            "Zero full file overwrites",
-            "Zero ghost blocks"
+          "files": [
+            "apps/desktop/Sources/ContextOSDesktop/ContextOSDesktopApp.swift",
+            "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "apps/desktop/Sources/ContextOSDesktop/Theme.swift",
+            "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
+            "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift",
+            "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift",
+            "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift",
+            "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
+            "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+            "packages/domain/src/plan.mjs",
+            "packages/domain/src/task.mjs",
+            "packages/domain/src/block.mjs",
+            "packages/domain/src/chain.mjs",
+            "packages/domain/src/link.mjs",
+            "packages/domain/src/knowledge.mjs",
+            "packages/domain/src/index.mjs",
+            "packages/domain/src/invariants.mjs",
+            "packages/storage/src/database.mjs",
+            "packages/storage/src/schema.mjs",
+            "packages/storage/src/index.mjs",
+            "packages/storage/src/sync-engine.mjs",
+            "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift",
+            "apps/daemon/src/osd.mjs",
+            "packages/protocol/src/ipc.mjs",
+            "packages/protocol/src/index.mjs",
+            "packages/mcp/src/v2-server.mjs",
+            "packages/mcp/src/v2-service.mjs",
+            "packages/mcp/src/server.mjs",
+            "packages/mcp/src/service.mjs",
+            "packages/code-intel/src/code-tools.mjs",
+            "packages/code-intel/src/language-registry.mjs",
+            "packages/code-intel/src/index.mjs",
+            "packages/code-intel/src/coverage.mjs",
+            "packages/process-host/src/runner.mjs",
+            "packages/process-host/src/sanitizer.mjs",
+            "packages/process-host/src/process-manager.mjs",
+            "packages/process-host/src/index.mjs",
+            "packages/context/src/markdown-renderer.mjs",
+            "packages/context/src/index.mjs",
+            "packages/layout/src/network-layout.mjs",
+            "packages/layout/src/index.mjs",
+            "packages/application/src/plan-service.mjs",
+            "packages/application/src/task-service.mjs",
+            "packages/application/src/knowledge-service.mjs",
+            "packages/application/src/index.mjs"
           ],
-          "references": {},
-          "locators": [],
-          "nextSteps": [
-            "Run surgical code edit",
-            "Verify command receipt",
-            "Sync with coverage gate"
-          ],
-          "openQuestions": []
-        },
-        "workingSet": {
-          "files": [],
-          "symbols": [],
-          "candidateBlockIds": []
-        },
-        "references": {
-          "rules": [],
-          "decisionSections": [],
-          "blockIds": []
-        },
-        "baseline": {
-          "gitHead": null,
-          "dirtyHash": null,
-          "indexRevision": 0
-        },
-        "notes": [
-          {
-            "id": "note-1789409836537-x61pc",
-            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
-            "kind": "journal",
-            "createdAt": "2026-09-14T18:17:16.537Z"
-          }
-        ],
-        "checks": [
-          {
-            "id": "check-1789409836863-ipxmo",
-            "receiptId": "receipt-1789409836620-632534",
-            "description": "Code-intel tests passed with out-of-context logging",
-            "passed": true,
-            "evidence": "",
-            "recordedAt": "2026-09-14T18:17:16.863Z"
-          }
-        ],
-        "syncResult": {
-          "createdBlockIds": [
-            "block-domain-core",
-            "block-storage-engine",
-            "block-daemon-host",
-            "block-code-gateway",
-            "block-command-gateway",
-            "block-context-renderer",
-            "block-layout-engine",
-            "block-lifecycle-services",
-            "block-mcp-facades",
-            "block-desktop-app"
-          ],
-          "updatedChainIds": [],
-          "updatedLinkIds": [],
-          "completedAt": "2026-09-14T18:17:16.866Z"
-        },
-        "createdAt": "2026-09-14T18:17:16.535Z",
-        "updatedAt": "2026-09-14T18:17:16.866Z"
-      },
-      {
-        "id": "task-1789409908680",
-        "planId": "plan-v2-rebuild",
-        "phaseId": "P8",
-        "title": "Real-time Metrics & Code Intelligence Tuning",
-        "status": "completed",
-        "contextSlice": {
-          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
-          "constraints": [
-            "Zero full file overwrites",
-            "Zero ghost blocks"
-          ],
-          "references": {},
-          "locators": [],
-          "nextSteps": [
-            "Run surgical code edit",
-            "Verify command receipt",
-            "Sync with coverage gate"
-          ],
-          "openQuestions": []
-        },
-        "workingSet": {
-          "files": [],
           "symbols": [],
           "candidateBlockIds": []
         },
@@ -427,197 +320,81 @@
         },
         "notes": [
           {
-            "id": "note-1789409908683-94wsn",
-            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
+            "id": "note-1789416701790-j04tk",
+            "text": "All 18 V2 modular blocks indexed with 100% file coverage and ready for binding.",
             "kind": "journal",
-            "createdAt": "2026-09-14T18:18:28.683Z"
+            "createdAt": "2026-09-14T20:11:41.790Z"
           }
         ],
         "checks": [
           {
-            "id": "check-1789409908983-ainow",
-            "receiptId": "receipt-1789409908766-fbe452",
-            "description": "Code-intel tests passed with out-of-context logging",
+            "id": "check-1789416701791-ed983",
+            "receiptId": null,
+            "description": "All V2 unit tests pass and all 49 project source files covered by Block artifactRefs.",
             "passed": true,
             "evidence": "",
-            "recordedAt": "2026-09-14T18:18:28.983Z"
+            "recordedAt": "2026-09-14T20:11:41.791Z"
           }
         ],
         "syncResult": {
           "createdBlockIds": [
-            "block-domain-core",
-            "block-storage-engine",
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-desktop-installer",
+            "block-domain-models",
+            "block-domain-invariants",
+            "block-storage-sqlite",
+            "block-storage-sync",
+            "block-desktop-database",
             "block-daemon-host",
-            "block-code-gateway",
-            "block-command-gateway",
-            "block-context-renderer",
-            "block-layout-engine",
-            "block-lifecycle-services",
             "block-mcp-facades",
-            "block-desktop-app"
-          ],
-          "updatedChainIds": [],
-          "updatedLinkIds": [],
-          "completedAt": "2026-09-14T18:18:28.985Z"
-        },
-        "createdAt": "2026-09-14T18:18:28.680Z",
-        "updatedAt": "2026-09-14T18:18:28.985Z"
-      },
-      {
-        "id": "task-1789410008540",
-        "planId": "plan-v2-rebuild",
-        "phaseId": "P8",
-        "title": "Real-time Metrics & Code Intelligence Tuning",
-        "status": "completed",
-        "contextSlice": {
-          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
-          "constraints": [
-            "Zero full file overwrites",
-            "Zero ghost blocks"
-          ],
-          "references": {},
-          "locators": [],
-          "nextSteps": [
-            "Run surgical code edit",
-            "Verify command receipt",
-            "Sync with coverage gate"
-          ],
-          "openQuestions": []
-        },
-        "workingSet": {
-          "files": [],
-          "symbols": [],
-          "candidateBlockIds": []
-        },
-        "references": {
-          "rules": [],
-          "decisionSections": [],
-          "blockIds": []
-        },
-        "baseline": {
-          "gitHead": null,
-          "dirtyHash": null,
-          "indexRevision": 0
-        },
-        "notes": [
-          {
-            "id": "note-1789410008543-a9kpc",
-            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
-            "kind": "journal",
-            "createdAt": "2026-09-14T18:20:08.543Z"
-          }
-        ],
-        "checks": [
-          {
-            "id": "check-1789410008840-gnhwp",
-            "receiptId": "receipt-1789410008624-6868c2",
-            "description": "Code-intel tests passed with out-of-context logging",
-            "passed": true,
-            "evidence": "",
-            "recordedAt": "2026-09-14T18:20:08.840Z"
-          }
-        ],
-        "syncResult": {
-          "createdBlockIds": [
-            "block-domain-core",
-            "block-storage-engine",
-            "block-daemon-host",
             "block-code-gateway",
-            "block-command-gateway",
-            "block-context-renderer",
+            "block-coverage-guard",
+            "block-command-runner",
+            "block-process-host",
+            "block-context-envelope",
             "block-layout-engine",
-            "block-lifecycle-services",
-            "block-mcp-facades",
-            "block-desktop-app"
+            "block-lifecycle-services"
           ],
-          "updatedChainIds": [],
-          "updatedLinkIds": [],
-          "completedAt": "2026-09-14T18:20:08.843Z"
-        },
-        "createdAt": "2026-09-14T18:20:08.540Z",
-        "updatedAt": "2026-09-14T18:20:08.843Z"
-      },
-      {
-        "id": "task-1789410256524",
-        "planId": "plan-v2-rebuild",
-        "phaseId": "P8",
-        "title": "Real-time Metrics & Code Intelligence Tuning",
-        "status": "completed",
-        "contextSlice": {
-          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
-          "constraints": [
-            "Zero full file overwrites",
-            "Zero ghost blocks"
+          "updatedChainIds": [
+            "chain-application-presentation",
+            "chain-core-engine",
+            "chain-gateways"
           ],
-          "references": {},
-          "locators": [],
-          "nextSteps": [
-            "Run surgical code edit",
-            "Verify command receipt",
-            "Sync with coverage gate"
+          "updatedLinkIds": [
+            "link-1",
+            "link-2",
+            "link-3",
+            "link-4",
+            "link-5",
+            "link-6",
+            "link-7",
+            "link-8",
+            "link-9",
+            "link-10",
+            "link-11",
+            "link-12",
+            "link-13",
+            "link-14",
+            "link-15",
+            "link-16",
+            "link-17",
+            "link-18"
           ],
-          "openQuestions": []
+          "completedAt": "2026-09-14T20:11:41.793Z"
         },
-        "workingSet": {
-          "files": [],
-          "symbols": [],
-          "candidateBlockIds": []
-        },
-        "references": {
-          "rules": [],
-          "decisionSections": [],
-          "blockIds": []
-        },
-        "baseline": {
-          "gitHead": null,
-          "dirtyHash": null,
-          "indexRevision": 0
-        },
-        "notes": [
-          {
-            "id": "note-1789410256527-e313c",
-            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
-            "kind": "journal",
-            "createdAt": "2026-09-14T18:24:16.527Z"
-          }
-        ],
-        "checks": [
-          {
-            "id": "check-1789410256825-x8ft1",
-            "receiptId": "receipt-1789410256609-30e8cb",
-            "description": "Code-intel tests passed with out-of-context logging",
-            "passed": true,
-            "evidence": "",
-            "recordedAt": "2026-09-14T18:24:16.825Z"
-          }
-        ],
-        "syncResult": {
-          "createdBlockIds": [
-            "block-domain-core",
-            "block-storage-engine",
-            "block-daemon-host",
-            "block-code-gateway",
-            "block-command-gateway",
-            "block-context-renderer",
-            "block-layout-engine",
-            "block-lifecycle-services",
-            "block-mcp-facades",
-            "block-desktop-app"
-          ],
-          "updatedChainIds": [],
-          "updatedLinkIds": [],
-          "completedAt": "2026-09-14T18:24:16.827Z"
-        },
-        "createdAt": "2026-09-14T18:24:16.524Z",
-        "updatedAt": "2026-09-14T18:24:16.827Z"
+        "createdAt": "2026-09-14T20:11:41.790Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       }
     ],
     "blocks": [
       {
         "id": "block-code-gateway",
         "projectId": "contextos",
-        "title": "Code Gateway & AST Intel",
-        "summary": "Multi-language AST parsing, progressive outline, surgical read/edit with re-anchoring, and coverage gap detection.",
+        "title": "AST Intel & Surgical Code Tools",
+        "kind": "service",
+        "summary": "Babel & Python AST outline, symbol lookup, and surgical code read/edit with re-anchoring.",
         "details": "",
         "artifactRefs": [
           {
@@ -685,22 +462,6 @@
             "role": "implementation"
           },
           {
-            "path": "packages/code-intel/src/coverage.mjs",
-            "symbol": "CoverageChecker",
-            "startLine": 6,
-            "endLine": 63,
-            "hash": "318071e52be4fbf7",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/code-intel/src/coverage.mjs",
-            "symbol": "CoverageChecker.checkCoverage",
-            "startLine": 7,
-            "endLine": 62,
-            "hash": "fb1236b85772c32b",
-            "role": "implementation"
-          },
-          {
             "path": "packages/code-intel/src/index.mjs",
             "symbol": null,
             "startLine": 1,
@@ -710,14 +471,15 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.826Z",
-        "updatedAt": "2026-09-14T18:24:16.826Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
-        "id": "block-command-gateway",
+        "id": "block-command-runner",
         "projectId": "contextos",
-        "title": "Command Gateway & Process Host",
-        "summary": "Out-of-context logging runner, ANSI/secret sanitizer, and daemon-managed process groups.",
+        "title": "Out-of-Context Command Runner",
+        "kind": "service",
+        "summary": "Non-polluting command runner with ANSI/secret stripping, disk logging, and receipt tokens.",
         "details": "",
         "artifactRefs": [
           {
@@ -751,57 +513,18 @@
             "endLine": 88,
             "hash": "ac3521dc8fc9c382",
             "role": "implementation"
-          },
-          {
-            "path": "packages/process-host/src/process-manager.mjs",
-            "symbol": "ProcessManager",
-            "startLine": 6,
-            "endLine": 222,
-            "hash": "8d48f3a8b174ad56",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/process-host/src/process-manager.mjs",
-            "symbol": "ProcessManager.constructor",
-            "startLine": 7,
-            "endLine": 10,
-            "hash": "73e50677096400a6",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/process-host/src/process-manager.mjs",
-            "symbol": "ProcessManager.startProcess",
-            "startLine": 12,
-            "endLine": 95,
-            "hash": "d4a9d7c1b2348643",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/process-host/src/process-manager.mjs",
-            "symbol": "ProcessManager._persistProcesses",
-            "startLine": 97,
-            "endLine": 103,
-            "hash": "c055ca2f2892ffdb",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/process-host/src/index.mjs",
-            "symbol": null,
-            "startLine": 1,
-            "endLine": 4,
-            "hash": "file",
-            "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.826Z",
-        "updatedAt": "2026-09-14T18:24:16.826Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
-        "id": "block-context-renderer",
+        "id": "block-context-envelope",
         "projectId": "contextos",
-        "title": "Progressive Markdown Renderer",
-        "summary": "L0-L3 human and AI readable envelope formatter that prevents context bloat.",
+        "title": "Progressive Context Formatter",
+        "kind": "service",
+        "summary": "L0-L3 progressive Markdown context serializer preventing context window blowout.",
         "details": "",
         "artifactRefs": [
           {
@@ -809,7 +532,7 @@
             "symbol": "MarkdownRenderer",
             "startLine": 6,
             "endLine": 170,
-            "hash": "5805d59e361779e3",
+            "hash": "0985925543898e8f",
             "role": "implementation"
           },
           {
@@ -846,14 +569,44 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.826Z",
-        "updatedAt": "2026-09-14T18:24:16.826Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
+      },
+      {
+        "id": "block-coverage-guard",
+        "projectId": "contextos",
+        "title": "Workspace Coverage Guard",
+        "kind": "service",
+        "summary": "Strict 100% workspace file coverage checker, preventing orphan code from entering tasks.",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/code-intel/src/coverage.mjs",
+            "symbol": "CoverageChecker",
+            "startLine": 6,
+            "endLine": 63,
+            "hash": "318071e52be4fbf7",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/code-intel/src/coverage.mjs",
+            "symbol": "CoverageChecker.checkCoverage",
+            "startLine": 7,
+            "endLine": 62,
+            "hash": "fb1236b85772c32b",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
         "id": "block-daemon-host",
         "projectId": "contextos",
         "title": "ContextOS Daemon (osd)",
-        "summary": "Independent daemon process hosting project routers, background processes, and IPC sockets.",
+        "kind": "service",
+        "summary": "Background daemon hosting project routers, persistent process monitoring, and IPC socket server.",
         "details": "",
         "artifactRefs": [
           {
@@ -930,48 +683,17 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.826Z",
-        "updatedAt": "2026-09-14T18:24:16.826Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
-        "id": "block-desktop-app",
+        "id": "block-desktop-canvas",
         "projectId": "contextos",
-        "title": "SwiftUI Desktop Visualizer",
-        "summary": "Native macOS desktop client with subway map visualization and long-running process manager.",
+        "title": "Metro Map Subway Canvas",
+        "kind": "ui",
+        "summary": "SwiftUI subway rail network view, station nodes, orthogonal rail connections, and zoom/pan scene.",
         "details": "",
         "artifactRefs": [
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
-            "symbol": "ContentView",
-            "startLine": 3,
-            "endLine": 455,
-            "hash": "8dfbe3246c555e69",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
-            "symbol": "ContentView.body",
-            "startLine": 13,
-            "endLine": 67,
-            "hash": "8b8cb93099b15251",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
-            "symbol": "ContentView.openDocument",
-            "startLine": 69,
-            "endLine": 74,
-            "hash": "2a407d2b71e12afa",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
-            "symbol": "ContentView.closeDocument",
-            "startLine": 75,
-            "endLine": 75,
-            "hash": "67d81e0b610df2f7",
-            "role": "implementation"
-          },
           {
             "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
             "symbol": "GraphCanvasView",
@@ -1002,38 +724,6 @@
             "startLine": 135,
             "endLine": 150,
             "hash": "deefc3307623b2f2",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
-            "symbol": "LayoutEdge",
-            "startLine": 3,
-            "endLine": 7,
-            "hash": "149c1226dfc52218",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
-            "symbol": "LayoutNodeMetadata",
-            "startLine": 9,
-            "endLine": 13,
-            "hash": "2303bc420eeed383",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
-            "symbol": "LayoutBand",
-            "startLine": 15,
-            "endLine": 19,
-            "hash": "0ba246663fc8f911",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
-            "symbol": "NetworkLayoutSnapshot",
-            "startLine": 21,
-            "endLine": 27,
-            "hash": "1748237ec9a9e07e",
             "role": "implementation"
           },
           {
@@ -1069,43 +759,80 @@
             "role": "implementation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ContextOSDesktopApp.swift",
-            "symbol": "ContextOSDesktopApp",
-            "startLine": 4,
+            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "symbol": "LayoutEdge",
+            "startLine": 3,
+            "endLine": 7,
+            "hash": "149c1226dfc52218",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "symbol": "LayoutNodeMetadata",
+            "startLine": 9,
+            "endLine": 13,
+            "hash": "2303bc420eeed383",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "symbol": "LayoutBand",
+            "startLine": 15,
+            "endLine": 19,
+            "hash": "0ba246663fc8f911",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "symbol": "NetworkLayoutSnapshot",
+            "startLine": 21,
+            "endLine": 27,
+            "hash": "1748237ec9a9e07e",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
+      },
+      {
+        "id": "block-desktop-database",
+        "projectId": "contextos",
+        "title": "Desktop Native SQLite Store",
+        "kind": "database",
+        "summary": "Swift native SQLite reader, reactive GraphStore publisher, and background file change watcher.",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "symbol": "DatabaseFileIdentity",
+            "startLine": 10,
             "endLine": 12,
-            "hash": "e34d7498f5afed18",
+            "hash": "487c20cbefce5ce7",
             "role": "implementation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
-            "symbol": "DetailView",
-            "startLine": 4,
-            "endLine": 1391,
-            "hash": "526d4e12630c3302",
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "symbol": "ProjectDatabase",
+            "startLine": 14,
+            "endLine": 941,
+            "hash": "c80548b03cdc4983",
             "role": "implementation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
-            "symbol": "DetailView.body",
-            "startLine": 16,
-            "endLine": 46,
-            "hash": "8ea09fb68fd34469",
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "symbol": "ProjectDatabase.fileIdentity",
+            "startLine": 34,
+            "endLine": 38,
+            "hash": "665c3a9e5e20cf38",
             "role": "implementation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
-            "symbol": "DetailView.metadataLabel",
-            "startLine": 188,
-            "endLine": 193,
-            "hash": "4db98ff2ce74af7f",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
-            "symbol": "DetailView.planDocument",
-            "startLine": 202,
-            "endLine": 387,
-            "hash": "89e0e65e4cb6db8a",
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "symbol": "ProjectDatabase.close",
+            "startLine": 65,
+            "endLine": 69,
+            "hash": "3b82aea4ec91d1e2",
             "role": "implementation"
           },
           {
@@ -1138,6 +865,51 @@
             "startLine": 114,
             "endLine": 114,
             "hash": "369c1234529ffead",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
+      },
+      {
+        "id": "block-desktop-inspector",
+        "projectId": "contextos",
+        "title": "Inspector & Knowledge Reader",
+        "kind": "ui",
+        "summary": "Right drawer inspector, task journal, and rich Markdown knowledge document reader.",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "symbol": "DetailView",
+            "startLine": 4,
+            "endLine": 1391,
+            "hash": "526d4e12630c3302",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "symbol": "DetailView.body",
+            "startLine": 16,
+            "endLine": 46,
+            "hash": "8ea09fb68fd34469",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "symbol": "DetailView.metadataLabel",
+            "startLine": 188,
+            "endLine": 193,
+            "hash": "4db98ff2ce74af7f",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "symbol": "DetailView.planDocument",
+            "startLine": 202,
+            "endLine": 387,
+            "hash": "89e0e65e4cb6db8a",
             "role": "implementation"
           },
           {
@@ -1203,39 +975,20 @@
             "endLine": 25,
             "hash": "17c5768ccd2b6632",
             "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
-            "symbol": "ProjectDescriptor",
-            "startLine": 3,
-            "endLine": 7,
-            "hash": "a55ce6d89135d762",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
-            "symbol": "RecentProject",
-            "startLine": 9,
-            "endLine": 13,
-            "hash": "70201a6a6bd0b8e7",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
-            "symbol": "ProjectInfo",
-            "startLine": 15,
-            "endLine": 20,
-            "hash": "54ead291fdb3f6ef",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
-            "symbol": "BlockItem",
-            "startLine": 22,
-            "endLine": 40,
-            "hash": "3a5c85323726905b",
-            "role": "implementation"
-          },
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
+      },
+      {
+        "id": "block-desktop-installer",
+        "projectId": "contextos",
+        "title": "Environment & Plugin Synchronizer",
+        "kind": "service",
+        "summary": "Editor configuration detection, Node path resolution, and one-click MCP plugin synchronization.",
+        "details": "",
+        "artifactRefs": [
           {
             "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
             "symbol": "EditorPlatformStatus",
@@ -1256,8 +1009,8 @@
             "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
             "symbol": "PluginInstaller",
             "startLine": 35,
-            "endLine": 703,
-            "hash": "c4a35330bb46d8c2",
+            "endLine": 727,
+            "hash": "a89652a1e13329ab",
             "role": "implementation"
           },
           {
@@ -1266,38 +1019,6 @@
             "startLine": 76,
             "endLine": 80,
             "hash": "c0b7f00f8dc0f869",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
-            "symbol": "DatabaseFileIdentity",
-            "startLine": 10,
-            "endLine": 12,
-            "hash": "487c20cbefce5ce7",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
-            "symbol": "ProjectDatabase",
-            "startLine": 14,
-            "endLine": 909,
-            "hash": "5af0df8b904eb5e8",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
-            "symbol": "ProjectDatabase.fileIdentity",
-            "startLine": 34,
-            "endLine": 38,
-            "hash": "665c3a9e5e20cf38",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
-            "symbol": "ProjectDatabase.close",
-            "startLine": 65,
-            "endLine": 69,
-            "hash": "3b82aea4ec91d1e2",
             "role": "implementation"
           },
           {
@@ -1331,6 +1052,59 @@
             "endLine": 89,
             "hash": "43fff413f3f24c32",
             "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
+      },
+      {
+        "id": "block-desktop-shell",
+        "projectId": "contextos",
+        "title": "Desktop Window & App Shell",
+        "kind": "ui",
+        "summary": "Main desktop app entrypoint, window frame, global theme, and data models.",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContextOSDesktopApp.swift",
+            "symbol": "ContextOSDesktopApp",
+            "startLine": 4,
+            "endLine": 12,
+            "hash": "e34d7498f5afed18",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "symbol": "ContentView",
+            "startLine": 3,
+            "endLine": 455,
+            "hash": "8dfbe3246c555e69",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "symbol": "ContentView.body",
+            "startLine": 13,
+            "endLine": 67,
+            "hash": "8b8cb93099b15251",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "symbol": "ContentView.openDocument",
+            "startLine": 69,
+            "endLine": 74,
+            "hash": "2a407d2b71e12afa",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+            "symbol": "ContentView.closeDocument",
+            "startLine": 75,
+            "endLine": 75,
+            "hash": "67d81e0b610df2f7",
+            "role": "implementation"
           },
           {
             "path": "apps/desktop/Sources/ContextOSDesktop/Theme.swift",
@@ -1363,17 +1137,95 @@
             "endLine": 49,
             "hash": "4bb0ccc65d4b855d",
             "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "symbol": "ProjectDescriptor",
+            "startLine": 3,
+            "endLine": 7,
+            "hash": "a55ce6d89135d762",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "symbol": "RecentProject",
+            "startLine": 9,
+            "endLine": 13,
+            "hash": "70201a6a6bd0b8e7",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "symbol": "ProjectInfo",
+            "startLine": 15,
+            "endLine": 20,
+            "hash": "54ead291fdb3f6ef",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "symbol": "BlockItem",
+            "startLine": 22,
+            "endLine": 40,
+            "hash": "3a5c85323726905b",
+            "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.827Z",
-        "updatedAt": "2026-09-14T18:24:16.827Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
-        "id": "block-domain-core",
+        "id": "block-domain-invariants",
         "projectId": "contextos",
-        "title": "Domain Model & Invariants",
-        "summary": "Unified domain entities (Plan, Phase, Checkpoint, Task, Block, Chain, Link) and core invariants.",
+        "title": "Architecture Invariant Guard",
+        "kind": "service",
+        "summary": "Enforces zero ghost blocks, valid state machine transitions, and relational consistency.",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/domain/src/invariants.mjs",
+            "symbol": "InvariantViolationError",
+            "startLine": 5,
+            "endLine": 11,
+            "hash": "4fff1e04699ee846",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/invariants.mjs",
+            "symbol": "InvariantViolationError.constructor",
+            "startLine": 6,
+            "endLine": 10,
+            "hash": "08886e2f2449662b",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/invariants.mjs",
+            "symbol": "assertBlockHasRealCode",
+            "startLine": 16,
+            "endLine": 23,
+            "hash": "18499f283a6880fb",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/invariants.mjs",
+            "symbol": "assertCheckpointBelongsToPlan",
+            "startLine": 28,
+            "endLine": 35,
+            "hash": "9ca9d1d57636ee76",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
+      },
+      {
+        "id": "block-domain-models",
+        "projectId": "contextos",
+        "title": "Domain Entities & Knowledge Models",
+        "kind": "data",
+        "summary": "Unified core entity definitions for Plans, Phases, Tasks, Blocks, Chains, Links, and Decision records.",
         "details": "",
         "artifactRefs": [
           {
@@ -1468,8 +1320,8 @@
             "path": "packages/domain/src/block.mjs",
             "symbol": "Block",
             "startLine": 36,
-            "endLine": 102,
-            "hash": "aaf324fd800c56b0",
+            "endLine": 105,
+            "hash": "2008e2b5bd1318cf",
             "role": "implementation"
           },
           {
@@ -1529,38 +1381,6 @@
             "role": "implementation"
           },
           {
-            "path": "packages/domain/src/invariants.mjs",
-            "symbol": "InvariantViolationError",
-            "startLine": 5,
-            "endLine": 11,
-            "hash": "4fff1e04699ee846",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/domain/src/invariants.mjs",
-            "symbol": "InvariantViolationError.constructor",
-            "startLine": 6,
-            "endLine": 10,
-            "hash": "08886e2f2449662b",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/domain/src/invariants.mjs",
-            "symbol": "assertBlockHasRealCode",
-            "startLine": 16,
-            "endLine": 23,
-            "hash": "18499f283a6880fb",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/domain/src/invariants.mjs",
-            "symbol": "assertCheckpointBelongsToPlan",
-            "startLine": 28,
-            "endLine": 35,
-            "hash": "9ca9d1d57636ee76",
-            "role": "implementation"
-          },
-          {
             "path": "packages/domain/src/knowledge.mjs",
             "symbol": "DecisionDocument",
             "startLine": 21,
@@ -1602,14 +1422,15 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.826Z",
-        "updatedAt": "2026-09-14T18:24:16.826Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
         "id": "block-layout-engine",
         "projectId": "contextos",
-        "title": "Metro Map DAG Layout Engine",
-        "summary": "Subway rail track placement, adjacent station ordering, and orthogonal transfer routing.",
+        "title": "Metro Line Layout Algorithm",
+        "kind": "service",
+        "summary": "Metro rail graph layout algorithm with parallel rails and station spacing.",
         "details": "",
         "artifactRefs": [
           {
@@ -1638,14 +1459,15 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.826Z",
-        "updatedAt": "2026-09-14T18:24:16.826Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
         "id": "block-lifecycle-services",
         "projectId": "contextos",
-        "title": "Lifecycle & Knowledge Application Services",
-        "summary": "PlanService, TaskService (C-D-C-S state machine), and KnowledgeService (singleton Decision and categorized Rules).",
+        "title": "C-D-C-S Lifecycle Services",
+        "kind": "service",
+        "summary": "PlanService, TaskService (C-D-C-S state machine), and KnowledgeService application coordination.",
         "details": "",
         "artifactRefs": [
           {
@@ -1754,14 +1576,15 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.827Z",
-        "updatedAt": "2026-09-14T18:24:16.827Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
         "id": "block-mcp-facades",
         "projectId": "contextos",
         "title": "Consolidated 9 MCP Facades",
-        "summary": "High-level action-based MCP entry points replacing the 49 legacy micro-tools.",
+        "kind": "gateway",
+        "summary": "High-level action-based MCP facades replacing legacy micro-tools with clean context control.",
         "details": "",
         "artifactRefs": [
           {
@@ -1793,15 +1616,15 @@
             "symbol": "createV2Server",
             "startLine": 45,
             "endLine": 251,
-            "hash": "a941c51c64d1f358",
+            "hash": "c214871e7c254d2b",
             "role": "implementation"
           },
           {
             "path": "packages/mcp/src/v2-service.mjs",
             "symbol": "ContextOSV2Service",
             "startLine": 10,
-            "endLine": 391,
-            "hash": "7d720028c9d7436d",
+            "endLine": 436,
+            "hash": "f05cb68328c5c97d",
             "role": "implementation"
           },
           {
@@ -1846,22 +1669,76 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.827Z",
-        "updatedAt": "2026-09-14T18:24:16.827Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       },
       {
-        "id": "block-storage-engine",
+        "id": "block-process-host",
         "projectId": "contextos",
-        "title": "SQLite & Bidirectional Sync Engine",
-        "summary": "WAL mode SQLite database and deterministic graph.json sync with Git rollback detection.",
+        "title": "Process Supervisor & Tree Killer",
+        "kind": "service",
+        "summary": "Long-running daemon process supervisor, heartbeat tracking, and clean process tree termination.",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/process-host/src/process-manager.mjs",
+            "symbol": "ProcessManager",
+            "startLine": 6,
+            "endLine": 222,
+            "hash": "8d48f3a8b174ad56",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/process-host/src/process-manager.mjs",
+            "symbol": "ProcessManager.constructor",
+            "startLine": 7,
+            "endLine": 10,
+            "hash": "73e50677096400a6",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/process-host/src/process-manager.mjs",
+            "symbol": "ProcessManager.startProcess",
+            "startLine": 12,
+            "endLine": 95,
+            "hash": "d4a9d7c1b2348643",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/process-host/src/process-manager.mjs",
+            "symbol": "ProcessManager._persistProcesses",
+            "startLine": 97,
+            "endLine": 103,
+            "hash": "c055ca2f2892ffdb",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/process-host/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 4,
+            "hash": "file",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
+      },
+      {
+        "id": "block-storage-sqlite",
+        "projectId": "contextos",
+        "title": "SQLite WAL Database Engine",
+        "kind": "database",
+        "summary": "WAL-mode SQLite schema, atomic transactions, and relational projection persistence.",
         "details": "",
         "artifactRefs": [
           {
             "path": "packages/storage/src/database.mjs",
             "symbol": "V2Database",
             "startLine": 6,
-            "endLine": 476,
-            "hash": "5285185256b7636a",
+            "endLine": 520,
+            "hash": "f44a5db3a3caddd3",
             "role": "implementation"
           },
           {
@@ -1888,6 +1765,35 @@
             "hash": "ee44571933d89ed1",
             "role": "implementation"
           },
+          {
+            "path": "packages/storage/src/schema.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 135,
+            "hash": "file",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/storage/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 4,
+            "hash": "file",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
+      },
+      {
+        "id": "block-storage-sync",
+        "projectId": "contextos",
+        "title": "Git Bidirectional Sync Engine",
+        "kind": "service",
+        "summary": "Deterministic graph.json export, Git checkout rollback detection, and state reconciliation.",
+        "details": "",
+        "artifactRefs": [
           {
             "path": "packages/storage/src/sync-engine.mjs",
             "symbol": "calculateSha256",
@@ -1919,27 +1825,11 @@
             "endLine": 59,
             "hash": "e4a6cac9cd41e089",
             "role": "implementation"
-          },
-          {
-            "path": "packages/storage/src/schema.mjs",
-            "symbol": null,
-            "startLine": 1,
-            "endLine": 134,
-            "hash": "file",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/storage/src/index.mjs",
-            "symbol": null,
-            "startLine": 1,
-            "endLine": 4,
-            "hash": "file",
-            "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T18:24:16.826Z",
-        "updatedAt": "2026-09-14T18:24:16.826Z"
+        "createdAt": "2026-09-14T20:11:41.792Z",
+        "updatedAt": "2026-09-14T20:11:41.792Z"
       }
     ],
     "chains": [
@@ -1950,14 +1840,14 @@
         "summary": "",
         "kind": "leaf",
         "memberIds": [
-          "block-lifecycle-services",
-          "block-mcp-facades",
-          "block-layout-engine",
-          "block-desktop-app"
+          "block-desktop-shell",
+          "block-desktop-canvas",
+          "block-desktop-inspector",
+          "block-desktop-installer"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       },
       {
         "id": "chain-core-engine",
@@ -1966,13 +1856,16 @@
         "summary": "",
         "kind": "leaf",
         "memberIds": [
-          "block-domain-core",
-          "block-storage-engine",
+          "block-domain-models",
+          "block-domain-invariants",
+          "block-storage-sqlite",
+          "block-storage-sync",
+          "block-desktop-database",
           "block-daemon-host"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       },
       {
         "id": "chain-gateways",
@@ -1981,171 +1874,254 @@
         "summary": "",
         "kind": "leaf",
         "memberIds": [
+          "block-mcp-facades",
+          "block-lifecycle-services",
           "block-code-gateway",
-          "block-command-gateway",
-          "block-context-renderer"
+          "block-coverage-guard",
+          "block-command-runner",
+          "block-process-host",
+          "block-context-envelope",
+          "block-layout-engine"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       }
     ],
     "links": [
       {
         "id": "link-1",
         "projectId": "contextos",
+        "from": "block-desktop-shell",
+        "to": "block-desktop-canvas",
+        "kind": "flows_to",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Shell embeds and coordinates the Metro Map canvas scene",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-10",
+        "projectId": "contextos",
+        "from": "block-daemon-host",
+        "to": "block-storage-sync",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Daemon monitors Git rollback events and triggers sync reconciliation",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-11",
+        "projectId": "contextos",
         "from": "block-mcp-facades",
         "to": "block-lifecycle-services",
         "kind": "calls",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "MCP routes plan, task, block, chain, knowledge requests to application services",
+        "reason": "MCP plan/task/knowledge tools call application lifecycle services",
         "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
-      },
-      {
-        "id": "link-10",
-        "projectId": "contextos",
-        "from": "block-desktop-app",
-        "to": "block-layout-engine",
-        "kind": "calls",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "Desktop SwiftUI client calls layout engine to compute node positions and envelopes",
-        "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
-      },
-      {
-        "id": "link-11",
-        "projectId": "contextos",
-        "from": "block-desktop-app",
-        "to": "block-storage-engine",
-        "kind": "depends_on",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "Desktop app connects to state.sqlite and polls changes from graph.json",
-        "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       },
       {
         "id": "link-12",
-        "projectId": "contextos",
-        "from": "block-desktop-app",
-        "to": "block-command-gateway",
-        "kind": "depends_on",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "Desktop app inspects .contextos/processes.json and terminates running processes",
-        "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
-      },
-      {
-        "id": "link-2",
-        "projectId": "contextos",
-        "from": "block-lifecycle-services",
-        "to": "block-domain-core",
-        "kind": "depends_on",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "Lifecycle services instantiate and validate domain models and invariants",
-        "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
-      },
-      {
-        "id": "link-3",
-        "projectId": "contextos",
-        "from": "block-lifecycle-services",
-        "to": "block-storage-engine",
-        "kind": "depends_on",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "Lifecycle services persist and query graph state via V2Database",
-        "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
-      },
-      {
-        "id": "link-4",
         "projectId": "contextos",
         "from": "block-mcp-facades",
         "to": "block-code-gateway",
         "kind": "calls",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "MCP code facade delegates outline, surgical read/edit, and symbol search to CodeTools",
+        "reason": "MCP code tool delegates outline and surgical read/edit to CodeTools",
         "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-13",
+        "projectId": "contextos",
+        "from": "block-mcp-facades",
+        "to": "block-command-runner",
+        "kind": "calls",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "MCP run_command tool delegates execution and receipt generation",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-14",
+        "projectId": "contextos",
+        "from": "block-mcp-facades",
+        "to": "block-process-host",
+        "kind": "calls",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "MCP process tool queries and manages background daemon processes",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-15",
+        "projectId": "contextos",
+        "from": "block-mcp-facades",
+        "to": "block-context-envelope",
+        "kind": "calls",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "MCP os_context delegates brief rendering to MarkdownRenderer",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-16",
+        "projectId": "contextos",
+        "from": "block-lifecycle-services",
+        "to": "block-coverage-guard",
+        "kind": "calls",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Task sync calls coverage checker to ensure 100% workspace file coverage",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-17",
+        "projectId": "contextos",
+        "from": "block-lifecycle-services",
+        "to": "block-domain-invariants",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Application services enforce core state machine invariants",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-18",
+        "projectId": "contextos",
+        "from": "block-lifecycle-services",
+        "to": "block-storage-sqlite",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Application services commit domain changes via SQLite transactions",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-2",
+        "projectId": "contextos",
+        "from": "block-desktop-shell",
+        "to": "block-desktop-inspector",
+        "kind": "flows_to",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Shell controls selection state and detail inspection drawer",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-3",
+        "projectId": "contextos",
+        "from": "block-desktop-canvas",
+        "to": "block-layout-engine",
+        "kind": "calls",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Canvas scene calls layout engine to compute subway station coordinates",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
+      },
+      {
+        "id": "link-4",
+        "projectId": "contextos",
+        "from": "block-desktop-shell",
+        "to": "block-desktop-database",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Desktop UI observes GraphStore SQLite database snapshot",
+        "revision": 1,
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       },
       {
         "id": "link-5",
         "projectId": "contextos",
-        "from": "block-mcp-facades",
-        "to": "block-command-gateway",
+        "from": "block-desktop-installer",
+        "to": "block-mcp-facades",
         "kind": "calls",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "MCP run_command and process facades execute commands and manage background processes",
+        "reason": "Installer deploys MCP server bundle and configures editor clients",
         "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       },
       {
         "id": "link-6",
         "projectId": "contextos",
-        "from": "block-mcp-facades",
-        "to": "block-context-renderer",
-        "kind": "calls",
+        "from": "block-domain-invariants",
+        "to": "block-domain-models",
+        "kind": "validates",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "MCP os_context delegates brief and entity rendering to MarkdownRenderer",
+        "reason": "Invariant rules validate domain entities to reject ghost blocks",
         "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       },
       {
         "id": "link-7",
         "projectId": "contextos",
-        "from": "block-storage-engine",
-        "to": "block-domain-core",
-        "kind": "depends_on",
+        "from": "block-storage-sqlite",
+        "to": "block-domain-models",
+        "kind": "writes",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "Database schema and sync engine serialize and deserialize domain entities",
+        "reason": "SQLite tables persist serialized domain model projections",
         "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       },
       {
         "id": "link-8",
         "projectId": "contextos",
-        "from": "block-daemon-host",
-        "to": "block-storage-engine",
-        "kind": "depends_on",
+        "from": "block-storage-sync",
+        "to": "block-storage-sqlite",
+        "kind": "reads",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "ContextOS daemon loads state database and watches bidirectional sync events",
+        "reason": "Sync engine exports active SQLite state to versioned graph.json",
         "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       },
       {
         "id": "link-9",
         "projectId": "contextos",
-        "from": "block-layout-engine",
-        "to": "block-domain-core",
-        "kind": "depends_on",
+        "from": "block-desktop-database",
+        "to": "block-storage-sqlite",
+        "kind": "reads",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "Layout engine positions domain Blocks, Chains, and Links onto 2D Metro tracks",
+        "reason": "Swift desktop app directly reads state.sqlite in WAL mode",
         "revision": 1,
-        "createdAt": "2026-09-14T16:15:34.859Z",
-        "updatedAt": "2026-09-14T16:15:34.859Z"
+        "createdAt": "2026-09-14T20:11:41.793Z",
+        "updatedAt": "2026-09-14T20:11:41.793Z"
       }
     ]
   }

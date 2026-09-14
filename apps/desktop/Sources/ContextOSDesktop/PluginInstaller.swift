@@ -489,6 +489,29 @@ enum PluginInstaller {
         }
     }
 
+    private static func nodeExecutablePath() -> String {
+        let manager = FileManager.default
+        let home = manager.homeDirectoryForCurrentUser.path
+        let candidates = [
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "\(home)/.nvm/current/bin/node",
+            "/usr/bin/node"
+        ]
+        for path in candidates {
+            if manager.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        if let lookup = try? run(URL(fileURLWithPath: "/usr/bin/which"), arguments: ["node"]) {
+            let path = lookup.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if lookup.status == 0 && manager.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        return "node"
+    }
+
     private static func configureJsonMcp(at configURL: URL, serverScript: String, version: String, build: String) -> Bool {
         var json: [String: Any] = [:]
         if FileManager.default.fileExists(atPath: configURL.path),
@@ -499,7 +522,7 @@ enum PluginInstaller {
         var mcpServers = json["mcpServers"] as? [String: Any] ?? [:]
         mcpServers.removeValue(forKey: "contextos")
         mcpServers["contextos"] = [
-            "command": "node",
+            "command": nodeExecutablePath(),
             "args": [serverScript],
             "_version": version,
             "_build": build
@@ -688,10 +711,11 @@ enum PluginInstaller {
     private static func configureTomlMcp(at configURL: URL, serverScript: String, version: String, build: String) {
         cleanTomlMcp(at: configURL)
         var content = (try? String(contentsOf: configURL, encoding: .utf8)) ?? ""
+        let nodeCmd = nodeExecutablePath()
         content += """
         
         [mcp_servers.contextos]
-        command = "node"
+        command = "\(nodeCmd)"
         args = ["--no-warnings=ExperimentalWarning", "\(serverScript)"]
         
         [mcp_servers.contextos.env]

@@ -46,8 +46,9 @@ Block 描述真实的物理代码能力（杜绝虚空 Ghost Block）。Chain �
 ### macOS App
 
 1. [下载最新 App](https://github.com/yubinbin32-ops/ContextOS/releases/latest)，解压并打开 **ContextOS**。
-2. 打开 **设置**，选择检测到的 AI 编辑器，点击 **安装 / 同步插件**。
-3. 在 Codex 中打开项目，在插件列表确认出现 **ContextOS**，然后开始工作。
+2. 打开 **设置**，选择检测到的 AI 编辑器（Cursor / Claude Desktop / Antigravity / Windsurf 等），点击 **安装 / 同步插件**。
+3. 在编辑器中打开项目，确认插件已连接。
+4. 在对话中只需一句话唤醒 OS 协作（例如：**“把这个方案写入os后开始执行”** 或 **“查看os继续开发”**），AI 即会自动通过 ContextOS 渐进式管理方案、任务、手术刀读写代码与回执验证。
 
 桌面版支持 macOS 14 及以上，MCP 运行时使用 Node.js 22 或以上。App 会把编辑器配置和插件入口写好，安装完成即可使用。
 
@@ -55,7 +56,7 @@ Block 描述真实的物理代码能力（杜绝虚空 Ghost Block）。Chain �
 
 ## 实测 V2 上下文节省基准
 
-在自我托管的 ContextOS V2 自身代码库（10 Blocks, 3 Chains, 12 Links, 49 源码文件，100% 覆盖率）测定：
+在自我托管的 ContextOS V2 自身代码库（18 Blocks, 3 Chains, 18 Links, 49 源码文件，100% 覆盖率）测定：
 
 | 研发环节 | 传统开发交互（非推荐，消耗大） | ContextOS V2 渐进式最佳实践 | 节省比率 |
 |---|---|---|---:|

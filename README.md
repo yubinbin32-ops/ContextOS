@@ -46,8 +46,9 @@ Dev servers, watchers, and background workers are managed by the Process Host an
 ### macOS App
 
 1. [Download the latest App](https://github.com/yubinbin32-ops/ContextOS/releases/latest), unzip it, and open **ContextOS**.
-2. Open **Settings**, choose the detected AI editor, and click **Install / Sync Plugin**.
-3. Open the project in Codex, confirm **ContextOS** appears in the installed plugin list, and start working.
+2. Open **Settings**, choose the detected AI editor (Cursor / Claude Desktop / Antigravity / Windsurf, etc.), and click **Install / Sync Plugin**.
+3. Open your project in the editor and verify the plugin is active.
+4. During your AI conversation, simply activate ContextOS with a single sentence (e.g., **"把这个方案写入os后开始执行"** / *"Write this proposal into the OS and start execution"*, or **"查看os继续开发"** / *"Inspect the OS and resume development"*). The AI will automatically leverage ContextOS for progressive context budgeting, C-D-C-S tasks, surgical code tools, and receipt verification.
 
 The desktop App supports macOS 14 or later. The MCP runtime uses Node.js 22 or later. The App writes the editor configuration and plugin entry for you.
 
@@ -55,7 +56,7 @@ The desktop App supports macOS 14 or later. The MCP runtime uses Node.js 22 or l
 
 ## Reproducible V2 Benchmark
 
-The measurements below were verified on September 14, 2026 on the self-adopted ContextOS V2 repository (10 Blocks, 3 Chains, 12 Links, 49 files, 100% coverage).
+The measurements below were verified on the self-adopted ContextOS V2 repository (18 Blocks, 3 Chains, 18 Links, 49 files, 100% coverage).
 
 | Development Phase | Traditional AI Workflow | ContextOS V2 Workflow | Reduction Rate |
 |---|---|---|---:|

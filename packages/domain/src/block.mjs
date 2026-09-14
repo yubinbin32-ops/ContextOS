@@ -38,6 +38,7 @@ export class Block {
     id,
     projectId,
     title,
+    kind = 'service',
     summary = '',
     details = '',
     artifactRefs = [],
@@ -59,6 +60,7 @@ export class Block {
     this.id = id;
     this.projectId = projectId;
     this.title = title;
+    this.kind = kind;
     this.summary = summary;
     this.details = details;
     this.artifactRefs = artifactRefs.map((ref) => (ref instanceof ArtifactRef ? ref : new ArtifactRef(ref)));
@@ -91,6 +93,7 @@ export class Block {
       id: this.id,
       projectId: this.projectId,
       title: this.title,
+      kind: this.kind,
       summary: this.summary,
       details: this.details,
       artifactRefs: this.artifactRefs.map((ref) => ref.toJSON()),

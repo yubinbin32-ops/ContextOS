@@ -23299,6 +23299,7 @@ CREATE TABLE IF NOT EXISTS blocks (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'service',
   summary TEXT NOT NULL DEFAULT '',
   details TEXT NOT NULL DEFAULT '',
   history_json TEXT NOT NULL DEFAULT '[]',
@@ -23608,13 +23609,14 @@ var V2Database = class {
   saveBlock(block) {
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO blocks (
-        id, project_id, title, summary, details, history_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, title, kind, summary, details, history_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(
       block.id,
       block.projectId || block.project_id || "contextos",
       block.title || block.id,
+      block.kind || "service",
       block.summary || "",
       block.details || "",
       JSON.stringify(block.history || []),
@@ -23660,6 +23662,7 @@ var V2Database = class {
       id: row.id,
       projectId: row.project_id,
       title: row.title,
+      kind: row.kind || "service",
       summary: row.summary,
       details: row.details,
       artifactRefs: refs,
@@ -40567,7 +40570,7 @@ var MarkdownRenderer = class {
   }
   static renderBlock(block) {
     const lines = [];
-    lines.push(`# Block: [${block.id}] ${block.title}`);
+    lines.push(`# Block: [${block.id}] ${block.title} (${block.kind || "service"})`);
     if (block.summary) lines.push(`**Summary**: ${block.summary}`);
     if (block.details) lines.push(`
 ${block.details}`);

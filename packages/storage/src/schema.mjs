@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS blocks (
   id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'service',
   summary TEXT NOT NULL DEFAULT '',
   details TEXT NOT NULL DEFAULT '',
   history_json TEXT NOT NULL DEFAULT '[]',
