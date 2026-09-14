@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod/v4';
@@ -6,8 +7,28 @@ import { ContextOSV2Service } from './v2-service.mjs';
 
 const serviceCache = new Map();
 
+function findDefaultProjectRoot() {
+  if (process.env.CONTEXTOS_PROJECT_ROOT && fs.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
+    return process.env.CONTEXTOS_PROJECT_ROOT;
+  }
+  let cur = process.cwd();
+  if (cur && cur !== '/') {
+    while (cur && cur !== path.dirname(cur)) {
+      if (fs.existsSync(path.join(cur, '.contextos'))) {
+        return cur;
+      }
+      cur = path.dirname(cur);
+    }
+  }
+  const defaultRepo = '/Users/a1-6/Documents/GitHub/mdflow';
+  if (fs.existsSync(defaultRepo)) {
+    return defaultRepo;
+  }
+  return process.cwd();
+}
+
 function getService(projectRoot) {
-  const root = projectRoot || process.env.CONTEXTOS_PROJECT_ROOT || process.cwd();
+  const root = projectRoot || findDefaultProjectRoot();
   if (!serviceCache.has(root)) {
     serviceCache.set(root, new ContextOSV2Service({ projectRoot: root }));
   }
@@ -79,7 +100,7 @@ export function createV2Server() {
     {
       description: 'C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.',
       inputSchema: {
-        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume']),
+        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume', 'activate', 'develop']),
         id: z.string().optional(),
         taskData: z.record(z.any()).optional(),
         text: z.string().optional(),
@@ -122,9 +143,9 @@ export function createV2Server() {
   server.registerTool(
     'chain',
     {
-      description: 'Manage feature Chains (leaf or composite) and typed directional Links between Blocks.',
+      description: 'Feature chains and dependency links. Link kind reflects true semantics: depends_on, calls, imports, implements.',
       inputSchema: {
-        action: z.enum(['list', 'open', 'compose', 'link', 'validate']),
+        action: z.enum(['list', 'open', 'link', 'validate_layout']),
         id: z.string().optional(),
         chainData: z.record(z.any()).optional(),
         linkData: z.record(z.any()).optional(),
@@ -143,10 +164,10 @@ export function createV2Server() {
   server.registerTool(
     'code',
     {
-      description: 'Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring.',
+      description: 'Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, and symbol search.',
       inputSchema: {
         action: z.enum(['outline', 'read', 'edit', 'search']),
-        path: z.string(),
+        path: z.string().optional(),
         selector: z.union([z.string(), z.record(z.any())]).optional(),
         targetContent: z.string().optional(),
         replacementContent: z.string().optional(),

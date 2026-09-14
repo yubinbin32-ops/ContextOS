@@ -242,6 +242,29 @@ export class ContextOSV2Service {
 
   // ================= 6. code =================
   async code({ action, path: relPath, selector, targetContent, replacementContent, query, format = 'markdown' }) {
+    if (action === 'search' && (!relPath || relPath === '.' || relPath === './')) {
+      const blocks = this.db.listBlocks();
+      const allFiles = new Set();
+      for (const b of blocks) {
+        for (const ref of b.artifactRefs || []) {
+          allFiles.add(ref.path);
+        }
+      }
+      const results = CodeTools.searchWorkspace(this.projectRoot, query || '', Array.from(allFiles));
+      if (format === 'json') return results;
+      const lines = [`# Workspace Symbols matching: \`${query}\``];
+      if (results.length === 0) {
+        lines.push('No matching symbols found.');
+      } else {
+        for (const r of results) {
+          const sig = r.signature ? ` - \`${r.signature}\`` : '';
+          lines.push(`- **${r.kind}** \`${r.symbol}\`${sig} [\`${r.path}\`:L${r.startLine}-L${r.endLine}]`);
+        }
+      }
+      return lines.join('\n');
+    }
+
+    if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
     const fullPath = path.resolve(this.projectRoot, relPath);
     if (!fs.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
     const content = fs.readFileSync(fullPath, 'utf8');
@@ -271,7 +294,23 @@ export class ContextOSV2Service {
         };
       }
       case 'search': {
-        return CodeTools.search(relPath, content, query);
+        const res = CodeTools.search(relPath, content, query || '');
+        if (format === 'json') return res;
+        const lines = [`# Symbols in \`${relPath}\` matching: \`${query}\``];
+        if (res.matchingSymbols.length > 0) {
+          lines.push('\n### Matching Methods / Symbols:');
+          for (const s of res.matchingSymbols) {
+            const sig = s.signature ? ` - \`${s.signature}\`` : '';
+            lines.push(`- **${s.kind}** \`${s.symbol}\`${sig} [L${s.startLine}-L${s.endLine}]`);
+          }
+        }
+        if (res.matchingLines.length > 0) {
+          lines.push('\n### Matching Lines:');
+          for (const l of res.matchingLines) {
+            lines.push(`- L${l.line}: \`${l.content}\``);
+          }
+        }
+        return lines.join('\n');
       }
       default:
         throw new Error(`Unknown code action: ${action}`);

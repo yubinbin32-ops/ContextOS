@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { LanguageRegistry, calculateHash } from './language-registry.mjs';
 
@@ -25,11 +26,13 @@ export class CodeTools {
           lines.push(`- **class** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
           if (sym.methods && sym.methods.length > 0) {
             for (const m of sym.methods) {
-              lines.push(`  - **method** \`${m.name}\` [L${m.startLine}-L${m.endLine}] (hash: \`${m.hash}\`)`);
+              const displaySig = m.signature ? m.signature : m.name;
+              lines.push(`  - **method** \`${displaySig}\` [L${m.startLine}-L${m.endLine}] (hash: \`${m.hash}\`)`);
             }
           }
         } else if (sym.kind === 'function') {
-          lines.push(`- **func** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
+          const displaySig = sym.signature ? sym.signature : sym.name;
+          lines.push(`- **func** \`${displaySig}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
         } else if (sym.kind !== 'method') {
           lines.push(`- **${sym.kind}** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
         }
@@ -66,6 +69,8 @@ export class CodeTools {
       }
     } else if (selector.symbol) {
       targetSymbol = selector.symbol;
+    } else if (selector.method) {
+      targetSymbol = selector.method;
     } else if (selector.startLine && selector.endLine) {
       startLine = Number(selector.startLine);
       endLine = Number(selector.endLine);
@@ -80,7 +85,11 @@ export class CodeTools {
 
     if (targetSymbol) {
       const structure = LanguageRegistry.parseStructure(filePath, content);
-      const matched = structure.symbols.find((s) => s.name === targetSymbol || s.name.endsWith(`.${targetSymbol}`));
+      const matched =
+        structure.symbols.find((s) => s.name === targetSymbol) ||
+        structure.symbols.find((s) => s.shortName === targetSymbol) ||
+        structure.symbols.find((s) => s.name.endsWith(`.${targetSymbol}`));
+
       if (!matched) {
         throw new Error(`Symbol '${targetSymbol}' not found in ${filePath}`);
       }
@@ -172,13 +181,28 @@ export class CodeTools {
   }
 
   /**
-   * 4. Search: Find symbol or pattern
+   * 4. Search: Find symbol or pattern (VS Code Document Symbol search)
    */
   static search(filePath, content, query) {
     const structure = LanguageRegistry.parseStructure(filePath, content);
     const queryLower = query.toLowerCase();
 
-    const matchingSymbols = structure.symbols.filter((s) => s.name.toLowerCase().includes(queryLower));
+    const matchingSymbols = structure.symbols
+      .filter((s) => {
+        const nameMatch = s.name.toLowerCase().includes(queryLower);
+        const shortMatch = s.shortName && s.shortName.toLowerCase().includes(queryLower);
+        return nameMatch || shortMatch;
+      })
+      .map((s) => ({
+        symbol: s.name,
+        shortName: s.shortName || s.name,
+        kind: s.kind,
+        container: s.containerName || null,
+        signature: s.signature || null,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        hash: s.hash,
+      }));
 
     const lines = content.split(/\r?\n/);
     const matchingLines = [];
@@ -197,5 +221,39 @@ export class CodeTools {
       matchingSymbols,
       matchingLines: matchingLines.slice(0, 20),
     };
+  }
+
+  /**
+   * 5. Workspace Search: Find symbols/methods across all project files (like VS Code Cmd+T)
+   */
+  static searchWorkspace(repoRoot, query, candidateFiles = []) {
+    const queryLower = query.toLowerCase();
+    const results = [];
+    for (const relPath of candidateFiles) {
+      const fullPath = path.resolve(repoRoot, relPath);
+      if (!fs.existsSync(fullPath)) continue;
+      try {
+        const content = fs.readFileSync(fullPath, 'utf8');
+        const structure = LanguageRegistry.parseStructure(relPath, content);
+        for (const s of structure.symbols) {
+          const nameMatch = s.name.toLowerCase().includes(queryLower);
+          const shortMatch = s.shortName && s.shortName.toLowerCase().includes(queryLower);
+          if (nameMatch || shortMatch) {
+            results.push({
+              path: relPath,
+              symbol: s.name,
+              shortName: s.shortName || s.name,
+              kind: s.kind,
+              container: s.containerName || null,
+              signature: s.signature || null,
+              startLine: s.startLine,
+              endLine: s.endLine,
+              hash: s.hash,
+            });
+          }
+        }
+      } catch (_) {}
+    }
+    return results;
   }
 }

@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import * as babelParser from '@babel/parser';
 
 export function calculateHash(code) {
   return crypto.createHash('sha256').update(code, 'utf8').digest('hex').slice(0, 16);
@@ -74,6 +76,193 @@ export class LanguageRegistry {
   }
 
   static _parseJsTs(lines, symbols, imports, fullText) {
+    try {
+      this._parseJsTsWithBabel(lines, symbols, imports, fullText);
+    } catch (err) {
+      this._parseJsTsFallback(lines, symbols, imports, fullText);
+    }
+  }
+
+  static _parseJsTsWithBabel(lines, symbols, imports, fullText) {
+    const ast = babelParser.parse(fullText, {
+      sourceType: 'unambiguous',
+      errorRecovery: true,
+      plugins: [
+        'typescript',
+        'jsx',
+        'classProperties',
+        'classPrivateProperties',
+        'classPrivateMethods',
+        'decorators-legacy',
+        'asyncGenerators',
+        'dynamicImport',
+        'exportDefaultFrom',
+        'exportNamespaceFrom',
+        'topLevelAwait',
+      ],
+    });
+
+    const getSliceHash = (startLine, endLine) => {
+      const slice = lines.slice(Math.max(0, startLine - 1), endLine).join('\n');
+      return calculateHash(slice);
+    };
+
+    const extractFunctionSignature = (node, name) => {
+      const params = (node.params || [])
+        .map((p) => {
+          if (p.type === 'Identifier') return p.name;
+          if (p.type === 'AssignmentPattern' && p.left?.name) return `${p.left.name}=...`;
+          if (p.type === 'RestElement' && p.argument?.name) return `...${p.argument.name}`;
+          if (p.type === 'ObjectPattern') return '{...}';
+          if (p.type === 'ArrayPattern') return '[...]';
+          return 'arg';
+        })
+        .join(', ');
+      return `${name}(${params})`;
+    };
+
+    for (const stmt of ast.program.body) {
+      if (stmt.type === 'ImportDeclaration') {
+        imports.push({
+          source: stmt.source.value,
+          line: stmt.loc.start.line,
+        });
+        continue;
+      }
+
+      let target = stmt;
+      if (stmt.type === 'ExportNamedDeclaration' || stmt.type === 'ExportDefaultDeclaration') {
+        target = stmt.declaration || stmt;
+      }
+
+      if (!target || !target.loc) continue;
+
+      if (target.type === 'ClassDeclaration' || target.type === 'ClassExpression') {
+        const className = target.id?.name || 'AnonymousClass';
+        const startLine = target.loc.start.line;
+        const endLine = target.loc.end.line;
+        const classSymbol = {
+          name: className,
+          shortName: className,
+          kind: 'class',
+          startLine,
+          endLine,
+          hash: getSliceHash(startLine, endLine),
+          methods: [],
+        };
+        symbols.push(classSymbol);
+
+        for (const member of target.body.body || []) {
+          if (!member.loc) continue;
+          const mStart = member.loc.start.line;
+          const mEnd = member.loc.end.line;
+
+          if (member.type === 'ClassMethod' || member.type === 'ClassPrivateMethod') {
+            const methodName = member.key?.name || member.key?.id?.name || (member.kind === 'constructor' ? 'constructor' : 'method');
+            const qualifiedName = `${className}.${methodName}`;
+            const sig = extractFunctionSignature(member, methodName);
+            const methodSymbol = {
+              name: qualifiedName,
+              shortName: methodName,
+              containerName: className,
+              kind: member.kind === 'constructor' ? 'constructor' : 'method',
+              signature: sig,
+              startLine: mStart,
+              endLine: mEnd,
+              hash: getSliceHash(mStart, mEnd),
+            };
+            symbols.push(methodSymbol);
+            classSymbol.methods.push(methodSymbol);
+          } else if (member.type === 'ClassProperty' && member.value && (member.value.type === 'ArrowFunctionExpression' || member.value.type === 'FunctionExpression')) {
+            const propName = member.key?.name || 'prop';
+            const qualifiedName = `${className}.${propName}`;
+            const sig = extractFunctionSignature(member.value, propName);
+            const methodSymbol = {
+              name: qualifiedName,
+              shortName: propName,
+              containerName: className,
+              kind: 'method',
+              signature: sig,
+              startLine: mStart,
+              endLine: mEnd,
+              hash: getSliceHash(mStart, mEnd),
+            };
+            symbols.push(methodSymbol);
+            classSymbol.methods.push(methodSymbol);
+          }
+        }
+      } else if (target.type === 'FunctionDeclaration') {
+        const fnName = target.id?.name || 'anonymous';
+        const startLine = target.loc.start.line;
+        const endLine = target.loc.end.line;
+        symbols.push({
+          name: fnName,
+          shortName: fnName,
+          kind: 'function',
+          signature: extractFunctionSignature(target, fnName),
+          startLine,
+          endLine,
+          hash: getSliceHash(startLine, endLine),
+        });
+      } else if (target.type === 'VariableDeclaration') {
+        for (const decl of target.declarations || []) {
+          const varName = decl.id?.name;
+          if (!varName) continue;
+          const startLine = target.loc.start.line;
+          const endLine = target.loc.end.line;
+          if (decl.init && (decl.init.type === 'ArrowFunctionExpression' || decl.init.type === 'FunctionExpression')) {
+            symbols.push({
+              name: varName,
+              shortName: varName,
+              kind: 'function',
+              signature: extractFunctionSignature(decl.init, varName),
+              startLine,
+              endLine,
+              hash: getSliceHash(startLine, endLine),
+            });
+          }
+        }
+      } else if (target.type === 'TSInterfaceDeclaration') {
+        const ifaceName = target.id?.name;
+        const startLine = target.loc.start.line;
+        const endLine = target.loc.end.line;
+        symbols.push({
+          name: ifaceName,
+          shortName: ifaceName,
+          kind: 'interface',
+          startLine,
+          endLine,
+          hash: getSliceHash(startLine, endLine),
+        });
+      } else if (target.type === 'TSTypeAliasDeclaration') {
+        const typeName = target.id?.name;
+        const startLine = target.loc.start.line;
+        const endLine = target.loc.end.line;
+        symbols.push({
+          name: typeName,
+          shortName: typeName,
+          kind: 'type',
+          startLine,
+          endLine,
+          hash: getSliceHash(startLine, endLine),
+        });
+      } else if (target.type === 'TSEnumDeclaration') {
+        const enumName = target.id?.name;
+        const startLine = target.loc.start.line;
+        const endLine = target.loc.end.line;
+        symbols.push({
+          name: enumName,
+          shortName: enumName,
+          kind: 'enum',
+          startLine,
+          endLine,
+          hash: getSliceHash(startLine, endLine),
+        });
+      }
+    }
+  }
+
+  static _parseJsTsFallback(lines, symbols, imports, fullText) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -96,6 +285,7 @@ export class LanguageRegistry {
         const snippet = lines.slice(i, endLine).join('\n');
         symbols.push({
           name: typeName,
+          shortName: typeName,
           kind: 'interface',
           startLine: lineNum,
           endLine,
@@ -112,6 +302,7 @@ export class LanguageRegistry {
         const classSnippet = lines.slice(i, endLine).join('\n');
         currentClass = {
           name: className,
+          shortName: className,
           kind: 'class',
           startLine: lineNum,
           endLine,
@@ -122,7 +313,7 @@ export class LanguageRegistry {
         continue;
       }
 
-      // Method inside class (supports async, static, getters, setters)
+      // Method inside class
       if (currentClass && lineNum <= currentClass.endLine) {
         const methodMatch = line.match(/^\s*(?:async\s+)?(?:static\s+)?(?:get\s+|set\s+)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{/);
         if (methodMatch && !['if', 'for', 'while', 'switch', 'catch'].includes(methodMatch[1])) {
@@ -131,6 +322,8 @@ export class LanguageRegistry {
           const methodSnippet = lines.slice(i, endLine).join('\n');
           const methodSymbol = {
             name: `${currentClass.name}.${methodName}`,
+            shortName: methodName,
+            containerName: currentClass.name,
             kind: 'method',
             startLine: lineNum,
             endLine,
@@ -154,6 +347,7 @@ export class LanguageRegistry {
         const fnSnippet = lines.slice(i, endLine).join('\n');
         symbols.push({
           name: fnName,
+          shortName: fnName,
           kind: 'function',
           startLine: lineNum,
           endLine,
@@ -164,6 +358,63 @@ export class LanguageRegistry {
   }
 
   static _parsePython(lines, symbols, imports, fullText) {
+    try {
+      const script = `
+import ast, json, sys
+tree = ast.parse(sys.stdin.read())
+imports, symbols = [], []
+for node in ast.iter_child_nodes(tree):
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        if isinstance(node, ast.Import):
+            for n in node.names: imports.append({"source": n.name, "line": node.lineno})
+        else:
+            imports.append({"source": node.module or "", "line": node.lineno})
+    elif isinstance(node, ast.ClassDef):
+        methods = []
+        for m in node.body:
+            if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                methods.append({
+                    "name": f"{node.name}.{m.name}",
+                    "shortName": m.name,
+                    "kind": "method",
+                    "containerName": node.name,
+                    "startLine": m.lineno,
+                    "endLine": getattr(m, "end_lineno", m.lineno)
+                })
+        symbols.append({
+            "name": node.name,
+            "shortName": node.name,
+            "kind": "class",
+            "startLine": node.lineno,
+            "endLine": getattr(node, "end_lineno", node.lineno),
+            "methods": methods
+        })
+        symbols.extend(methods)
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        symbols.append({
+            "name": node.name,
+            "shortName": node.name,
+            "kind": "function",
+            "startLine": node.lineno,
+            "endLine": getattr(node, "end_lineno", node.lineno)
+        })
+print(json.dumps({"imports": imports, "symbols": symbols}))
+`;
+      const out = execFileSync('python3', ['-c', script], { input: fullText, encoding: 'utf8', timeout: 3000 });
+      const data = JSON.parse(out);
+      for (const imp of data.imports) imports.push(imp);
+      for (const s of data.symbols) {
+        const slice = lines.slice(s.startLine - 1, s.endLine).join('\n');
+        s.hash = calculateHash(slice);
+        symbols.push(s);
+      }
+      return;
+    } catch (_) {
+      this._parsePythonFallback(lines, symbols, imports);
+    }
+  }
+
+  static _parsePythonFallback(lines, symbols, imports) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {

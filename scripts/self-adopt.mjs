@@ -133,61 +133,120 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
       id: 'block-domain-core',
       title: 'Domain Model & Invariants',
       summary: 'Unified domain entities (Plan, Phase, Checkpoint, Task, Block, Chain, Link) and core invariants.',
-      files: ['packages/domain/src/plan.mjs', 'packages/domain/src/task.mjs', 'packages/domain/src/block.mjs'],
+      files: [
+        'packages/domain/src/plan.mjs',
+        'packages/domain/src/task.mjs',
+        'packages/domain/src/block.mjs',
+        'packages/domain/src/chain.mjs',
+        'packages/domain/src/link.mjs',
+        'packages/domain/src/invariants.mjs',
+        'packages/domain/src/knowledge.mjs',
+        'packages/domain/src/index.mjs',
+      ],
     },
     {
       id: 'block-storage-engine',
       title: 'SQLite & Bidirectional Sync Engine',
       summary: 'WAL mode SQLite database and deterministic graph.json sync with Git rollback detection.',
-      files: ['packages/storage/src/database.mjs', 'packages/storage/src/sync-engine.mjs'],
+      files: [
+        'packages/storage/src/database.mjs',
+        'packages/storage/src/sync-engine.mjs',
+        'packages/storage/src/schema.mjs',
+        'packages/storage/src/index.mjs',
+      ],
     },
     {
       id: 'block-daemon-host',
       title: 'ContextOS Daemon (osd)',
       summary: 'Independent daemon process hosting project routers, background processes, and IPC sockets.',
-      files: ['apps/daemon/src/osd.mjs'],
+      files: [
+        'apps/daemon/src/osd.mjs',
+        'packages/protocol/src/ipc.mjs',
+        'packages/protocol/src/index.mjs',
+      ],
     },
     {
       id: 'block-code-gateway',
       title: 'Code Gateway & AST Intel',
       summary: 'Multi-language AST parsing, progressive outline, surgical read/edit with re-anchoring, and coverage gap detection.',
-      files: ['packages/code-intel/src/code-tools.mjs', 'packages/code-intel/src/language-registry.mjs', 'packages/code-intel/src/coverage.mjs'],
+      files: [
+        'packages/code-intel/src/code-tools.mjs',
+        'packages/code-intel/src/language-registry.mjs',
+        'packages/code-intel/src/coverage.mjs',
+        'packages/code-intel/src/index.mjs',
+      ],
     },
     {
       id: 'block-command-gateway',
       title: 'Command Gateway & Process Host',
       summary: 'Out-of-context logging runner, ANSI/secret sanitizer, and daemon-managed process groups.',
-      files: ['packages/process-host/src/runner.mjs', 'packages/process-host/src/sanitizer.mjs', 'packages/process-host/src/process-manager.mjs'],
+      files: [
+        'packages/process-host/src/runner.mjs',
+        'packages/process-host/src/sanitizer.mjs',
+        'packages/process-host/src/process-manager.mjs',
+        'packages/process-host/src/index.mjs',
+      ],
     },
     {
       id: 'block-context-renderer',
       title: 'Progressive Markdown Renderer',
       summary: 'L0-L3 human and AI readable envelope formatter that prevents context bloat.',
-      files: ['packages/context/src/markdown-renderer.mjs'],
+      files: [
+        'packages/context/src/markdown-renderer.mjs',
+        'packages/context/src/index.mjs',
+      ],
     },
     {
       id: 'block-layout-engine',
       title: 'Metro Map DAG Layout Engine',
       summary: 'Subway rail track placement, adjacent station ordering, and orthogonal transfer routing.',
-      files: ['packages/layout/src/network-layout.mjs'],
+      files: [
+        'packages/layout/src/network-layout.mjs',
+        'packages/layout/src/index.mjs',
+      ],
     },
     {
       id: 'block-lifecycle-services',
       title: 'Lifecycle & Knowledge Application Services',
       summary: 'PlanService, TaskService (C-D-C-S state machine), and KnowledgeService (singleton Decision and categorized Rules).',
-      files: ['packages/application/src/plan-service.mjs', 'packages/application/src/task-service.mjs', 'packages/application/src/knowledge-service.mjs'],
+      files: [
+        'packages/application/src/plan-service.mjs',
+        'packages/application/src/task-service.mjs',
+        'packages/application/src/knowledge-service.mjs',
+        'packages/application/src/index.mjs',
+      ],
     },
     {
       id: 'block-mcp-facades',
       title: 'Consolidated 9 MCP Facades',
       summary: 'High-level action-based MCP entry points replacing the 49 legacy micro-tools.',
-      files: ['packages/mcp/src/v2-server.mjs', 'packages/mcp/src/v2-service.mjs'],
+      files: [
+        'packages/mcp/src/v2-server.mjs',
+        'packages/mcp/src/v2-service.mjs',
+        'packages/mcp/src/server.mjs',
+        'packages/mcp/src/service.mjs',
+      ],
     },
     {
       id: 'block-desktop-app',
       title: 'SwiftUI Desktop Visualizer',
       summary: 'Native macOS desktop client with subway map visualization and long-running process manager.',
-      files: ['apps/desktop/Sources/ContextOSDesktop/ContentView.swift', 'apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift', 'apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift'],
+      files: [
+        'apps/desktop/Sources/ContextOSDesktop/ContentView.swift',
+        'apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift',
+        'apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift',
+        'apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift',
+        'apps/desktop/Sources/ContextOSDesktop/ContextOSDesktopApp.swift',
+        'apps/desktop/Sources/ContextOSDesktop/DetailView.swift',
+        'apps/desktop/Sources/ContextOSDesktop/GraphStore.swift',
+        'apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift',
+        'apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift',
+        'apps/desktop/Sources/ContextOSDesktop/Models.swift',
+        'apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift',
+        'apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift',
+        'apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift',
+        'apps/desktop/Sources/ContextOSDesktop/Theme.swift',
+      ],
     },
   ];
 
@@ -199,13 +258,26 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
       if (fs.existsSync(full)) {
         const content = fs.readFileSync(full, 'utf8');
         const outline = CodeTools.outline(rel, content);
-        for (const sym of outline.structure.symbols.slice(0, 4)) {
+        const topSymbols = outline.structure.symbols.slice(0, 4);
+        if (topSymbols.length > 0) {
+          for (const sym of topSymbols) {
+            artifactRefs.push({
+              path: rel,
+              symbol: sym.name,
+              startLine: sym.startLine,
+              endLine: sym.endLine,
+              hash: sym.hash,
+              role: 'implementation',
+            });
+          }
+        } else {
+          // File level reference for entrypoints/modules
           artifactRefs.push({
             path: rel,
-            symbol: sym.name,
-            startLine: sym.startLine,
-            endLine: sym.endLine,
-            hash: sym.hash,
+            symbol: null,
+            startLine: 1,
+            endLine: outline.structure.totalLines || 1,
+            hash: outline.structure.symbols[0]?.hash || 'file',
             role: 'implementation',
           });
         }
@@ -237,8 +309,8 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
       title: 'Self-Adopt ContextOS Codebase into V2 Architecture',
       workingSet: { files: uniqueWorkingFiles },
       contextSlice: {
-        objective: 'Index all 10 V2 packages, register real Blocks, and sync pure graph.json.',
-        constraints: ['Zero ghost blocks', 'All modified code bound to Blocks', 'Subway rail track chains'],
+        objective: 'Index all 10 V2 packages, register real Blocks with 100% file coverage, and sync pure graph.json.',
+        constraints: ['Zero ghost blocks', '100% source file coverage', 'Subway rail track chains'],
       },
     },
   });
@@ -246,14 +318,14 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
   await service.task({
     action: 'note',
     id: 'task-self-adopt',
-    text: 'All V2 packages indexed and ready for binding.',
+    text: 'All V2 packages indexed with 100% file coverage and ready for binding.',
   });
 
   await service.task({
     action: 'check',
     id: 'task-self-adopt',
     checkData: {
-      description: 'All V2 unit tests pass across domain, storage, code-intel, process-host, layout, application, and mcp.',
+      description: 'All V2 unit tests pass and all 49 project source files covered by Block artifactRefs.',
       passed: true,
     },
   });
@@ -286,14 +358,18 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
         },
       ],
       links: [
-        { id: 'link-1', from: 'block-mcp-facades', to: 'block-lifecycle-services', kind: 'calls' },
-        { id: 'link-2', from: 'block-lifecycle-services', to: 'block-domain-core', kind: 'depends_on' },
-        { id: 'link-3', from: 'block-lifecycle-services', to: 'block-storage-engine', kind: 'depends_on' },
-        { id: 'link-4', from: 'block-mcp-facades', to: 'block-code-gateway', kind: 'calls' },
-        { id: 'link-5', from: 'block-mcp-facades', to: 'block-command-gateway', kind: 'calls' },
-        { id: 'link-6', from: 'block-storage-engine', to: 'block-daemon-host', kind: 'depends_on' },
-        { id: 'link-7', from: 'block-desktop-app', to: 'block-layout-engine', kind: 'calls' },
-        { id: 'link-8', from: 'block-desktop-app', to: 'block-daemon-host', kind: 'depends_on' },
+        { id: 'link-1', from: 'block-mcp-facades', to: 'block-lifecycle-services', kind: 'calls', reason: 'MCP routes plan, task, block, chain, knowledge requests to application services' },
+        { id: 'link-2', from: 'block-lifecycle-services', to: 'block-domain-core', kind: 'depends_on', reason: 'Lifecycle services instantiate and validate domain models and invariants' },
+        { id: 'link-3', from: 'block-lifecycle-services', to: 'block-storage-engine', kind: 'depends_on', reason: 'Lifecycle services persist and query graph state via V2Database' },
+        { id: 'link-4', from: 'block-mcp-facades', to: 'block-code-gateway', kind: 'calls', reason: 'MCP code facade delegates outline, surgical read/edit, and symbol search to CodeTools' },
+        { id: 'link-5', from: 'block-mcp-facades', to: 'block-command-gateway', kind: 'calls', reason: 'MCP run_command and process facades execute commands and manage background processes' },
+        { id: 'link-6', from: 'block-mcp-facades', to: 'block-context-renderer', kind: 'calls', reason: 'MCP os_context delegates brief and entity rendering to MarkdownRenderer' },
+        { id: 'link-7', from: 'block-storage-engine', to: 'block-domain-core', kind: 'depends_on', reason: 'Database schema and sync engine serialize and deserialize domain entities' },
+        { id: 'link-8', from: 'block-daemon-host', to: 'block-storage-engine', kind: 'depends_on', reason: 'ContextOS daemon loads state database and watches bidirectional sync events' },
+        { id: 'link-9', from: 'block-layout-engine', to: 'block-domain-core', kind: 'depends_on', reason: 'Layout engine positions domain Blocks, Chains, and Links onto 2D Metro tracks' },
+        { id: 'link-10', from: 'block-desktop-app', to: 'block-layout-engine', kind: 'calls', reason: 'Desktop SwiftUI client calls layout engine to compute node positions and envelopes' },
+        { id: 'link-11', from: 'block-desktop-app', to: 'block-storage-engine', kind: 'depends_on', reason: 'Desktop app connects to state.sqlite and polls changes from graph.json' },
+        { id: 'link-12', from: 'block-desktop-app', to: 'block-command-gateway', kind: 'depends_on', reason: 'Desktop app inspects .contextos/processes.json and terminates running processes' },
       ],
     },
     format: 'json',

@@ -49,6 +49,7 @@
     "desktop:run": "swift run --package-path apps/desktop contextos-desktop"
   },
   "dependencies": {
+    "@babel/parser": "^8.0.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "web-tree-sitter": "^0.27.0",
     "zod": "^4.1.5"

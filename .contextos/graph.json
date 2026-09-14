@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "projectId": "contextos",
   "graphRevision": 1,
-  "exportedAt": "2026-09-14T14:30:29.149Z",
+  "exportedAt": "2026-09-14T15:38:09.657Z",
   "data": {
     "plans": [
       {
@@ -125,7 +125,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T14:30:29.089Z"
+            "completedAt": "2026-09-14T15:38:09.522Z"
           },
           {
             "id": "cp-p6-self-adopted",
@@ -135,7 +135,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T14:30:29.089Z"
+            "completedAt": "2026-09-14T15:38:09.522Z"
           },
           {
             "id": "cp-p7-desktop-verified",
@@ -145,7 +145,7 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [],
-            "completedAt": "2026-09-14T14:30:29.089Z"
+            "completedAt": "2026-09-14T15:38:09.522Z"
           },
           {
             "id": "cp-p8-reduction-proven",
@@ -158,8 +158,8 @@
             "completedAt": null
           }
         ],
-        "createdAt": "2026-09-14T14:30:29.089Z",
-        "updatedAt": "2026-09-14T14:30:29.089Z"
+        "createdAt": "2026-09-14T15:38:09.523Z",
+        "updatedAt": "2026-09-14T15:38:09.523Z"
       }
     ],
     "tasks": [
@@ -170,10 +170,10 @@
         "title": "Self-Adopt ContextOS Codebase into V2 Architecture",
         "status": "completed",
         "contextSlice": {
-          "objective": "Index all 10 V2 packages, register real Blocks, and sync pure graph.json.",
+          "objective": "Index all 10 V2 packages, register real Blocks with 100% file coverage, and sync pure graph.json.",
           "constraints": [
             "Zero ghost blocks",
-            "All modified code bound to Blocks",
+            "100% source file coverage",
             "Subway rail track chains"
           ],
           "references": {},
@@ -186,25 +186,52 @@
             "packages/domain/src/plan.mjs",
             "packages/domain/src/task.mjs",
             "packages/domain/src/block.mjs",
+            "packages/domain/src/chain.mjs",
+            "packages/domain/src/link.mjs",
+            "packages/domain/src/invariants.mjs",
+            "packages/domain/src/knowledge.mjs",
+            "packages/domain/src/index.mjs",
             "packages/storage/src/database.mjs",
             "packages/storage/src/sync-engine.mjs",
+            "packages/storage/src/schema.mjs",
+            "packages/storage/src/index.mjs",
             "apps/daemon/src/osd.mjs",
+            "packages/protocol/src/ipc.mjs",
+            "packages/protocol/src/index.mjs",
             "packages/code-intel/src/code-tools.mjs",
             "packages/code-intel/src/language-registry.mjs",
             "packages/code-intel/src/coverage.mjs",
+            "packages/code-intel/src/index.mjs",
             "packages/process-host/src/runner.mjs",
             "packages/process-host/src/sanitizer.mjs",
             "packages/process-host/src/process-manager.mjs",
+            "packages/process-host/src/index.mjs",
             "packages/context/src/markdown-renderer.mjs",
+            "packages/context/src/index.mjs",
             "packages/layout/src/network-layout.mjs",
+            "packages/layout/src/index.mjs",
             "packages/application/src/plan-service.mjs",
             "packages/application/src/task-service.mjs",
             "packages/application/src/knowledge-service.mjs",
+            "packages/application/src/index.mjs",
             "packages/mcp/src/v2-server.mjs",
             "packages/mcp/src/v2-service.mjs",
+            "packages/mcp/src/server.mjs",
+            "packages/mcp/src/service.mjs",
             "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
             "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
-            "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift"
+            "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift",
+            "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift",
+            "apps/desktop/Sources/ContextOSDesktop/ContextOSDesktopApp.swift",
+            "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift",
+            "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift",
+            "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift",
+            "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
+            "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+            "apps/desktop/Sources/ContextOSDesktop/Theme.swift"
           ],
           "symbols": [],
           "candidateBlockIds": []
@@ -221,20 +248,20 @@
         },
         "notes": [
           {
-            "id": "note-1789396229137-nlo70",
-            "text": "All V2 packages indexed and ready for binding.",
+            "id": "note-1789400289645-nggzu",
+            "text": "All V2 packages indexed with 100% file coverage and ready for binding.",
             "kind": "journal",
-            "createdAt": "2026-09-14T14:30:29.137Z"
+            "createdAt": "2026-09-14T15:38:09.645Z"
           }
         ],
         "checks": [
           {
-            "id": "check-1789396229138-s2fch",
+            "id": "check-1789400289646-aenxo",
             "receiptId": null,
-            "description": "All V2 unit tests pass across domain, storage, code-intel, process-host, layout, application, and mcp.",
+            "description": "All V2 unit tests pass and all 49 project source files covered by Block artifactRefs.",
             "passed": true,
             "evidence": "",
-            "recordedAt": "2026-09-14T14:30:29.138Z"
+            "recordedAt": "2026-09-14T15:38:09.646Z"
           }
         ],
         "syncResult": {
@@ -263,12 +290,16 @@
             "link-5",
             "link-6",
             "link-7",
-            "link-8"
+            "link-8",
+            "link-9",
+            "link-10",
+            "link-11",
+            "link-12"
           ],
-          "completedAt": "2026-09-14T14:30:29.139Z"
+          "completedAt": "2026-09-14T15:38:09.648Z"
         },
-        "createdAt": "2026-09-14T14:30:29.137Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.645Z",
+        "updatedAt": "2026-09-14T15:38:09.648Z"
       }
     ],
     "blocks": [
@@ -282,65 +313,65 @@
           {
             "path": "packages/code-intel/src/code-tools.mjs",
             "symbol": "CodeTools",
-            "startLine": 4,
-            "endLine": 201,
-            "hash": "a69bf1789b6ce215",
+            "startLine": 5,
+            "endLine": 259,
+            "hash": "e9751272b62a6107",
             "role": "implementation"
           },
           {
             "path": "packages/code-intel/src/code-tools.mjs",
             "symbol": "CodeTools.outline",
-            "startLine": 8,
-            "endLine": 8,
-            "hash": "6341be0b6fc0f205",
+            "startLine": 9,
+            "endLine": 47,
+            "hash": "7561b3ddff2a7b7f",
             "role": "implementation"
           },
           {
             "path": "packages/code-intel/src/code-tools.mjs",
             "symbol": "CodeTools.read",
-            "startLine": 49,
-            "endLine": 49,
-            "hash": "7f98d851e9b5ea57",
+            "startLine": 52,
+            "endLine": 116,
+            "hash": "c26ba137a98407a8",
             "role": "implementation"
           },
           {
             "path": "packages/code-intel/src/code-tools.mjs",
             "symbol": "CodeTools.edit",
-            "startLine": 112,
-            "endLine": 112,
-            "hash": "aa9032f0cb0af2c5",
+            "startLine": 121,
+            "endLine": 181,
+            "hash": "12c3d0f228f8d134",
             "role": "implementation"
           },
           {
             "path": "packages/code-intel/src/language-registry.mjs",
             "symbol": "calculateHash",
-            "startLine": 4,
-            "endLine": 6,
+            "startLine": 6,
+            "endLine": 8,
             "hash": "43dac33a145ec63d",
             "role": "implementation"
           },
           {
             "path": "packages/code-intel/src/language-registry.mjs",
             "symbol": "LanguageRegistry",
-            "startLine": 8,
-            "endLine": 501,
-            "hash": "2c7c124139e9aa50",
+            "startLine": 10,
+            "endLine": 751,
+            "hash": "9328002d265cfeae",
             "role": "implementation"
           },
           {
             "path": "packages/code-intel/src/language-registry.mjs",
             "symbol": "LanguageRegistry.getLanguage",
-            "startLine": 9,
-            "endLine": 31,
+            "startLine": 11,
+            "endLine": 33,
             "hash": "de261d6278bbd353",
             "role": "implementation"
           },
           {
             "path": "packages/code-intel/src/language-registry.mjs",
             "symbol": "LanguageRegistry.parseStructure",
-            "startLine": 36,
-            "endLine": 36,
-            "hash": "993c5fbe119807cf",
+            "startLine": 38,
+            "endLine": 76,
+            "hash": "dfcb5ab71ebc0c01",
             "role": "implementation"
           },
           {
@@ -358,11 +389,19 @@
             "endLine": 62,
             "hash": "fb1236b85772c32b",
             "role": "implementation"
+          },
+          {
+            "path": "packages/code-intel/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 4,
+            "hash": "file",
+            "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "block-command-gateway",
@@ -375,8 +414,8 @@
             "path": "packages/process-host/src/runner.mjs",
             "symbol": "runCommand",
             "startLine": 7,
-            "endLine": 14,
-            "hash": "b56d842ca6a2cc83",
+            "endLine": 94,
+            "hash": "4d1c90fdefb7f5c3",
             "role": "implementation"
           },
           {
@@ -391,24 +430,40 @@
             "path": "packages/process-host/src/sanitizer.mjs",
             "symbol": "redactSecrets",
             "startLine": 13,
-            "endLine": 89,
-            "hash": "98a3287750e3875c",
+            "endLine": 20,
+            "hash": "9256c98d3f50078d",
             "role": "implementation"
           },
           {
             "path": "packages/process-host/src/sanitizer.mjs",
             "symbol": "sanitizeTerminalOutput",
             "startLine": 22,
-            "endLine": 22,
-            "hash": "080565aea4566fdc",
+            "endLine": 88,
+            "hash": "ac3521dc8fc9c382",
             "role": "implementation"
           },
           {
             "path": "packages/process-host/src/process-manager.mjs",
             "symbol": "ProcessManager",
             "startLine": 6,
-            "endLine": 221,
-            "hash": "327aed2a9c8ab823",
+            "endLine": 222,
+            "hash": "8d48f3a8b174ad56",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/process-host/src/process-manager.mjs",
+            "symbol": "ProcessManager.constructor",
+            "startLine": 7,
+            "endLine": 10,
+            "hash": "73e50677096400a6",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/process-host/src/process-manager.mjs",
+            "symbol": "ProcessManager.startProcess",
+            "startLine": 12,
+            "endLine": 95,
+            "hash": "d4a9d7c1b2348643",
             "role": "implementation"
           },
           {
@@ -420,25 +475,17 @@
             "role": "implementation"
           },
           {
-            "path": "packages/process-host/src/process-manager.mjs",
-            "symbol": "ProcessManager.listProcesses",
-            "startLine": 105,
-            "endLine": 107,
-            "hash": "7086395e1a76bb0a",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/process-host/src/process-manager.mjs",
-            "symbol": "ProcessManager.getProcess",
-            "startLine": 109,
-            "endLine": 112,
-            "hash": "dc2df982d4fbef73",
+            "path": "packages/process-host/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 4,
+            "hash": "file",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "block-context-renderer",
@@ -451,22 +498,46 @@
             "path": "packages/context/src/markdown-renderer.mjs",
             "symbol": "MarkdownRenderer",
             "startLine": 6,
-            "endLine": 61,
-            "hash": "25a0f2b5748cb355",
+            "endLine": 167,
+            "hash": "c77b735cea26ee71",
             "role": "implementation"
           },
           {
             "path": "packages/context/src/markdown-renderer.mjs",
             "symbol": "MarkdownRenderer.renderBrief",
-            "startLine": 7,
-            "endLine": 7,
-            "hash": "13581dcaa8961e61",
+            "startLine": 9,
+            "endLine": 63,
+            "hash": "d8531596b6d73033",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/context/src/markdown-renderer.mjs",
+            "symbol": "MarkdownRenderer.renderPlan",
+            "startLine": 65,
+            "endLine": 98,
+            "hash": "94dd5926a6f7d322",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/context/src/markdown-renderer.mjs",
+            "symbol": "MarkdownRenderer.renderTask",
+            "startLine": 100,
+            "endLine": 139,
+            "hash": "68d2fa2714f97bf0",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/context/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 2,
+            "hash": "file",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "block-daemon-host",
@@ -481,6 +552,14 @@
             "startLine": 7,
             "endLine": 122,
             "hash": "52a97da30f7c1c4c",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/daemon/src/osd.mjs",
+            "symbol": "Daemon.constructor",
+            "startLine": 8,
+            "endLine": 18,
+            "hash": "8a85c2519c53db6f",
             "role": "implementation"
           },
           {
@@ -500,17 +579,49 @@
             "role": "implementation"
           },
           {
-            "path": "apps/daemon/src/osd.mjs",
-            "symbol": "Daemon.handleMessage",
-            "startLine": 41,
-            "endLine": 41,
-            "hash": "bff3b4dde95d08fe",
+            "path": "packages/protocol/src/ipc.mjs",
+            "symbol": "getSocketPath",
+            "startLine": 6,
+            "endLine": 10,
+            "hash": "6dcfa80714e9f4e5",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/protocol/src/ipc.mjs",
+            "symbol": "IPCServer",
+            "startLine": 12,
+            "endLine": 92,
+            "hash": "d8b844d842dd0837",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/protocol/src/ipc.mjs",
+            "symbol": "IPCServer.constructor",
+            "startLine": 13,
+            "endLine": 18,
+            "hash": "9f1a9b7bad91730c",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/protocol/src/ipc.mjs",
+            "symbol": "IPCServer.start",
+            "startLine": 20,
+            "endLine": 73,
+            "hash": "ca7cbb95ff704824",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/protocol/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 2,
+            "hash": "file",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "block-desktop-app",
@@ -523,8 +634,8 @@
             "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
             "symbol": "ContentView",
             "startLine": 3,
-            "endLine": 448,
-            "hash": "7d0752461d91b10d",
+            "endLine": 455,
+            "hash": "8dfbe3246c555e69",
             "role": "implementation"
           },
           {
@@ -555,8 +666,8 @@
             "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
             "symbol": "GraphCanvasView",
             "startLine": 5,
-            "endLine": 663,
-            "hash": "5178f3421fabf5e9",
+            "endLine": 656,
+            "hash": "bbb27b285ffd10d7",
             "role": "implementation"
           },
           {
@@ -571,15 +682,15 @@
             "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
             "symbol": "GraphCanvasView.rebuildScene",
             "startLine": 98,
-            "endLine": 118,
-            "hash": "714b48c97387c072",
+            "endLine": 111,
+            "hash": "7cb3fa44ef7cbfb5",
             "role": "implementation"
           },
           {
             "path": "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift",
             "symbol": "GraphCanvasView.grid",
-            "startLine": 142,
-            "endLine": 157,
+            "startLine": 135,
+            "endLine": 150,
             "hash": "deefc3307623b2f2",
             "role": "implementation"
           },
@@ -614,11 +725,339 @@
             "endLine": 27,
             "hash": "1748237ec9a9e07e",
             "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift",
+            "symbol": "CanvasScene",
+            "startLine": 5,
+            "endLine": 135,
+            "hash": "939667e7d13cb5e1",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift",
+            "symbol": "CanvasScene.compile",
+            "startLine": 23,
+            "endLine": 98,
+            "hash": "75adbd0eae411bd8",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift",
+            "symbol": "CanvasScene.resolvedChainNodes",
+            "startLine": 42,
+            "endLine": 57,
+            "hash": "0d2902adf01ae95a",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift",
+            "symbol": "CanvasScene.connectedComponent",
+            "startLine": 100,
+            "endLine": 111,
+            "hash": "9f07f6ecf043fcc4",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContextOSDesktopApp.swift",
+            "symbol": "ContextOSDesktopApp",
+            "startLine": 4,
+            "endLine": 12,
+            "hash": "e34d7498f5afed18",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "symbol": "DetailView",
+            "startLine": 4,
+            "endLine": 1391,
+            "hash": "526d4e12630c3302",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "symbol": "DetailView.body",
+            "startLine": 16,
+            "endLine": 46,
+            "hash": "8ea09fb68fd34469",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "symbol": "DetailView.metadataLabel",
+            "startLine": 188,
+            "endLine": 193,
+            "hash": "4db98ff2ce74af7f",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+            "symbol": "DetailView.planDocument",
+            "startLine": 202,
+            "endLine": 387,
+            "hash": "89e0e65e4cb6db8a",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift",
+            "symbol": "GraphStore",
+            "startLine": 7,
+            "endLine": 1253,
+            "hash": "8913236db8c7a6c5",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift",
+            "symbol": "GraphStore.chooseProject",
+            "startLine": 97,
+            "endLine": 108,
+            "hash": "3fbf5b5684da7e96",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift",
+            "symbol": "GraphStore.openProject",
+            "startLine": 110,
+            "endLine": 112,
+            "hash": "9b8e7e1d287f416b",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift",
+            "symbol": "GraphStore.openKnowledgeProject",
+            "startLine": 114,
+            "endLine": 114,
+            "hash": "369c1234529ffead",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift",
+            "symbol": "KnowledgeDocument",
+            "startLine": 5,
+            "endLine": 14,
+            "hash": "de7e673e1a2048ba",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift",
+            "symbol": "KnowledgeLibrary",
+            "startLine": 17,
+            "endLine": 57,
+            "hash": "41902bcdafe84360",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift",
+            "symbol": "KnowledgeLibrary.reload",
+            "startLine": 22,
+            "endLine": 30,
+            "hash": "61b6747f5d96cc45",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift",
+            "symbol": "KnowledgeView",
+            "startLine": 60,
+            "endLine": 133,
+            "hash": "31192342a1fc38ee",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift",
+            "symbol": "MarkdownPage",
+            "startLine": 5,
+            "endLine": 111,
+            "hash": "a1d275a160e6af3d",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift",
+            "symbol": "MarkdownPage.escape",
+            "startLine": 6,
+            "endLine": 8,
+            "hash": "c2aae18ef9207df1",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift",
+            "symbol": "MarkdownPage.replace",
+            "startLine": 9,
+            "endLine": 18,
+            "hash": "79e7c712c6235611",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift",
+            "symbol": "MarkdownPage.safeURL",
+            "startLine": 19,
+            "endLine": 25,
+            "hash": "17c5768ccd2b6632",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "symbol": "ProjectDescriptor",
+            "startLine": 3,
+            "endLine": 7,
+            "hash": "a55ce6d89135d762",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "symbol": "RecentProject",
+            "startLine": 9,
+            "endLine": 13,
+            "hash": "70201a6a6bd0b8e7",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "symbol": "ProjectInfo",
+            "startLine": 15,
+            "endLine": 20,
+            "hash": "54ead291fdb3f6ef",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Models.swift",
+            "symbol": "BlockItem",
+            "startLine": 22,
+            "endLine": 40,
+            "hash": "3a5c85323726905b",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
+            "symbol": "EditorPlatformStatus",
+            "startLine": 4,
+            "endLine": 25,
+            "hash": "cc0b7231a5af0f28",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
+            "symbol": "PluginInstallStatus",
+            "startLine": 27,
+            "endLine": 33,
+            "hash": "b235a8e0c67e230e",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
+            "symbol": "PluginInstaller",
+            "startLine": 35,
+            "endLine": 703,
+            "hash": "c4a35330bb46d8c2",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
+            "symbol": "PluginInstaller.bundledPluginBuildID",
+            "startLine": 76,
+            "endLine": 80,
+            "hash": "c0b7f00f8dc0f869",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "symbol": "DatabaseFileIdentity",
+            "startLine": 10,
+            "endLine": 12,
+            "hash": "487c20cbefce5ce7",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "symbol": "ProjectDatabase",
+            "startLine": 14,
+            "endLine": 909,
+            "hash": "5af0df8b904eb5e8",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "symbol": "ProjectDatabase.fileIdentity",
+            "startLine": 34,
+            "endLine": 38,
+            "hash": "665c3a9e5e20cf38",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+            "symbol": "ProjectDatabase.close",
+            "startLine": 65,
+            "endLine": 69,
+            "hash": "3b82aea4ec91d1e2",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+            "symbol": "ProjectLocation",
+            "startLine": 3,
+            "endLine": 103,
+            "hash": "1297ae4ea187c2cf",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+            "symbol": "ProjectLocation.resolve",
+            "startLine": 10,
+            "endLine": 32,
+            "hash": "264fa2839c69e0d9",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+            "symbol": "ProjectLocation.resolve",
+            "startLine": 34,
+            "endLine": 77,
+            "hash": "9a4a7aedf0c622ac",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+            "symbol": "ProjectLocation.recentProjects",
+            "startLine": 79,
+            "endLine": 89,
+            "hash": "43fff413f3f24c32",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Theme.swift",
+            "symbol": "ContextOSTheme",
+            "startLine": 4,
+            "endLine": 113,
+            "hash": "10b1e69166e1e12c",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Theme.swift",
+            "symbol": "ContextOSTheme.healthColor",
+            "startLine": 18,
+            "endLine": 26,
+            "hash": "d8f35b01b49d1517",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Theme.swift",
+            "symbol": "ContextOSTheme.deliveryColor",
+            "startLine": 28,
+            "endLine": 37,
+            "hash": "2666341ccb716038",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/Theme.swift",
+            "symbol": "ContextOSTheme.planColor",
+            "startLine": 39,
+            "endLine": 49,
+            "hash": "4bb0ccc65d4b855d",
+            "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "block-domain-core",
@@ -633,6 +1072,14 @@
             "startLine": 11,
             "endLine": 66,
             "hash": "3ef5731873c8e585",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/plan.mjs",
+            "symbol": "PlanCheckpoint.constructor",
+            "startLine": 12,
+            "endLine": 37,
+            "hash": "bb87445200cf3c40",
             "role": "implementation"
           },
           {
@@ -652,19 +1099,19 @@
             "role": "implementation"
           },
           {
-            "path": "packages/domain/src/plan.mjs",
-            "symbol": "PlanCheckpoint.markStale",
-            "startLine": 50,
-            "endLine": 52,
-            "hash": "e2b1059894a62c6b",
-            "role": "implementation"
-          },
-          {
             "path": "packages/domain/src/task.mjs",
             "symbol": "Task",
             "startLine": 17,
             "endLine": 202,
             "hash": "8cf5258b8ed08133",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/task.mjs",
+            "symbol": "Task.constructor",
+            "startLine": 18,
+            "endLine": 80,
+            "hash": "f41764f6cdcb472f",
             "role": "implementation"
           },
           {
@@ -679,16 +1126,8 @@
             "path": "packages/domain/src/task.mjs",
             "symbol": "Task.addNote",
             "startLine": 90,
-            "endLine": 90,
-            "hash": "95a503a7cc644a11",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/domain/src/task.mjs",
-            "symbol": "Task.addFileToWorkingSet",
-            "startLine": 103,
-            "endLine": 108,
-            "hash": "17098ee5c99a4788",
+            "endLine": 101,
+            "hash": "89bfc02912abb4bd",
             "role": "implementation"
           },
           {
@@ -697,6 +1136,14 @@
             "startLine": 6,
             "endLine": 34,
             "hash": "985e76351272511f",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/block.mjs",
+            "symbol": "ArtifactRef.constructor",
+            "startLine": 7,
+            "endLine": 22,
+            "hash": "761a8e6828570ae0",
             "role": "implementation"
           },
           {
@@ -716,17 +1163,137 @@
             "role": "implementation"
           },
           {
-            "path": "packages/domain/src/block.mjs",
-            "symbol": "Block.updateArtifactRefs",
-            "startLine": 70,
-            "endLine": 76,
-            "hash": "f98ede0a423e118f",
+            "path": "packages/domain/src/chain.mjs",
+            "symbol": "Chain",
+            "startLine": 9,
+            "endLine": 68,
+            "hash": "8a024926e22cd9ee",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/chain.mjs",
+            "symbol": "Chain.constructor",
+            "startLine": 10,
+            "endLine": 37,
+            "hash": "3a525a465815dd53",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/chain.mjs",
+            "symbol": "Chain.addMember",
+            "startLine": 39,
+            "endLine": 45,
+            "hash": "47bc342b022b6191",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/chain.mjs",
+            "symbol": "Chain.removeMember",
+            "startLine": 47,
+            "endLine": 53,
+            "hash": "9be21cb2a14d117b",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/link.mjs",
+            "symbol": "Link",
+            "startLine": 20,
+            "endLine": 73,
+            "hash": "0a0e011aed05ec40",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/link.mjs",
+            "symbol": "Link.constructor",
+            "startLine": 21,
+            "endLine": 56,
+            "hash": "3dc7563378f2b1b5",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/link.mjs",
+            "symbol": "Link.toJSON",
+            "startLine": 58,
+            "endLine": 72,
+            "hash": "e49ad1ba749f66a7",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/invariants.mjs",
+            "symbol": "InvariantViolationError",
+            "startLine": 5,
+            "endLine": 11,
+            "hash": "4fff1e04699ee846",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/invariants.mjs",
+            "symbol": "InvariantViolationError.constructor",
+            "startLine": 6,
+            "endLine": 10,
+            "hash": "08886e2f2449662b",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/invariants.mjs",
+            "symbol": "assertBlockHasRealCode",
+            "startLine": 16,
+            "endLine": 23,
+            "hash": "18499f283a6880fb",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/invariants.mjs",
+            "symbol": "assertCheckpointBelongsToPlan",
+            "startLine": 28,
+            "endLine": 35,
+            "hash": "9ca9d1d57636ee76",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/knowledge.mjs",
+            "symbol": "DecisionDocument",
+            "startLine": 21,
+            "endLine": 93,
+            "hash": "b072aea098056483",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/knowledge.mjs",
+            "symbol": "DecisionDocument.constructor",
+            "startLine": 22,
+            "endLine": 25,
+            "hash": "5b290dafb4991e9a",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/knowledge.mjs",
+            "symbol": "DecisionDocument.parseSections",
+            "startLine": 27,
+            "endLine": 58,
+            "hash": "fa1460b06a4cd599",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/knowledge.mjs",
+            "symbol": "DecisionDocument.getSection",
+            "startLine": 60,
+            "endLine": 62,
+            "hash": "07d05210e4a7da45",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/domain/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 8,
+            "hash": "file",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.138Z",
-        "updatedAt": "2026-09-14T14:30:29.138Z"
+        "createdAt": "2026-09-14T15:38:09.646Z",
+        "updatedAt": "2026-09-14T15:38:09.646Z"
       },
       {
         "id": "block-layout-engine",
@@ -742,11 +1309,27 @@
             "endLine": 119,
             "hash": "bd1abadf2fc36529",
             "role": "implementation"
+          },
+          {
+            "path": "packages/layout/src/network-layout.mjs",
+            "symbol": "NetworkLayoutEngine.computeLayout",
+            "startLine": 13,
+            "endLine": 118,
+            "hash": "ea019709df850dc8",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/layout/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 2,
+            "hash": "file",
+            "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "block-lifecycle-services",
@@ -773,18 +1356,18 @@
           },
           {
             "path": "packages/application/src/plan-service.mjs",
-            "symbol": "PlanService.getPlan",
-            "startLine": 38,
-            "endLine": 40,
-            "hash": "5000c54db21b7196",
+            "symbol": "PlanService.createPlan",
+            "startLine": 8,
+            "endLine": 36,
+            "hash": "65b2cf63f05260fe",
             "role": "implementation"
           },
           {
             "path": "packages/application/src/plan-service.mjs",
-            "symbol": "PlanService.listPlans",
-            "startLine": 42,
-            "endLine": 44,
-            "hash": "aafec30d946703ed",
+            "symbol": "PlanService.getPlan",
+            "startLine": 38,
+            "endLine": 40,
+            "hash": "5000c54db21b7196",
             "role": "implementation"
           },
           {
@@ -805,18 +1388,18 @@
           },
           {
             "path": "packages/application/src/task-service.mjs",
-            "symbol": "TaskService.getTask",
-            "startLine": 37,
-            "endLine": 39,
-            "hash": "4f33e67f6abd56d6",
+            "symbol": "TaskService.createTask",
+            "startLine": 10,
+            "endLine": 35,
+            "hash": "ad82c8b95dbca977",
             "role": "implementation"
           },
           {
             "path": "packages/application/src/task-service.mjs",
-            "symbol": "TaskService.listTasks",
-            "startLine": 41,
-            "endLine": 43,
-            "hash": "3abdc4cc438fdade",
+            "symbol": "TaskService.getTask",
+            "startLine": 37,
+            "endLine": 39,
+            "hash": "4f33e67f6abd56d6",
             "role": "implementation"
           },
           {
@@ -847,14 +1430,22 @@
             "path": "packages/application/src/knowledge-service.mjs",
             "symbol": "KnowledgeService.patchDecisionSection",
             "startLine": 28,
-            "endLine": 28,
-            "hash": "7b5966f292f17976",
+            "endLine": 37,
+            "hash": "7764fc2495f66b4e",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/application/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 4,
+            "hash": "file",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "block-mcp-facades",
@@ -865,34 +1456,50 @@
         "artifactRefs": [
           {
             "path": "packages/mcp/src/v2-server.mjs",
+            "symbol": "findDefaultProjectRoot",
+            "startLine": 10,
+            "endLine": 28,
+            "hash": "506c86e29dbb5265",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/mcp/src/v2-server.mjs",
             "symbol": "getService",
-            "startLine": 9,
-            "endLine": 15,
-            "hash": "f6d59f425f640d60",
+            "startLine": 30,
+            "endLine": 36,
+            "hash": "b8f4fe03b1ba3790",
             "role": "implementation"
           },
           {
             "path": "packages/mcp/src/v2-server.mjs",
             "symbol": "textResult",
-            "startLine": 17,
-            "endLine": 22,
+            "startLine": 38,
+            "endLine": 43,
             "hash": "df19c89cc78bb0f0",
             "role": "implementation"
           },
           {
             "path": "packages/mcp/src/v2-server.mjs",
             "symbol": "createV2Server",
-            "startLine": 24,
-            "endLine": 230,
-            "hash": "863e6aaba24fe521",
+            "startLine": 45,
+            "endLine": 251,
+            "hash": "a941c51c64d1f358",
             "role": "implementation"
           },
           {
             "path": "packages/mcp/src/v2-service.mjs",
             "symbol": "ContextOSV2Service",
             "startLine": 10,
-            "endLine": 352,
-            "hash": "3967dafdbefdd68e",
+            "endLine": 391,
+            "hash": "7d720028c9d7436d",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/mcp/src/v2-service.mjs",
+            "symbol": "ContextOSV2Service.constructor",
+            "startLine": 11,
+            "endLine": 26,
+            "hash": "aff1139de0317c9a",
             "role": "implementation"
           },
           {
@@ -907,22 +1514,30 @@
             "path": "packages/mcp/src/v2-service.mjs",
             "symbol": "ContextOSV2Service.osContext",
             "startLine": 34,
-            "endLine": 34,
-            "hash": "a366e7a2b837f9ff",
+            "endLine": 103,
+            "hash": "c24f1c0a837b2d99",
             "role": "implementation"
           },
           {
-            "path": "packages/mcp/src/v2-service.mjs",
-            "symbol": "ContextOSV2Service.plan",
-            "startLine": 106,
-            "endLine": 106,
-            "hash": "12c0bf8202233efa",
+            "path": "packages/mcp/src/server.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 4,
+            "hash": "file",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/mcp/src/service.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 2,
+            "hash": "file",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "block-storage-engine",
@@ -994,11 +1609,27 @@
             "endLine": 59,
             "hash": "e4a6cac9cd41e089",
             "role": "implementation"
+          },
+          {
+            "path": "packages/storage/src/schema.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 134,
+            "hash": "file",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/storage/src/index.mjs",
+            "symbol": null,
+            "startLine": 1,
+            "endLine": 4,
+            "hash": "file",
+            "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       }
     ],
     "chains": [
@@ -1015,8 +1646,8 @@
           "block-desktop-app"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "chain-core-engine",
@@ -1030,8 +1661,8 @@
           "block-daemon-host"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "chain-gateways",
@@ -1045,8 +1676,8 @@
           "block-context-renderer"
         ],
         "metadata": {},
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       }
     ],
     "links": [
@@ -1058,10 +1689,49 @@
         "kind": "calls",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "",
+        "reason": "MCP routes plan, task, block, chain, knowledge requests to application services",
         "revision": 1,
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
+      },
+      {
+        "id": "link-10",
+        "projectId": "contextos",
+        "from": "block-desktop-app",
+        "to": "block-layout-engine",
+        "kind": "calls",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Desktop SwiftUI client calls layout engine to compute node positions and envelopes",
+        "revision": 1,
+        "createdAt": "2026-09-14T15:38:09.648Z",
+        "updatedAt": "2026-09-14T15:38:09.648Z"
+      },
+      {
+        "id": "link-11",
+        "projectId": "contextos",
+        "from": "block-desktop-app",
+        "to": "block-storage-engine",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Desktop app connects to state.sqlite and polls changes from graph.json",
+        "revision": 1,
+        "createdAt": "2026-09-14T15:38:09.648Z",
+        "updatedAt": "2026-09-14T15:38:09.648Z"
+      },
+      {
+        "id": "link-12",
+        "projectId": "contextos",
+        "from": "block-desktop-app",
+        "to": "block-command-gateway",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Desktop app inspects .contextos/processes.json and terminates running processes",
+        "revision": 1,
+        "createdAt": "2026-09-14T15:38:09.648Z",
+        "updatedAt": "2026-09-14T15:38:09.648Z"
       },
       {
         "id": "link-2",
@@ -1071,10 +1741,10 @@
         "kind": "depends_on",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "",
+        "reason": "Lifecycle services instantiate and validate domain models and invariants",
         "revision": 1,
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "link-3",
@@ -1084,10 +1754,10 @@
         "kind": "depends_on",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "",
+        "reason": "Lifecycle services persist and query graph state via V2Database",
         "revision": 1,
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "link-4",
@@ -1097,10 +1767,10 @@
         "kind": "calls",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "",
+        "reason": "MCP code facade delegates outline, surgical read/edit, and symbol search to CodeTools",
         "revision": 1,
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "link-5",
@@ -1110,49 +1780,62 @@
         "kind": "calls",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "",
+        "reason": "MCP run_command and process facades execute commands and manage background processes",
         "revision": 1,
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "link-6",
         "projectId": "contextos",
-        "from": "block-storage-engine",
-        "to": "block-daemon-host",
-        "kind": "depends_on",
+        "from": "block-mcp-facades",
+        "to": "block-context-renderer",
+        "kind": "calls",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "",
+        "reason": "MCP os_context delegates brief and entity rendering to MarkdownRenderer",
         "revision": 1,
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "link-7",
         "projectId": "contextos",
-        "from": "block-desktop-app",
-        "to": "block-layout-engine",
-        "kind": "calls",
+        "from": "block-storage-engine",
+        "to": "block-domain-core",
+        "kind": "depends_on",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "",
+        "reason": "Database schema and sync engine serialize and deserialize domain entities",
         "revision": 1,
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       },
       {
         "id": "link-8",
         "projectId": "contextos",
-        "from": "block-desktop-app",
-        "to": "block-daemon-host",
+        "from": "block-daemon-host",
+        "to": "block-storage-engine",
         "kind": "depends_on",
         "provenance": "authored",
         "confidence": 1,
-        "reason": "",
+        "reason": "ContextOS daemon loads state database and watches bidirectional sync events",
         "revision": 1,
-        "createdAt": "2026-09-14T14:30:29.139Z",
-        "updatedAt": "2026-09-14T14:30:29.139Z"
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
+      },
+      {
+        "id": "link-9",
+        "projectId": "contextos",
+        "from": "block-layout-engine",
+        "to": "block-domain-core",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Layout engine positions domain Blocks, Chains, and Links onto 2D Metro tracks",
+        "revision": 1,
+        "createdAt": "2026-09-14T15:38:09.647Z",
+        "updatedAt": "2026-09-14T15:38:09.647Z"
       }
     ]
   }
