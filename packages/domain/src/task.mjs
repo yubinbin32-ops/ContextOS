@@ -1,0 +1,202 @@
+/**
+ * Task domain entity and C-D-C-S state machine.
+ * Lifecycle: draft -> active -> checking -> syncing -> completed
+ * Abnormal states: blocked, sync_failed
+ */
+
+export const TASK_STATUSES = [
+  'draft',
+  'active',
+  'checking',
+  'syncing',
+  'completed',
+  'blocked',
+  'sync_failed',
+];
+
+export class Task {
+  constructor({
+    id,
+    planId,
+    phaseId,
+    title,
+    status = 'draft',
+    contextSlice = {},
+    workingSet = {},
+    references = {},
+    baseline = {},
+    notes = [],
+    checks = [],
+    syncResult = null,
+    createdAt = new Date().toISOString(),
+    updatedAt = new Date().toISOString(),
+  }) {
+    if (!id || typeof id !== 'string') throw new Error('Task requires a valid string id');
+    if (!planId || typeof planId !== 'string') throw new Error('Task requires planId');
+    if (!phaseId || typeof phaseId !== 'string') throw new Error('Task requires phaseId');
+    if (!title || typeof title !== 'string') throw new Error('Task requires title');
+    if (!TASK_STATUSES.includes(status)) {
+      throw new Error(`Invalid task status: ${status}. Must be one of ${TASK_STATUSES.join(', ')}`);
+    }
+
+    this.id = id;
+    this.planId = planId;
+    this.phaseId = phaseId;
+    this.title = title;
+    this.status = status;
+
+    this.contextSlice = {
+      objective: contextSlice.objective || '',
+      constraints: Array.isArray(contextSlice.constraints) ? [...contextSlice.constraints] : [],
+      references: contextSlice.references || {},
+      locators: Array.isArray(contextSlice.locators) ? [...contextSlice.locators] : [],
+      nextSteps: Array.isArray(contextSlice.nextSteps) ? [...contextSlice.nextSteps] : [],
+      openQuestions: Array.isArray(contextSlice.openQuestions) ? [...contextSlice.openQuestions] : [],
+    };
+
+    this.workingSet = {
+      files: Array.isArray(workingSet.files) ? [...workingSet.files] : [],
+      symbols: Array.isArray(workingSet.symbols) ? [...workingSet.symbols] : [],
+      candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : [],
+    };
+
+    this.references = {
+      rules: Array.isArray(references.rules) ? [...references.rules] : [],
+      decisionSections: Array.isArray(references.decisionSections) ? [...references.decisionSections] : [],
+      blockIds: Array.isArray(references.blockIds) ? [...references.blockIds] : [],
+    };
+
+    this.baseline = {
+      gitHead: baseline.gitHead || null,
+      dirtyHash: baseline.dirtyHash || null,
+      indexRevision: baseline.indexRevision || 0,
+    };
+
+    this.notes = Array.isArray(notes) ? [...notes] : [];
+    this.checks = Array.isArray(checks) ? [...checks] : [];
+    this.syncResult = syncResult;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+
+  activate() {
+    if (this.status !== 'draft' && this.status !== 'blocked') {
+      throw new Error(`Cannot activate task in ${this.status} state`);
+    }
+    this.status = 'active';
+    this.updatedAt = new Date().toISOString();
+  }
+
+  addNote({ text, kind = 'journal' }) {
+    if (!text || typeof text !== 'string') throw new Error('Note text is required');
+    const note = {
+      id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      text,
+      kind,
+      createdAt: new Date().toISOString(),
+    };
+    this.notes.push(note);
+    this.updatedAt = new Date().toISOString();
+    return note;
+  }
+
+  addFileToWorkingSet(filePath) {
+    if (filePath && !this.workingSet.files.includes(filePath)) {
+      this.workingSet.files.push(filePath);
+      this.updatedAt = new Date().toISOString();
+    }
+  }
+
+  addCheck({ receiptId = null, description, passed = true, evidence = '' }) {
+    if (!description || typeof description !== 'string') {
+      throw new Error('Check description is required');
+    }
+    const check = {
+      id: `check-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      receiptId,
+      description,
+      passed: Boolean(passed),
+      evidence,
+      recordedAt: new Date().toISOString(),
+    };
+    this.checks.push(check);
+    this.updatedAt = new Date().toISOString();
+    return check;
+  }
+
+  startChecking() {
+    if (this.status !== 'active' && this.status !== 'sync_failed') {
+      throw new Error(`Cannot transition to checking from state: ${this.status}`);
+    }
+    this.status = 'checking';
+    this.updatedAt = new Date().toISOString();
+  }
+
+  startSyncing() {
+    if (this.status === 'active') {
+      this.status = 'checking';
+    }
+    if (this.status !== 'checking') {
+      throw new Error(`Cannot transition to syncing from state: ${this.status}. Must be active or checking.`);
+    }
+    const failedChecks = this.checks.filter((c) => !c.passed);
+    if (failedChecks.length > 0) {
+      throw new Error(`Cannot sync task with ${failedChecks.length} failed checks`);
+    }
+    this.status = 'syncing';
+    this.updatedAt = new Date().toISOString();
+  }
+
+  completeSync(syncResult) {
+    if (this.status !== 'syncing') {
+      throw new Error(`Cannot complete sync from state: ${this.status}. Must be syncing.`);
+    }
+    this.status = 'completed';
+    this.syncResult = {
+      ...syncResult,
+      completedAt: new Date().toISOString(),
+    };
+    this.updatedAt = new Date().toISOString();
+  }
+
+  failSync(reason) {
+    this.status = 'sync_failed';
+    this.syncResult = {
+      error: reason,
+      failedAt: new Date().toISOString(),
+    };
+    this.updatedAt = new Date().toISOString();
+  }
+
+  block(reason) {
+    this.status = 'blocked';
+    this.addNote({ text: `Task blocked: ${reason}`, kind: 'blocked' });
+  }
+
+  resume() {
+    if (this.status !== 'blocked' && this.status !== 'sync_failed') {
+      throw new Error(`Cannot resume task from state: ${this.status}`);
+    }
+    this.status = 'active';
+    this.updatedAt = new Date().toISOString();
+  }
+
+  toJSON() {
+    return {
+      id: this.id,
+      planId: this.planId,
+      phaseId: this.phaseId,
+      title: this.title,
+      status: this.status,
+      contextSlice: this.contextSlice,
+      workingSet: this.workingSet,
+      references: this.references,
+      baseline: this.baseline,
+      notes: this.notes,
+      checks: this.checks,
+      syncResult: this.syncResult,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+    };
+  }
+}

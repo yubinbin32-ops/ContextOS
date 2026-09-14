@@ -41,7 +41,7 @@
   ],
   "scripts": {
     "mcp": "node packages/mcp/src/server.mjs",
-    "test": "node --test packages/mcp/test/*.test.mjs",
+    "test": "node --test packages/*/test/*.test.mjs apps/*/test/*.test.mjs",
     "benchmark": "node scripts/benchmark.mjs",
     "plugin:build": "esbuild packages/mcp/src/server.mjs --bundle --platform=node --format=esm --target=node22 --outfile=plugins/contextos/server/contextos-mcp.mjs",
     "plugin:verify": "npm run plugin:build && node scripts/plugin-smoke.mjs",
@@ -50,6 +50,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "web-tree-sitter": "^0.27.0",
     "zod": "^4.1.5"
   },
   "devDependencies": {

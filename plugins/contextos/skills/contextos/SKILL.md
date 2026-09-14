@@ -1,76 +1,89 @@
 ---
 name: contextos
-description: Keep project architecture, progress, source locators and verified handoffs synchronized with ContextOS while each task reads only the code and knowledge it needs.
+description: Context operating system for AI coding agents. Controls context pollution via C-D-C-S lifecycle, AST outline/surgical read/edit, compressed command receipts, and strict Block code coverage.
 ---
 
-# ContextOS 工作方式
+# ContextOS V2 操作指引
 
-ContextOS 是项目的结构化记忆层。它保存 Block、Link、Chain、Plan、Decision、Checkpoint 和源码定位，让 AI 能够沿着当前任务直接进入相关架构和代码。
+ContextOS 是面向 AI 开发全生命周期的上下文控制运行时。它通过阶梯式按需展开、代码结构化索引和生命周期状态机，大幅降低命令日志、全文件阅读、架构维护和跨对话恢复的上下文开销。
 
-用户按正常方式描述任务。AI 根据任务需要读取项目结构或代码定位，并在结构发生变化时更新 OS。
+---
 
-## 任务开始
+## 核心开发节奏：C-D-C-S
 
-1. 任务需要项目进度、规则或交接信息时，使用绝对 `projectRoot` 调用 `context_for_task`。架构已经明确时，可以直接从 `entity_open`、`chain_code_stream` 或 `block_code_stream` 开始。
-2. 使用 `plan_context` 展开 Plan，使用 `entity_open` 展开单个 Block、Chain、Link 或 Decision。每次只展开当前工作需要的记录。
-3. 延续已有工作时复用 `context_for_task` 或 `sync_issues` 中的 TaskSession。新功能先登记 Block、Link 和 Chain，再使用 `task_begin` 建立任务范围。
-4. Plan 扩展使用 `plan_append_changes` 或 `plan_append_chain_scope`，结构重排时使用对应的完整更新操作。
+任何开发任务必须遵循 **`Create → Develop → Check → Sync`** 统一节奏：
 
-## Block、Chain 与 Composite
+```text
+[1. Create]   os_context(brief) -> plan(create) -> task(create)
+                    │
+[2. Develop]  code(outline) -> code(read) -> code(edit) -> run_command() -> task(note)
+                    │
+[3. Check]    run_command(test) -> task(check)
+                    │
+[4. Sync]     task(sync with bound real Blocks) -> plan(check & complete)
+```
 
-- Block 表示一个独立的架构职责，可以是初始蓝图，也可以绑定一个或多个源码入口。
-- Leaf Chain 表示一个聚焦的功能路径，按明确顺序连接多个 Block。
-- Composite Chain 表示较大的功能路线，成员可以是子 Chain 或直接 Block。父级展示阶段，子级保存实现路径。
-- Block 何时组合为 Chain、原 Block 何时从活动架构移除、哪些 Link 属于新结构，由 AI 根据功能语义决定。
-- 结构变更优先使用一次完整的 `chain_compose` 或 `graph_mutate`：写入新成员和路线、更新父级关系、移除被替代的活动 Block，然后读取结果确认。
-- `chain_reconcile` 用于查看成员、Link、顺序、孤立 Block 和候选关系。AI 根据返回结果选择下一次组合操作。
-- `graph_validate` 用于确认成员存在、路线连通、端点有效、Composite 层级无循环以及投影已经同步。
-- `architecture_link_suggest` 提供代码关系和架构关系候选。AI 结合功能意图选择真正需要的 Link。
+---
 
-## 精确读取源码
+## 一、任务启动与跨会话恢复 (Create)
 
-Block 可以覆盖多个文件和多个方法。Block 本身保存主要入口和范围，细粒度方法信息由源码索引按需提供。
+1. **新对话恢复**：首先调用 `os_context(action: "brief")`。
+   - 获取项目简要状态、当前进行中的 Plan、当前 Task、运行中的后台进程与核心 Block。
+   - 若有正在进行的任务，调用 `task(action: "open", id: "...")` 恢复开发切片。
+2. **制定计划 (Plan)**：
+   - 先调用 `knowledge(action: "rule_list")` 浏览规则分类与索引，不要全量读取规则正文。
+   - 调用 `plan(action: "create", planData: { title, priority, phases, checkpoints, ruleRefs })`。
+   - **核心约束**：正式验收节点（Checkpoint）只属于 Plan，Task 和 Block 都不拥有 Checkpoint。
+3. **创建任务 (Task)**：
+   - 调用 `task(action: "create", taskData: { planId, phaseId, title, contextSlice, workingSet })`。
+   - 任务包含目标、约束、工作文件（workingSet）与上下文切片。
 
-1. 调用 `block_code_stream` 获取该 Block 的完整 locator 清单：文件、符号、角色、起止行、源码 hash 和绑定状态。
-2. 调用 `chain_code_stream` 获取整个 Chain 的阶段级 locator 清单。Composite 先查看子 Chain，再展开目标阶段。
-3. 使用本地 CLI 按 locator 读取代码范围：
+---
 
-   ```text
-   contextos code --path <file> --symbol <symbol>
-   contextos code --path <file> --start <line> --end <line>
-   ```
+## 二、代码开发与命令执行 (Develop)
 
-4. 一个 Block 有多个 SourceRef 时，按当前任务选择需要的 locator，逐个读取对应方法、类型、调用方、被调用方或测试。文件级重构和符号无法定位时，再读取完整文件。
-5. 源码修改由 AI 使用常规 CLI 或编辑工具完成。修改后调用 `source_sync`，让符号位置和 hash 重新绑定。
+### 1. 代码网关 (`code`)
+**严禁为修改一小段代码而读取整个文件！**
+- **第一步：看结构**：调用 `code(action: "outline", path: "...")`，获取函数、类、方法及起止行。
+- **第二步：按需读**：根据 outline 结果，调用 `code(action: "read", path: "...", selector: "funcName")` 或指定起止行，仅读取必要的代码片段。
+- **第三步：精确改**：调用 `code(action: "edit", path: "...", targetContent: "...", replacementContent: "...")` 进行外科手术式唯一替换。系统会自动重新解析语法并重锚所有代码符号位置。
 
-源码索引在服务端扫描文件并保存符号目录，响应只携带选定的定位信息和代码片段，因此索引规模不会直接变成对话上下文。
+### 2. 命令执行 (`run_command` & `process`)
+**严禁让大量成功日志或冗长编译信息进入对话上下文！**
+- **单次命令**：构建、测试、Lint 统一使用 `run_command(command: "...")`。
+  - 默认剥离 ANSI 颜色与进度条，提取错误堆栈与关键摘要，原始全量日志保存在 `.contextos/logs/`。
+- **长期进程**：dev server、watch 服务调用 `process(action: "start", command: "...")`，后台守护运行。
+  - 需要时通过 `process(action: "logs", id: "...", grep: "...")` 过滤查看。
+  - 结束时调用 `process(action: "stop", id: "...")` 清理整棵进程树。
 
-## 进度与验证
+### 3. 过程记录 (`task note`)
+- 开发过程中有重要中间发现或决策时，调用 `task(action: "note", id: "...", text: "...")`。
+- **不要每次改动代码就同步一次 OS**，记录保存在 Task 内部即可。
 
-1. 编辑完成后调用 `task_reconcile`，同步变更文件、绑定状态、任务范围和 Plan 覆盖。
-2. 使用 `graph_status` 查看孤立 Block、断开路线、过期定位和待验证项目。
-3. 使用 `run_command` 执行测试、构建和检查，读取压缩后的结果摘要。
-4. 使用 `checkpoint_record` 记录验证证据，再使用 `task_finish` 完成任务收尾。
-5. 最后调用 `graph_validate` 确认数据库、图谱投影、成员关系和 Chain 拓扑处于同一版本。
-6. 使用 `timeline_sync` 保存当前工作焦点和下一步动作，方便新的对话继续。
+---
 
-## 项目知识
+## 三、验证阶段 (Check)
 
-- 内部设计、审计和指南使用 `document_write`，章节更新使用 `document_patch`。
-- README 保持在仓库原位置，由 App 以只读方式预览；内部 Markdown 文档作为 OS Document 在 App 中按章节展示。
-- Decision 保存长期取舍，Plan 保存执行顺序，Checkpoint 保存验证证据。
-- 使用体验数据和可重复的读取统计分开记录。日常使用体感上下文压缩频率大约减少 60%。
+- 运行测试用例：`run_command(command: "npm test ...")`。
+- 收集测试结果回执 ID，调用 `task(action: "check", id: "...", checkData: { receiptId, description, passed: true })`。
+- 只有全部检查通过，才允许进入 Sync 阶段。
 
-## 工具索引
+---
 
-| 目的 | 工具 |
-|---|---|
-| 定位项目 | `context_for_task`, `project_map`, `entity_open`, `graph_search` |
-| 读取知识 | `document_list`, `document_open`, `plan_context` |
-| 维护架构 | `graph_mutate`, `graph_patch`, `graph_flow`, `architecture_connect`, `chain_append`, `chain_compose`, `chain_reconcile` |
-| 读取源码 | `source_index`, `source_sync`, `source_binding_suggest`, `source_binding_accept`, `chain_code_stream`, `block_code_stream` |
-| 维护任务 | `task_begin`, `task_scope`, `task_reconcile`, `task_finish`, `sync_issues` |
-| 验证结果 | `run_command`, `checkpoint_record`, `block_seal`, `graph_status`, `graph_validate` |
-| 检查运行版本 | `runtime_info` |
+## 四、写回与归档 (Sync)
 
-解析器提供语法级定位和稳定符号身份。动态调用、反射和不支持的语法会以明确的状态和候选位置返回，AI 结合功能语义选择读取范围和架构关系。
+- 调用 `task(action: "sync", id: "...", syncData: { blocks: [...] })`：
+  - **核心不变量 1：真实代码绑定**：所有 Block 必须绑定到真实存在且已通过验证的代码（包含 path, symbol, hash），**严禁创建没有代码的 Ghost Block**！
+  - **核心不变量 2：工作区全覆盖 (Coverage Gate)**：本次任务修改的所有代码文件必须归属于至少一个 Block。如果有遗漏的孤儿代码，系统将拦截并返回 `coverage_gap`，要求补齐绑定。
+  - **自动同步**：Sync 成功后，SQLite 与 Git 追踪的 `graph.json` 自动完成原子写回。
+- 当阶段验收满足时，调用 `plan(action: "check", id: "...", checkpointId: "...")`，最后调用 `plan(action: "complete")` 将计划压缩归档。
+
+---
+
+## 五、严禁违背的行为红线
+
+1. ❌ **禁止全文盲读**：不要直接读取上千行的源码文件，必须先 `outline` 再 `read`。
+2. ❌ **禁止长日志污染**：不要在终端执行高噪声命令把几百行日志塞进上下文，使用 `run_command`。
+3. ❌ **禁止创建 Ghost Block**：没有代码之前不要提前建 Block，代码跑通后再在 `sync` 中绑定。
+4. ❌ **禁止高频全量 Sync**：严格遵守 `Create -> Develop -> Check -> Sync` 节奏，不要每改一行代码就同步一次架构。
+5. ❌ **禁止手工维护行号**：行号与符号位置由 AST 自动重锚，不要人工填报或信任过期的静态行号。

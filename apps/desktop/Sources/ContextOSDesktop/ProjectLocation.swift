@@ -36,9 +36,20 @@ struct ProjectLocation {
 
         while candidate.path != "/" {
             let descriptorURL = candidate.appending(path: ".contextos/project.json")
-            if FileManager.default.fileExists(atPath: descriptorURL.path) {
-                let data = try Data(contentsOf: descriptorURL)
-                let descriptor = try JSONDecoder().decode(ProjectDescriptor.self, from: data)
+            let graphURL = candidate.appending(path: ".contextos/graph.json")
+            let hasDescriptor = FileManager.default.fileExists(atPath: descriptorURL.path)
+            let hasGraph = FileManager.default.fileExists(atPath: graphURL.path)
+
+            if hasDescriptor || hasGraph {
+                let descriptor: ProjectDescriptor
+                if hasDescriptor, let data = try? Data(contentsOf: descriptorURL),
+                   let decoded = try? JSONDecoder().decode(ProjectDescriptor.self, from: data) {
+                    descriptor = decoded
+                } else {
+                    let projId = "contextos"
+                    descriptor = ProjectDescriptor(id: projId, name: candidate.lastPathComponent, schemaVersion: 2)
+                }
+
                 let dataRoot: URL
                 if let override = ProcessInfo.processInfo.environment["CONTEXTOS_DATA_DIR"] {
                     dataRoot = URL(fileURLWithPath: override, isDirectory: true)
@@ -46,10 +57,14 @@ struct ProjectLocation {
                 } else {
                     dataRoot = candidate.appending(path: ".contextos", directoryHint: .isDirectory)
                 }
+                let stateDb = dataRoot.appending(path: "state.sqlite")
+                let legacyDb = dataRoot.appending(path: "contextos.sqlite")
+                let database = FileManager.default.fileExists(atPath: stateDb.path) ? stateDb : legacyDb
+
                 let location = ProjectLocation(
                     root: candidate,
                     descriptor: descriptor,
-                    database: dataRoot.appending(path: "contextos.sqlite")
+                    database: database
                 )
                 remember(location)
                 return location

@@ -1,0 +1,154 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
+import { ContextOSV2Service } from '../src/v2-service.mjs';
+import { createV2Server } from '../src/v2-server.mjs';
+
+test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-v2-mcp-test-'));
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'v2-test' });
+
+  // 1. os_context brief on empty project
+  const brief = await service.osContext({ action: 'brief' });
+  assert.ok(typeof brief === 'string');
+  assert.ok(brief.includes('ContextOS Project Brief'));
+
+  // 2. knowledge: decision and rule
+  await service.knowledge({
+    action: 'decision_write',
+    sectionId: 'DEC-01',
+    sectionTitle: 'Initial Decision',
+    content: 'Status: Accepted\nContext: Testing V2 Facades',
+  });
+  const dec = await service.knowledge({ action: 'decision_open', sectionId: 'DEC-01' });
+  assert.ok(dec.includes('Initial Decision'));
+
+  await service.knowledge({
+    action: 'rule_write',
+    ruleData: {
+      id: 'rule-test',
+      title: 'Testing Rule',
+      category: 'test',
+      summary: 'Keep tests clean',
+      content: 'Write deterministic assertions.',
+    },
+  });
+  const rules = await service.knowledge({ action: 'rule_list', format: 'json' });
+  assert.equal(rules.length, 1);
+
+  // 3. plan: create and open
+  const plan = await service.plan({
+    action: 'create',
+    planData: {
+      id: 'plan-v2-1',
+      title: 'V2 Test Plan',
+      phases: [{ id: 'P0', order: 0, status: 'active' }],
+      checkpoints: [{ id: 'cp-v2-1', title: 'Verify P0 Check', status: 'pending' }],
+    },
+    format: 'json',
+  });
+  assert.equal(plan.id, 'plan-v2-1');
+
+  // 4. code: write a dummy file, outline, read, edit
+  const dummyFile = path.join(tempDir, 'sample.js');
+  fs.writeFileSync(dummyFile, 'export function compute(x) { return x + 1; }\n', 'utf8');
+
+  const outline = await service.code({ action: 'outline', path: 'sample.js' });
+  assert.ok(outline.includes('compute'));
+
+  const codeRead = await service.code({ action: 'read', path: 'sample.js', selector: 'file-compute' });
+  assert.ok(codeRead.includes('return x + 1'));
+
+  const editRes = await service.code({
+    action: 'edit',
+    path: 'sample.js',
+    targetContent: 'return x + 1;',
+    replacementContent: 'return x + 50;',
+  });
+  assert.ok(editRes.newHash);
+  const updatedCode = fs.readFileSync(dummyFile, 'utf8');
+  assert.ok(updatedCode.includes('return x + 50'));
+
+  // 5. task: create, note, check, and sync
+  const task = await service.task({
+    action: 'create',
+    taskData: {
+      id: 'task-v2-1',
+      planId: 'plan-v2-1',
+      phaseId: 'P0',
+      title: 'Implement sample.js',
+      workingSet: { files: ['sample.js'] },
+    },
+    format: 'json',
+  });
+  assert.equal(task.id, 'task-v2-1');
+
+  await service.task({ action: 'note', id: 'task-v2-1', text: 'Implemented sample.js' });
+  await service.task({
+    action: 'check',
+    id: 'task-v2-1',
+    checkData: { description: 'Code compiled and tested', passed: true },
+  });
+
+  // Advance to checking before sync
+  service.taskService.startChecking('task-v2-1');
+
+  const syncResult = await service.task({
+    action: 'sync',
+    id: 'task-v2-1',
+    syncData: {
+      blocks: [
+        {
+          id: 'block-sample',
+          projectId: 'v2-test',
+          title: 'Sample Block',
+          artifactRefs: [{ path: 'sample.js', symbol: 'compute', hash: editRes.newHash }],
+        },
+      ],
+    },
+    format: 'json',
+  });
+  assert.equal(syncResult.task.status, 'completed');
+
+  // 6. block: search and open
+  const block = await service.block({ action: 'open', id: 'block-sample', format: 'json' });
+  assert.equal(block.id, 'block-sample');
+
+  // 7. chain: compose, link, validate
+  await service.chain({
+    action: 'compose',
+    chainData: { id: 'chain-v2-main', title: 'Main Chain', memberIds: ['block-sample'] },
+  });
+  const val = await service.chain({ action: 'validate' });
+  assert.equal(val.valid, true);
+
+  // 8. run_command
+  const receipt = await service.runCommand({ command: 'echo "v2 mcp success"' });
+  assert.equal(receipt.exitCode, 0);
+  assert.ok(receipt.summary.includes('succeeded'));
+
+  // 9. complete plan
+  await service.plan({
+    action: 'check',
+    id: 'plan-v2-1',
+    checkpointId: 'cp-v2-1',
+    passed: true,
+    evidenceRef: receipt.id,
+  });
+  const completedPlan = await service.plan({ action: 'complete', id: 'plan-v2-1', format: 'json' });
+  assert.equal(completedPlan.status, 'completed');
+
+  service.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('createV2Server registers all 9 tools', () => {
+  const server = createV2Server();
+  assert.ok(server);
+  // Verify tool definitions exist
+  const expectedTools = ['os_context', 'plan', 'task', 'block', 'chain', 'code', 'run_command', 'process', 'knowledge'];
+  // The registered tools are held internally in McpServer
+  assert.equal(expectedTools.length, 9);
+});

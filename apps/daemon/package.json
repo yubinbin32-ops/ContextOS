@@ -1,0 +1,9 @@
+{
+  "name": "@contextos/daemon",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "bin": {
+    "osd": "./src/osd.mjs"
+  }
+}
