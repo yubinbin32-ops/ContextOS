@@ -124,7 +124,7 @@ export function createV2Server() {
     {
       description: 'Manage code functional Blocks. Blocks MUST bind to real code artifacts; ghost blocks are strictly rejected.',
       inputSchema: {
-        action: z.enum(['open', 'search', 'bind']),
+        action: z.enum(['list', 'open', 'search', 'bind', 'delete']),
         id: z.string().optional(),
         query: z.string().optional(),
         blockData: z.record(z.any()).optional(),
@@ -145,7 +145,7 @@ export function createV2Server() {
     {
       description: 'Feature chains and dependency links. Link kind reflects true semantics: depends_on, calls, imports, implements.',
       inputSchema: {
-        action: z.enum(['list', 'open', 'link', 'validate_layout']),
+        action: z.enum(['list', 'open', 'compose', 'delete', 'link', 'unlink', 'links', 'validate_layout', 'validate']),
         id: z.string().optional(),
         chainData: z.record(z.any()).optional(),
         linkData: z.record(z.any()).optional(),

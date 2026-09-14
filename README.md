@@ -1,11 +1,11 @@
 <div align="center">
   <img src="assets/logo.png" width="76" alt="ContextOS" />
-  <h1>Let the AI remember the project and continue from the last conversation.</h1>
-  <p><strong>ContextOS keeps architecture, progress, command results, and exact code locations in one synchronized project memory.</strong></p>
-  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download the macOS App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文</a></p>
+  <h1>Let AI remember your project and continue from where you left off.</h1>
+  <p><strong>ContextOS keeps architecture, progress, command receipts, and exact code locations in one synchronized project memory.</strong></p>
+  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文说明</a></p>
 </div>
 
-![ContextOS V2 Metro Map Architecture and Desktop App](docs/images/contextos-desktop-v2.png)
+![ContextOS Interactive Workflow Demo](assets/contextos-demo.gif)
 
 ## What problem does ContextOS solve?
 
@@ -13,17 +13,45 @@ An AI coding conversation often starts by rebuilding the project map: reading fi
 
 ContextOS stores that working memory beside the code in one synchronized OS graph. Each conversation receives the architecture and progress relevant to its task, and the Native Desktop App visualizes the exact same state as an intuitive Metro Map. A new conversation can continue seamlessly from the recorded state.
 
+![ContextOS V2 Metro Map Architecture and Desktop App](docs/images/contextos-desktop-v2.png)
+
 ## What changes in daily development?
 
-**1. Architecture becomes a Metro Map.** Blocks describe real, verified code modules (zero ghost blocks allowed). Chains represent horizontal subway rails, and typed Links connect transfer stations orthogonally. The agent understands the big picture without touching the code.
+### 1. Architecture becomes a Metro Map
+Blocks describe real, verified code modules (zero ghost blocks allowed). Chains represent horizontal subway rails, and typed Links connect transfer stations orthogonally. The agent understands the big picture without touching the code.
 
-**2. Progress follows the C-D-C-S lifecycle.** Work flows strictly through **Create → Develop → Check → Sync**. Tasks carry an explicit context slice, intermediate development notes, and sandboxed test checks, completing with an atomic sync that enforces a 100% workspace code coverage gate.
+![Feature Path with Exact Code Locations](assets/path-impact.png)
 
-**3. Commands run out-of-context.** `run_command` strips ANSI noise, redacts secrets, saves full raw logs into `.contextos/logs/`, and returns a compact receipt with critical error diagnostics, reducing terminal noise by over 98%.
+### 2. Progress follows the C-D-C-S lifecycle
+Work flows strictly through **Create → Develop → Check → Sync**. Tasks carry an explicit context slice, intermediate development notes, and sandboxed test checks, completing with an atomic sync that enforces a 100% workspace code coverage gate.
 
-**4. Code tools operate surgically.** Multi-language AST engines (Babel for JS/TS/JSX/TSX, native Python AST, Swift struct/view body parsers) allow VS Code-style symbol search, outline inspection, and surgical reading/editing with automatic symbol re-anchoring.
+### 3. Commands run out-of-context
+`run_command` strips ANSI noise, redacts secrets, saves full raw logs into `.contextos/logs/`, and returns a compact receipt with critical error diagnostics, reducing terminal noise by over 98%.
 
-**5. Long-running processes are monitored live.** Dev servers, watchers, and background workers are managed by the Process Host and displayed in the Desktop App's bottom-left sidebar with live PID and port tracking.
+### 4. Code tools operate surgically
+Multi-language AST engines (Babel for JS/TS/JSX/TSX, native Python AST, Swift struct/view body parsers) allow VS Code-style symbol search, outline inspection, and surgical reading/editing with automatic symbol re-anchoring.
+
+### 5. Unified Knowledge & Architectural Decisions
+Proposals, audits, architectural decisions, and rules live as OS Documents. `README.md` and `README_zh.md` appear read-only in the App Knowledge view with images and links intact.
+
+![OS Documents and README in the Knowledge Drawer](assets/knowledge-reader.png)
+
+### 6. Long-running processes are monitored live
+Dev servers, watchers, and background workers are managed by the Process Host and displayed in the Desktop App's bottom-left sidebar with live PID and port tracking.
+
+![Station Detail and Drawer Inspection](assets/readme-reader.png)
+
+## Start in three minutes
+
+### macOS App
+
+1. [Download the latest App](https://github.com/yubinbin32-ops/ContextOS/releases/latest), unzip it, and open **ContextOS**.
+2. Open **Settings**, choose the detected AI editor, and click **Install / Sync Plugin**.
+3. Open the project in Codex, confirm **ContextOS** appears in the installed plugin list, and start working.
+
+The desktop App supports macOS 14 or later. The MCP runtime uses Node.js 22 or later. The App writes the editor configuration and plugin entry for you.
+
+![One-click editor and MCP synchronization](assets/settings-sync.png)
 
 ## Reproducible V2 Benchmark
 
@@ -43,6 +71,7 @@ Run the benchmarks locally:
 node scripts/benchmark.mjs
 node scripts/practical-test.mjs
 node scripts/e2e-project-lifecycle.mjs
+node scripts/comprehensive-dev-eval.mjs
 ```
 
 ## For contributors
@@ -56,6 +85,6 @@ npm run plugin:verify
 npm run desktop:build       # macOS + Swift/Xcode
 ```
 
-The versioned `.contextos/graph.json` is the project's portable graph projection. Internal proposals, audits, and guides belong in OS Documents; benchmark JSON and public README files remain repository artifacts.
+The versioned `.contextos/graph.json` is the project's portable graph projection.
 
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT License](LICENSE)

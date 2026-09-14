@@ -23673,6 +23673,21 @@ var V2Database = class {
     const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => this.getBlock(r.id));
   }
+  deleteBlock(blockId) {
+    this.transaction((self) => {
+      self.db.prepare("DELETE FROM links WHERE from_id = ? OR to_id = ?").run(blockId, blockId);
+      self.db.prepare("DELETE FROM artifact_refs WHERE block_id = ?").run(blockId);
+      self.db.prepare("DELETE FROM blocks WHERE id = ?").run(blockId);
+      const chains = self.listChains();
+      for (const c of chains) {
+        if (c.memberIds?.includes(blockId)) {
+          c.memberIds = c.memberIds.filter((m) => m !== blockId);
+          self.saveChain(c);
+        }
+      }
+    });
+    return true;
+  }
   // --- Chain ---
   saveChain(chain) {
     const stmt = this.db.prepare(`
@@ -23723,6 +23738,11 @@ var V2Database = class {
       updatedAt: r.updated_at
     }));
   }
+  deleteChain(chainId) {
+    const stmt = this.db.prepare("DELETE FROM chains WHERE id = ?");
+    stmt.run(chainId);
+    return true;
+  }
   // --- Link ---
   saveLink(link) {
     const stmt = this.db.prepare(`
@@ -23760,6 +23780,16 @@ var V2Database = class {
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
+  }
+  deleteLink(linkId) {
+    const stmt = this.db.prepare("DELETE FROM links WHERE id = ?");
+    stmt.run(linkId);
+    return true;
+  }
+  deleteLinkBetween(fromId, toId) {
+    const stmt = this.db.prepare("DELETE FROM links WHERE (from_id = ? AND to_id = ?) OR (id = ?)");
+    stmt.run(fromId, toId, `${fromId}->${toId}`);
+    return true;
   }
   // --- Command Receipts ---
   saveCommandReceipt(receipt) {
@@ -40721,6 +40751,16 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
   // ================= 4. block =================
   async block({ action, id, blockData = {}, query, format = "markdown" }) {
     switch (action) {
+      case "list": {
+        const blocks = this.db.listBlocks(this.projectId);
+        if (format === "json") return blocks;
+        const lines = [`# Architecture Blocks (${blocks.length} total)`];
+        for (const b of blocks) {
+          lines.push(`- **[${b.id}]** ${b.title} (${b.artifactRefs?.length || 0} code refs)
+  ${b.summary}`);
+        }
+        return lines.join("\n");
+      }
       case "open": {
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
@@ -40737,7 +40777,13 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
       case "bind": {
         const block = { ...blockData, projectId: this.projectId };
         this.db.saveBlock(block);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Block '${block.id}' bound with ${block.artifactRefs?.length || 0} code locators.`;
+      }
+      case "delete": {
+        this.db.deleteBlock(id);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        return `Block '${id}' deleted successfully.`;
       }
       default:
         throw new Error(`Unknown block action: ${action}`);
@@ -40759,11 +40805,41 @@ Members: ${chain.memberIds.join(", ")}`;
       }
       case "compose": {
         this.db.saveChain({ ...chainData, projectId: this.projectId });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Chain '${chainData.id}' composed successfully.`;
+      }
+      case "delete": {
+        this.db.deleteChain(id);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        return `Chain '${id}' deleted successfully.`;
       }
       case "link": {
         this.db.saveLink({ ...linkData, projectId: this.projectId });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Link created: ${linkData.from} -[${linkData.kind}]-> ${linkData.to}`;
+      }
+      case "unlink": {
+        const from = linkData.from || linkData.from_id;
+        const to = linkData.to || linkData.to_id;
+        if (id) {
+          this.db.deleteLink(id);
+        } else if (from && to) {
+          this.db.deleteLinkBetween(from, to);
+        } else {
+          throw new Error("Action 'unlink' requires link id or { from, to } in linkData");
+        }
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        return `Link between '${from}' and '${to}' removed.`;
+      }
+      case "links": {
+        const links = this.db.listLinks(this.projectId);
+        if (format === "json") return links;
+        const lines = [`# Architecture Links (${links.length} total)`];
+        for (const l of links) {
+          const reason = l.reason ? ` - ${l.reason}` : "";
+          lines.push(`- \`${l.from}\` -[${l.kind}]-> \`${l.to}\`${reason}`);
+        }
+        return lines.join("\n");
       }
       case "validate": {
         const blocks = this.db.listBlocks(this.projectId);
@@ -41040,7 +41116,7 @@ function createV2Server() {
     {
       description: "Manage code functional Blocks. Blocks MUST bind to real code artifacts; ghost blocks are strictly rejected.",
       inputSchema: {
-        action: _enum(["open", "search", "bind"]),
+        action: _enum(["list", "open", "search", "bind", "delete"]),
         id: string2().optional(),
         query: string2().optional(),
         blockData: record(any()).optional(),
@@ -41059,7 +41135,7 @@ function createV2Server() {
     {
       description: "Feature chains and dependency links. Link kind reflects true semantics: depends_on, calls, imports, implements.",
       inputSchema: {
-        action: _enum(["list", "open", "link", "validate_layout"]),
+        action: _enum(["list", "open", "compose", "delete", "link", "unlink", "links", "validate_layout", "validate"]),
         id: string2().optional(),
         chainData: record(any()).optional(),
         linkData: record(any()).optional(),

@@ -179,6 +179,15 @@ export class ContextOSV2Service {
   // ================= 4. block =================
   async block({ action, id, blockData = {}, query, format = 'markdown' }) {
     switch (action) {
+      case 'list': {
+        const blocks = this.db.listBlocks(this.projectId);
+        if (format === 'json') return blocks;
+        const lines = [`# Architecture Blocks (${blocks.length} total)`];
+        for (const b of blocks) {
+          lines.push(`- **[${b.id}]** ${b.title} (${b.artifactRefs?.length || 0} code refs)\n  ${b.summary}`);
+        }
+        return lines.join('\n');
+      }
       case 'open': {
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
@@ -195,7 +204,13 @@ export class ContextOSV2Service {
       case 'bind': {
         const block = { ...blockData, projectId: this.projectId };
         this.db.saveBlock(block);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Block '${block.id}' bound with ${block.artifactRefs?.length || 0} code locators.`;
+      }
+      case 'delete': {
+        this.db.deleteBlock(id);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        return `Block '${id}' deleted successfully.`;
       }
       default:
         throw new Error(`Unknown block action: ${action}`);
@@ -217,11 +232,41 @@ export class ContextOSV2Service {
       }
       case 'compose': {
         this.db.saveChain({ ...chainData, projectId: this.projectId });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Chain '${chainData.id}' composed successfully.`;
+      }
+      case 'delete': {
+        this.db.deleteChain(id);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        return `Chain '${id}' deleted successfully.`;
       }
       case 'link': {
         this.db.saveLink({ ...linkData, projectId: this.projectId });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Link created: ${linkData.from} -[${linkData.kind}]-> ${linkData.to}`;
+      }
+      case 'unlink': {
+        const from = linkData.from || linkData.from_id;
+        const to = linkData.to || linkData.to_id;
+        if (id) {
+          this.db.deleteLink(id);
+        } else if (from && to) {
+          this.db.deleteLinkBetween(from, to);
+        } else {
+          throw new Error("Action 'unlink' requires link id or { from, to } in linkData");
+        }
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        return `Link between '${from}' and '${to}' removed.`;
+      }
+      case 'links': {
+        const links = this.db.listLinks(this.projectId);
+        if (format === 'json') return links;
+        const lines = [`# Architecture Links (${links.length} total)`];
+        for (const l of links) {
+          const reason = l.reason ? ` - ${l.reason}` : '';
+          lines.push(`- \`${l.from}\` -[${l.kind}]-> \`${l.to}\`${reason}`);
+        }
+        return lines.join('\n');
       }
       case 'validate': {
         const blocks = this.db.listBlocks(this.projectId);

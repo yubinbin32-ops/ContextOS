@@ -116,13 +116,29 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
   const block = await service.block({ action: 'open', id: 'block-sample', format: 'json' });
   assert.equal(block.id, 'block-sample');
 
-  // 7. chain: compose, link, validate
+  // 7. chain: compose, link, links, unlink, validate
   await service.chain({
     action: 'compose',
     chainData: { id: 'chain-v2-main', title: 'Main Chain', memberIds: ['block-sample'] },
   });
+  await service.chain({
+    action: 'link',
+    linkData: { from: 'block-sample', to: 'block-sample', kind: 'calls', reason: 'self-recursion test' },
+  });
+  const allLinks = await service.chain({ action: 'links', format: 'json' });
+  assert.equal(allLinks.length, 1);
+  await service.chain({
+    action: 'unlink',
+    linkData: { from: 'block-sample', to: 'block-sample' },
+  });
+  const remainingLinks = await service.chain({ action: 'links', format: 'json' });
+  assert.equal(remainingLinks.length, 0);
+
   const val = await service.chain({ action: 'validate' });
   assert.equal(val.valid, true);
+
+  const blockList = await service.block({ action: 'list', format: 'json' });
+  assert.equal(blockList.length, 1);
 
   // 8. run_command
   const receipt = await service.runCommand({ command: 'echo "v2 mcp success"' });

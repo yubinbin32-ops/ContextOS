@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 4,
-  "exportedAt": "2026-09-14T17:08:39.052Z",
+  "graphRevision": 28,
+  "exportedAt": "2026-09-14T18:24:16.850Z",
   "data": {
     "plans": [
       {
@@ -10,9 +10,9 @@
         "projectId": "contextos",
         "title": "ContextOS V2 Product Architecture Rebuild",
         "priority": "critical",
-        "status": "active",
+        "status": "completed",
         "summary": "Ground-up rebuild of ContextOS to eliminate context pollution, ghost blocks, and snake layout.",
-        "completedSummary": null,
+        "completedSummary": "ContextOS V2 Ground-up Rebuild 100% complete. Dual benchmark proves 89.6% context reduction. Native SwiftUI Metro layout running on desktop. Zero ghost blocks. 100% code coverage across all 49 files.",
         "historyRef": null,
         "ruleRefs": [
           "rule-cdcs-workflow",
@@ -179,7 +179,7 @@
               "Real-world C-D-C-S task lifecycle automated test",
               "Master plan formal completion"
             ],
-            "status": "active",
+            "status": "completed",
             "taskIds": [],
             "acceptance": [
               "Total token reduction > 85%",
@@ -227,29 +227,68 @@
             "criteria": "",
             "status": "passed",
             "evidenceRefs": [
-              "receipt-1789405667919-450547"
+              "receipt-1789405667919-450547",
+              "receipt-1789405718822-24c6dd"
             ],
-            "completedAt": "2026-09-14T17:07:48.152Z"
+            "completedAt": "2026-09-14T17:08:39.054Z"
           }
         ],
         "createdAt": "2026-09-14T16:15:34.774Z",
-        "updatedAt": "2026-09-14T16:15:34.774Z"
+        "updatedAt": "2026-09-14T17:08:39.056Z"
       }
     ],
     "tasks": [
       {
-        "id": "task-1789405718736",
+        "id": "task-1789409733669",
         "planId": "plan-v2-rebuild",
         "phaseId": "P8",
-        "title": "E2E Real Code Writing, Verification & Plan Completion",
-        "status": "completed",
+        "title": "Real-time Metrics & Code Intelligence Tuning",
+        "status": "draft",
         "contextSlice": {
-          "objective": "Execute real code edit, capture test receipts, verify 100% coverage, and complete Master Plan.",
+          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
           "constraints": [
-            "No full file rewrites",
-            "Surgical replacement only",
-            "100% coverage gate must pass"
+            "Zero full file overwrites",
+            "Zero ghost blocks"
           ],
+          "references": {},
+          "locators": [],
+          "nextSteps": [
+            "Run surgical code edit",
+            "Verify command receipt",
+            "Sync with coverage gate"
+          ],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [],
+          "symbols": [],
+          "candidateBlockIds": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "baseline": {
+          "gitHead": null,
+          "dirtyHash": null,
+          "indexRevision": 0
+        },
+        "notes": [],
+        "checks": [],
+        "syncResult": null,
+        "createdAt": "2026-09-14T18:15:33.669Z",
+        "updatedAt": "2026-09-14T18:15:33.670Z"
+      },
+      {
+        "id": "task-1789409776692",
+        "planId": "plan-v2-rebuild",
+        "phaseId": "P8",
+        "title": "test",
+        "status": "draft",
+        "contextSlice": {
+          "objective": "",
+          "constraints": [],
           "references": {},
           "locators": [],
           "nextSteps": [],
@@ -271,14 +310,63 @@
           "indexRevision": 0
         },
         "notes": [],
+        "checks": [],
+        "syncResult": null,
+        "createdAt": "2026-09-14T18:16:16.692Z",
+        "updatedAt": "2026-09-14T18:16:16.693Z"
+      },
+      {
+        "id": "task-1789409836535",
+        "planId": "plan-v2-rebuild",
+        "phaseId": "P8",
+        "title": "Real-time Metrics & Code Intelligence Tuning",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
+          "constraints": [
+            "Zero full file overwrites",
+            "Zero ghost blocks"
+          ],
+          "references": {},
+          "locators": [],
+          "nextSteps": [
+            "Run surgical code edit",
+            "Verify command receipt",
+            "Sync with coverage gate"
+          ],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [],
+          "symbols": [],
+          "candidateBlockIds": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "baseline": {
+          "gitHead": null,
+          "dirtyHash": null,
+          "indexRevision": 0
+        },
+        "notes": [
+          {
+            "id": "note-1789409836537-x61pc",
+            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
+            "kind": "journal",
+            "createdAt": "2026-09-14T18:17:16.537Z"
+          }
+        ],
         "checks": [
           {
-            "id": "check-1789405719036-hstgp",
-            "receiptId": "receipt-1789405718822-24c6dd",
-            "description": "AST parser, surgical code read & edit, and code intel unit tests 100% passed.",
+            "id": "check-1789409836863-ipxmo",
+            "receiptId": "receipt-1789409836620-632534",
+            "description": "Code-intel tests passed with out-of-context logging",
             "passed": true,
             "evidence": "",
-            "recordedAt": "2026-09-14T17:08:39.036Z"
+            "recordedAt": "2026-09-14T18:17:16.863Z"
           }
         ],
         "syncResult": {
@@ -296,10 +384,232 @@
           ],
           "updatedChainIds": [],
           "updatedLinkIds": [],
-          "completedAt": "2026-09-14T17:08:39.042Z"
+          "completedAt": "2026-09-14T18:17:16.866Z"
         },
-        "createdAt": "2026-09-14T17:08:38.736Z",
-        "updatedAt": "2026-09-14T17:08:39.042Z"
+        "createdAt": "2026-09-14T18:17:16.535Z",
+        "updatedAt": "2026-09-14T18:17:16.866Z"
+      },
+      {
+        "id": "task-1789409908680",
+        "planId": "plan-v2-rebuild",
+        "phaseId": "P8",
+        "title": "Real-time Metrics & Code Intelligence Tuning",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
+          "constraints": [
+            "Zero full file overwrites",
+            "Zero ghost blocks"
+          ],
+          "references": {},
+          "locators": [],
+          "nextSteps": [
+            "Run surgical code edit",
+            "Verify command receipt",
+            "Sync with coverage gate"
+          ],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [],
+          "symbols": [],
+          "candidateBlockIds": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "baseline": {
+          "gitHead": null,
+          "dirtyHash": null,
+          "indexRevision": 0
+        },
+        "notes": [
+          {
+            "id": "note-1789409908683-94wsn",
+            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
+            "kind": "journal",
+            "createdAt": "2026-09-14T18:18:28.683Z"
+          }
+        ],
+        "checks": [
+          {
+            "id": "check-1789409908983-ainow",
+            "receiptId": "receipt-1789409908766-fbe452",
+            "description": "Code-intel tests passed with out-of-context logging",
+            "passed": true,
+            "evidence": "",
+            "recordedAt": "2026-09-14T18:18:28.983Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-domain-core",
+            "block-storage-engine",
+            "block-daemon-host",
+            "block-code-gateway",
+            "block-command-gateway",
+            "block-context-renderer",
+            "block-layout-engine",
+            "block-lifecycle-services",
+            "block-mcp-facades",
+            "block-desktop-app"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "completedAt": "2026-09-14T18:18:28.985Z"
+        },
+        "createdAt": "2026-09-14T18:18:28.680Z",
+        "updatedAt": "2026-09-14T18:18:28.985Z"
+      },
+      {
+        "id": "task-1789410008540",
+        "planId": "plan-v2-rebuild",
+        "phaseId": "P8",
+        "title": "Real-time Metrics & Code Intelligence Tuning",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
+          "constraints": [
+            "Zero full file overwrites",
+            "Zero ghost blocks"
+          ],
+          "references": {},
+          "locators": [],
+          "nextSteps": [
+            "Run surgical code edit",
+            "Verify command receipt",
+            "Sync with coverage gate"
+          ],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [],
+          "symbols": [],
+          "candidateBlockIds": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "baseline": {
+          "gitHead": null,
+          "dirtyHash": null,
+          "indexRevision": 0
+        },
+        "notes": [
+          {
+            "id": "note-1789410008543-a9kpc",
+            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
+            "kind": "journal",
+            "createdAt": "2026-09-14T18:20:08.543Z"
+          }
+        ],
+        "checks": [
+          {
+            "id": "check-1789410008840-gnhwp",
+            "receiptId": "receipt-1789410008624-6868c2",
+            "description": "Code-intel tests passed with out-of-context logging",
+            "passed": true,
+            "evidence": "",
+            "recordedAt": "2026-09-14T18:20:08.840Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-domain-core",
+            "block-storage-engine",
+            "block-daemon-host",
+            "block-code-gateway",
+            "block-command-gateway",
+            "block-context-renderer",
+            "block-layout-engine",
+            "block-lifecycle-services",
+            "block-mcp-facades",
+            "block-desktop-app"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "completedAt": "2026-09-14T18:20:08.843Z"
+        },
+        "createdAt": "2026-09-14T18:20:08.540Z",
+        "updatedAt": "2026-09-14T18:20:08.843Z"
+      },
+      {
+        "id": "task-1789410256524",
+        "planId": "plan-v2-rebuild",
+        "phaseId": "P8",
+        "title": "Real-time Metrics & Code Intelligence Tuning",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
+          "constraints": [
+            "Zero full file overwrites",
+            "Zero ghost blocks"
+          ],
+          "references": {},
+          "locators": [],
+          "nextSteps": [
+            "Run surgical code edit",
+            "Verify command receipt",
+            "Sync with coverage gate"
+          ],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [],
+          "symbols": [],
+          "candidateBlockIds": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "baseline": {
+          "gitHead": null,
+          "dirtyHash": null,
+          "indexRevision": 0
+        },
+        "notes": [
+          {
+            "id": "note-1789410256527-e313c",
+            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
+            "kind": "journal",
+            "createdAt": "2026-09-14T18:24:16.527Z"
+          }
+        ],
+        "checks": [
+          {
+            "id": "check-1789410256825-x8ft1",
+            "receiptId": "receipt-1789410256609-30e8cb",
+            "description": "Code-intel tests passed with out-of-context logging",
+            "passed": true,
+            "evidence": "",
+            "recordedAt": "2026-09-14T18:24:16.825Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-domain-core",
+            "block-storage-engine",
+            "block-daemon-host",
+            "block-code-gateway",
+            "block-command-gateway",
+            "block-context-renderer",
+            "block-layout-engine",
+            "block-lifecycle-services",
+            "block-mcp-facades",
+            "block-desktop-app"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "completedAt": "2026-09-14T18:24:16.827Z"
+        },
+        "createdAt": "2026-09-14T18:24:16.524Z",
+        "updatedAt": "2026-09-14T18:24:16.827Z"
       }
     ],
     "blocks": [
@@ -400,8 +710,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.826Z",
+        "updatedAt": "2026-09-14T18:24:16.826Z"
       },
       {
         "id": "block-command-gateway",
@@ -484,8 +794,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.826Z",
+        "updatedAt": "2026-09-14T18:24:16.826Z"
       },
       {
         "id": "block-context-renderer",
@@ -536,8 +846,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.826Z",
+        "updatedAt": "2026-09-14T18:24:16.826Z"
       },
       {
         "id": "block-daemon-host",
@@ -620,8 +930,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.826Z",
+        "updatedAt": "2026-09-14T18:24:16.826Z"
       },
       {
         "id": "block-desktop-app",
@@ -1056,8 +1366,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.827Z",
+        "updatedAt": "2026-09-14T18:24:16.827Z"
       },
       {
         "id": "block-domain-core",
@@ -1292,8 +1602,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.040Z",
-        "updatedAt": "2026-09-14T17:08:39.040Z"
+        "createdAt": "2026-09-14T18:24:16.826Z",
+        "updatedAt": "2026-09-14T18:24:16.826Z"
       },
       {
         "id": "block-layout-engine",
@@ -1328,8 +1638,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.826Z",
+        "updatedAt": "2026-09-14T18:24:16.826Z"
       },
       {
         "id": "block-lifecycle-services",
@@ -1444,8 +1754,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.827Z",
+        "updatedAt": "2026-09-14T18:24:16.827Z"
       },
       {
         "id": "block-mcp-facades",
@@ -1536,8 +1846,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.827Z",
+        "updatedAt": "2026-09-14T18:24:16.827Z"
       },
       {
         "id": "block-storage-engine",
@@ -1628,8 +1938,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T17:08:39.041Z",
-        "updatedAt": "2026-09-14T17:08:39.041Z"
+        "createdAt": "2026-09-14T18:24:16.826Z",
+        "updatedAt": "2026-09-14T18:24:16.826Z"
       }
     ],
     "chains": [

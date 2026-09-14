@@ -344,6 +344,22 @@ export class V2Database {
     return rows.map((r) => this.getBlock(r.id));
   }
 
+  deleteBlock(blockId) {
+    this.transaction((self) => {
+      self.db.prepare('DELETE FROM links WHERE from_id = ? OR to_id = ?').run(blockId, blockId);
+      self.db.prepare('DELETE FROM artifact_refs WHERE block_id = ?').run(blockId);
+      self.db.prepare('DELETE FROM blocks WHERE id = ?').run(blockId);
+      const chains = self.listChains();
+      for (const c of chains) {
+        if (c.memberIds?.includes(blockId)) {
+          c.memberIds = c.memberIds.filter((m) => m !== blockId);
+          self.saveChain(c);
+        }
+      }
+    });
+    return true;
+  }
+
   // --- Chain ---
   saveChain(chain) {
     const stmt = this.db.prepare(`
@@ -399,6 +415,12 @@ export class V2Database {
     }));
   }
 
+  deleteChain(chainId) {
+    const stmt = this.db.prepare('DELETE FROM chains WHERE id = ?');
+    stmt.run(chainId);
+    return true;
+  }
+
   // --- Link ---
   saveLink(link) {
     const stmt = this.db.prepare(`
@@ -439,6 +461,18 @@ export class V2Database {
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }));
+  }
+
+  deleteLink(linkId) {
+    const stmt = this.db.prepare('DELETE FROM links WHERE id = ?');
+    stmt.run(linkId);
+    return true;
+  }
+
+  deleteLinkBetween(fromId, toId) {
+    const stmt = this.db.prepare('DELETE FROM links WHERE (from_id = ? AND to_id = ?) OR (id = ?)');
+    stmt.run(fromId, toId, `${fromId}->${toId}`);
+    return true;
   }
 
   // --- Command Receipts ---
