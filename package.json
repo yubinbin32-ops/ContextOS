@@ -46,7 +46,8 @@
     "plugin:build": "esbuild packages/mcp/src/server.mjs --bundle --platform=node --format=esm --target=node22 --outfile=plugins/contextos/server/contextos-mcp.mjs",
     "plugin:verify": "npm run plugin:build && node scripts/plugin-smoke.mjs",
     "desktop:build": "swift build --package-path apps/desktop",
-    "desktop:run": "swift run --package-path apps/desktop contextos-desktop"
+    "desktop:run": "swift run --package-path apps/desktop contextos-desktop",
+    "desktop:package": "node scripts/package-macos.mjs"
   },
   "dependencies": {
     "@babel/parser": "^8.0.5",
