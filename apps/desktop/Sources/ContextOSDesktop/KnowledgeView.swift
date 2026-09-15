@@ -30,16 +30,55 @@ final class KnowledgeLibrary: ObservableObject {
     }
     nonisolated private static func read(root: String, previous: String) -> (fingerprint: String, documents: [KnowledgeDocument], error: String?)? {
         let directory = URL(fileURLWithPath: root)
-        let names = ["README_zh.md", "README.md", ".contextos/graph.json"]
-        let fingerprint = root + names.map { name in
+        let names = ["README_zh.md", "README.md", "DECISION.md", ".contextos/graph.json"]
+        var fingerprint = root + names.map { name in
             let attributes = try? FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(name).path)
             return "\(name):\(attributes?[.modificationDate] ?? ""):\(attributes?[.size] ?? "")"
         }.joined()
+        let rulesDir = directory.appendingPathComponent(".contextos/rules")
+        if let ruleFiles = try? FileManager.default.contentsOfDirectory(at: rulesDir, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey], options: [.skipsHiddenFiles]) {
+            for rFile in ruleFiles {
+                let attr = try? FileManager.default.attributesOfItem(atPath: rFile.path)
+                fingerprint += "\(rFile.lastPathComponent):\(attr?[.modificationDate] ?? ""):\(attr?[.size] ?? "")"
+            }
+        }
         guard fingerprint != previous else { return nil }
         var docs: [KnowledgeDocument] = []
-        for name in names.prefix(2) {
+        for name in ["README_zh.md", "README.md"] {
             if let body = try? String(contentsOf: directory.appendingPathComponent(name), encoding: .utf8) {
                 docs.append(.init(id: name, title: name == "README_zh.md" ? "README · 中文" : "README · English", body: body, html: MarkdownPage.render(body), sourcePath: name, revision: 0, kind: "readme", relations: []))
+            }
+        }
+        if let body = try? String(contentsOf: directory.appendingPathComponent("DECISION.md"), encoding: .utf8) {
+            docs.append(.init(id: "DECISION.md", title: "架构决策 · DECISION.md", body: body, html: MarkdownPage.render(body), sourcePath: "DECISION.md", revision: 1, kind: "decision", relations: []))
+        }
+        if let ruleFiles = try? FileManager.default.contentsOfDirectory(at: rulesDir, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey], options: [.skipsHiddenFiles]) {
+            for fileURL in ruleFiles.filter({ $0.pathExtension == "md" }).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                if let content = try? String(contentsOf: fileURL, encoding: .utf8) {
+                    let filename = fileURL.lastPathComponent
+                    let ruleId = fileURL.deletingPathExtension().lastPathComponent
+                    var ruleTitle = ruleId
+                    for line in content.components(separatedBy: "\n") {
+                        let trimmed = line.trimmingCharacters(in: .whitespaces)
+                        if trimmed.hasPrefix("title:") {
+                            ruleTitle = String(trimmed.dropFirst("title:".count)).trimmingCharacters(in: .whitespaces)
+                            break
+                        } else if trimmed.hasPrefix("# ") {
+                            ruleTitle = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                            break
+                        }
+                    }
+                    docs.append(.init(
+                        id: "rule:" + ruleId,
+                        title: ruleTitle,
+                        body: content,
+                        html: MarkdownPage.render(content),
+                        sourcePath: ".contextos/rules/\(filename)",
+                        revision: 1,
+                        kind: "rule",
+                        relations: []
+                    ))
+                }
             }
         }
         do {
@@ -77,11 +116,11 @@ struct KnowledgeView: View {
                         Button(action: close) { Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)) }
                             .buttonStyle(.plain).help(chinese ? "关闭详情" : "Close details")
                     }
-                    Text(doc.kind == "readme" ? (chinese ? "仓库原文件 · 只读" : "Repository file · Read only") : "OS · \(doc.kind) · r\(doc.revision)")
+                    Text(doc.kind == "readme" ? (chinese ? "仓库原文件 · 只读" : "Repository file · Read only") : (doc.kind == "rule" ? (chinese ? "项目规范 · 只读" : "Project Rule · Read only") : (doc.kind == "decision" ? (chinese ? "架构决策记录 · 只读" : "Architecture Decision · Read only") : "OS · \(doc.kind) · r\(doc.revision)")))
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button(chinese ? "复制全文" : "Copy Markdown") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(doc.body, forType: .string) }
-                        if doc.kind == "readme" {
+                        if doc.kind == "readme" || doc.kind == "rule" || doc.kind == "decision" {
                             Button(chinese ? "在编辑器打开" : "Open in editor") { NSWorkspace.shared.open(URL(fileURLWithPath: store.projectRoot).appendingPathComponent(doc.sourcePath)) }
                         }
                     }.controlSize(.small)

@@ -42,10 +42,17 @@ struct ContentView: View {
         .sheet(isPresented: $store.settingsPresented) { SettingsView(store: store) }
         .task(id: store.projectRoot) {
             let root = store.projectRoot
+            var initialized = false
             while !Task.isCancelled {
                 await knowledge.reload(root: root)
                 let issues = store.knowledgeSyncIssues()
                 if syncIssues != issues { syncIssues = issues }
+                if !initialized {
+                    initialized = true
+                    if store.selection == nil, requestedDocument == nil, let firstPlan = store.snapshot.plans.first {
+                        store.focusPlan(firstPlan.id)
+                    }
+                }
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -55,13 +62,27 @@ struct ContentView: View {
             if let id = event.userInfo?["id"] as? String { openDocument(id, nil) }
         }
         .onOpenURL { url in
-            guard url.scheme == "contextos", url.host == "knowledge",
-                let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
-            if let project = parts.queryItems?.first(where: { $0.name == "project" })?.value, project != store.projectRoot {
-                store.openKnowledgeProject(at: URL(fileURLWithPath: project))
-            }
-            if let id = parts.queryItems?.first(where: { $0.name == "document" })?.value {
-                Task { await knowledge.reload(root: store.projectRoot); openDocument(id, parts.queryItems?.first(where: { $0.name == "section" })?.value) }
+            guard url.scheme == "contextos" else { return }
+            if url.host == "knowledge",
+                let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                if let project = parts.queryItems?.first(where: { $0.name == "project" })?.value, project != store.projectRoot {
+                    store.openKnowledgeProject(at: URL(fileURLWithPath: project))
+                }
+                if let id = parts.queryItems?.first(where: { $0.name == "document" })?.value {
+                    Task { await knowledge.reload(root: store.projectRoot); openDocument(id, parts.queryItems?.first(where: { $0.name == "section" })?.value) }
+                }
+            } else if url.host == "select",
+                let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                closeDocument()
+                let typeStr = parts.queryItems?.first(where: { $0.name == "type" })?.value ?? "plan"
+                let id = parts.queryItems?.first(where: { $0.name == "id" })?.value ?? ""
+                if typeStr == "plan" {
+                    store.focusPlan(id.isEmpty ? (store.snapshot.plans.first?.id ?? "plan-v2-rebuild") : id)
+                } else if typeStr == "decision" {
+                    store.select(GraphSelection(type: .decision, id: id))
+                } else if typeStr == "block" {
+                    store.select(GraphSelection(type: .block, id: id))
+                }
             }
         }
     }
@@ -90,10 +111,10 @@ struct ContentView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     sidebarSection(.knowledge, title: store.activeLocale == "zh-Hans" ? "知识" : "Knowledge") {
-                        ForEach(knowledge.documents) { doc in
-                            sidebarButton(title: doc.title, subtitle: doc.kind == "readme" ? (store.activeLocale == "zh-Hans" ? "仓库原文件 · 只读" : "REPOSITORY · READ ONLY") : "OS · r\(doc.revision)", color: ContextOSTheme.blockKindColor("principle"), selected: requestedDocument == doc.id) { openDocument(doc.id, nil) }
+                        ForEach(knowledge.documents.filter { $0.kind != "rule" }) { doc in
+                            sidebarButton(title: doc.title, subtitle: doc.kind == "readme" ? (store.activeLocale == "zh-Hans" ? "仓库原文件 · 只读" : "REPOSITORY · READ ONLY") : (doc.kind == "decision" ? (store.activeLocale == "zh-Hans" ? "架构决策记录 · 只读" : "ADR · READ ONLY") : "OS · r\(doc.revision)"), color: ContextOSTheme.blockKindColor("principle"), selected: requestedDocument == doc.id) { openDocument(doc.id, nil) }
                         }
-                        if knowledge.documents.isEmpty { Text(store.activeLocale == "zh-Hans" ? "README 与项目文档" : "README and project documents").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 18) }
+                        if knowledge.documents.filter({ $0.kind != "rule" }).isEmpty { Text(store.activeLocale == "zh-Hans" ? "README 与项目文档" : "README and project documents").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 18) }
                     }
                     if !syncIssues.isEmpty || store.sourcePollingError != nil {
                         sidebarSection(.synchronization, title: store.activeLocale == "zh-Hans" ? "同步检查 (\(syncIssues.count))" : "Sync checks (\(syncIssues.count))") {
@@ -101,14 +122,25 @@ struct ContentView: View {
                             ForEach(syncIssues, id: \.self) { Text($0).font(.caption).foregroundStyle(ContextOSTheme.muted).textSelection(.enabled).padding(.horizontal, 18).padding(.vertical, 4) }
                         }
                     }
-                    sidebarSection(.projectRules, title: store.text("projectRules")) {
-                        ForEach(projectRuleBlocks) { block in
-                            sidebarButton(
-                                title: store.blockText(block, field: "title"),
-                                subtitle: "\(store.ruleScopeLabel(block.id).uppercased()) · \(block.deliveryState.uppercased())",
-                                color: ContextOSTheme.blockKindColor(block.kind),
-                                selected: store.selection == GraphSelection(type: .block, id: block.id)
-                            ) { store.select(GraphSelection(type: .block, id: block.id)) }
+                    let ruleDocs = knowledge.documents.filter { $0.kind == "rule" }
+                    if !ruleDocs.isEmpty || !projectRuleBlocks.isEmpty {
+                        sidebarSection(.projectRules, title: store.text("projectRules")) {
+                            ForEach(ruleDocs) { rule in
+                                sidebarButton(
+                                    title: rule.title,
+                                    subtitle: store.activeLocale == "zh-Hans" ? "规范 · 只读" : "RULE · SPEC",
+                                    color: ContextOSTheme.blockKindColor("principle"),
+                                    selected: requestedDocument == rule.id
+                                ) { openDocument(rule.id, nil) }
+                            }
+                            ForEach(projectRuleBlocks) { block in
+                                sidebarButton(
+                                    title: store.blockText(block, field: "title"),
+                                    subtitle: "\(store.ruleScopeLabel(block.id).uppercased()) · \(block.deliveryState.uppercased())",
+                                    color: ContextOSTheme.blockKindColor(block.kind),
+                                    selected: store.selection == GraphSelection(type: .block, id: block.id)
+                                ) { store.select(GraphSelection(type: .block, id: block.id)) }
+                            }
                         }
                     }
 
