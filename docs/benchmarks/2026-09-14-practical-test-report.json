@@ -1,0 +1,105 @@
+{
+  "testName": "ContextOS V2 Practical Development Task Test",
+  "measuredAt": "2026-09-14T14:02:32.453Z",
+  "scenario": "Add invariant validator function and verify via unit test under C-D-C-S state machine",
+  "comparison": {
+    "traditionalAgent": {
+      "totalChars": 114445,
+      "totalTokensEst": 28612,
+      "steps": [
+        {
+          "step": "Project Ingestion (Monolithic graph.json)",
+          "chars": 104731,
+          "tokensEst": 26183
+        },
+        {
+          "step": "Read Full Target File (invariants.mjs)",
+          "chars": 2115,
+          "tokensEst": 529
+        },
+        {
+          "step": "Read Full Test File (domain.test.mjs)",
+          "chars": 6471,
+          "tokensEst": 1618
+        },
+        {
+          "step": "Ingest Raw Test Terminal Output",
+          "chars": 961,
+          "tokensEst": 241
+        },
+        {
+          "step": "Unstructured Chat History & State Sync",
+          "chars": 167,
+          "tokensEst": 42
+        }
+      ]
+    },
+    "contextosV2Agent": {
+      "totalChars": 4229,
+      "totalTokensEst": 1058,
+      "steps": [
+        {
+          "step": "os_context brief",
+          "chars": 2637,
+          "tokensEst": 660,
+          "desc": "Progressive summary of active plan, active task, processes and recent blocks"
+        },
+        {
+          "step": "task create (draft)",
+          "chars": 251,
+          "tokensEst": 63,
+          "desc": "Create task with tracked working set files"
+        },
+        {
+          "step": "task develop (active)",
+          "chars": 54,
+          "tokensEst": 14,
+          "desc": "Transition state machine into active development"
+        },
+        {
+          "step": "code outline",
+          "chars": 558,
+          "tokensEst": 140,
+          "desc": "Parse symbols and line ranges in target file"
+        },
+        {
+          "step": "code read (surgical symbol)",
+          "chars": 386,
+          "tokensEst": 97,
+          "desc": "Fetch only the exact target function without full file dump"
+        },
+        {
+          "step": "code edit (surgical patch)",
+          "chars": 96,
+          "tokensEst": 24,
+          "desc": "AST-anchored surgical in-place modification"
+        },
+        {
+          "step": "run_command (sanitized receipt)",
+          "chars": 37,
+          "tokensEst": 10,
+          "desc": "ANSI stripped, credentials redacted, noise collapsed into compact receipt"
+        },
+        {
+          "step": "task check (checking)",
+          "chars": 134,
+          "tokensEst": 34,
+          "desc": "Record verification gate with evidence reference"
+        },
+        {
+          "step": "task sync (syncing & completed)",
+          "chars": 76,
+          "tokensEst": 19,
+          "desc": "Verify 100% block coverage gate and sync graph.json"
+        }
+      ]
+    },
+    "reductionPercent": 96.3,
+    "tokensSavedEst": 27554
+  },
+  "verification": {
+    "coverageGatePassed": true,
+    "testsPassed": true,
+    "graphSynchronized": true
+  }
+}

@@ -1,76 +1,221 @@
 ---
 name: contextos
-description: Keep project architecture, progress, source locators and verified handoffs synchronized with ContextOS while each task reads only the code and knowledge it needs.
+description: Context operating system for AI coding agents. Governs context lifecycle via C-D-C-S state machines, AST outlines, surgical reads/edits across 10+ languages, out-of-context command receipts, categorized rules, and single-file chapter decisions.
 ---
 
-# ContextOS 工作方式
+# ContextOS · 智能体上下文操作系统开发指南
 
-ContextOS 是项目的结构化记忆层。它保存 Block、Link、Chain、Plan、Decision、Checkpoint 和源码定位，让 AI 能够沿着当前任务直接进入相关架构和代码。
+ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控制与架构治理操作系统。它通过拓扑图谱结构化索引、按需切片展开、编译器级 AST 手术刀读写、脱敏出舱命令沙箱、分类规则库、章节式架构决议以及 C-D-C-S 状态机，保障大规模与复杂项目在长对话周期中的上下文极度精炼与架构一致性。
 
-用户按正常方式描述任务。AI 根据任务需要读取项目结构或代码定位，并在结构发生变化时更新 OS。
+---
 
-## 任务开始
+## 核心开发节奏：C-D-C-S 闭环
 
-1. 任务需要项目进度、规则或交接信息时，使用绝对 `projectRoot` 调用 `context_for_task`。架构已经明确时，可以直接从 `entity_open`、`chain_code_stream` 或 `block_code_stream` 开始。
-2. 使用 `plan_context` 展开 Plan，使用 `entity_open` 展开单个 Block、Chain、Link 或 Decision。每次只展开当前工作需要的记录。
-3. 延续已有工作时复用 `context_for_task` 或 `sync_issues` 中的 TaskSession。新功能先登记 Block、Link 和 Chain，再使用 `task_begin` 建立任务范围。
-4. Plan 扩展使用 `plan_append_changes` 或 `plan_append_chain_scope`，结构重排时使用对应的完整更新操作。
+在进行任何真实功能开发、重构或缺陷修复时，推荐遵循 **`Create → Develop → Check → Sync`** 的确定性工程闭环：
 
-## Block、Chain 与 Composite
+```text
+[1. Create]   os_context(brief) ──> plan(open/create) ──> task(create/develop)
+                    │
+[2. Develop]  code(search/outline) ──> code(read) ──> code(edit) ──> task(note)
+                    │
+[3. Check]    run_command(test/lint) ──> task(check with receiptId)
+                    │
+[4. Sync]     task(sync with 100% coverage gate) ──> plan(check/complete)
+```
 
-- Block 表示一个独立的架构职责，可以是初始蓝图，也可以绑定一个或多个源码入口。
-- Leaf Chain 表示一个聚焦的功能路径，按明确顺序连接多个 Block。
-- Composite Chain 表示较大的功能路线，成员可以是子 Chain 或直接 Block。父级展示阶段，子级保存实现路径。
-- Block 何时组合为 Chain、原 Block 何时从活动架构移除、哪些 Link 属于新结构，由 AI 根据功能语义决定。
-- 结构变更优先使用一次完整的 `chain_compose` 或 `graph_mutate`：写入新成员和路线、更新父级关系、移除被替代的活动 Block，然后读取结果确认。
-- `chain_reconcile` 用于查看成员、Link、顺序、孤立 Block 和候选关系。AI 根据返回结果选择下一次组合操作。
-- `graph_validate` 用于确认成员存在、路线连通、端点有效、Composite 层级无循环以及投影已经同步。
-- `architecture_link_suggest` 提供代码关系和架构关系候选。AI 结合功能意图选择真正需要的 Link。
+1. **Create（创建任务）**：从 `os_context(brief)` 获悉当前系统概况，锚定或创建 Plan，建立具体 Task 并明确 `workingSet`（本任务修改的文件范围）。
+2. **Develop（手术刀开发）**：通过 AST 大纲与局部符号提取进行精准阅读与修改，随时调用 `task(note)` 记录关键思考与中间推理。
+3. **Check（验证沉淀）**：使用 `run_command` 运行构建与测试，日志出舱存盘，将生成的精简回执（Receipt ID）写入 `task(check)` 作为验证证据。
+4. **Sync（原子同步）**：调用 `task(sync)` 触发 **100% 工作区覆盖率门禁**，确保所有改动文件均归属于明确的 Block 站台，原子更新 Git 与图谱状态。
 
-## 精确读取源码
+---
 
-Block 可以覆盖多个文件和多个方法。Block 本身保存主要入口和范围，细粒度方法信息由源码索引按需提供。
+## 一、9 大核心 Facade 工具全景与参数规范
 
-1. 调用 `block_code_stream` 获取该 Block 的完整 locator 清单：文件、符号、角色、起止行、源码 hash 和绑定状态。
-2. 调用 `chain_code_stream` 获取整个 Chain 的阶段级 locator 清单。Composite 先查看子 Chain，再展开目标阶段。
-3. 使用本地 CLI 按 locator 读取代码范围：
+ContextOS 收敛为 9 个高内聚 Facade 工具，覆盖 AI 开发全生命周期：
 
-   ```text
-   contextos code --path <file> --symbol <symbol>
-   contextos code --path <file> --start <line> --end <line>
-   ```
+### 1. `os_context` —— 项目全景与上下文切片
+- **核心作用**：会话启动引导、实体快速搜索、按需提取上下文切片。
+- **关键 Action 与入参**：
+  - `action: "brief"`：获取 L0 简报（当前活跃 Plan、进行中 Task、后台常驻服务、核心 Metro 拓扑概览）。
+  - `action: "search", query: "关键词"`：跨 Block、Chain、Task 全局搜索实体。
+  - `action: "open", entityId: "实体ID"`：获取特定实体的结构化上下文切片。
+- **最佳使用时机**：**每次新对话开启或任务切换时的第一步操作**。调用 `brief` 仅消耗几百 tokens 即可完整掌握项目状态，无需遍历全仓库。
 
-4. 一个 Block 有多个 SourceRef 时，按当前任务选择需要的 locator，逐个读取对应方法、类型、调用方、被调用方或测试。文件级重构和符号无法定位时，再读取完整文件。
-5. 源码修改由 AI 使用常规 CLI 或编辑工具完成。修改后调用 `source_sync`，让符号位置和 hash 重新绑定。
+### 2. `plan` —— 里程碑与阶段计划管理
+- **核心作用**：承载大型工程目标，按有序阶段（Phases）与检查点（Checkpoints）追踪开发全流程。
+- **关键 Action 与入参**：
+  - `action: "list"`：列出所有计划及其状态（`active`, `draft`, `completed`）。
+  - `action: "create", planData: { title, summary, phases: [{ id, name, description, checkpoints: [{ id, title, status }] }] }`：创建结构化多阶段计划。
+  - `action: "open", id: "计划ID"`：查看计划完整阶段与检查点进展。
+  - `action: "check", id: "计划ID", checkpointId: "检查点ID", passed: true, evidenceRef: "凭据"`：标记检查点完成。
+  - `action: "complete", id: "计划ID", planData: { completedSummary: "..." }`：归档完结计划，生成历史摘要。
+- **最佳使用时机**：承接复杂需求、重构或版本发布时。通过有序 Checkpoints 确保每一步均有始有终、可验证。
 
-源码索引在服务端扫描文件并保存符号目录，响应只携带选定的定位信息和代码片段，因此索引规模不会直接变成对话上下文。
+### 3. `task` —— C-D-C-S 任务状态机与覆盖率门禁
+- **核心作用**：执行原子开发任务，绑定物理工作集，记录笔记与检查证据，并在最终 Sync 时执行覆盖率门禁。
+- **关键 Action 与入参**：
+  - `action: "create", taskData: { planId, phaseId, title, description, workingSet: ["src/..."] }`：创建任务。
+  - `action: "develop", id: "任务ID"`：将任务切换至激活开发态。
+  - `action: "note", id: "任务ID", text: "记录内容", kind: "decision" | "discovery" | "progress"`：在任务流中沉淀重要决策与发现。
+  - `action: "check", id: "任务ID", checkData: { receiptId: "...", description: "单元测试通过", passed: true }`：记录命令回执验证。
+  - `action: "sync", id: "任务ID", syncData: { blocks: [...] }`：**原子写回**。触发 100% 工作区覆盖率校验。
+- **最佳使用时机**：日常功能实现与 bugfix 的主战场。开发过程中随时记录 `note`，测试通过后一次性执行 `sync`。
 
-## 进度与验证
+### 4. `code` —— 编译器级真 AST 手术刀读写（10+ 语言）
+- **核心作用**：结构大纲审视、精准符号抽取、补丁式安全写入、自动符号重锚。
+- **支持语言**：原生支持 JavaScript/TypeScript (JSX/TSX), Python, Swift, Java, Kotlin, C/C++, C#, Go, Rust, PHP, Ruby。
+- **关键 Action 与入参**：
+  - `action: "outline", path: "文件路径"`：提取类、接口、函数、方法、导入列表与行号范围，不倾倒函数体。
+  - `action: "search", query: "符号名"`：全局跨文件检索符号签名与位置。
+  - `action: "read", path: "文件路径", selector: { symbol: "类名.方法名" }` 或 `{ startLine: 10, endLine: 35 }`：仅提取目标代码片段。
+  - `action: "edit", path: "文件路径", targetContent: "原代码", replacementContent: "新代码"`：唯一性文本精准替换，系统自动重新解析 AST 并重锚所有符号。
+- **最佳使用时机**：任何代码阅读与编写场景。**推荐“search 定位 → outline 审视 → read 手术刀提取 → edit 精准替换”**，杜绝读取整个长文件。
 
-1. 编辑完成后调用 `task_reconcile`，同步变更文件、绑定状态、任务范围和 Plan 覆盖。
-2. 使用 `graph_status` 查看孤立 Block、断开路线、过期定位和待验证项目。
-3. 使用 `run_command` 执行测试、构建和检查，读取压缩后的结果摘要。
-4. 使用 `checkpoint_record` 记录验证证据，再使用 `task_finish` 完成任务收尾。
-5. 最后调用 `graph_validate` 确认数据库、图谱投影、成员关系和 Chain 拓扑处于同一版本。
-6. 使用 `timeline_sync` 保存当前工作焦点和下一步动作，方便新的对话继续。
+### 5. `run_command` —— 出舱脱敏命令执行沙箱
+- **核心作用**：执行有限生命周期的命令（编译、测试、代码扫描、脚本）。
+- **关键参数**：`command: "npm test"`, `cwd: "可选工作路径"`, `maxChars: 1500`, `timeoutMs: 60000`。
+- **运行机制**：
+  1. 自动剔除 ANSI 终端着色符与格式控制符；
+  2. 自动检测并脱敏 API 密钥、Token 与敏感环境变量；
+  3. 全量原始输出保存至 `.contextos/logs/<timestamp>-<hash>.log`，供持久排查；
+  4. 仅向对话上下文返回紧凑的 **Receipt 回执**（包含 ExitCode、耗时、Receipt ID 以及关键错误堆栈诊断）。
+- **最佳使用时机**：运行任何测试套件、代码构建或环境检查命令。极大削减 98% 终端噪音，防止长日志污染模型注意力。
 
-## 项目知识
+### 6. `process` —— 长期常驻后台守护进程管理器
+- **核心作用**：托管持续运行的进程（Dev Server、文件 Watcher、长连接 Worker、模拟后台）。
+- **关键 Action 与入参**：
+  - `action: "start", command: "npm run dev", id: "可选进程标识"`：在独立进程组中启动守护进程。
+  - `action: "list"`：列出所有托管进程的 PID、状态、运行时间与监听端口。
+  - `action: "status", id: "进程ID"`：查看特定进程状态与资源开销。
+  - `action: "logs", id: "进程ID", lines: 50, grep: "关键词"`：按需过滤调阅进程实时输出日志。
+  - `action: "stop", id: "进程ID"`：递归终止整棵进程树，释放端口与内存。
+- **最佳使用时机**：本地联调、启动预览服务。常驻进程状态直连桌面端左下角，开发结束时调用 `stop` 干净释放。
 
-- 内部设计、审计和指南使用 `document_write`，章节更新使用 `document_patch`。
-- README 保持在仓库原位置，由 App 以只读方式预览；内部 Markdown 文档作为 OS Document 在 App 中按章节展示。
-- Decision 保存长期取舍，Plan 保存执行顺序，Checkpoint 保存验证证据。
-- 使用体验数据和可重复的读取统计分开记录。日常使用体感上下文压缩频率大约减少 60%。
+### 7. `block` —— 真实代码能力的物理站台
+- **核心作用**：定义和管理系统的基础功能块，绑定物理源文件与关键 AST 符号。
+- **关键 Action 与入参**：
+  - `action: "list"`：列出所有 Block 及其绑定文件。
+  - `action: "open", id: "BlockID"`：查看 Block 职责描述、关联符号与依赖关系。
+  - `action: "search", query: "关键词"`：根据职责或代码路径搜索 Block。
+  - `action: "bind", id: "BlockID", blockData: { artifactRefs: [...] }`：将新增源码文件绑定到 Block。
+- **约束规范**：**杜绝虚空 Block（Ghost Block）**。每一个 Block 必须在物理磁盘上存在对应的源码实现。
 
-## 工具索引
+### 8. `chain` —— 地铁主线与正交换乘链接
+- **核心作用**：将 Block 串接为清晰的业务轨道，管理系统的数据流向与依赖拓扑。
+- **关键 Action 与入参**：
+  - `action: "list"`：查看系统所有地铁线（Feature Chains）。
+  - `action: "open", id: "ChainID"`：查看整条线路的车站顺序与跨线换乘。
+  - `action: "compose", id: "ChainID", chainData: { blocks: [...] }`：编排线路沿途站点。
+  - `action: "link", linkData: { from: "...", to: "...", kind: "calls" | "depends_on" | "imports" | "implements" }`：建立跨线连接。
+  - `action: "validate_layout"`：校验地铁拓扑布局，防止出现长蛇乱绕。
+- **设计哲学**：Chain 是平行的轨道，Link 是带类型的垂直换乘，让整体架构如地铁图般清晰直观。
 
-| 目的 | 工具 |
-|---|---|
-| 定位项目 | `context_for_task`, `project_map`, `entity_open`, `graph_search` |
-| 读取知识 | `document_list`, `document_open`, `plan_context` |
-| 维护架构 | `graph_mutate`, `graph_patch`, `graph_flow`, `architecture_connect`, `chain_append`, `chain_compose`, `chain_reconcile` |
-| 读取源码 | `source_index`, `source_sync`, `source_binding_suggest`, `source_binding_accept`, `chain_code_stream`, `block_code_stream` |
-| 维护任务 | `task_begin`, `task_scope`, `task_reconcile`, `task_finish`, `sync_issues` |
-| 验证结果 | `run_command`, `checkpoint_record`, `block_seal`, `graph_status`, `graph_validate` |
-| 检查运行版本 | `runtime_info` |
+### 9. `knowledge` —— 项目规则库与单文件架构决议
+- **核心作用**：全项目工程规范（Rules）与重大架构决议（Decisions）的治理中心。
+- **关键 Action 与入参**：
+  - `action: "rule_list"`：列出所有已分类规则的概要与优先级。
+  - `action: "rule_open", ruleId: "规则ID"`：读取完整规则规范内容。
+  - `action: "rule_write", ruleData: { id, title, category, priority, summary, content }`：新建或更新分类规则。
+  - `action: "decision_open", sectionId: "可选DEC-ID"`：调阅 ADR 决策文档或指定章节。
+  - `action: "decision_write", sectionId: "DEC-xxx", sectionTitle: "...", content: "..."`：按章节增量追加或修正重大架构决策。
+- **最佳使用时机**：形成工程规范时写 Rule；做出技术取舍、重构设计或经历路线弯路教训时写 Decision。
 
-解析器提供语法级定位和稳定符号身份。动态调用、反射和不支持的语法会以明确的状态和候选位置返回，AI 结合功能语义选择读取范围和架构关系。
+---
+
+## 二、项目规则 (Rules) 的定义与写入规范
+
+项目规则是团队与 AI 协作的契约标准。存盘于 `.contextos/rules/<id>.md`，由 Git 统一版本控制，在桌面端侧边栏的“项目规则”中以只读抽屉高亮展示。
+
+### 1. 规则分类标准（高自由度，AI 自主决定）
+- **分类完全开放**：ContextOS 对 `category` 不做任何硬性枚举约束，AI 可根据工程语义自由定义分类标识，常见参考如：
+  - `ui_ux`：界面设计、精密网格、色彩与排版；
+  - `architecture`：架构分层原则、模块单向依赖、解耦规约；
+  - `code_style`：编程语言风格、命名约定、注释纪律；
+  - `testing`：单元测试覆盖标准、mock 策略、冒烟测试；
+  - `security`：敏感信息脱敏、凭据防护、校验规范；
+  - `performance`：响应延迟阈值、并发控制、资源释放；
+  - `workflow`：Git 提交规范、分支管理、发布节奏；
+  - 或根据业务自由创建其他任何分类标签（如 `database`, `api`, `infra` 等）。
+
+### 2. 写入规则实战代码示例
+当建立新的规范（例如 UI 设计语言规约）时，调用 `knowledge` 工具：
+
+```json
+{
+  "action": "rule_write",
+  "ruleData": {
+    "id": "rule-ui-design-principles",
+    "title": "白色精密工程语言与 iOS 克制艺术",
+    "category": "ui_ux",
+    "priority": "high",
+    "summary": "定义 ContextOS 桌面端原生界面的黑白灰精密工程美学、严谨间距网格与克制动效原则。",
+    "content": "### 1. 视觉基调\n- 采用高对比度精密工程黑白灰调，杜绝高饱和度大面积杂色；\n- 状态标识遵循语义色点（青色 Gateway、蓝色 UI、绿色 Service、橙色 Data）；\n\n### 2. 字体与间距\n- 统一采用系统等宽字体展示哈希、行号与路径；\n- 严格基于 4pt/8pt 几何网格对齐，禁止随意硬编码非标 padding。"
+  }
+}
+```
+
+---
+
+## 三、架构决策 (ADR Decision) 的章节式管理与写入规范
+
+重大架构决议集中收录于单个根文件 `DECISION.md` 中。每一次重大重构、方案选型或**走过技术弯路后的反思纠偏**，都必须通过章节追加或修正。
+
+### 1. 为什么必须沉淀决策？
+- 防止后续对话或新会话再次重蹈覆辙（例如：为什么放弃传统长终端日志而采用脱敏回执？为什么放弃正则语法抽取而引入 AST 引擎？）；
+- 让接手的 AI 智能体能够明确了解系统“为何演变至此”。
+
+### 2. 决策章节标准四段式结构
+每一个 ADR 章节推荐包含以下结构：
+1. **背景 (Context)**：遇到了什么痛点或性能瓶颈？
+2. **决策 (Decision)**：最终确立了何种方案？
+3. **原因与替代方案取舍 (Rationale & Tradeoffs)**：尝试了哪些失败路线？为何放弃其他做法？
+4. **影响与后果 (Consequences)**：带来了哪些积极收益与潜在考量？
+
+### 3. 写入决策实战代码示例
+调用 `knowledge` 工具执行 `decision_write`：
+
+```json
+{
+  "action": "decision_write",
+  "sectionId": "DEC-010",
+  "sectionTitle": "AST 多语言编译器级代码分析引擎设计",
+  "content": "### 1. 背景\n随着项目支持语言扩展到 Java、Kotlin、C++、C#、Go、Rust、PHP、Ruby，早期基于粗粒度正则的符号识别容易受到字符串内花括号和多行注释的干扰，导致方法识别错位。\n\n### 2. 决策\n引入带注释与字符串状态感知的嵌套花括号匹配器（Comment- and String-Aware Brace Matcher），并针对不同语言设计专用语义扫描器。\n\n### 3. 原因与替代方案取舍\n- 曾尝试全量引入多语言 Tree-sitter C++ 本地二进制绑定，但在多平台跨机器编译打包时体积膨胀且容易失败；\n- 纯正则方案无法处理深层嵌套类和字符串中包含的花括号；\n- 最终采纳轻量级纯 JavaScript 实现的无依赖状态机，兼顾零环境依赖与精确语法树解析。\n\n### 4. 影响与后果\n10+ 种主流语言全面支持 outline 大纲提取、符号搜索与精确代码块替换，单测覆盖率 100%。"
+}
+```
+
+---
+
+## 四、架构抽象与 Block 划分设计指南
+
+### 1. Block 是代码能力的物理站台
+- **真实单一职责**：Block 描述系统中的一个独立能力（如“SQLite WAL 存储引擎”、“Metro 路线图画布”、“AST 代码抽取工具”）。
+- **适度拆分**：每个 Block 推荐绑定 **1 ~ 3 个高内聚代码文件与关键符号**。避免将包含数十个文件的整个子系统压缩为单一 Block（那本质是 Chain）。
+- **杜绝 Ghost Block**：新建 Block 时必须确保磁盘上存在对应的实现文件，并通过 `block.bind` 关联 `artifactRefs`。
+
+### 2. 开放自由的 Block 类型 (`kind`)
+ContextOS 对 `kind` 保持开放，支持 AI 根据工程语义自由定义：
+- 界面层：`ui`, `view`, `presentation`
+- 存储层：`database`, `storage`, `data`, `model`
+- 服务与业务层：`service`, `engine`, `worker`, `lifecycle`
+- 接口与通信层：`gateway`, `api`, `protocol`, `router`
+- 工具与支撑层：`utility`, `infra`, `tooling`
+
+### 3. 架构导航三级递进法则
+面对陌生或大型项目时，AI 推荐遵循自顶向下的三级导航：
+1. **宏观查 Chain**：`chain(list)` 查看系统主干业务流；
+2. **微观定 Block**：沿线路找到相关 Block，`block(open)` 查看绑定源文件；
+3. **手术刀提取**：`code(outline)` 审视函数大纲，`code(read)` 提取目标方法，精准修改。
+
+---
+
+## 五、跨会话开发无缝衔接指引
+
+ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文件（`.contextos/graph.json`、`.contextos/rules/`、`DECISION.md`）中。
+
+1. **新会话启动**：第一句话调用 `os_context(brief)`，瞬间获取上次对话遗留的活跃 Plan、进行中 Task 及核心拓扑；
+2. **继续未完成工作**：`task(open, id)` 获取上下文切片与历史 `note`，无缝接续开发；
+3. **沉淀新知**：技术选型写入 `decision_write`，新规约写入 `rule_write`；
+4. **收尾与同步**：运行测试并记录 `task(check)`，执行 `task(sync)` 确保 100% 覆盖率，最终完结 Plan。
+
+

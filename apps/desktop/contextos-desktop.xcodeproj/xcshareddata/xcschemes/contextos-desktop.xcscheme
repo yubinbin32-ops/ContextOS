@@ -14,8 +14,8 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3C039C48178109589A97B3AF"
-               BuildableName = "contextos.app"
+               BlueprintIdentifier = "44208EAA42AC772CF49AA1D6"
+               BuildableName = "contextos-desktop.app"
                BlueprintName = "contextos-desktop"
                ReferencedContainer = "container:contextos-desktop.xcodeproj">
             </BuildableReference>
@@ -30,8 +30,8 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3C039C48178109589A97B3AF"
-            BuildableName = "contextos.app"
+            BlueprintIdentifier = "44208EAA42AC772CF49AA1D6"
+            BuildableName = "contextos-desktop.app"
             BlueprintName = "contextos-desktop"
             ReferencedContainer = "container:contextos-desktop.xcodeproj">
          </BuildableReference>
@@ -53,8 +53,8 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3C039C48178109589A97B3AF"
-            BuildableName = "contextos.app"
+            BlueprintIdentifier = "44208EAA42AC772CF49AA1D6"
+            BuildableName = "contextos-desktop.app"
             BlueprintName = "contextos-desktop"
             ReferencedContainer = "container:contextos-desktop.xcodeproj">
          </BuildableReference>
@@ -70,8 +70,8 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "3C039C48178109589A97B3AF"
-            BuildableName = "contextos.app"
+            BlueprintIdentifier = "44208EAA42AC772CF49AA1D6"
+            BuildableName = "contextos-desktop.app"
             BlueprintName = "contextos-desktop"
             ReferencedContainer = "container:contextos-desktop.xcodeproj">
          </BuildableReference>

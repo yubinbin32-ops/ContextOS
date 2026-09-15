@@ -42,10 +42,17 @@ struct ContentView: View {
         .sheet(isPresented: $store.settingsPresented) { SettingsView(store: store) }
         .task(id: store.projectRoot) {
             let root = store.projectRoot
+            var initialized = false
             while !Task.isCancelled {
                 await knowledge.reload(root: root)
                 let issues = store.knowledgeSyncIssues()
                 if syncIssues != issues { syncIssues = issues }
+                if !initialized {
+                    initialized = true
+                    if store.selection == nil, requestedDocument == nil, let firstPlan = store.snapshot.plans.first {
+                        store.focusPlan(firstPlan.id)
+                    }
+                }
                 try? await Task.sleep(for: .seconds(2))
             }
         }
@@ -55,13 +62,27 @@ struct ContentView: View {
             if let id = event.userInfo?["id"] as? String { openDocument(id, nil) }
         }
         .onOpenURL { url in
-            guard url.scheme == "contextos", url.host == "knowledge",
-                let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
-            if let project = parts.queryItems?.first(where: { $0.name == "project" })?.value, project != store.projectRoot {
-                store.openKnowledgeProject(at: URL(fileURLWithPath: project))
-            }
-            if let id = parts.queryItems?.first(where: { $0.name == "document" })?.value {
-                Task { await knowledge.reload(root: store.projectRoot); openDocument(id, parts.queryItems?.first(where: { $0.name == "section" })?.value) }
+            guard url.scheme == "contextos" else { return }
+            if url.host == "knowledge",
+                let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                if let project = parts.queryItems?.first(where: { $0.name == "project" })?.value, project != store.projectRoot {
+                    store.openKnowledgeProject(at: URL(fileURLWithPath: project))
+                }
+                if let id = parts.queryItems?.first(where: { $0.name == "document" })?.value {
+                    Task { await knowledge.reload(root: store.projectRoot); openDocument(id, parts.queryItems?.first(where: { $0.name == "section" })?.value) }
+                }
+            } else if url.host == "select",
+                let parts = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                closeDocument()
+                let typeStr = parts.queryItems?.first(where: { $0.name == "type" })?.value ?? "plan"
+                let id = parts.queryItems?.first(where: { $0.name == "id" })?.value ?? ""
+                if typeStr == "plan" {
+                    store.focusPlan(id.isEmpty ? (store.snapshot.plans.first?.id ?? "plan-v2-rebuild") : id)
+                } else if typeStr == "decision" {
+                    store.select(GraphSelection(type: .decision, id: id))
+                } else if typeStr == "block" {
+                    store.select(GraphSelection(type: .block, id: id))
+                }
             }
         }
     }
@@ -90,10 +111,10 @@ struct ContentView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     sidebarSection(.knowledge, title: store.activeLocale == "zh-Hans" ? "知识" : "Knowledge") {
-                        ForEach(knowledge.documents) { doc in
-                            sidebarButton(title: doc.title, subtitle: doc.kind == "readme" ? (store.activeLocale == "zh-Hans" ? "仓库原文件 · 只读" : "REPOSITORY · READ ONLY") : "OS · r\(doc.revision)", color: ContextOSTheme.blockKindColor("principle"), selected: requestedDocument == doc.id) { openDocument(doc.id, nil) }
+                        ForEach(knowledge.documents.filter { $0.kind == "readme" }) { doc in
+                            sidebarButton(title: doc.title, subtitle: store.activeLocale == "zh-Hans" ? "仓库原文件 · 只读" : "REPOSITORY · READ ONLY", color: ContextOSTheme.blockKindColor("principle"), selected: requestedDocument == doc.id) { openDocument(doc.id, nil) }
                         }
-                        if knowledge.documents.isEmpty { Text(store.activeLocale == "zh-Hans" ? "README 与项目文档" : "README and project documents").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 18) }
+                        if knowledge.documents.filter({ $0.kind == "readme" }).isEmpty { Text(store.activeLocale == "zh-Hans" ? "README 与项目文档" : "README and project documents").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 18) }
                     }
                     if !syncIssues.isEmpty || store.sourcePollingError != nil {
                         sidebarSection(.synchronization, title: store.activeLocale == "zh-Hans" ? "同步检查 (\(syncIssues.count))" : "Sync checks (\(syncIssues.count))") {
@@ -101,26 +122,37 @@ struct ContentView: View {
                             ForEach(syncIssues, id: \.self) { Text($0).font(.caption).foregroundStyle(ContextOSTheme.muted).textSelection(.enabled).padding(.horizontal, 18).padding(.vertical, 4) }
                         }
                     }
-                    sidebarSection(.projectRules, title: store.text("projectRules")) {
-                        ForEach(projectRuleBlocks) { block in
-                            sidebarButton(
-                                title: store.blockText(block, field: "title"),
-                                subtitle: "\(store.ruleScopeLabel(block.id).uppercased()) · \(block.deliveryState.uppercased())",
-                                color: ContextOSTheme.blockKindColor(block.kind),
-                                selected: store.selection == GraphSelection(type: .block, id: block.id)
-                            ) { store.select(GraphSelection(type: .block, id: block.id)) }
+                    let ruleDocs = knowledge.documents.filter { $0.kind == "rule" }
+                    if !ruleDocs.isEmpty || !projectRuleBlocks.isEmpty {
+                        sidebarSection(.projectRules, title: store.text("projectRules")) {
+                            ForEach(ruleDocs) { rule in
+                                sidebarButton(
+                                    title: rule.title,
+                                    subtitle: store.activeLocale == "zh-Hans" ? "规范 · 只读" : "RULE · SPEC",
+                                    color: ContextOSTheme.blockKindColor("principle"),
+                                    selected: requestedDocument == rule.id
+                                ) { openDocument(rule.id, nil) }
+                            }
+                            ForEach(projectRuleBlocks) { block in
+                                sidebarButton(
+                                    title: store.blockText(block, field: "title"),
+                                    subtitle: "\(store.ruleScopeLabel(block.id).uppercased()) · \(block.deliveryState.uppercased())",
+                                    color: ContextOSTheme.blockKindColor(block.kind),
+                                    selected: store.selection == GraphSelection(type: .block, id: block.id)
+                                ) { store.select(GraphSelection(type: .block, id: block.id)) }
+                            }
                         }
                     }
 
-                    if !store.snapshot.decisions.isEmpty {
+                    if let decisionDoc = knowledge.documents.first(where: { $0.id == "DECISION.md" }) {
                         sidebarSection(.decisions, title: store.text("decisions")) {
-                            ForEach(store.snapshot.decisions) { decision in
-                                sidebarButton(
-                                    title: decision.title,
-                                    subtitle: "\(decision.status.uppercased()) · \(store.decisionScopeLabel(decision.id))",
-                                    color: ContextOSTheme.blockKindColor("principle"),
-                                    selected: store.selection == GraphSelection(type: .decision, id: decision.id)
-                                ) { store.select(GraphSelection(type: .decision, id: decision.id)) }
+                            sidebarButton(
+                                title: "DECISION.md",
+                                subtitle: store.activeLocale == "zh-Hans" ? "架构决策记录 · 只读" : "ADR · READ ONLY",
+                                color: ContextOSTheme.blockKindColor("principle"),
+                                selected: requestedDocument == decisionDoc.id
+                            ) {
+                                openDocument(decisionDoc.id, nil)
                             }
                         }
                     }
@@ -175,6 +207,8 @@ struct ContentView: View {
                 }
                 .padding(.bottom, 16)
             }
+            Divider().padding(.horizontal, 14)
+            runningProcessesSection
             Divider().padding(.horizontal, 14)
             legend
         }
@@ -302,6 +336,13 @@ struct ContentView: View {
                 .foregroundStyle(ContextOSTheme.ink)
             }
             Spacer()
+            Button { store.fitOverview() } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(ContextOSTheme.ink)
+            }
+            .buttonStyle(.plain)
+            .help(store.activeLocale == "zh-Hans" ? "居中自适应视图" : "Fit overview")
             Text("\(Int((store.canvasScale * 100).rounded()))%")
                 .font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(ContextOSTheme.muted)
                 .help(store.activeLocale == "zh-Hans" ? "触控板捏合、⌘滚动或双击缩放" : "Pinch, ⌘-scroll, or double-click to zoom")
@@ -346,6 +387,86 @@ struct ContentView: View {
     private func legendItem(color: Color, text: String) -> some View {
         HStack(spacing: 4) { Circle().fill(color).frame(width: 6, height: 6); Text(text) }
             .font(.system(size: 8.5, weight: .medium, design: .rounded)).foregroundStyle(ContextOSTheme.ink.opacity(0.8))
+    }
+
+    private var runningProcessesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(store.activeLocale == "zh-Hans" ? "持续运行命令" : "RUNNING PROCESSES")
+                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                    .tracking(1.2)
+                    .foregroundStyle(ContextOSTheme.muted)
+                Spacer()
+                if !store.runningProcesses.isEmpty {
+                    Text("\(store.runningProcesses.count)")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(ContextOSTheme.focus.opacity(0.15))
+                        .foregroundStyle(ContextOSTheme.focus)
+                        .clipShape(Capsule())
+                }
+            }
+
+            if store.runningProcesses.isEmpty {
+                HStack(spacing: 5) {
+                    Circle().fill(ContextOSTheme.muted.opacity(0.3)).frame(width: 5, height: 5)
+                    Text(store.activeLocale == "zh-Hans" ? "暂无运行中的长期任务" : "No active background tasks")
+                        .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                        .foregroundStyle(ContextOSTheme.muted)
+                }
+                .padding(.vertical, 2)
+            } else {
+                VStack(spacing: 4) {
+                    ForEach(store.runningProcesses) { proc in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(proc.isRunning ? ContextOSTheme.success : ContextOSTheme.muted)
+                                .frame(width: 6, height: 6)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(proc.command)
+                                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(ContextOSTheme.ink)
+                                    .lineLimit(1)
+
+                                HStack(spacing: 6) {
+                                    Text("PID \(proc.pid)")
+                                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(ContextOSTheme.muted)
+                                    if let port = proc.port {
+                                        Text(":\(port)")
+                                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                            .foregroundStyle(ContextOSTheme.focus)
+                                    }
+                                }
+                            }
+
+                            Spacer()
+
+                            Button {
+                                store.stopProcess(id: proc.id)
+                            } label: {
+                                Image(systemName: "stop.circle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(ContextOSTheme.failure.opacity(0.85))
+                            }
+                            .buttonStyle(.plain)
+                            .help(store.activeLocale == "zh-Hans" ? "停止此长期任务" : "Stop process")
+                        }
+                        .padding(6)
+                        .background(ContextOSTheme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(ContextOSTheme.hairline, lineWidth: 0.8)
+                        )
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 
     private var projectRuleBlocks: [BlockItem] {

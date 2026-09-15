@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 2,
+  "version": "ContextOS V2",
+  "measuredAt": "2026-09-14T14:02:32.013Z",
+  "environment": {
+    "node": "v22.22.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M1"
+  },
+  "source": {
+    "gitHead": "822f3616313cff3a7ad617eb2e5b1ef82a6e352f",
+    "graphRevision": 1128,
+    "graphSha256": "e299867ec540cc8e565f3b5d273071d0535db457407723c44003cb5fa655601d"
+  },
+  "scope": {
+    "blocks": 69,
+    "chains": 20,
+    "links": 109,
+    "plans": 5,
+    "tasks": 1
+  },
+  "benchmarks": {
+    "contextIngestion": {
+      "fullGraphChars": 104731,
+      "fullGraphTokensEst": 26183,
+      "briefMarkdownChars": 2637,
+      "briefMarkdownTokensEst": 660,
+      "briefReductionPercent": 97.48,
+      "briefJsonChars": 34663,
+      "briefJsonReductionPercent": 66.9,
+      "searchQueryChars": 86,
+      "searchReductionPercent": 99.92,
+      "blockOpenChars": 1619,
+      "blockOpenReductionPercent": 98.45
+    },
+    "codeGateway": {
+      "files": [
+        {
+          "file": "packages/storage/src/database.mjs",
+          "language": "JavaScript",
+          "fullChars": 15692,
+          "fullTokensEst": 3923,
+          "outlineChars": 2183,
+          "outlineReductionPercent": 86.09,
+          "surgicalReadChars": 1196,
+          "surgicalReadReductionPercent": 92.38
+        },
+        {
+          "file": "packages/application/src/task-service.mjs",
+          "language": "JavaScript",
+          "fullChars": 4450,
+          "fullTokensEst": 1113,
+          "outlineChars": 1059,
+          "outlineReductionPercent": 76.2,
+          "surgicalReadChars": 177,
+          "surgicalReadReductionPercent": 96.02
+        },
+        {
+          "file": "packages/code-intel/src/code-tools.mjs",
+          "language": "JavaScript",
+          "fullChars": 6669,
+          "fullTokensEst": 1668,
+          "outlineChars": 515,
+          "outlineReductionPercent": 92.28,
+          "surgicalReadChars": 137,
+          "surgicalReadReductionPercent": 97.95
+        },
+        {
+          "file": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+          "language": "Swift",
+          "fullChars": 4689,
+          "fullTokensEst": 1173,
+          "outlineChars": 222,
+          "outlineReductionPercent": 95.27,
+          "surgicalReadChars": 1490,
+          "surgicalReadReductionPercent": 68.22
+        }
+      ],
+      "aggregate": {
+        "totalFullFileChars": 31500,
+        "totalFullFileTokensEst": 7875,
+        "totalOutlineChars": 3979,
+        "totalOutlineReductionPercent": 87.37,
+        "totalSurgicalReadChars": 3000,
+        "totalSurgicalReadReductionPercent": 90.48,
+        "combinedWorkflowChars": 6979,
+        "combinedWorkflowReductionPercent": 77.84
+      }
+    },
+    "noiseSanitization": {
+      "syntheticCase": {
+        "rawChars": 16713,
+        "rawTokensEst": 4179,
+        "sanitizedChars": 251,
+        "sanitizedTokensEst": 63,
+        "reductionPercent": 98.5,
+        "secretRedacted": true,
+        "errorRetained": true
+      }
+    },
+    "cumulativeSession": {
+      "traditionalSessionChars": 169657,
+      "traditionalSessionTokensEst": 42415,
+      "v2SessionChars": 10118,
+      "v2SessionTokensEst": 2530,
+      "overallReductionPercent": 94.04,
+      "tokensSavedEst": 39885
+    }
+  },
+  "conclusions": [
+    "Project context ingestion reduced by 97.48% using progressive L0-L1 Markdown.",
+    "Code exploration & inspection reduced by 77.84% using AST outlines and surgical symbol reading.",
+    "Terminal execution output noise reduced by 98.5% while preserving 100% of failure diagnostics.",
+    "Overall estimated session context footprint reduced by 94.04% (~39885 tokens saved per 4-file workflow)."
+  ]
+}

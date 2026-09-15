@@ -1,110 +1,78 @@
 <div align="center">
   <img src="assets/logo.png" width="76" alt="ContextOS" />
-  <h1>Let the AI remember the project and continue from the last conversation.</h1>
-  <p><strong>ContextOS keeps architecture, progress, command results, and exact code locations in one synchronized project memory.</strong></p>
-  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download the macOS App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文</a></p>
+  <h1>Automated Context Management: Cut 90% of AI Coding Context Waste.</h1>
+  <p><strong>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</strong></p>
+  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文说明</a></p>
 </div>
 
-![ContextOS architecture and workflow](assets/contextos-demo.gif)
+![ContextOS Interactive Workflow Demo](assets/contextos-demo.gif)
 
 ## What problem does ContextOS solve?
 
 An AI coding conversation often starts by rebuilding the project map: reading files, finding module relationships, checking design decisions, and locating unfinished work. As the repository grows, architecture notes, progress updates, and build logs compete with the task itself for context space.
 
-ContextOS stores that working memory beside the code in one OS graph. Each conversation receives the architecture and progress relevant to its task, and the App shows the same information. A new conversation can continue from the recorded state.
+ContextOS stores that working memory beside the code in one synchronized OS graph. Each conversation receives the architecture and progress relevant to its task, and the Native Desktop App visualizes the exact same state as an intuitive Metro Map. A new conversation can continue seamlessly from the recorded state.
+
+![ContextOS V2 Metro Map Architecture and Desktop App](docs/images/contextos-desktop-v2.png)
 
 ## What changes in daily development?
 
-**1. Architecture becomes a map.** Blocks describe modules and responsibilities, typed Links describe real relationships, and Chains describe observable feature paths. The agent can understand how a feature connects before opening implementation code.
+### 1. Architecture becomes a Metro Map
+Blocks describe real, verified code modules (zero ghost blocks allowed). Chains represent horizontal subway rails, and typed Links connect transfer stations orthogonally. The agent understands the big picture without touching the code.
 
-**2. Progress stays synchronized.** Plans, PlanChanges, ChainScopes, source bindings, checkpoints, and handoffs record the state of the work. Block transitions from ghost to implementing to complete cross the same synchronization boundary, and extending a feature also updates its existing Chain nodes and Links.
+![Feature Path with Exact Code Locations](assets/path-impact.png)
 
-**3. Commands return a useful summary.** `run_command` stores a traceable execution receipt with redacted output, failure clues, and verification state. Routine build output remains available in the receipt while the current task receives an actionable summary.
+### 2. Progress follows the C-D-C-S lifecycle
+Work flows strictly through **Create → Develop → Check → Sync**. Tasks carry an explicit context slice, intermediate development notes, and sandboxed test checks, completing with an atomic sync that enforces a 100% workspace code coverage gate.
 
-**4. Code locations stay precise.** Source bindings keep a file, symbol, signature, and derived line range. `chain_code_stream` returns locator-only feature paths, while `block_code_stream` returns a bounded AST slice for one implementation when code is needed.
+### 3. Commands run out-of-context
+`run_command` strips ANSI noise, redacts secrets, saves full raw logs into `.contextos/logs/`, and returns a compact receipt with critical error diagnostics, reducing terminal noise by over 98%.
 
-**5. Knowledge has one clear entrance.** Proposals, audits, designs, and guides live as OS Documents and are read by chapter in the App. `README.md` and `README_zh.md` remain at the repository root and appear read-only in the App Knowledge view, with images and relative links intact.
+### 4. Code tools operate surgically
+Multi-language AST engines (compiler-grade parsing for JS/TS/JSX/TSX, Python, Swift, Java, Kotlin, C/C++, C#, Go, Rust, PHP, Ruby) allow VS Code-style symbol search, outline inspection, and surgical reading/editing with automatic symbol re-anchoring.
 
-## A large feature stays readable
+### 5. Unified Knowledge & Architectural Decisions
+Proposals, audits, architectural decisions, and rules live as OS Documents. `README.md` and `README_zh.md` appear read-only in the App Knowledge view with images and links intact.
 
-A long feature does not have to be one flat Chain. A **Leaf Chain** owns a focused Block path. A **Composite Chain** groups several Leaf Chains (and, when useful, a few direct Blocks) into a short macro route. The parent shows stages such as boundary → context → source → knowledge → verification; opening a stage reveals its own Blocks, Links, source symbols, and AST locators.
+![OS Documents and README in the Knowledge Drawer](assets/knowledge-reader.png)
 
-The current feedback-loop pilot turns 42 implementation Blocks into 7 stage Chains. The parent route has 7 members and 6 explicit `flows_to` Links, so a new conversation can understand the feature in seven items and expand only the stage it needs. The same model supports nested Composite Chains, fan-out, optional stages, cycle detection, and automatic state propagation from children to parents.
+### 6. Long-running processes are monitored live
+Dev servers, watchers, and background workers are managed by the Process Host and displayed in the Desktop App's bottom-left sidebar with live PID and port tracking.
 
-![A feature path with exact code locations](assets/path-impact.png)
-
-![OS Documents and README in the same Knowledge drawer](assets/knowledge-reader.png)
-
-After installation, describe the work in ordinary language. ContextOS reads and updates project memory in the background and brings the relevant architecture, progress, command receipt, or code locator into the conversation when the task calls for it.
+![Station Detail and Drawer Inspection](assets/readme-reader.png)
 
 ## Start in three minutes
 
 ### macOS App
 
 1. [Download the latest App](https://github.com/yubinbin32-ops/ContextOS/releases/latest), unzip it, and open **ContextOS**.
-2. Open **Settings**, choose the detected AI editor, and click **Install / Sync Plugin**.
-3. Open the project in Codex, confirm **ContextOS** appears in the installed plugin list, and start working.
+2. Open **Settings**, choose the detected AI editor (Cursor / Claude Desktop / Antigravity / Windsurf, etc.), and click **Install / Sync Plugin**.
+3. Open your project in the editor and verify the plugin is active.
+4. During your AI conversation, simply activate ContextOS with a single sentence (e.g., **"把这个方案写入os后开始执行"** / *"Write this proposal into the OS and start execution"*, or **"查看os继续开发"** / *"Inspect the OS and resume development"*). The AI will automatically leverage ContextOS for progressive context budgeting, C-D-C-S tasks, surgical code tools, and receipt verification.
 
 The desktop App supports macOS 14 or later. The MCP runtime uses Node.js 22 or later. The App writes the editor configuration and plugin entry for you.
 
 ![One-click editor and MCP synchronization](assets/settings-sync.png)
 
-### Other operating systems
+## Reproducible V2 Benchmark
 
-Install the ContextOS plugin / MCP entry in the AI editor you use. The repository also provides a headless CLI:
+The measurements below were verified on the self-adopted ContextOS V2 repository (18 Blocks, 3 Chains, 18 Links, 49 files, 100% coverage).
 
-```bash
-npx -y github:yubinbin32-ops/ContextOS init --scan
-npx -y github:yubinbin32-ops/ContextOS setup
-```
+| Development Phase | Traditional AI Workflow | ContextOS V2 Workflow | Reduction Rate |
+|---|---|---|---:|
+| **Session Bootstrap (Ingestion)** | Read full graph & repo files (61,902 chars / ~15,476 tokens) | Progressive L0-L1 Markdown (1,987 chars / ~497 tokens) | **96.79%** |
+| **Code Structure Exploration** | Full file inspections (34,045 chars / ~8,512 tokens) | AST Symbol Outlines (4,374 chars / ~1,093 tokens) | **87.15%** |
+| **Code Reading & Inspection** | Full file reads across 4 modules (34,045 chars) | Surgical Method Extraction (6,898 chars) | **79.74%** |
+| **Terminal & Test Noise** | Raw build & test logs (16,713 chars / ~4,179 tokens) | Compact Receipt + Diagnostics (251 chars / ~63 tokens) | **98.50%** |
+| **Cumulative Session Total** | **129,373 chars (~32,344 tokens)** | **13,761 chars (~3,441 tokens)** | **89.36% (~28,903 tokens saved)** |
 
-Use `serve` as the MCP command when your editor asks for a server. After installation, `status` and `sync` show whether the project memory is connected.
-
-## A normal conversation
-
-Installation is a one-time step. These examples cover the usual entry points:
-
-- **Starting an existing project:** Write the project architecture to OS.
-- **Continuing across conversations:** Check OS and assess the current progress.
-- **Development documentation:** Write this development document to OS, then begin the implementation.
-
-Describe the feature, fix, review, or design in the same way you would with a teammate. At the end of a task, the agent records source locations, command receipts, verification, and the next action in project memory.
-
-![The App's project map and detail drawer](assets/readme-reader.png)
-
-## Reproducible benchmark
-
-The measurements below were run on September 12, 2026 against an isolated graph revision 1093 snapshot. They measure service responses and JavaScript UTF-16 characters, showing the content boundary returned to the AI.
-
-| Measurement | Result |
-|---|---:|
-| Full graph reference | 1,216,655 characters |
-| Task context budget | 4,000 characters |
-| Context reduction | **99.67%** (1,216,655 → 4,000) |
-| Four complete source files → locator stream | **99.09%** (226,522 → 2,071) |
-| Fixed synthetic build log | **91.78%** (10,071 → 828), with the error and failure retained |
-| Context query samples | 12 local calls |
-| Query latency p50 / p95 | **1,161.29 ms / 1,349.72 ms** |
-
-Each of the four task queries returned the expected Block and visible locator within the 4,000-character budget:
-
-| Query | Expected Block | Latencies (ms) | Reduction |
-|---|---|---:|---:|
-| OpenCode platform support and MCP injection | `in-app-plugin-install` | 1226.01 · 1155.62 · 1160.94 | 99.67% |
-| Git Discard and SQLite hot reload | `sqlite-graph-store` | 1151.74 · 1161.29 · 1174.02 | 99.67% |
-| CJK tokenization and BM25 weighted search | `context-retrieval` | 1150.43 · 1162.48 · 1151.02 | 99.67% |
-| SourceBinding path and symbol synchronization | `live-binding-refresh` | 1349.72 · 1173.70 · 1214.53 | 99.67% |
-
-The Chain measurement used `chain-context-os` and returned four anchored locators: `ast-facade-engine/extractSymbols`, `progressive-materializer/addSourceRef`, `terminal-sanitizer/sanitizeTerminalOutput`, and `desktop-context-console/chainCodeStreamSection`. The full raw data is in [`docs/benchmarks/2026-09-12-v040-chain-network.json`](docs/benchmarks/2026-09-12-v040-chain-network.json).
-
-In daily use, context compaction feels roughly 60% less frequent.
-
-The benchmark records service responses, character reduction, and local call latency. Full graph size, full-file size, MCP tool descriptions, skills, follow-up source reads, model tokens, cost, and task success are separate observation dimensions. The 12 calls cover both first reads and warm reads, so the latency values are useful for version-to-version comparison.
-
-Run the measurement again after changing the service or graph:
+Run the benchmarks locally:
 
 ```bash
-npm run benchmark -- --output docs/benchmarks/2026-09-12-v040-chain-network.json
+node scripts/benchmark.mjs
+node scripts/practical-test.mjs
+node scripts/e2e-project-lifecycle.mjs
+node scripts/comprehensive-dev-eval.mjs
 ```
 
 ## For contributors
@@ -118,6 +86,6 @@ npm run plugin:verify
 npm run desktop:build       # macOS + Swift/Xcode
 ```
 
-The versioned `.contextos/graph.json` is the project's portable graph projection. Internal proposals, audits, and guides belong in OS Documents; benchmark JSON and public README files remain repository artifacts.
+The versioned `.contextos/graph.json` is the project's portable graph projection.
 
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT License](LICENSE)

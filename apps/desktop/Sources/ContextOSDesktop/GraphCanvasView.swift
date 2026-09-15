@@ -106,14 +106,7 @@ struct GraphCanvasView: View {
         }
         if fit || didFitProjectID != store.snapshot.project.id {
             didFitProjectID = store.snapshot.project.id
-            if store.hasRestoredCamera {
-                camera.owner = .explicitLocate
-                camera.scale = store.canvasScale
-                camera.offset = store.canvasOffset
-                camera.owner = .none
-            } else {
-                fitAll(viewport: viewport)
-            }
+            fitAll(viewport: viewport)
         }
     }
 
