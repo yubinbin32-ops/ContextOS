@@ -38821,6 +38821,24 @@ var LanguageRegistry = class {
         return { name: "rust", capability: "L2" };
       case ".swift":
         return { name: "swift", capability: "L2" };
+      case ".java":
+        return { name: "java", capability: "L2" };
+      case ".kt":
+      case ".kts":
+        return { name: "kotlin", capability: "L2" };
+      case ".c":
+      case ".h":
+      case ".cpp":
+      case ".hpp":
+      case ".cc":
+      case ".cxx":
+        return { name: "cpp", capability: "L2" };
+      case ".cs":
+        return { name: "csharp", capability: "L2" };
+      case ".php":
+        return { name: "php", capability: "L2" };
+      case ".rb":
+        return { name: "ruby", capability: "L2" };
       default:
         return { name: "text", capability: "L1" };
     }
@@ -38843,6 +38861,18 @@ var LanguageRegistry = class {
       this._parseRust(lines, symbols, imports, content);
     } else if (lang === "swift") {
       this._parseSwift(lines, symbols, imports, content);
+    } else if (lang === "java") {
+      this._parseJava(lines, symbols, imports, content);
+    } else if (lang === "kotlin") {
+      this._parseKotlin(lines, symbols, imports, content);
+    } else if (lang === "cpp") {
+      this._parseCpp(lines, symbols, imports, content);
+    } else if (lang === "csharp") {
+      this._parseCSharp(lines, symbols, imports, content);
+    } else if (lang === "php") {
+      this._parsePhp(lines, symbols, imports, content);
+    } else if (lang === "ruby") {
+      this._parseRuby(lines, symbols, imports, content);
     } else {
       symbols.push({
         name: path3.basename(filePath),
@@ -39278,19 +39308,20 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const lineNum = i + 1;
-      const typeMatch = line.match(/^(?:pub\s+)?(?:struct|enum|trait)\s+([A-Za-z0-9_]+)/);
+      const typeMatch = line.match(/^\s*(?:pub(?:\([^)]+\))?\s+)?(struct|enum|trait)\s+([A-Za-z0-9_]+)/);
       if (typeMatch) {
+        const typeKind = typeMatch[1];
         const endLine = this._findClosingBrace(lines, i);
         symbols.push({
-          name: typeMatch[1],
-          kind: "struct",
+          name: typeMatch[2],
+          kind: typeKind === "trait" ? "trait" : typeKind === "enum" ? "enum" : "struct",
           startLine: lineNum,
           endLine,
           hash: calculateHash(lines.slice(i, endLine).join("\n"))
         });
         continue;
       }
-      const implMatch = line.match(/^impl(?:\s+<[^>]+>)?\s+(?:[A-Za-z0-9_]+\s+for\s+)?([A-Za-z0-9_]+)/);
+      const implMatch = line.match(/^\s*impl(?:\s+<[^>]+>)?\s+(?:[A-Za-z0-9_]+\s+for\s+)?([A-Za-z0-9_]+)/);
       if (implMatch) {
         currentImpl = {
           name: implMatch[1],
@@ -39386,6 +39417,336 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
         });
       }
     }
+  }
+  static _parseJava(lines, symbols, imports, fullText) {
+    let currentClass = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+      const importMatch = line.match(/^import\s+(?:static\s+)?([A-Za-z0-9_.*]+);/);
+      if (importMatch) {
+        imports.push({ source: importMatch[1], line: lineNum });
+        continue;
+      }
+      const typeMatch = line.match(
+        /^(?:@\w+(?:\([^)]*\))?\s+)*(?:public\s+|protected\s+|private\s+)?(?:static\s+)?(?:final\s+|abstract\s+)?(class|interface|enum|record)\s+([A-Za-z0-9_]+)/
+      );
+      if (typeMatch) {
+        const typeName = typeMatch[2];
+        const endLine = this._findClosingBrace(lines, i);
+        currentClass = {
+          name: typeName,
+          kind: typeMatch[1] === "interface" ? "interface" : "class",
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+        };
+        symbols.push(currentClass);
+        continue;
+      }
+      const methodMatch = line.match(
+        /^(?:\s*)(?:@\w+(?:\([^)]*\))?\s+)*(?:public\s+|protected\s+|private\s+)?(?:static\s+)?(?:final\s+|synchronized\s+)?(?:<[^>]+>\s+)?(?:[A-Za-z0-9_<>[\]?]+\s+)+([A-Za-z0-9_]+)\s*\([^)]*\)\s*(?:throws\s+[^{]+)?\{/
+      );
+      if (methodMatch) {
+        const methodName = methodMatch[1];
+        if (["if", "for", "while", "switch", "catch", "synchronized"].includes(methodName)) continue;
+        const endLine = this._findClosingBrace(lines, i);
+        const snippet = lines.slice(i, endLine).join("\n");
+        if (currentClass && lineNum <= currentClass.endLine) {
+          symbols.push({
+            name: `${currentClass.name}.${methodName}`,
+            kind: "method",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        } else {
+          symbols.push({
+            name: methodName,
+            kind: "function",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        }
+      }
+    }
+  }
+  static _parseKotlin(lines, symbols, imports, fullText) {
+    let currentType = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+      const importMatch = line.match(/^\s*import\s+([A-Za-z0-9_.*]+)/);
+      if (importMatch) {
+        imports.push({ source: importMatch[1], line: lineNum });
+        continue;
+      }
+      const typeMatch = line.match(
+        /^\s*(?:open\s+|data\s+|sealed\s+|abstract\s+|inner\s+)*(class|interface|object)\s+([A-Za-z0-9_]+)/
+      );
+      if (typeMatch) {
+        const typeName = typeMatch[2];
+        const endLine = this._findClosingBrace(lines, i);
+        currentType = {
+          name: typeName,
+          kind: typeMatch[1] === "interface" ? "interface" : "class",
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+        };
+        symbols.push(currentType);
+        continue;
+      }
+      const funMatch = line.match(
+        /^(?:\s*)(?:override\s+|suspend\s+|private\s+|public\s+|protected\s+|internal\s+)?fun\s+(?:<[^>]+>\s+)?(?:([A-Za-z0-9_]+)\.)?([A-Za-z0-9_]+)\s*\(/
+      );
+      if (funMatch) {
+        const receiver = funMatch[1];
+        const funName = funMatch[2];
+        const endLine = this._findClosingBrace(lines, i);
+        const snippet = lines.slice(i, endLine).join("\n");
+        const inType = currentType && lineNum <= currentType.endLine;
+        const fullName = receiver ? `${receiver}.${funName}` : inType ? `${currentType.name}.${funName}` : funName;
+        symbols.push({
+          name: fullName,
+          kind: inType || receiver ? "method" : "function",
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(snippet)
+        });
+      }
+    }
+  }
+  static _parseCpp(lines, symbols, imports, fullText) {
+    let currentClass = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+      const includeMatch = line.match(/^\s*#include\s+([<"][^>"]+[>"])/);
+      if (includeMatch) {
+        imports.push({ source: includeMatch[1], line: lineNum });
+        continue;
+      }
+      const classMatch = line.match(/^\s*(?:template\s*<[^>]*>\s*)?(class|struct)\s+([A-Za-z0-9_]+)(?:\s*:[^{]*)?\s*\{/);
+      if (classMatch) {
+        const className = classMatch[2];
+        const endLine = this._findClosingBrace(lines, i);
+        currentClass = {
+          name: className,
+          kind: classMatch[1] === "class" ? "class" : "struct",
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+        };
+        symbols.push(currentClass);
+        continue;
+      }
+      const outOfLineMatch = line.match(/^\s*(?:[A-Za-z0-9_:*&<>]+\s+)+([A-Za-z0-9_]+)::([A-Za-z0-9_~]+)\s*\([^)]*\)\s*(?:const)?\s*\{/);
+      if (outOfLineMatch) {
+        const scope = outOfLineMatch[1];
+        const fnName = outOfLineMatch[2];
+        const endLine = this._findClosingBrace(lines, i);
+        symbols.push({
+          name: `${scope}::${fnName}`,
+          kind: "method",
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+        });
+        continue;
+      }
+      const fnMatch = line.match(/^(?:\s*)(?:virtual\s+|static\s+|inline\s+)?(?:[A-Za-z0-9_:*&<>]+\s+)+([A-Za-z0-9_]+)\s*\([^)]*\)\s*(?:const)?\s*\{/);
+      if (fnMatch) {
+        const fnName = fnMatch[1];
+        if (["if", "for", "while", "switch", "catch"].includes(fnName)) continue;
+        const endLine = this._findClosingBrace(lines, i);
+        const snippet = lines.slice(i, endLine).join("\n");
+        if (currentClass && lineNum <= currentClass.endLine) {
+          symbols.push({
+            name: `${currentClass.name}::${fnName}`,
+            kind: "method",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        } else {
+          symbols.push({
+            name: fnName,
+            kind: "function",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        }
+      }
+    }
+  }
+  static _parseCSharp(lines, symbols, imports, fullText) {
+    let currentClass = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+      const usingMatch = line.match(/^\s*using\s+([A-Za-z0-9_.]+);/);
+      if (usingMatch) {
+        imports.push({ source: usingMatch[1], line: lineNum });
+        continue;
+      }
+      const typeMatch = line.match(
+        /^\s*(?:public\s+|internal\s+|private\s+|protected\s+)?(?:static\s+|abstract\s+|sealed\s+|partial\s+)*(class|interface|struct|record)\s+([A-Za-z0-9_]+)/
+      );
+      if (typeMatch) {
+        const typeName = typeMatch[2];
+        const endLine = this._findClosingBrace(lines, i);
+        currentClass = {
+          name: typeName,
+          kind: typeMatch[1] === "interface" ? "interface" : "class",
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+        };
+        symbols.push(currentClass);
+        continue;
+      }
+      const methodMatch = line.match(
+        /^(?:\s*)(?:public\s+|private\s+|protected\s+|internal\s+)?(?:static\s+|async\s+|virtual\s+|override\s+)*(?:[A-Za-z0-9_<>[\]?]+\s+)+([A-Za-z0-9_]+)\s*\([^)]*\)\s*\{/
+      );
+      if (methodMatch) {
+        const methodName = methodMatch[1];
+        if (["if", "for", "foreach", "while", "switch", "catch", "using", "lock"].includes(methodName)) continue;
+        const endLine = this._findClosingBrace(lines, i);
+        const snippet = lines.slice(i, endLine).join("\n");
+        if (currentClass && lineNum <= currentClass.endLine) {
+          symbols.push({
+            name: `${currentClass.name}.${methodName}`,
+            kind: "method",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        } else {
+          symbols.push({
+            name: methodName,
+            kind: "function",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        }
+      }
+    }
+  }
+  static _parsePhp(lines, symbols, imports, fullText) {
+    let currentClass = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+      const useMatch = line.match(/^\s*use\s+([A-Za-z0-9_\\]+);/);
+      if (useMatch) {
+        imports.push({ source: useMatch[1], line: lineNum });
+        continue;
+      }
+      const typeMatch = line.match(/^\s*(?:abstract\s+|final\s+)?(class|interface|trait)\s+([A-Za-z0-9_]+)/);
+      if (typeMatch) {
+        const typeName = typeMatch[2];
+        const endLine = this._findClosingBrace(lines, i);
+        currentClass = {
+          name: typeName,
+          kind: typeMatch[1] === "interface" ? "interface" : "class",
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+        };
+        symbols.push(currentClass);
+        continue;
+      }
+      const fnMatch = line.match(/^(?:\s*)(?:public\s+|protected\s+|private\s+)?(?:static\s+)?function\s+([A-Za-z0-9_]+)\s*\(/);
+      if (fnMatch) {
+        const fnName = fnMatch[1];
+        const endLine = this._findClosingBrace(lines, i);
+        const snippet = lines.slice(i, endLine).join("\n");
+        if (currentClass && lineNum <= currentClass.endLine) {
+          symbols.push({
+            name: `${currentClass.name}::${fnName}`,
+            kind: "method",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        } else {
+          symbols.push({
+            name: fnName,
+            kind: "function",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        }
+      }
+    }
+  }
+  static _parseRuby(lines, symbols, imports, fullText) {
+    let currentClass = null;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const lineNum = i + 1;
+      const requireMatch = line.match(/^\s*(?:require|require_relative)\s+['"]([^'"]+)['"]/);
+      if (requireMatch) {
+        imports.push({ source: requireMatch[1], line: lineNum });
+        continue;
+      }
+      const typeMatch = line.match(/^\s*(?:class|module)\s+([A-Za-z0-9_:]+)/);
+      if (typeMatch) {
+        const typeName = typeMatch[1];
+        const endLine = this._findRubyBlockEnd(lines, i);
+        currentClass = {
+          name: typeName,
+          kind: "class",
+          startLine: lineNum,
+          endLine,
+          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+        };
+        symbols.push(currentClass);
+        continue;
+      }
+      const defMatch = line.match(/^(\s*)def\s+([A-Za-z0-9_!?.]+)/);
+      if (defMatch) {
+        const fnName = defMatch[2];
+        const endLine = this._findRubyBlockEnd(lines, i);
+        const snippet = lines.slice(i, endLine).join("\n");
+        if (currentClass && lineNum <= currentClass.endLine) {
+          symbols.push({
+            name: `${currentClass.name}#${fnName}`,
+            kind: "method",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        } else {
+          symbols.push({
+            name: fnName,
+            kind: "function",
+            startLine: lineNum,
+            endLine,
+            hash: calculateHash(snippet)
+          });
+        }
+      }
+    }
+  }
+  static _findRubyBlockEnd(lines, startIndex) {
+    let depth = 0;
+    const startKeywords = /^\s*(?:class|module|def|if|unless|while|until|for|case)\b/;
+    const endKeyword = /^\s*end\b/;
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i];
+      if (startKeywords.test(line)) depth++;
+      if (endKeyword.test(line)) {
+        depth--;
+        if (depth === 0) return i + 1;
+      }
+    }
+    return lines.length;
   }
   /**
    * String- and Comment-Aware Brace Matcher.

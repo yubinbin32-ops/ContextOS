@@ -125,6 +125,194 @@ struct MyView: View {
   assert.ok(structure.symbols.some((s) => s.name === 'MyView.increment' && s.kind === 'method'));
 });
 
+test('LanguageRegistry parses Go structs and methods', () => {
+  const goCode = `package main
+
+import (
+  "fmt"
+  "strings"
+)
+
+type Server struct {
+  Host string
+  Port int
+}
+
+func (s *Server) Start() error {
+  fmt.Println("starting")
+  return nil
+}
+
+func CalculateSum(a, b int) int {
+  return a + b
+}
+`;
+  const structure = LanguageRegistry.parseStructure('main.go', goCode);
+  assert.equal(structure.language, 'go');
+  assert.ok(structure.symbols.some((s) => s.name === 'Server' && s.kind === 'struct'));
+  assert.ok(structure.symbols.some((s) => s.name === 'Server.Start' && s.kind === 'method'));
+  assert.ok(structure.symbols.some((s) => s.name === 'CalculateSum' && s.kind === 'function'));
+});
+
+test('LanguageRegistry parses Rust structs, traits, and impl methods', () => {
+  const rustCode = `use std::collections::HashMap;
+
+pub trait Worker {
+  fn work(&self);
+}
+
+pub struct Engine {
+  id: u32,
+}
+
+impl Engine {
+  pub fn new(id: u32) -> Self {
+    Engine { id }
+  }
+}
+`;
+  const structure = LanguageRegistry.parseStructure('src/lib.rs', rustCode);
+  assert.equal(structure.language, 'rust');
+  assert.ok(structure.symbols.some((s) => s.name === 'Worker' && s.kind === 'trait'));
+  assert.ok(structure.symbols.some((s) => s.name === 'Engine' && s.kind === 'struct'));
+  assert.ok(structure.symbols.some((s) => s.name === 'Engine.new' && s.kind === 'method'));
+});
+
+test('LanguageRegistry parses Java classes, interfaces, and methods', () => {
+  const javaCode = `package com.example.service;
+
+import java.util.List;
+import java.io.File;
+
+public class OrderService {
+  private String orderId;
+
+  public OrderService(String orderId) {
+    this.orderId = orderId;
+  }
+
+  public void processOrder() {
+    System.out.println("Processing " + orderId);
+  }
+}
+`;
+  const structure = LanguageRegistry.parseStructure('OrderService.java', javaCode);
+  assert.equal(structure.language, 'java');
+  assert.equal(structure.imports.length, 2);
+  assert.ok(structure.symbols.some((s) => s.name === 'OrderService' && s.kind === 'class'));
+  assert.ok(structure.symbols.some((s) => s.name === 'OrderService.processOrder' && s.kind === 'method'));
+});
+
+test('LanguageRegistry parses Kotlin classes and functions', () => {
+  const ktCode = `package com.example.app
+
+import kotlinx.coroutines.flow.Flow
+
+class UserRepository(private val api: ApiClient) {
+  fun fetchUser(id: String): User {
+    return api.get(id)
+  }
+}
+
+fun formatUserName(user: User): String {
+  return user.name.trim()
+}
+`;
+  const structure = LanguageRegistry.parseStructure('UserRepository.kt', ktCode);
+  assert.equal(structure.language, 'kotlin');
+  assert.ok(structure.symbols.some((s) => s.name === 'UserRepository' && s.kind === 'class'));
+  assert.ok(structure.symbols.some((s) => s.name === 'UserRepository.fetchUser' && s.kind === 'method'));
+  assert.ok(structure.symbols.some((s) => s.name === 'formatUserName' && s.kind === 'function'));
+});
+
+test('LanguageRegistry parses C++ classes, methods, and functions', () => {
+  const cppCode = `#include <iostream>
+#include <vector>
+
+class Matrix {
+public:
+  void compute() {
+    std::cout << "compute" << std::endl;
+  }
+};
+
+void runPipeline() {
+  Matrix m;
+  m.compute();
+}
+`;
+  const structure = LanguageRegistry.parseStructure('Matrix.cpp', cppCode);
+  assert.equal(structure.language, 'cpp');
+  assert.equal(structure.imports.length, 2);
+  assert.ok(structure.symbols.some((s) => s.name === 'Matrix' && (s.kind === 'class' || s.kind === 'struct')));
+  assert.ok(structure.symbols.some((s) => s.name === 'Matrix::compute' && s.kind === 'method'));
+  assert.ok(structure.symbols.some((s) => s.name === 'runPipeline' && s.kind === 'function'));
+});
+
+test('LanguageRegistry parses C# classes and methods', () => {
+  const csCode = `using System;
+using System.Threading.Tasks;
+
+namespace MyApp {
+  public class AccountManager {
+    public async Task<bool> ValidateUser(string username) {
+      return await Task.FromResult(true);
+    }
+  }
+}
+`;
+  const structure = LanguageRegistry.parseStructure('AccountManager.cs', csCode);
+  assert.equal(structure.language, 'csharp');
+  assert.ok(structure.symbols.some((s) => s.name === 'AccountManager' && s.kind === 'class'));
+  assert.ok(structure.symbols.some((s) => s.name === 'AccountManager.ValidateUser' && s.kind === 'method'));
+});
+
+test('LanguageRegistry parses PHP classes and methods', () => {
+  const phpCode = `<?php
+namespace App\\Http;
+
+use App\\Models\\User;
+
+class AuthController {
+  public function login($request) {
+    return response()->json(['token' => 'xyz']);
+  }
+}
+
+function verifySignature($token) {
+  return true;
+}
+`;
+  const structure = LanguageRegistry.parseStructure('AuthController.php', phpCode);
+  assert.equal(structure.language, 'php');
+  assert.ok(structure.symbols.some((s) => s.name === 'AuthController' && s.kind === 'class'));
+  assert.ok(structure.symbols.some((s) => s.name === 'AuthController::login' && s.kind === 'method'));
+  assert.ok(structure.symbols.some((s) => s.name === 'verifySignature' && s.kind === 'function'));
+});
+
+test('LanguageRegistry parses Ruby classes and methods', () => {
+  const rbCode = `require 'json'
+require_relative 'helper'
+
+class PaymentGateway
+  def process_payment(amount)
+    puts "Charging #{amount}"
+  end
+end
+
+def format_currency(val)
+  "$#{val}"
+end
+`;
+  const structure = LanguageRegistry.parseStructure('gateway.rb', rbCode);
+  assert.equal(structure.language, 'ruby');
+  assert.equal(structure.imports.length, 2);
+  assert.ok(structure.symbols.some((s) => s.name === 'PaymentGateway' && s.kind === 'class'));
+  assert.ok(structure.symbols.some((s) => s.name === 'PaymentGateway#process_payment' && s.kind === 'method'));
+  assert.ok(structure.symbols.some((s) => s.name === 'format_currency' && s.kind === 'function'));
+});
+
+
 test('CodeTools.outline produces clean Markdown', () => {
   const outline = CodeTools.outline('src/engine.js', JS_CODE);
   assert.ok(outline.markdown.includes('# Outline: `src/engine.js`'));

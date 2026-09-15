@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.png" width="76" alt="ContextOS" />
-  <h1>Let AI remember your project and continue from where you left off.</h1>
-  <p><strong>ContextOS keeps architecture, progress, command receipts, and exact code locations in one synchronized project memory.</strong></p>
+  <h1>ContextOS · Context Operating System for AI Coding Agents</h1>
+  <p><strong>Governing AI coding context via compiler-grade AST surgical tools, Metro Map architecture topology, and deterministic C-D-C-S state machines.</strong></p>
   <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文说明</a></p>
 </div>
 
@@ -29,7 +29,7 @@ Work flows strictly through **Create → Develop → Check → Sync**. Tasks car
 `run_command` strips ANSI noise, redacts secrets, saves full raw logs into `.contextos/logs/`, and returns a compact receipt with critical error diagnostics, reducing terminal noise by over 98%.
 
 ### 4. Code tools operate surgically
-Multi-language AST engines (Babel for JS/TS/JSX/TSX, native Python AST, Swift struct/view body parsers) allow VS Code-style symbol search, outline inspection, and surgical reading/editing with automatic symbol re-anchoring.
+Multi-language AST engines (compiler-grade parsing for JS/TS/JSX/TSX, Python, Swift, Java, Kotlin, C/C++, C#, Go, Rust, PHP, Ruby) allow VS Code-style symbol search, outline inspection, and surgical reading/editing with automatic symbol re-anchoring.
 
 ### 5. Unified Knowledge & Architectural Decisions
 Proposals, audits, architectural decisions, and rules live as OS Documents. `README.md` and `README_zh.md` appear read-only in the App Knowledge view with images and links intact.

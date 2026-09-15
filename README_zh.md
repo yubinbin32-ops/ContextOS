@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.png" width="76" alt="ContextOS" />
-  <h1>让 AI 记住项目，下一次对话从上次进度继续。</h1>
-  <p><strong>ContextOS 把项目架构、开发进度、命令结果和代码位置放在同一份可同步的项目记忆里。</strong></p>
+  <h1>ContextOS · 智能体上下文操作系统</h1>
+  <p><strong>以编译器级 AST 手术刀读写、地铁拓扑图谱与 C-D-C-S 状态机，治理 AI 编程全生命周期的上下文与架构一致性。</strong></p>
   <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>下载 macOS App</strong></a> · <a href="#三分钟开始使用">三分钟开始使用</a> · <a href="README.md">English</a></p>
 </div>
 
@@ -29,7 +29,7 @@ Block 描述真实的物理代码能力（杜绝虚空 Ghost Block）。Chain �
 `run_command` 剥离 ANSI 终端控制符与敏感密钥，全量原始日志存盘于 `.contextos/logs/`，仅向上下文返回精简回执（Receipt），削减 98% 以上的终端输出噪声。
 
 ### 4. 代码工具手术刀级读写 (Surgical Code Engineering)
-集成编译器级真 AST 引擎（JS/TS/JSX/TSX 采用 `@babel/parser`，Python 采用官方标准库 `ast`，Swift 采用视图体解析），支持 VS Code 风格全局符号搜索、大纲审视、方法级抽取和补丁式精准写盘并自动重锚。
+集成编译器级真 AST 引擎（原生支持 JS/TS/JSX/TSX、Python、Swift、Java、Kotlin、C/C++、C#、Go、Rust、PHP、Ruby 等 10+ 种主流语言），支持 VS Code 风格全局符号搜索、大纲审视、方法级抽取和补丁式精准写盘并自动重锚。
 
 ### 5. 单一入口的知识与架构决议
 项目方案、设计取舍与规则规约归纳为单文件叙事 `DECISION.md` 与分类 Rules。`README.md` 与 `README_zh.md` 在 App 的知识抽屉中以只读方式直接预览。
