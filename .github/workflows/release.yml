@@ -77,10 +77,25 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-assets
+          APP_DIR="dist/build/Build/Products/Release/ContextOS.app"
+
+          # 1. Prepare Standard App (ensure bin/node is removed, lightweight ~1.6MB)
+          rm -f "$APP_DIR/Contents/Resources/bin/node"
+          rmdir "$APP_DIR/Contents/Resources/bin" 2>/dev/null || true
+          codesign --force --deep --sign - "$APP_DIR"
           (cd dist/build/Build/Products/Release && zip -r -y -q "$GITHUB_WORKSPACE/release-assets/ContextOS-macos.zip" ContextOS.app)
+
+          # 2. Prepare Full Standalone App (with bundled standalone Node 22, ~35MB)
+          mkdir -p "$APP_DIR/Contents/Resources/bin"
+          cp .cache/node-darwin-arm64 "$APP_DIR/Contents/Resources/bin/node"
+          chmod 755 "$APP_DIR/Contents/Resources/bin/node"
+          codesign --force --deep --sign - "$APP_DIR"
+          (cd dist/build/Build/Products/Release && zip -r -y -q "$GITHUB_WORKSPACE/release-assets/ContextOS-macos-full.zip" ContextOS.app)
+
+          # 3. Server bundle & Checksums
           cp plugins/contextos/server/contextos-mcp.mjs release-assets/contextos-mcp.mjs
           cd release-assets
-          shasum -a 256 ContextOS-macos.zip contextos-mcp.mjs > SHA256SUMS
+          shasum -a 256 ContextOS-macos.zip ContextOS-macos-full.zip contextos-mcp.mjs > SHA256SUMS
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -101,20 +116,13 @@ jobs:
           body: |
             ## ContextOS ${{ github.ref_name }}
 
-            Spatial architecture canvas and context optimization OS for AI coding agents. Task-focused code locators, persistent project knowledge, read-only README previews, and verified task completion via MCP.
+            Spatial architecture canvas and context optimization OS for AI coding agents. Surgical AST code reading/writing across 10+ languages, out-of-context sanitized command execution, persistent project knowledge, read-only documentation drawer, and verified C-D-C-S task lifecycles via MCP.
 
-            ### Highlights
+            ### Downloads & Getting Started
 
-            - Git-tracked architecture graph with Ghost Blueprints and AST-bound Solid Anchors
-            - Cross-file `chain_code_stream` returning compact code locators; reproducible character measurements are documented in the README
-            - Atomic `block_code_mutate` with verification and failure rollback
-            - `log_sanitize` for compact agent-ready terminal evidence
-            - Native macOS ContextOS app plus cross-platform headless MCP and CLI
-
-            ### Get started
-
-            - **macOS 14+ app:** download `ContextOS-macos.zip` (unzip and run `ContextOS.app`)
-            - **MCP / CLI:** `npx -y github:yubinbin32-ops/ContextOS@${{ github.ref_name }} init --scan`
-            - **Integrity:** compare your downloads with `SHA256SUMS`
+            - **macOS Full Standalone (Recommended, ~35MB):** download `ContextOS-macos-full.zip` (unzip and drag `ContextOS.app` to Applications). Bundles a standalone Node 22 runtime engine. **Zero external dependencies or Node installation required.**
+            - **macOS Standard Lite (~1.6MB):** download `ContextOS-macos.zip` (unzip and drag `ContextOS.app` to Applications). Ultra-lightweight edition for developers who already have Node.js 22+ installed on macOS (via Homebrew, nvm, or official installer).
+            - **Headless MCP / CLI:** `npx -y github:yubinbin32-ops/ContextOS@${{ github.ref_name }}` (for remote servers, Docker, or CLI-only setups with Node 22+).
+            - **Integrity Verification:** compare your downloaded files with `SHA256SUMS`.
 
             The macOS build is currently ad-hoc signed. On first launch, Control-click the app and choose **Open** if macOS blocks it.

@@ -2,7 +2,7 @@
   <img src="assets/logo.png" width="76" alt="ContextOS" />
   <h1>Automated Context Management: Cut 90% of AI Coding Context Waste.</h1>
   <p><strong>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</strong></p>
-  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文说明</a></p>
+  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">Simplified Chinese</a></p>
 </div>
 
 ![ContextOS Interactive Workflow Demo](assets/contextos-demo.gif)
@@ -43,29 +43,34 @@ Dev servers, watchers, and background workers are managed by the Process Host an
 
 ## Start in three minutes
 
-ContextOS offers two completely decoupled usage modes:
+ContextOS provides flexible setup options tailored to your environment:
 
-### Mode A: macOS Desktop App (Recommended, Fully Self-Contained, Zero Dependencies)
+### Option 1: macOS Desktop App (Visual Architecture & One-Click Setup)
 
-> [!TIP]
-> **Best for developers looking for out-of-the-box convenience and visual architecture inspection.**
-> The App bundles a standalone Node runtime engine and full MCP services. **You do NOT need Node.js installed on your machine.** Even when the desktop App window is closed, your AI editor can spawn MCP directly in the background. Opening the App reveals the native Metro Map architecture canvas anytime.
+Download the package matching your environment from [GitHub Releases](https://github.com/yubinbin32-ops/ContextOS/releases/latest):
 
-1. [Download the latest App](https://github.com/yubinbin32-ops/ContextOS/releases/latest), unzip it, and drag **ContextOS.app** into `Applications`.
-2. Launch **ContextOS**, open **Settings**, select your detected AI editor (Cursor / Claude Desktop / Antigravity / Windsurf / Codex), and click **Install / Sync Plugin**.
-3. The App injects the bundled runtime and MCP configuration into your editor. **Once configured, you can close the desktop App; it does NOT need to remain open.**
-4. During your AI conversation, simply activate ContextOS with a single prompt:
-   > **"把这个方案写入os后开始执行"** / *"Write this proposal into the OS and start execution"* or **"查看os继续开发"** / *"Inspect the OS and resume development"*
-   The AI will automatically leverage ContextOS for C-D-C-S task lifecycles, surgical AST code tools, out-of-context command receipts, and automated background process cleanup.
+| Package | File | Size | Node.js Requirement | Best For |
+|---|---|---|---|---|
+| **Full Standalone** *(Recommended)* | `ContextOS-macos-full.zip` | ~35 MB | **None** (Bundles standalone Node 22) | Zero-setup, plug-and-play. Ideal if you don't have Node installed. |
+| **Standard Lite** | `ContextOS-macos.zip` | ~1.6 MB | Requires Node.js 22+ on system | Ultra-compact download if you already have Node installed. |
+
+#### Setup Steps:
+1. Unzip the downloaded file and drag **ContextOS.app** into `/Applications`.
+2. Launch **ContextOS**, open **Settings** (gear icon or `Cmd+,`), select your detected AI editor (Cursor / Claude Desktop / Antigravity / OpenCode / Codex), and click **Install / Sync Plugin**.
+3. The App configures your editor to connect to ContextOS MCP. **Once configured, you can close the desktop App; it does NOT need to stay running in the background.**
+4. In your AI coding chat, activate ContextOS with a simple prompt:
+   > *"Write this proposal into ContextOS and start execution"* or *"Inspect ContextOS and resume development"*
+
+   The AI agent will immediately follow the C-D-C-S task lifecycle, perform surgical AST code reads/writes, generate compact command receipts, and safely clean up long-running background processes.
 
 ![One-click editor and MCP synchronization](assets/settings-sync.png)
 
-### Mode B: Lightweight Pure Plugin Stream (For Headless / Linux / CLI Environments)
+### Option 2: Lightweight Pure Plugin Stream (For Headless, Linux, or CLI-Only Workflows)
 
 > [!NOTE]
-> **Best for developers on remote servers or purely terminal-driven setups without desktop GUI.**
-> The plugin package is extremely lightweight (tens of KB) and can be installed via the Codex marketplace or run directly via `npx`.
-> **Prerequisites**: Since the pure plugin runs directly in the host environment, **Node.js 22 or later is required on your machine**.
+> **Best for remote servers, Docker containers, or purely terminal-driven setups without a macOS desktop GUI.**
+> The plugin package is extremely lightweight and runs directly via `npx` or as an editor plugin.
+> **Prerequisites**: Node.js 22 or later installed on the host machine.
 
 ```bash
 # Launch MCP server directly from command line
