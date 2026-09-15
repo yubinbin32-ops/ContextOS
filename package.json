@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Spatial architecture canvas and context optimization OS for AI coding agents.",
   "license": "MIT",
   "type": "module",

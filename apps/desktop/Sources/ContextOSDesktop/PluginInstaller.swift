@@ -46,7 +46,18 @@ enum PluginInstaller {
     }
 
     static var canonicalServerScriptURL: URL {
-        canonicalServerDirectoryURL.appending(path: "contextos-mcp.mjs")
+        let manager = FileManager.default
+        if let bundleResourceURL = Bundle.main.resourceURL {
+            let bundledScript = bundleResourceURL.appending(path: "server/contextos-mcp.mjs")
+            if manager.fileExists(atPath: bundledScript.path) {
+                return bundledScript
+            }
+        }
+        let appBundleScript = URL(fileURLWithPath: "/Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
+        if manager.fileExists(atPath: appBundleScript.path) {
+            return appBundleScript
+        }
+        return canonicalServerDirectoryURL.appending(path: "contextos-mcp.mjs")
     }
 
     private static let buildFiles = [
@@ -460,7 +471,8 @@ enum PluginInstaller {
             return (nil, nil)
         }
         // Verify that the configured server script actually exists on disk!
-        if let args = contextos["args"] as? [String], let script = args.first {
+        if let args = contextos["args"] as? [String],
+           let script = args.first(where: { $0.hasSuffix(".mjs") }) ?? args.last {
             guard FileManager.default.fileExists(atPath: script) else {
                 return (nil, nil)
             }
@@ -491,6 +503,23 @@ enum PluginInstaller {
 
     private static func nodeExecutablePath() -> String {
         let manager = FileManager.default
+        // 1. Check bundled node inside running application bundle
+        if let bundleResourceURL = Bundle.main.resourceURL {
+            let bundledNode = bundleResourceURL.appending(path: "bin/node").path
+            if manager.isExecutableFile(atPath: bundledNode) {
+                return bundledNode
+            }
+        }
+        // 2. Check standard Applications installation path
+        let appBundleNode = "/Applications/ContextOS.app/Contents/Resources/bin/node"
+        if manager.isExecutableFile(atPath: appBundleNode) {
+            return appBundleNode
+        }
+        let userAppBundleNode = "\(manager.homeDirectoryForCurrentUser.path)/Applications/ContextOS.app/Contents/Resources/bin/node"
+        if manager.isExecutableFile(atPath: userAppBundleNode) {
+            return userAppBundleNode
+        }
+        // 3. Fallback to Homebrew / nvm / system
         let home = manager.homeDirectoryForCurrentUser.path
         let candidates = [
             "/opt/homebrew/bin/node",
@@ -523,7 +552,7 @@ enum PluginInstaller {
         mcpServers.removeValue(forKey: "contextos")
         mcpServers["contextos"] = [
             "command": nodeExecutablePath(),
-            "args": [serverScript],
+            "args": ["--no-warnings=ExperimentalWarning", serverScript],
             "_version": version,
             "_build": build
         ]

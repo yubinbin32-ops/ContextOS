@@ -43,16 +43,35 @@ Block 描述真实的物理代码能力（杜绝虚空 Ghost Block）。Chain �
 
 ## 三分钟开始使用
 
-### macOS App
+ContextOS 提供两种完全解耦的使用方式：
 
-1. [下载最新 App](https://github.com/yubinbin32-ops/ContextOS/releases/latest)，解压并打开 **ContextOS**。
-2. 打开 **设置**，选择检测到的 AI 编辑器（Cursor / Claude Desktop / Antigravity / Windsurf 等），点击 **安装 / 同步插件**。
-3. 在编辑器中打开项目，确认插件已连接。
-4. 在对话中只需一句话唤醒 OS 协作（例如：**“把这个方案写入os后开始执行”** 或 **“查看os继续开发”**），AI 即会自动通过 ContextOS 渐进式管理方案、任务、手术刀读写代码与回执验证。
+### 方式 A：macOS 桌面端（推荐，全内置，零环境依赖一键启动）
 
-桌面版支持 macOS 14 及以上，MCP 运行时使用 Node.js 22 或以上。App 会把编辑器配置和插件入口写好，安装完成即可使用。
+> [!TIP]
+> **适合追求开箱即用与可视化架构体验的开发者。**
+> App 已内置精简独立 Node 运行引擎与 MCP 完整服务，**你的电脑无需预先安装任何 Node.js 环境**。即使平时不打开桌面 App，AI 在编辑器中也能随时直接在后台拉起 MCP 协作；打开 App 则可随时浏览原生 Metro 路线图架构画布。
+
+1. [下载最新 App](https://github.com/yubinbin32-ops/ContextOS/releases/latest)，解压并将 **ContextOS.app** 拖入 `Applications`。
+2. 打开 **ContextOS**，进入 **设置**，选择检测到的 AI 编辑器（Cursor / Claude Desktop / Antigravity / Windsurf / Codex 等），点击 **一键安装 / 同步插件**。
+3. App 会自动将内置运行时与 MCP 配置注入编辑器。**配置完成后，你可以随时关闭桌面 App，无需保持开启**。
+4. 在编辑器对话中只需一句话唤醒 OS 协作：
+   > **“把这个方案写入os后开始执行”** 或 **“查看os继续开发”**
+   AI 即会自动通过 ContextOS 渐进式管理方案、执行 C-D-C-S 任务闭环、手术刀读写代码、运行脱敏回执并自动回收常驻进程。
 
 ![一键同步编辑器和 MCP](assets/settings-sync.png)
+
+### 方式 B：轻量纯插件流（针对纯终端 / Linux / 无头环境，无需桌面 App）
+
+> [!NOTE]
+> **适合不想下载桌面 App、在远程服务器或纯 CLI 环境下开发的开发者。**
+> 插件包极度轻量（仅数十 KB），可直接通过 Codex 插件市场或 `npx` 引入。
+> **前提环境要求**：由于纯插件直接在宿主环境运行，**需要你的系统已具备 Node.js 22 或以上环境**。
+
+```bash
+# 纯命令行直接启动 MCP 服务
+npx -y github:yubinbin32-ops/ContextOS
+```
+
 
 ## 实测 V2 上下文节省基准
 

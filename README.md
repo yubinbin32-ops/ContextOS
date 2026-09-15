@@ -43,16 +43,35 @@ Dev servers, watchers, and background workers are managed by the Process Host an
 
 ## Start in three minutes
 
-### macOS App
+ContextOS offers two completely decoupled usage modes:
 
-1. [Download the latest App](https://github.com/yubinbin32-ops/ContextOS/releases/latest), unzip it, and open **ContextOS**.
-2. Open **Settings**, choose the detected AI editor (Cursor / Claude Desktop / Antigravity / Windsurf, etc.), and click **Install / Sync Plugin**.
-3. Open your project in the editor and verify the plugin is active.
-4. During your AI conversation, simply activate ContextOS with a single sentence (e.g., **"把这个方案写入os后开始执行"** / *"Write this proposal into the OS and start execution"*, or **"查看os继续开发"** / *"Inspect the OS and resume development"*). The AI will automatically leverage ContextOS for progressive context budgeting, C-D-C-S tasks, surgical code tools, and receipt verification.
+### Mode A: macOS Desktop App (Recommended, Fully Self-Contained, Zero Dependencies)
 
-The desktop App supports macOS 14 or later. The MCP runtime uses Node.js 22 or later. The App writes the editor configuration and plugin entry for you.
+> [!TIP]
+> **Best for developers looking for out-of-the-box convenience and visual architecture inspection.**
+> The App bundles a standalone Node runtime engine and full MCP services. **You do NOT need Node.js installed on your machine.** Even when the desktop App window is closed, your AI editor can spawn MCP directly in the background. Opening the App reveals the native Metro Map architecture canvas anytime.
+
+1. [Download the latest App](https://github.com/yubinbin32-ops/ContextOS/releases/latest), unzip it, and drag **ContextOS.app** into `Applications`.
+2. Launch **ContextOS**, open **Settings**, select your detected AI editor (Cursor / Claude Desktop / Antigravity / Windsurf / Codex), and click **Install / Sync Plugin**.
+3. The App injects the bundled runtime and MCP configuration into your editor. **Once configured, you can close the desktop App; it does NOT need to remain open.**
+4. During your AI conversation, simply activate ContextOS with a single prompt:
+   > **"把这个方案写入os后开始执行"** / *"Write this proposal into the OS and start execution"* or **"查看os继续开发"** / *"Inspect the OS and resume development"*
+   The AI will automatically leverage ContextOS for C-D-C-S task lifecycles, surgical AST code tools, out-of-context command receipts, and automated background process cleanup.
 
 ![One-click editor and MCP synchronization](assets/settings-sync.png)
+
+### Mode B: Lightweight Pure Plugin Stream (For Headless / Linux / CLI Environments)
+
+> [!NOTE]
+> **Best for developers on remote servers or purely terminal-driven setups without desktop GUI.**
+> The plugin package is extremely lightweight (tens of KB) and can be installed via the Codex marketplace or run directly via `npx`.
+> **Prerequisites**: Since the pure plugin runs directly in the host environment, **Node.js 22 or later is required on your machine**.
+
+```bash
+# Launch MCP server directly from command line
+npx -y github:yubinbin32-ops/ContextOS
+```
+
 
 ## Reproducible V2 Benchmark
 

@@ -70,27 +70,31 @@ ContextOS 收敛为 9 个高内聚 Facade 工具，覆盖 AI 开发全生命周�
   - `action: "search", query: "符号名"`：全局跨文件检索符号签名与位置。
   - `action: "read", path: "文件路径", selector: { symbol: "类名.方法名" }` 或 `{ startLine: 10, endLine: 35 }`：仅提取目标代码片段。
   - `action: "edit", path: "文件路径", targetContent: "原代码", replacementContent: "新代码"`：唯一性文本精准替换，系统自动重新解析 AST 并重锚所有符号。
-- **最佳使用时机**：任何代码阅读与编写场景。**推荐“search 定位 → outline 审视 → read 手术刀提取 → edit 精准替换”**，杜绝读取整个长文件。
+- **最佳使用心智**：
+  - **杜绝全量盲读**：禁止直接读入成百上千行的整个源文件，严禁倾倒无关实现代码；
+  - **四步精准工作法**：`code(search)` 定位符号位置 ➔ `code(outline)` 审视类/接口结构与函数签名 ➔ `code(read, selector)` 手术刀提取目标方法 ➔ `code(edit)` 局部原位修改；
+  - **修改后免重读**：`code(edit)` 执行后，系统底层自动重新解析 AST 并返回新符号哈希和重锚确认。AI **无需再调用 read 二次读取整个文件**，单次修改直接节省 80%+ 上下文。
 
 ### 5. `run_command` —— 出舱脱敏命令执行沙箱
-- **核心作用**：执行有限生命周期的命令（编译、测试、代码扫描、脚本）。
+- **核心作用**：执行有限生命周期的命令（编译、单次测试、代码扫描、脚本检查）。
 - **关键参数**：`command: "npm test"`, `cwd: "可选工作路径"`, `maxChars: 1500`, `timeoutMs: 60000`。
 - **运行机制**：
   1. 自动剔除 ANSI 终端着色符与格式控制符；
-  2. 自动检测并脱敏 API 密钥、Token 与敏感环境变量；
+  2. 自动检测并脱敏 API 密钥、Token 与敏感命令行凭据；
   3. 全量原始输出保存至 `.contextos/logs/<timestamp>-<hash>.log`，供持久排查；
   4. 仅向对话上下文返回紧凑的 **Receipt 回执**（包含 ExitCode、耗时、Receipt ID 以及关键错误堆栈诊断）。
-- **最佳使用时机**：运行任何测试套件、代码构建或环境检查命令。极大削减 98% 终端噪音，防止长日志污染模型注意力。
+- **证据链闭环**：`run_command` 返回的 `receipt.id`（例如 `receipt-178944...`）是客观真实的执行依据。在调用 `task(action: "check")` 时，必须将该 `receiptId` 传入 `checkData.receiptId`，形成不可篡改的工程质量证据链。
 
 ### 6. `process` —— 长期常驻后台守护进程管理器
-- **核心作用**：托管持续运行的进程（Dev Server、文件 Watcher、长连接 Worker、模拟后台）。
+- **核心作用**：托管持续运行的进程（Dev Server、文件 Watcher、持续监听测试、模拟后台服务）。
 - **关键 Action 与入参**：
   - `action: "start", command: "npm run dev", id: "可选进程标识"`：在独立进程组中启动守护进程。
   - `action: "list"`：列出所有托管进程的 PID、状态、运行时间与监听端口。
   - `action: "status", id: "进程ID"`：查看特定进程状态与资源开销。
   - `action: "logs", id: "进程ID", lines: 50, grep: "关键词"`：按需过滤调阅进程实时输出日志。
-  - `action: "stop", id: "进程ID"`：递归终止整棵进程树，释放端口与内存。
-- **最佳使用时机**：本地联调、启动预览服务。常驻进程状态直连桌面端左下角，开发结束时调用 `stop` 干净释放。
+  - `action: "stop", id: "进程ID"`：向整棵进程组发送 `SIGTERM/SIGKILL` 递归终止整棵进程树，彻底释放端口与内存。
+  - `action: "clear"`：清除已停止的进程历史记录。
+- **自清理准则**：**谁启动，谁负责释放**。在 Task 验证完成或会话结束前，AI **必须主动调用 `process(action: "stop")` 释放服务**，杜绝端口被长期僵死霸占（详见第六章）。
 
 ### 7. `block` —— 真实代码能力的物理站台
 - **核心作用**：定义和管理系统的基础功能块，绑定物理源文件与关键 AST 符号。
@@ -217,5 +221,28 @@ ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文
 2. **继续未完成工作**：`task(open, id)` 获取上下文切片与历史 `note`，无缝接续开发；
 3. **沉淀新知**：技术选型写入 `decision_write`，新规约写入 `rule_write`；
 4. **收尾与同步**：运行测试并记录 `task(check)`，执行 `task(sync)` 确保 100% 覆盖率，最终完结 Plan。
+
+---
+
+## 六、长期运行进程 (Process) 托管与自闭环清理指南
+
+在进行包含本地预览服务器、编译器持续监听（Watcher）或测试热重载任务时，AI 可以使用 `process` 工具托管常驻后台进程。**特别强调：对于不打开桌面 App 的纯插件用户，他们没有图形化界面的红色停止按钮，后台服务的生命周期完全依赖 AI 自觉闭环！**
+
+### 1. 启动场景与工具选型原则
+- **短暂命令用 `run_command`**：单次测试（`npm test`）、构建（`npm run build`）、代码扫描、git 操作等，一律调用 `run_command`。它出舱脱敏、写入日志并返回精简回执，不常驻后台；
+- **长时服务用 `process.start`**：仅当开发过程中需要持续监听文件变动（如 `npm run test:watch`、`tsc --watch`）或启动本地 API/Web 预览服务时，才使用 `process(action: "start", command: "...")`。
+
+### 2. 启动前防冲突探测
+在启动新的常驻服务之前，若该服务可能占用固定端口（如 `:3000`、`:4004`）：
+1. 先调用 `process(action: "list")` 盘点当前已有的活跃进程；
+2. 若发现同类型或可能产生端口冲突的老旧进程，先调用 `process(action: "stop", id: "...")` 释放旧服务；
+3. 再调用 `process(action: "start")` 启动新服务，避免抛出 `EADDRINUSE` 端口占用错误。
+
+### 3. Clean-on-Finish 闭环铁律（核心工程纪律）
+**“谁启动，谁负责释放”是 AI 智能体最基本的工程素养。**
+1. **任务完成即清理**：一旦当前 Task 的验证完成（`task(check)` 通过），或者即将调用 `task(sync)` 提交成果，或者即将结束当前对话前，**AI 必须主动调用 `process(action: "list")` 检查自己启动的临时服务，并逐一调用 `process(action: "stop", id: "...")` 停止！**
+2. **整棵进程树彻底拔除**：`process.stop` 会向整棵子进程组发送 `SIGTERM` 与 `SIGKILL`，杜绝任何僵尸进程或孤儿子进程在后台持续消耗系统资源与电量；
+3. **清理退出记录**：停止后可调用 `process(action: "clear")` 清除已停止的历史记录，保持工作区干净整洁。
+
 
 

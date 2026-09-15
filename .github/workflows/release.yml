@@ -51,6 +51,14 @@ jobs:
       - name: Build MCP bundle
         run: npm run plugin:build
 
+      - name: Prepare standalone Node runtime
+        shell: bash
+        run: |
+          mkdir -p .cache
+          curl -sL https://nodejs.org/dist/v22.14.0/node-v22.14.0-darwin-arm64.tar.gz | tar -xzf - -C .cache --strip-components=2 node-v22.14.0-darwin-arm64/bin/node
+          mv .cache/node .cache/node-darwin-arm64
+          chmod +x .cache/node-darwin-arm64
+
       - name: Build macOS app
         shell: bash
         run: |
@@ -62,6 +70,7 @@ jobs:
             CODE_SIGN_STYLE="Manual" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=YES \
+            OTHER_CODE_SIGN_FLAGS="--deep" \
             build
 
       - name: Prepare release assets
