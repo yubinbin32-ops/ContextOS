@@ -111,10 +111,10 @@ struct ContentView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     sidebarSection(.knowledge, title: store.activeLocale == "zh-Hans" ? "知识" : "Knowledge") {
-                        ForEach(knowledge.documents.filter { $0.kind != "rule" }) { doc in
-                            sidebarButton(title: doc.title, subtitle: doc.kind == "readme" ? (store.activeLocale == "zh-Hans" ? "仓库原文件 · 只读" : "REPOSITORY · READ ONLY") : (doc.kind == "decision" ? (store.activeLocale == "zh-Hans" ? "架构决策记录 · 只读" : "ADR · READ ONLY") : "OS · r\(doc.revision)"), color: ContextOSTheme.blockKindColor("principle"), selected: requestedDocument == doc.id) { openDocument(doc.id, nil) }
+                        ForEach(knowledge.documents.filter { $0.kind == "readme" }) { doc in
+                            sidebarButton(title: doc.title, subtitle: store.activeLocale == "zh-Hans" ? "仓库原文件 · 只读" : "REPOSITORY · READ ONLY", color: ContextOSTheme.blockKindColor("principle"), selected: requestedDocument == doc.id) { openDocument(doc.id, nil) }
                         }
-                        if knowledge.documents.filter({ $0.kind != "rule" }).isEmpty { Text(store.activeLocale == "zh-Hans" ? "README 与项目文档" : "README and project documents").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 18) }
+                        if knowledge.documents.filter({ $0.kind == "readme" }).isEmpty { Text(store.activeLocale == "zh-Hans" ? "README 与项目文档" : "README and project documents").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 18) }
                     }
                     if !syncIssues.isEmpty || store.sourcePollingError != nil {
                         sidebarSection(.synchronization, title: store.activeLocale == "zh-Hans" ? "同步检查 (\(syncIssues.count))" : "Sync checks (\(syncIssues.count))") {
@@ -144,15 +144,15 @@ struct ContentView: View {
                         }
                     }
 
-                    if !store.snapshot.decisions.isEmpty {
+                    if let decisionDoc = knowledge.documents.first(where: { $0.id == "DECISION.md" }) {
                         sidebarSection(.decisions, title: store.text("decisions")) {
-                            ForEach(store.snapshot.decisions) { decision in
-                                sidebarButton(
-                                    title: decision.title,
-                                    subtitle: "\(decision.status.uppercased()) · \(store.decisionScopeLabel(decision.id))",
-                                    color: ContextOSTheme.blockKindColor("principle"),
-                                    selected: store.selection == GraphSelection(type: .decision, id: decision.id)
-                                ) { store.select(GraphSelection(type: .decision, id: decision.id)) }
+                            sidebarButton(
+                                title: "DECISION.md",
+                                subtitle: store.activeLocale == "zh-Hans" ? "架构决策记录 · 只读" : "ADR · READ ONLY",
+                                color: ContextOSTheme.blockKindColor("principle"),
+                                selected: requestedDocument == decisionDoc.id
+                            ) {
+                                openDocument(decisionDoc.id, nil)
                             }
                         }
                     }

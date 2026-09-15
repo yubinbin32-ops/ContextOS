@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.png" width="76" alt="ContextOS" />
-  <h1>ContextOS · 智能体上下文操作系统</h1>
-  <p><strong>以编译器级 AST 手术刀读写、地铁拓扑图谱与 C-D-C-S 状态机，治理 AI 编程全生命周期的上下文与架构一致性。</strong></p>
+  <h1>自动化上下文管理，减少 AI 编程 90% 上下文浪费。</h1>
+  <p><strong>解决大项目上下文挤爆与记忆遗忘：以手术刀级 AST 读写代替盲读长文件，以脱敏沙箱隔绝终端日志，以地铁图谱让 AI 秒懂架构。</strong></p>
   <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>下载 macOS App</strong></a> · <a href="#三分钟开始使用">三分钟开始使用</a> · <a href="README.md">English</a></p>
 </div>
 

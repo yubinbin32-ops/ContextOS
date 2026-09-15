@@ -30,7 +30,7 @@ final class KnowledgeLibrary: ObservableObject {
     }
     nonisolated private static func read(root: String, previous: String) -> (fingerprint: String, documents: [KnowledgeDocument], error: String?)? {
         let directory = URL(fileURLWithPath: root)
-        let names = ["README_zh.md", "README.md", ".contextos/graph.json"]
+        let names = ["README_zh.md", "README.md", "DECISION.md", ".contextos/graph.json"]
         var fingerprint = root + names.map { name in
             let attributes = try? FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(name).path)
             return "\(name):\(attributes?[.modificationDate] ?? ""):\(attributes?[.size] ?? "")"
@@ -48,6 +48,9 @@ final class KnowledgeLibrary: ObservableObject {
             if let body = try? String(contentsOf: directory.appendingPathComponent(name), encoding: .utf8) {
                 docs.append(.init(id: name, title: name == "README_zh.md" ? "README · 中文" : "README · English", body: body, html: MarkdownPage.render(body), sourcePath: name, revision: 0, kind: "readme", relations: []))
             }
+        }
+        if let body = try? String(contentsOf: directory.appendingPathComponent("DECISION.md"), encoding: .utf8) {
+            docs.append(.init(id: "DECISION.md", title: "DECISION.md", body: body, html: MarkdownPage.render(body), sourcePath: "DECISION.md", revision: 1, kind: "decision", relations: []))
         }
         if let ruleFiles = try? FileManager.default.contentsOfDirectory(at: rulesDir, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey], options: [.skipsHiddenFiles]) {
             for fileURL in ruleFiles.filter({ $0.pathExtension == "md" }).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {

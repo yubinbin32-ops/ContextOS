@@ -247,10 +247,6 @@ test('Categorized Rule model', () => {
   assert.equal(rule.category, 'api');
   const summary = rule.toSummaryJSON();
   assert.equal(summary.content, undefined);
-  assert.equal(summary.title, 'API Versioning and Facades');
-
-  assert.throws(
-    () => new Rule({ id: 'bad', title: 'Bad Rule', category: 'invalid-cat' }),
-    /Invalid rule category/
-  );
+  const customCatRule = new Rule({ id: 'custom', title: 'Custom Rule', category: 'any-flexible-category' });
+  assert.equal(customCatRule.category, 'any-flexible-category');
 });

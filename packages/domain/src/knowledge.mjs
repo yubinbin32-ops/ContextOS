@@ -104,13 +104,10 @@ export class Rule {
   }) {
     if (!id || typeof id !== 'string') throw new Error('Rule requires id');
     if (!title || typeof title !== 'string') throw new Error('Rule requires title');
-    if (!RULE_CATEGORIES.includes(category)) {
-      throw new Error(`Invalid rule category: ${category}. Must be one of ${RULE_CATEGORIES.join(', ')}`);
-    }
 
     this.id = id;
     this.title = title;
-    this.category = category;
+    this.category = category ? String(category).trim() : 'general';
     this.summary = summary;
     this.content = content;
     this.priority = priority;

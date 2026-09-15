@@ -24345,18 +24345,6 @@ var Task = class {
 };
 
 // packages/domain/src/knowledge.mjs
-var RULE_CATEGORIES = [
-  "api",
-  "ui",
-  "security",
-  "test",
-  "release",
-  "data",
-  "performance",
-  "architecture",
-  "code",
-  "general"
-];
 var DecisionDocument = class {
   constructor(rawMarkdown = "") {
     this.rawMarkdown = rawMarkdown;
@@ -24435,12 +24423,9 @@ var Rule = class {
   }) {
     if (!id || typeof id !== "string") throw new Error("Rule requires id");
     if (!title || typeof title !== "string") throw new Error("Rule requires title");
-    if (!RULE_CATEGORIES.includes(category)) {
-      throw new Error(`Invalid rule category: ${category}. Must be one of ${RULE_CATEGORIES.join(", ")}`);
-    }
     this.id = id;
     this.title = title;
-    this.category = category;
+    this.category = category ? String(category).trim() : "general";
     this.summary = summary;
     this.content = content;
     this.priority = priority;
@@ -38802,7 +38787,16 @@ function calculateHash(code2) {
   return crypto2.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
 }
 var LanguageRegistry = class {
-  static getLanguage(filePath) {
+  static getLanguage(filePath, content = "") {
+    const basename = path3.basename(filePath);
+    switch (basename) {
+      case "Gemfile":
+      case "Podfile":
+      case "Rakefile":
+        return { name: "ruby", capability: "L2" };
+      case "CMakeLists.txt":
+        return { name: "cpp", capability: "L2" };
+    }
     const ext = path3.extname(filePath).toLowerCase();
     switch (ext) {
       case ".js":
@@ -38839,15 +38833,25 @@ var LanguageRegistry = class {
         return { name: "php", capability: "L2" };
       case ".rb":
         return { name: "ruby", capability: "L2" };
-      default:
-        return { name: "text", capability: "L1" };
     }
+    if (content) {
+      const firstLine = content.slice(0, 150).split(/\r?\n/)[0].trim();
+      if (firstLine.startsWith("#!")) {
+        if (/python[0-9.]*(\s|$)/.test(firstLine)) return { name: "python", capability: "L3" };
+        if (/(node|bun|deno)(\s|$)/.test(firstLine)) return { name: "javascript", capability: "L3" };
+        if (/ruby(\s|$)/.test(firstLine)) return { name: "ruby", capability: "L2" };
+        if (/php(\s|$)/.test(firstLine)) return { name: "php", capability: "L2" };
+      } else if (firstLine.startsWith("<?php")) {
+        return { name: "php", capability: "L2" };
+      }
+    }
+    return { name: "text", capability: "L1" };
   }
   /**
    * Parse symbols, imports, classes and functions from content.
    */
   static parseStructure(filePath, content, options = {}) {
-    const { name: lang, capability } = this.getLanguage(filePath);
+    const { name: lang, capability } = this.getLanguage(filePath, content);
     const lines = content.split(/\r?\n/);
     const symbols = [];
     const imports = [];

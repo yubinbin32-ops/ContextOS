@@ -8,7 +8,19 @@ export function calculateHash(code) {
 }
 
 export class LanguageRegistry {
-  static getLanguage(filePath) {
+  static getLanguage(filePath, content = '') {
+    const basename = path.basename(filePath);
+    // 1. Exact filename matching (matching Zed / Cursor filename mapping)
+    switch (basename) {
+      case 'Gemfile':
+      case 'Podfile':
+      case 'Rakefile':
+        return { name: 'ruby', capability: 'L2' };
+      case 'CMakeLists.txt':
+        return { name: 'cpp', capability: 'L2' };
+    }
+
+    // 2. Extension matching (standard primary mechanism in Zed, Cursor, VS Code)
     const ext = path.extname(filePath).toLowerCase();
     switch (ext) {
       case '.js':
@@ -45,16 +57,29 @@ export class LanguageRegistry {
         return { name: 'php', capability: 'L2' };
       case '.rb':
         return { name: 'ruby', capability: 'L2' };
-      default:
-        return { name: 'text', capability: 'L1' };
     }
+
+    // 3. Fallback: Shebang and content sniffing (for extensionless scripts)
+    if (content) {
+      const firstLine = content.slice(0, 150).split(/\r?\n/)[0].trim();
+      if (firstLine.startsWith('#!')) {
+        if (/python[0-9.]*(\s|$)/.test(firstLine)) return { name: 'python', capability: 'L3' };
+        if (/(node|bun|deno)(\s|$)/.test(firstLine)) return { name: 'javascript', capability: 'L3' };
+        if (/ruby(\s|$)/.test(firstLine)) return { name: 'ruby', capability: 'L2' };
+        if (/php(\s|$)/.test(firstLine)) return { name: 'php', capability: 'L2' };
+      } else if (firstLine.startsWith('<?php')) {
+        return { name: 'php', capability: 'L2' };
+      }
+    }
+
+    return { name: 'text', capability: 'L1' };
   }
 
   /**
    * Parse symbols, imports, classes and functions from content.
    */
   static parseStructure(filePath, content, options = {}) {
-    const { name: lang, capability } = this.getLanguage(filePath);
+    const { name: lang, capability } = this.getLanguage(filePath, content);
     const lines = content.split(/\r?\n/);
     const symbols = [];
     const imports = [];

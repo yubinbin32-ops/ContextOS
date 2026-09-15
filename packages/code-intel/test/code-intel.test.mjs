@@ -312,6 +312,24 @@ end
   assert.ok(structure.symbols.some((s) => s.name === 'format_currency' && s.kind === 'function'));
 });
 
+test('LanguageRegistry handles exact filenames and shebang sniffing like Zed/Cursor', () => {
+  // 1. Exact filename (Gemfile -> Ruby)
+  const gemfile = `source 'https://rubygems.org'
+gem 'rails', '~> 7.0'
+`;
+  const gemStructure = LanguageRegistry.parseStructure('Gemfile', gemfile);
+  assert.equal(gemStructure.language, 'ruby');
+
+  // 2. Shebang sniffing for extensionless script (#!/usr/bin/env python3)
+  const pythonScript = `#!/usr/bin/env python3
+def main():
+    print("hello from script")
+`;
+  const scriptStructure = LanguageRegistry.parseStructure('bin/run-task', pythonScript);
+  assert.equal(scriptStructure.language, 'python');
+  assert.ok(scriptStructure.symbols.some((s) => s.name === 'main'));
+});
+
 
 test('CodeTools.outline produces clean Markdown', () => {
   const outline = CodeTools.outline('src/engine.js', JS_CODE);

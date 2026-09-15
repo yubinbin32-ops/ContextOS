@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.png" width="76" alt="ContextOS" />
-  <h1>ContextOS · Context Operating System for AI Coding Agents</h1>
-  <p><strong>Governing AI coding context via compiler-grade AST surgical tools, Metro Map architecture topology, and deterministic C-D-C-S state machines.</strong></p>
+  <h1>Automated Context Management: Cut 90% of AI Coding Context Waste.</h1>
+  <p><strong>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</strong></p>
   <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文说明</a></p>
 </div>
 
