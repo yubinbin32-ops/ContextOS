@@ -77,7 +77,7 @@ export function createV2Server() {
     {
       description: 'Manage delivery Plans, Phases and Plan Checkpoints (formal acceptance). Checkpoints belong strictly to Plans.',
       inputSchema: {
-        action: z.enum(['list', 'create', 'open', 'check', 'complete']),
+        action: z.enum(['list', 'create', 'open', 'check', 'complete', 'delete']),
         id: z.string().optional(),
         planData: z.record(z.any()).optional(),
         checkpointId: z.string().optional(),

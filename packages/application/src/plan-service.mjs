@@ -82,4 +82,8 @@ export class PlanService {
     this.db.savePlan(plan.toJSON());
     return plan.toJSON();
   }
+
+  deletePlan(planId) {
+    return this.db.deletePlan(planId);
+  }
 }

@@ -14,7 +14,7 @@ project.root_object.development_region = "en"
 project.root_object.known_regions = ["en", "Base"]
 
 target = project.new_target(:application, "contextos-desktop", :osx, "14.0")
-target.product_name = "contextos"
+target.product_name = "ContextOS"
 
 sources_group = project.main_group.new_group("Sources", "Sources")
 app_group = sources_group.new_group("ContextOSDesktop", "ContextOSDesktop")
@@ -47,7 +47,7 @@ plugin_phase.output_paths = [
 
 common_settings = {
   "PRODUCT_BUNDLE_IDENTIFIER" => "com.contextos.desktop",
-  "PRODUCT_NAME" => "contextos",
+  "PRODUCT_NAME" => "ContextOS",
   "INFOPLIST_FILE" => "Resources/Info.plist",
   "GENERATE_INFOPLIST_FILE" => "NO",
   "MACOSX_DEPLOYMENT_TARGET" => "14.0",

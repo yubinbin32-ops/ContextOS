@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { sanitizeTerminalOutput } from './sanitizer.mjs';
+import { sanitizeTerminalOutput, redactSecrets } from './sanitizer.mjs';
 
 export async function runCommand({
   command,
@@ -60,7 +60,7 @@ export async function runCommand({
 
       resolve({
         id: receiptId,
-        command,
+        command: redactSecrets(command),
         cwd,
         exitCode,
         durationMs,
@@ -78,7 +78,7 @@ export async function runCommand({
       const durationMs = Date.now() - startTime;
       resolve({
         id: receiptId,
-        command,
+        command: redactSecrets(command),
         cwd,
         exitCode: 1,
         durationMs,

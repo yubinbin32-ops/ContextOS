@@ -194,6 +194,14 @@ export class V2Database {
     return rows.map((r) => this.getPlan(r.id));
   }
 
+  deletePlan(planId) {
+    this.db.prepare('DELETE FROM checkpoints WHERE plan_id = ?').run(planId);
+    this.db.prepare('DELETE FROM phases WHERE plan_id = ?').run(planId);
+    this.db.prepare('DELETE FROM tasks WHERE plan_id = ?').run(planId);
+    const result = this.db.prepare('DELETE FROM plans WHERE id = ?').run(planId);
+    return result.changes > 0;
+  }
+
   // --- Task ---
   saveTask(task) {
     const stmt = this.db.prepare(`

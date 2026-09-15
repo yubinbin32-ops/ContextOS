@@ -127,6 +127,10 @@ export class ContextOSV2Service {
         const completed = this.planService.completePlan(id, planData);
         return format === 'json' ? completed : `Plan '${id}' completed successfully!\nSummary: ${completed.completedSummary}`;
       }
+      case 'delete': {
+        const deleted = this.planService.deletePlan(id);
+        return format === 'json' ? { deleted, id } : `Plan '${id}' deleted successfully.`;
+      }
       default:
         throw new Error(`Unknown plan action: ${action}`);
     }

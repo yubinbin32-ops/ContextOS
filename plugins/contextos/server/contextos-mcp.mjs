@@ -23538,6 +23538,13 @@ var V2Database = class {
     const rows = projectId ? stmt.all(projectId) : stmt.all();
     return rows.map((r) => this.getPlan(r.id));
   }
+  deletePlan(planId) {
+    this.db.prepare("DELETE FROM checkpoints WHERE plan_id = ?").run(planId);
+    this.db.prepare("DELETE FROM phases WHERE plan_id = ?").run(planId);
+    this.db.prepare("DELETE FROM tasks WHERE plan_id = ?").run(planId);
+    const result = this.db.prepare("DELETE FROM plans WHERE id = ?").run(planId);
+    return result.changes > 0;
+  }
   // --- Task ---
   saveTask(task) {
     const stmt = this.db.prepare(`
@@ -24548,6 +24555,9 @@ var PlanService = class {
     plan.complete({ completedSummary: completedSummary || plan.summary, historyRef });
     this.db.savePlan(plan.toJSON());
     return plan.toJSON();
+  }
+  deletePlan(planId) {
+    return this.db.deletePlan(planId);
   }
 };
 
@@ -40486,7 +40496,7 @@ ${stderrData}` : "");
       const relativeLogHandle = path6.relative(projectRoot, logFile);
       resolve({
         id: receiptId,
-        command,
+        command: redactSecrets(command),
         cwd,
         exitCode,
         durationMs,
@@ -40503,7 +40513,7 @@ ${stderrData}` : "");
       const durationMs = Date.now() - startTime;
       resolve({
         id: receiptId,
-        command,
+        command: redactSecrets(command),
         cwd,
         exitCode: 1,
         durationMs,
@@ -41069,6 +41079,10 @@ Members: ${chain.memberIds.join(", ")}`;
         return format === "json" ? completed : `Plan '${id}' completed successfully!
 Summary: ${completed.completedSummary}`;
       }
+      case "delete": {
+        const deleted = this.planService.deletePlan(id);
+        return format === "json" ? { deleted, id } : `Plan '${id}' deleted successfully.`;
+      }
       default:
         throw new Error(`Unknown plan action: ${action}`);
     }
@@ -41441,7 +41455,7 @@ function createV2Server() {
     {
       description: "Manage delivery Plans, Phases and Plan Checkpoints (formal acceptance). Checkpoints belong strictly to Plans.",
       inputSchema: {
-        action: _enum(["list", "create", "open", "check", "complete"]),
+        action: _enum(["list", "create", "open", "check", "complete", "delete"]),
         id: string2().optional(),
         planData: record(any()).optional(),
         checkpointId: string2().optional(),
