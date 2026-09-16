@@ -1,9 +1,16 @@
 ---
 name: contextos
-description: Context operating system for AI coding agents. Governs context lifecycle via C-D-C-S state machines, AST outlines, surgical reads/edits across 10+ languages, out-of-context command receipts, categorized rules, and single-file chapter decisions.
+description: MUST be used whenever starting ANY coding task, exploring or understanding codebase architecture, adding features, fixing bugs, refactoring, or reading/editing code (进行代码开发、架构理解、新功能实现或读写代码时必须调用). Activates ContextOS C-D-C-S workflow and AST surgical tools (os_context, code, task, plan) to replace blind file reading.
 ---
 
 # ContextOS · 智能体上下文操作系统开发指南
+
+> [!CRITICAL]
+> **ContextOS 开发准入硬性守则（Mandatory Zero-Tolerance Rules）**：
+> 1. **严禁全量盲读（FORBIDDEN Blind Reading）**：在未调用 `os_context(action: "brief")` 建立认知前，严禁直接调用原生 `view_file`、`cat`、`read_file` 遍历或通读业务源码来了解架构。
+> 2. **首要动作必须调用 OS（Mandatory First Action）**：每次对话开始、承接新功能、理解项目或排查缺陷时，第一步必须调用 `os_context(action: "brief")` 获取系统拓扑、活跃 Plan 与 Task 切片。
+> 3. **手术刀式读写（Surgical Code Operations）**：必须优先使用 `code(action: "search")` / `code(action: "outline")` 定位结构，再用 `code(action: "read")` 手术刀提取目标方法，禁止倾倒整文件内容进上下文。
+> 4. **生命周期闭环（C-D-C-S Protocol）**：必须遵循 `os_context(brief)` ➔ `plan/task` ➔ `code` ➔ `run_command` ➔ `task(sync)` 的原子闭环。
 
 ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控制与架构治理操作系统。它通过拓扑图谱结构化索引、按需切片展开、编译器级 AST 手术刀读写、脱敏出舱命令沙箱、分类规则库、章节式架构决议以及 C-D-C-S 状态机，保障大规模与复杂项目在长对话周期中的上下文极度精炼与架构一致性。
 
@@ -11,7 +18,7 @@ ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控�
 
 ## 核心开发节奏：C-D-C-S 闭环
 
-在进行任何真实功能开发、重构或缺陷修复时，推荐遵循 **`Create → Develop → Check → Sync`** 的确定性工程闭环：
+在进行任何真实功能开发、重构或缺陷修复时，**必须强制遵循** **`Create → Develop → Check → Sync`** 的确定性工程闭环：
 
 ```text
 [1. Create]   os_context(brief) ──> plan(open/create) ──> task(create/develop)
@@ -206,7 +213,7 @@ ContextOS 对 `kind` 保持开放，支持 AI 根据工程语义自由定义：
 - 工具与支撑层：`utility`, `infra`, `tooling`
 
 ### 3. 架构导航三级递进法则
-面对陌生或大型项目时，AI 推荐遵循自顶向下的三级导航：
+面对陌生或大型项目时，AI **必须强制遵循**自顶向下的三级导航（严禁直接全量阅读未建立索引的文件）：
 1. **宏观查 Chain**：`chain(list)` 查看系统主干业务流；
 2. **微观定 Block**：沿线路找到相关 Block，`block(open)` 查看绑定源文件；
 3. **手术刀提取**：`code(outline)` 审视函数大纲，`code(read)` 提取目标方法，精准修改。
