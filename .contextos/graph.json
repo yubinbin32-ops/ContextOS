@@ -1,10 +1,38 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 3,
-  "exportedAt": "2026-09-15T04:22:46.888Z",
+  "graphRevision": 4,
+  "exportedAt": "2026-09-16T07:43:08.316Z",
   "data": {
     "plans": [
+      {
+        "id": "plan-1789544378269",
+        "projectId": "contextos",
+        "title": "Git Release Auto-Detection and Selective Update",
+        "priority": "normal",
+        "status": "active",
+        "summary": "Auto-detect new releases from Git/GitHub, support edition and version selection, and provide in-app or browser update in Settings.",
+        "completedSummary": null,
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-1",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "pending",
+            "taskIds": [],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [],
+        "createdAt": "2026-09-16T07:39:38.269Z",
+        "updatedAt": "2026-09-16T07:39:38.269Z"
+      },
       {
         "id": "plan-v2-rebuild",
         "projectId": "contextos",
@@ -234,7 +262,64 @@
         "updatedAt": "2026-09-14T20:11:41.821Z"
       }
     ],
-    "tasks": [],
+    "tasks": [
+      {
+        "id": "task-1789544383198",
+        "planId": "plan-1789544378269",
+        "phaseId": "phase-1",
+        "title": "Add Git release auto-detection and selective update in Settings",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "",
+          "constraints": [],
+          "references": {},
+          "locators": [],
+          "nextSteps": [],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [],
+          "symbols": [],
+          "candidateBlockIds": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "baseline": {
+          "gitHead": null,
+          "dirtyHash": null,
+          "indexRevision": 0
+        },
+        "notes": [
+          {
+            "id": "note-1789544569980-x4uxm",
+            "text": "Created AppUpdater.swift engine supporting GitHub Releases API, semantic version parsing, download progress, in-place app swap, and integrated into GraphStore and ContentView SettingsView with full localization.",
+            "kind": "progress",
+            "createdAt": "2026-09-16T07:42:49.980Z"
+          }
+        ],
+        "checks": [
+          {
+            "id": "check-1789544573087-de4vj",
+            "receiptId": "receipt-1789544544790-a450cc",
+            "description": "Swift compilation and automated version assertion tests passed cleanly",
+            "passed": true,
+            "evidence": "",
+            "recordedAt": "2026-09-16T07:42:53.087Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "completedAt": "2026-09-16T07:43:08.302Z"
+        },
+        "createdAt": "2026-09-16T07:39:43.198Z",
+        "updatedAt": "2026-09-16T07:43:08.302Z"
+      }
+    ],
     "blocks": [
       {
         "id": "block-code-gateway",

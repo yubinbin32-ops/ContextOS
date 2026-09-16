@@ -19,7 +19,14 @@ final class GraphStore: ObservableObject {
     }
     @Published private(set) var recentlyChangedRefs: Set<String> = []
     @Published private(set) var errorMessage: String?
-    @Published var settingsPresented = false
+    @Published var settingsPresented = false {
+        didSet {
+            if settingsPresented {
+                updater.checkOnSettingsOpen()
+            }
+        }
+    }
+    @Published var updater = AppUpdater.shared
     @Published private(set) var pluginInstallStatus: PluginInstallStatus = .checking
     @Published private(set) var editorStatuses: [EditorPlatformStatus] = []
     @Published private(set) var runningProcesses: [RunningProcessItem] = []
@@ -92,6 +99,7 @@ final class GraphStore: ObservableObject {
         startLiveUpdates()
         refreshPluginStatus(autoInstallIfNeeded: true)
         refreshRunningProcesses()
+        updater.checkOnLaunch()
     }
 
     func chooseProject() {
@@ -955,7 +963,8 @@ final class GraphStore: ObservableObject {
             "upstream":"直接上游", "downstream":"直接下游", "memberships":"所在 Chain", "relatedPlans":"关联 Plan", "path":"路径", "revision":"版本",
             "fitNetwork":"适配全图", "focusMode":"聚焦", "exitFocus":"退出聚焦", "isolate":"仅显示关联", "projectRules":"项目规则", "decisions":"架构决策",
             "openProject":"打开项目", "changeProject":"切换项目", "recentProjects":"最近项目", "openProjectHelp":"请选择包含 .contextos/project.json 的项目目录。", "open":"打开",
-            "all":"全部", "verification":"验证", "unassigned":"独立验证", "verified":"已验证", "checkpointsPassed":"检查点通过", "noCheckpoints":"0 检查点", "directBlockWork":"直接 Block 工作", "principle":"原则", "product":"产品", "requirement":"需求", "decision":"决策", "flow":"流程", "ui":"界面", "service":"服务", "function":"函数", "api":"API", "integration":"集成", "data":"数据", "database":"数据库", "risk":"风险", "test":"测试", "checkpoint":"检查点"
+            "all":"全部", "verification":"验证", "unassigned":"独立验证", "verified":"已验证", "checkpointsPassed":"检查点通过", "noCheckpoints":"0 检查点", "directBlockWork":"直接 Block 工作", "principle":"原则", "product":"产品", "requirement":"需求", "decision":"决策", "flow":"流程", "ui":"界面", "service":"服务", "function":"函数", "api":"API", "integration":"集成", "data":"数据", "database":"数据库", "risk":"风险", "test":"测试", "checkpoint":"检查点",
+            "softwareUpdate":"软件更新", "currentVersion":"当前版本", "checkUpdate":"检查更新", "checkingUpdate":"正在检查更新…", "upToDate":"当前已是最新版本", "newVersionFound":"发现新版本", "updateNow":"立即更新", "updating":"正在处理更新…", "restartAndUpdate":"重启并完成更新", "viewReleaseNotes":"发行说明", "hideReleaseNotes":"收起说明", "selectEdition":"安装包规格", "fullEdition":"全功能版 (内置 Node 22 · 推荐)", "standardEdition":"轻量版 (依赖系统 Node)", "openInBrowser":"在浏览器中查看", "openReleasePage":"打开 GitHub Release 页面", "gitRepository":"Git 仓库", "selectVersion":"选择更新版本", "retry":"重试", "devModeUpdateNotice":"开发模式下已解压至缓存目录", "cancelDownload":"取消下载", "releaseNotes":"更新日志", "downloadingUpdate":"正在下载更新…"
         ]
         let en: [String: String] = [
             "overview":"Full Network", "plans":"Plans", "chains":"Chains", "settings":"Settings", "done":"Done",
@@ -969,7 +978,8 @@ final class GraphStore: ObservableObject {
             "upstream":"Direct Upstream", "downstream":"Direct Downstream", "memberships":"Chain Memberships", "relatedPlans":"Related Plans", "path":"Path", "revision":"Revision",
             "fitNetwork":"Fit Network", "focusMode":"Focus", "exitFocus":"Exit Focus", "isolate":"Related Only", "projectRules":"Project Rules", "decisions":"Architecture Decisions",
             "openProject":"Open Project", "changeProject":"Change Project", "recentProjects":"Recent Projects", "openProjectHelp":"Choose a project folder containing .contextos/project.json.", "open":"Open",
-            "all":"All", "verification":"Verification", "unassigned":"Standalone checks", "verified":"Verified", "checkpointsPassed":"checkpoints passed", "noCheckpoints":"0 Checkpoints", "directBlockWork":"Direct Block work", "principle":"Principle", "product":"Product", "requirement":"Requirement", "decision":"Decision", "flow":"Flow", "ui":"UI", "service":"Service", "function":"Function", "api":"API", "integration":"Integration", "data":"Data", "database":"Database", "risk":"Risk", "test":"Test", "checkpoint":"Checkpoint"
+            "all":"All", "verification":"Verification", "unassigned":"Standalone checks", "verified":"Verified", "checkpointsPassed":"checkpoints passed", "noCheckpoints":"0 Checkpoints", "directBlockWork":"Direct Block work", "principle":"Principle", "product":"Product", "requirement":"Requirement", "decision":"Decision", "flow":"Flow", "ui":"UI", "service":"Service", "function":"Function", "api":"API", "integration":"Integration", "data":"Data", "database":"Database", "risk":"Risk", "test":"Test", "checkpoint":"Checkpoint",
+            "softwareUpdate":"SOFTWARE UPDATE", "currentVersion":"Current Version", "checkUpdate":"Check for Updates", "checkingUpdate":"Checking for updates…", "upToDate":"ContextOS is up to date", "newVersionFound":"New Version Available", "updateNow":"Update Now", "updating":"Processing update…", "restartAndUpdate":"Restart & Install", "viewReleaseNotes":"Release Notes", "hideReleaseNotes":"Hide Notes", "selectEdition":"Package Edition", "fullEdition":"Full (Bundled Node 22 · Recommended)", "standardEdition":"Standard Lite (Requires Node.js)", "openInBrowser":"View in Browser", "openReleasePage":"Open GitHub Release", "gitRepository":"Git Repository", "selectVersion":"Select Version", "retry":"Retry", "devModeUpdateNotice":"Extracted to cache directory in development mode", "cancelDownload":"Cancel", "releaseNotes":"Release Notes", "downloadingUpdate":"Downloading update…"
         ]
         return (activeLocale == "zh-Hans" ? zh : en)[key] ?? key
     }
