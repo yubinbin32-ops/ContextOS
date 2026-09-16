@@ -24,6 +24,23 @@ if (!fs.existsSync(releaseBinaryPath)) {
   execSync('swift build --package-path apps/desktop -c release', { cwd: repoRoot, stdio: 'inherit' });
 }
 
+// 2.5 Ensure standalone Node runtime is ready
+console.log('📦 Step 2.5/5: Preparing bundled standalone Node runtime...');
+const nodeCacheDir = path.join(repoRoot, '.cache');
+const cachedNodePath = path.join(nodeCacheDir, 'node-darwin-arm64');
+if (!fs.existsSync(cachedNodePath)) {
+  fs.mkdirSync(nodeCacheDir, { recursive: true });
+  console.log('   Downloading official standalone Node 22 binary (zero external dylibs)...');
+  execSync(
+    'curl -sL https://nodejs.org/dist/v22.14.0/node-v22.14.0-darwin-arm64.tar.gz | tar -xzf - -C "' +
+      nodeCacheDir +
+      '" --strip-components=2 node-v22.14.0-darwin-arm64/bin/node',
+    { stdio: 'inherit' }
+  );
+  fs.renameSync(path.join(nodeCacheDir, 'node'), cachedNodePath);
+  fs.chmodSync(cachedNodePath, 0o755);
+}
+
 // 3. Assemble .app Bundle
 console.log('📂 Step 3/5: Assembling ContextOS.app bundle...');
 const distDir = path.join(repoRoot, 'dist');
@@ -32,6 +49,8 @@ const contentsDir = path.join(appDir, 'Contents');
 const macosDir = path.join(contentsDir, 'MacOS');
 const resourcesDir = path.join(contentsDir, 'Resources');
 const marketplaceDir = path.join(resourcesDir, 'MarketplaceRoot');
+const binDir = path.join(resourcesDir, 'bin');
+const serverDir = path.join(resourcesDir, 'server');
 
 if (fs.existsSync(appDir)) {
   fs.rmSync(appDir, { recursive: true, force: true });
@@ -40,6 +59,14 @@ if (fs.existsSync(appDir)) {
 fs.mkdirSync(macosDir, { recursive: true });
 fs.mkdirSync(resourcesDir, { recursive: true });
 fs.mkdirSync(marketplaceDir, { recursive: true });
+fs.mkdirSync(binDir, { recursive: true });
+fs.mkdirSync(serverDir, { recursive: true });
+
+// Copy server script
+fs.copyFileSync(
+  path.join(repoRoot, 'plugins/contextos/server/contextos-mcp.mjs'),
+  path.join(serverDir, 'contextos-mcp.mjs')
+);
 
 // Copy binary
 const targetBinary = path.join(macosDir, 'ContextOS');
@@ -85,31 +112,49 @@ const targetAppPlistDir = path.join(marketplaceDir, 'apps/desktop/Resources');
 fs.mkdirSync(targetAppPlistDir, { recursive: true });
 fs.copyFileSync(sourcePlistPath, path.join(targetAppPlistDir, 'Info.plist'));
 
-// 4. Code Signing
-console.log('✍️  Step 4/5: Ad-hoc code signing ContextOS.app...');
+// 4. Code Signing & Packaging Standard Edition (without bundled Node)
+console.log('✍️  Step 4/5: Code signing and packaging Standard Edition (ContextOS-macos.zip)...');
 execSync(`codesign --force --deep --sign - "${appDir}"`, { cwd: repoRoot, stdio: 'inherit' });
 execSync(`codesign --verify --verbose "${appDir}"`, { cwd: repoRoot, stdio: 'inherit' });
 
-// 5. Package into .zip distribution
-console.log('🗜️  Step 5/5: Creating release zip archives...');
-const zipV2 = path.join(distDir, 'contextos-macos-v2.0.0.zip');
-const zipLatest = path.join(distDir, 'contextos-macos.zip');
+const pkgVersion = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
+const zipStandardV = path.join(distDir, `contextos-macos-v${pkgVersion}.zip`);
+const zipStandardLatest = path.join(distDir, 'contextos-macos.zip');
 
-if (fs.existsSync(zipV2)) fs.rmSync(zipV2);
-if (fs.existsSync(zipLatest)) fs.rmSync(zipLatest);
+if (fs.existsSync(zipStandardV)) fs.rmSync(zipStandardV);
+if (fs.existsSync(zipStandardLatest)) fs.rmSync(zipStandardLatest);
 
-// Use -r -y -q as specified in CONTRIBUTING.md
-execSync(`zip -r -y -q "${zipV2}" ContextOS.app`, { cwd: distDir, stdio: 'inherit' });
-fs.copyFileSync(zipV2, zipLatest);
+execSync(`zip -r -y -q "${zipStandardV}" ContextOS.app`, { cwd: distDir, stdio: 'inherit' });
+fs.copyFileSync(zipStandardV, zipStandardLatest);
+const standardZipStats = fs.statSync(zipStandardV);
 
-const zipStats = fs.statSync(zipV2);
+// 5. Code Signing & Packaging Full Edition (with bundled standalone Node 22)
+console.log('🗜️  Step 5/5: Bundling Node 22 and packaging Full Edition (ContextOS-macos-full.zip)...');
+fs.mkdirSync(binDir, { recursive: true });
+fs.copyFileSync(cachedNodePath, path.join(binDir, 'node'));
+fs.chmodSync(path.join(binDir, 'node'), 0o755);
+
+execSync(`codesign --force --deep --sign - "${appDir}"`, { cwd: repoRoot, stdio: 'inherit' });
+execSync(`codesign --verify --verbose "${appDir}"`, { cwd: repoRoot, stdio: 'inherit' });
+
+const zipFullV = path.join(distDir, `contextos-macos-full-v${pkgVersion}.zip`);
+const zipFullLatest = path.join(distDir, 'contextos-macos-full.zip');
+
+if (fs.existsSync(zipFullV)) fs.rmSync(zipFullV);
+if (fs.existsSync(zipFullLatest)) fs.rmSync(zipFullLatest);
+
+execSync(`zip -r -y -q "${zipFullV}" ContextOS.app`, { cwd: distDir, stdio: 'inherit' });
+fs.copyFileSync(zipFullV, zipFullLatest);
+const fullZipStats = fs.statSync(zipFullV);
 const appStats = fs.statSync(targetBinary);
 
 console.log('\n========================================');
-console.log('🎉 ContextOS macOS Release Packaging Complete!');
-console.log(`📦 Application:  dist/ContextOS.app`);
-console.log(`⚙️  Binary:       ContextOS (${(appStats.size / 1024 / 1024).toFixed(2)} MB)`);
-console.log(`🏷️  Version:      2.0.0 (Build 200)`);
-console.log(`🤐 Zip Archives: dist/contextos-macos-v2.0.0.zip (${(zipStats.size / 1024 / 1024).toFixed(2)} MB)`);
-console.log(`                dist/contextos-macos.zip`);
+console.log('🎉 ContextOS macOS Dual Release Packaging Complete!');
+console.log(`📦 Application:       dist/ContextOS.app (Full standalone with bundled Node 22)`);
+console.log(`⚙️  Native Binary:     ContextOS (${(appStats.size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`🏷️  Version:           ${pkgVersion}`);
+console.log(`🤐 Standard Archive:  dist/contextos-macos.zip (${(standardZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`                      dist/contextos-macos-v${pkgVersion}.zip`);
+console.log(`🤐 Full Archive:      dist/contextos-macos-full.zip (${(fullZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`                      dist/contextos-macos-full-v${pkgVersion}.zip`);
 console.log('========================================\n');

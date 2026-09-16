@@ -95,11 +95,16 @@ export class TaskService {
     if (!raw) throw new Error(`Task '${taskId}' not found`);
     const task = new Task(raw);
 
+    // Resolve string IDs to stored objects if needed
+    const resolvedBlocks = blocks.map((b) => (typeof b === 'string' ? this.db.getBlock(b) : b)).filter(Boolean);
+    const resolvedChains = chains.map((c) => (typeof c === 'string' ? this.db.getChain(c) : c)).filter(Boolean);
+    const resolvedLinks = links.map((l) => (typeof l === 'string' ? this.db.getLink(l) : l)).filter(Boolean);
+
     // Transition to syncing (verifies all checks passed)
     task.startSyncing();
 
     // 1. Invariant Check: Verify Block coverage for all working set files
-    const coverageReport = CoverageChecker.checkCoverage(task.workingSet.files || [], blocks);
+    const coverageReport = CoverageChecker.checkCoverage(task.workingSet.files || [], resolvedBlocks);
     if (!coverageReport.isFullyCovered) {
       task.failSync(`Coverage gap: Missing Block ownership for: ${coverageReport.uncoveredList.join(', ')}`);
       this.db.saveTask(task.toJSON());
@@ -109,7 +114,7 @@ export class TaskService {
     }
 
     // 2. Invariant Check: Ensure no ghost blocks
-    for (const b of blocks) {
+    for (const b of resolvedBlocks) {
       assertBlockHasRealCode(b);
     }
 
@@ -118,20 +123,20 @@ export class TaskService {
     let exportResult;
 
     this.db.transaction((db) => {
-      for (const b of blocks) {
+      for (const b of resolvedBlocks) {
         db.saveBlock(b);
       }
-      for (const c of chains) {
+      for (const c of resolvedChains) {
         db.saveChain(c);
       }
-      for (const l of links) {
+      for (const l of resolvedLinks) {
         db.saveLink(l);
       }
 
       syncResult = {
-        createdBlockIds: blocks.map((b) => b.id),
-        updatedChainIds: chains.map((c) => c.id),
-        updatedLinkIds: links.map((l) => l.id || `${l.from}->${l.to}`),
+        createdBlockIds: resolvedBlocks.map((b) => b.id),
+        updatedChainIds: resolvedChains.map((c) => c.id),
+        updatedLinkIds: resolvedLinks.map((l) => l.id || `${l.from}->${l.to}`),
       };
 
       task.completeSync(syncResult);

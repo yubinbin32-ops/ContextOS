@@ -18,4 +18,6 @@ assets/截屏*.png
 # Local process handshake (never canonical project knowledge)
 .contextos/runtime.json*
 *.xcuserstate
-
+.cache/
+.wrangler/
+.agents/mcp_config.json

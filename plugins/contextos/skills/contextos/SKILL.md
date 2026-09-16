@@ -1,9 +1,16 @@
 ---
 name: contextos
-description: Context operating system for AI coding agents. Governs context lifecycle via C-D-C-S state machines, AST outlines, surgical reads/edits across 10+ languages, out-of-context command receipts, categorized rules, and single-file chapter decisions.
+description: MUST be used whenever starting ANY coding task, exploring or understanding codebase architecture, adding features, fixing bugs, refactoring, or reading/editing code (进行代码开发、架构理解、新功能实现或读写代码时必须调用). Activates ContextOS C-D-C-S workflow and AST surgical tools (os_context, code, task, plan) to replace blind file reading.
 ---
 
 # ContextOS · 智能体上下文操作系统开发指南
+
+> [!CRITICAL]
+> **ContextOS 开发准入硬性守则（Mandatory Zero-Tolerance Rules）**：
+> 1. **严禁全量盲读（FORBIDDEN Blind Reading）**：在未调用 `os_context(action: "brief")` 建立认知前，严禁直接调用原生 `view_file`、`cat`、`read_file` 遍历或通读业务源码来了解架构。
+> 2. **首要动作必须调用 OS（Mandatory First Action）**：每次对话开始、承接新功能、理解项目或排查缺陷时，第一步必须调用 `os_context(action: "brief")` 获取系统拓扑、活跃 Plan 与 Task 切片。
+> 3. **手术刀式读写（Surgical Code Operations）**：必须优先使用 `code(action: "search")` / `code(action: "outline")` 定位结构，再用 `code(action: "read")` 手术刀提取目标方法，禁止倾倒整文件内容进上下文。
+> 4. **生命周期闭环（C-D-C-S Protocol）**：必须遵循 `os_context(brief)` ➔ `plan/task` ➔ `code` ➔ `run_command` ➔ `task(sync)` 的原子闭环。
 
 ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控制与架构治理操作系统。它通过拓扑图谱结构化索引、按需切片展开、编译器级 AST 手术刀读写、脱敏出舱命令沙箱、分类规则库、章节式架构决议以及 C-D-C-S 状态机，保障大规模与复杂项目在长对话周期中的上下文极度精炼与架构一致性。
 
@@ -11,7 +18,7 @@ ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控�
 
 ## 核心开发节奏：C-D-C-S 闭环
 
-在进行任何真实功能开发、重构或缺陷修复时，推荐遵循 **`Create → Develop → Check → Sync`** 的确定性工程闭环：
+在进行任何真实功能开发、重构或缺陷修复时，**必须强制遵循** **`Create → Develop → Check → Sync`** 的确定性工程闭环：
 
 ```text
 [1. Create]   os_context(brief) ──> plan(open/create) ──> task(create/develop)
@@ -30,9 +37,9 @@ ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控�
 
 ---
 
-## 一、9 大核心 Facade 工具全景与参数规范
+## 一、12 大核心 Facade 工具全景与参数规范
 
-ContextOS 收敛为 9 个高内聚 Facade 工具，覆盖 AI 开发全生命周期：
+ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周期：
 
 ### 1. `os_context` —— 项目全景与上下文切片
 - **核心作用**：会话启动引导、实体快速搜索、按需提取上下文切片。
@@ -70,27 +77,31 @@ ContextOS 收敛为 9 个高内聚 Facade 工具，覆盖 AI 开发全生命周�
   - `action: "search", query: "符号名"`：全局跨文件检索符号签名与位置。
   - `action: "read", path: "文件路径", selector: { symbol: "类名.方法名" }` 或 `{ startLine: 10, endLine: 35 }`：仅提取目标代码片段。
   - `action: "edit", path: "文件路径", targetContent: "原代码", replacementContent: "新代码"`：唯一性文本精准替换，系统自动重新解析 AST 并重锚所有符号。
-- **最佳使用时机**：任何代码阅读与编写场景。**推荐“search 定位 → outline 审视 → read 手术刀提取 → edit 精准替换”**，杜绝读取整个长文件。
+- **最佳使用心智**：
+  - **杜绝全量盲读**：禁止直接读入成百上千行的整个源文件，严禁倾倒无关实现代码；
+  - **四步精准工作法**：`code(search)` 定位符号位置 ➔ `code(outline)` 审视类/接口结构与函数签名 ➔ `code(read, selector)` 手术刀提取目标方法 ➔ `code(edit)` 局部原位修改；
+  - **修改后免重读**：`code(edit)` 执行后，系统底层自动重新解析 AST 并返回新符号哈希和重锚确认。AI **无需再调用 read 二次读取整个文件**，单次修改直接节省 80%+ 上下文。
 
 ### 5. `run_command` —— 出舱脱敏命令执行沙箱
-- **核心作用**：执行有限生命周期的命令（编译、测试、代码扫描、脚本）。
+- **核心作用**：执行有限生命周期的命令（编译、单次测试、代码扫描、脚本检查）。
 - **关键参数**：`command: "npm test"`, `cwd: "可选工作路径"`, `maxChars: 1500`, `timeoutMs: 60000`。
 - **运行机制**：
   1. 自动剔除 ANSI 终端着色符与格式控制符；
-  2. 自动检测并脱敏 API 密钥、Token 与敏感环境变量；
+  2. 自动检测并脱敏 API 密钥、Token 与敏感命令行凭据；
   3. 全量原始输出保存至 `.contextos/logs/<timestamp>-<hash>.log`，供持久排查；
   4. 仅向对话上下文返回紧凑的 **Receipt 回执**（包含 ExitCode、耗时、Receipt ID 以及关键错误堆栈诊断）。
-- **最佳使用时机**：运行任何测试套件、代码构建或环境检查命令。极大削减 98% 终端噪音，防止长日志污染模型注意力。
+- **证据链闭环**：`run_command` 返回的 `receipt.id`（例如 `receipt-178944...`）是客观真实的执行依据。在调用 `task(action: "check")` 时，必须将该 `receiptId` 传入 `checkData.receiptId`，形成不可篡改的工程质量证据链。
 
 ### 6. `process` —— 长期常驻后台守护进程管理器
-- **核心作用**：托管持续运行的进程（Dev Server、文件 Watcher、长连接 Worker、模拟后台）。
+- **核心作用**：托管持续运行的进程（Dev Server、文件 Watcher、持续监听测试、模拟后台服务）。
 - **关键 Action 与入参**：
   - `action: "start", command: "npm run dev", id: "可选进程标识"`：在独立进程组中启动守护进程。
   - `action: "list"`：列出所有托管进程的 PID、状态、运行时间与监听端口。
   - `action: "status", id: "进程ID"`：查看特定进程状态与资源开销。
   - `action: "logs", id: "进程ID", lines: 50, grep: "关键词"`：按需过滤调阅进程实时输出日志。
-  - `action: "stop", id: "进程ID"`：递归终止整棵进程树，释放端口与内存。
-- **最佳使用时机**：本地联调、启动预览服务。常驻进程状态直连桌面端左下角，开发结束时调用 `stop` 干净释放。
+  - `action: "stop", id: "进程ID"`：向整棵进程组发送 `SIGTERM/SIGKILL` 递归终止整棵进程树，彻底释放端口与内存。
+  - `action: "clear"`：清除已停止的进程历史记录。
+- **自清理准则**：**谁启动，谁负责释放**。在 Task 验证完成或会话结束前，AI **必须主动调用 `process(action: "stop")` 释放服务**，杜绝端口被长期僵死霸占（详见第六章）。
 
 ### 7. `block` —— 真实代码能力的物理站台
 - **核心作用**：定义和管理系统的基础功能块，绑定物理源文件与关键 AST 符号。
@@ -120,6 +131,27 @@ ContextOS 收敛为 9 个高内聚 Facade 工具，覆盖 AI 开发全生命周�
   - `action: "decision_open", sectionId: "可选DEC-ID"`：调阅 ADR 决策文档或指定章节。
   - `action: "decision_write", sectionId: "DEC-xxx", sectionTitle: "...", content: "..."`：按章节增量追加或修正重大架构决策。
 - **最佳使用时机**：形成工程规范时写 Rule；做出技术取舍、重构设计或经历路线弯路教训时写 Decision。
+
+### 10. `contextos_init` —— 模式切换与自举初始化
+- **核心作用**：在当前工作区初始化或切换存储模式（本地模式 vs 云端协同模式）。
+- **关键入参**：
+  - `mode: "local" | "cloud"`（模式选择，默认 `local`）
+  - `projectId: "contextos"`（项目名称，默认预设为 `contextos`）
+  - `cloudUrl: "https://..."`（云端 Hub URL）
+  - `token: "..."`（鉴权 Token）
+  - `injectEditors: true`（是否自动同步宿主编辑器配置）
+- **核心价值**：用户只做二选一选择，由 AI 在后台直接调用该工具完成项目元数据建立与编辑器注入。
+
+### 11. `contextos_doctor` —— 环境与中枢连接自检
+- **核心作用**：全方位诊断当前宿主环境、Node 运行时、存储路由模式、Cloudflare 连通性以及各大已安装编辑器的 MCP 配置状态。
+- **使用时机**：配置完毕后进行自检，或在遇到连接异常时快速获取排障诊断报告。
+
+### 12. `contextos_switch` —— 本地与云端无损双向切换与数据同步
+- **核心作用**：在当前项目自由切换本地离线模式与云端协同模式，并自动完成架构数据的双向迁移。
+- **关键入参**：`targetMode: "local" | "cloud"`, `cloudUrl?: "..."`, `token?: "..."`。
+- **迁移机制**：
+  - `local ➔ cloud`：读取本地 SQLite 数据库中的所有 Block、Chain、Link、Plan 并无损同步至 Cloud Hub，更新 project.json；
+  - `cloud ➔ local`：拉取云端最新架构快照写入本地 SQLite，更新 project.json 并完全切断网络依赖。
 
 ---
 
@@ -202,7 +234,7 @@ ContextOS 对 `kind` 保持开放，支持 AI 根据工程语义自由定义：
 - 工具与支撑层：`utility`, `infra`, `tooling`
 
 ### 3. 架构导航三级递进法则
-面对陌生或大型项目时，AI 推荐遵循自顶向下的三级导航：
+面对陌生或大型项目时，AI **必须强制遵循**自顶向下的三级导航（严禁直接全量阅读未建立索引的文件）：
 1. **宏观查 Chain**：`chain(list)` 查看系统主干业务流；
 2. **微观定 Block**：沿线路找到相关 Block，`block(open)` 查看绑定源文件；
 3. **手术刀提取**：`code(outline)` 审视函数大纲，`code(read)` 提取目标方法，精准修改。
@@ -217,5 +249,58 @@ ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文
 2. **继续未完成工作**：`task(open, id)` 获取上下文切片与历史 `note`，无缝接续开发；
 3. **沉淀新知**：技术选型写入 `decision_write`，新规约写入 `rule_write`；
 4. **收尾与同步**：运行测试并记录 `task(check)`，执行 `task(sync)` 确保 100% 覆盖率，最终完结 Plan。
+
+---
+
+## 六、长期运行进程 (Process) 托管与自闭环清理指南
+
+在进行包含本地预览服务器、编译器持续监听（Watcher）或测试热重载任务时，AI 可以使用 `process` 工具托管常驻后台进程。**特别强调：对于不打开桌面 App 的纯插件用户，他们没有图形化界面的红色停止按钮，后台服务的生命周期完全依赖 AI 自觉闭环！**
+
+### 1. 启动场景与工具选型原则
+- **短暂命令用 `run_command`**：单次测试（`npm test`）、构建（`npm run build`）、代码扫描、git 操作等，一律调用 `run_command`。它出舱脱敏、写入日志并返回精简回执，不常驻后台；
+- **长时服务用 `process.start`**：仅当开发过程中需要持续监听文件变动（如 `npm run test:watch`、`tsc --watch`）或启动本地 API/Web 预览服务时，才使用 `process(action: "start", command: "...")`。
+
+### 2. 启动前防冲突探测
+在启动新的常驻服务之前，若该服务可能占用固定端口（如 `:3000`、`:4004`）：
+1. 先调用 `process(action: "list")` 盘点当前已有的活跃进程；
+2. 若发现同类型或可能产生端口冲突的老旧进程，先调用 `process(action: "stop", id: "...")` 释放旧服务；
+3. 再调用 `process(action: "start")` 启动新服务，避免抛出 `EADDRINUSE` 端口占用错误。
+
+### 3. Clean-on-Finish 闭环铁律（核心工程纪律）
+**“谁启动，谁负责释放”是 AI 智能体最基本的工程素养。**
+1. **任务完成即清理**：一旦当前 Task 的验证完成（`task(check)` 通过），或者即将调用 `task(sync)` 提交成果，或者即将结束当前对话前，**AI 必须主动调用 `process(action: "list")` 检查自己启动的临时服务，并逐一调用 `process(action: "stop", id: "...")` 停止！**
+2. **整棵进程树彻底拔除**：`process.stop` 会向整棵子进程组发送 `SIGTERM` 与 `SIGKILL`，杜绝任何僵尸进程或孤儿子进程在后台持续消耗系统资源与电量；
+3. **清理退出记录**：停止后可调用 `process(action: "clear")` 清除已停止的历史记录，保持工作区干净整洁。
+
+---
+
+## 七、项目初始化与存储隔离规范 (用户仅做二选一，AI 全自动自举配置)
+
+当用户在新工作区开启对话、要求初始化项目或切换模式时，**必须严格遵循极简交互准则：不要让用户去改代码或配置文件，用户只做选择，AI 在后台完成所有注入！**
+
+### 1. 模式引导决策流
+若工作区尚未初始化（`.contextos/project.json` 不存在）：
+1. **AI 向用户发起二选一询问**：
+   ```text
+   检测到当前项目尚未初始化 ContextOS。请选择数据存储模式：
+   [1] 纯本地模式（默认）：数据存储在本地 .contextos/，100% 离线隐私安全。
+   [2] 云端协同模式：通过 Cloudflare Edge + D1 进行多端实时同步与跨设备协同。
+   ```
+2. **若用户选择 [1] 纯本地模式**：
+   * AI 调用 `contextos_init(mode: "local", projectId: "contextos")`。
+   * 系统自动在本地 `.contextos/project.json` 标记 `"storage": "local"`。
+   * **隔离保证**：即使系统环境变量设置了全局云端 URL，本地项目也绝对强制走本地 SQLite，杜绝任何数据冲突！
+3. **若用户选择 [2] 云端协同模式**：
+   * 若环境已有 Cloudflare 配置，AI 直接调用 `contextos_init(mode: "cloud", projectId: "contextos")`。
+   * 若尚无配置，AI 向用户输出由 `AI_SETUP.md` 提供的 Cloudflare 一键部署链接，索取 URL + Token 并调用 `contextos_init`。
+
+### 2. 自动化验证
+初始化后，AI 调用 `contextos_doctor` 进行轻量自检，向用户汇报配置就绪后，直接进入 C-D-C-S 正常开发节奏。
+
+### 3. 随时双向无损切换规范
+若用户在对话中提出切换模式要求：
+- 用户说：“把本项目切换到云端协同模式” ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，本地架构数据完整上云；
+- 用户说：“把本项目切回本地纯离线模式” ➔ AI 调用 `contextos_switch(targetMode: "local")`，云端最新数据落盘为本地 SQLite，完全断网离线。
+
 
 

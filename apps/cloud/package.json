@@ -1,0 +1,11 @@
+{
+  "name": "@contextos/cloud-hub",
+  "version": "2.1.0",
+  "description": "Serverless Cloud Hub for ContextOS on Cloudflare Workers",
+  "type": "module",
+  "main": "src/index.mjs",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}

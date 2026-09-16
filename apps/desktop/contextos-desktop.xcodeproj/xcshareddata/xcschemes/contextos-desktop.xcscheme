@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "44208EAA42AC772CF49AA1D6"
+               BlueprintIdentifier = "66A880A190C37F403F882E2C"
                BuildableName = "contextos-desktop.app"
                BlueprintName = "contextos-desktop"
                ReferencedContainer = "container:contextos-desktop.xcodeproj">
@@ -30,7 +30,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "44208EAA42AC772CF49AA1D6"
+            BlueprintIdentifier = "66A880A190C37F403F882E2C"
             BuildableName = "contextos-desktop.app"
             BlueprintName = "contextos-desktop"
             ReferencedContainer = "container:contextos-desktop.xcodeproj">
@@ -53,7 +53,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "44208EAA42AC772CF49AA1D6"
+            BlueprintIdentifier = "66A880A190C37F403F882E2C"
             BuildableName = "contextos-desktop.app"
             BlueprintName = "contextos-desktop"
             ReferencedContainer = "container:contextos-desktop.xcodeproj">
@@ -70,7 +70,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "44208EAA42AC772CF49AA1D6"
+            BlueprintIdentifier = "66A880A190C37F403F882E2C"
             BuildableName = "contextos-desktop.app"
             BlueprintName = "contextos-desktop"
             ReferencedContainer = "container:contextos-desktop.xcodeproj">

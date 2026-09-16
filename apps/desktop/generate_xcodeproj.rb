@@ -35,14 +35,23 @@ target.resources_build_phase.add_file_reference(app_icon)
 plugin_phase = target.new_shell_script_build_phase("Embed contextos Codex plugin")
 plugin_phase.shell_script = <<~'SCRIPT'
   set -eu
-  marketplace_root="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/MarketplaceRoot"
+  resources_dir="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+  marketplace_root="${resources_dir}/MarketplaceRoot"
   mkdir -p "${marketplace_root}/plugins" "${marketplace_root}/.agents/plugins"
   /usr/bin/rsync -a "${SRCROOT}/../../plugins/contextos/" "${marketplace_root}/plugins/contextos/"
   /usr/bin/rsync -a "${SRCROOT}/../../.agents/plugins/" "${marketplace_root}/.agents/plugins/"
+
+  mkdir -p "${resources_dir}/bin" "${resources_dir}/server"
+  /usr/bin/rsync -a "${SRCROOT}/../../plugins/contextos/server/contextos-mcp.mjs" "${resources_dir}/server/"
+  if [ -f "${SRCROOT}/../../.cache/node-darwin-arm64" ]; then
+    cp "${SRCROOT}/../../.cache/node-darwin-arm64" "${resources_dir}/bin/node"
+    chmod 755 "${resources_dir}/bin/node"
+  fi
 SCRIPT
 plugin_phase.run_only_for_deployment_postprocessing = false
 plugin_phase.output_paths = [
   "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/MarketplaceRoot/.agents/plugins/marketplace.json",
+  "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/server/contextos-mcp.mjs",
 ]
 
 common_settings = {

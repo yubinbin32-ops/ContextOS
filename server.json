@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.yubinbin32-ops/contextos",
-  "title": "ContextOS — Spatial Architecture Canvas & Context OS for AI Coding Agents",
-  "description": "Spatial architecture canvas and context optimization OS for AI coding agents.",
+  "title": "ContextOS — Powered Exoskeleton for AI Coding",
+  "description": "Powered exoskeleton for AI coding: auto-governs context via MCP to cut 90%+ context waste.",
   "repository": {
     "url": "https://github.com/yubinbin32-ops/ContextOS",
     "source": "github"
   },
-  "version": "0.4.1",
+  "version": "2.1.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/yubinbin32-ops/contextos:0.4.1",
+      "identifier": "ghcr.io/yubinbin32-ops/contextos:2.1.0",
       "transport": {
         "type": "stdio"
       },

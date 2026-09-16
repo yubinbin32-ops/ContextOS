@@ -1,5 +1,9 @@
 {
   "id": "contextos",
   "name": "contextos",
-  "schemaVersion": 1
+  "schemaVersion": 1,
+  "storage": "local",
+  "isCloud": false,
+  "createdAt": "2026-09-16T16:24:14.164Z",
+  "updatedAt": "2026-09-16T17:24:19.544Z"
 }

@@ -49,9 +49,6 @@ struct ContentView: View {
                 if syncIssues != issues { syncIssues = issues }
                 if !initialized {
                     initialized = true
-                    if store.selection == nil, requestedDocument == nil, let firstPlan = store.snapshot.plans.first {
-                        store.focusPlan(firstPlan.id)
-                    }
                 }
                 try? await Task.sleep(for: .seconds(2))
             }
@@ -243,18 +240,48 @@ struct ContentView: View {
 
     private var projectHeader: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .center, spacing: 8) {
+            let isCloudProject = store.snapshot.project.name.contains("(Cloud)") || store.projectRoot.contains(".contextos/cloud_projects")
+            HStack(alignment: .center, spacing: 6) {
                 Text(store.snapshot.project.name)
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(ContextOSTheme.ink)
                     .lineLimit(1)
+                if isCloudProject {
+                    HStack(spacing: 4) {
+                        Image(systemName: "cloud.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(ContextOSTheme.focus)
+                        Button {
+                            Task { await store.refreshCloudProject() }
+                        } label: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(ContextOSTheme.focus)
+                        }
+                        .buttonStyle(.plain)
+                        .help(store.activeLocale == "zh-Hans" ? "从云端中枢拉取最新图谱" : "Sync latest graph from cloud")
+                    }
+                }
                 Spacer()
                 Menu {
                     if !store.recentProjects.isEmpty {
                         Section(store.text("recentProjects")) {
                             ForEach(store.recentProjects) { project in
-                                Button { store.openProject(project) } label: {
-                                    project.path == store.projectRoot ? Label(project.name, systemImage: "checkmark") : Label(project.name, systemImage: "folder")
+                                Menu {
+                                    Button(store.text("open")) { store.openProject(project) }
+                                    Divider()
+                                    Button(role: .destructive) {
+                                        store.removeRecentProject(project)
+                                    } label: {
+                                        Label(store.activeLocale == "zh-Hans" ? "从最近列表中移除" : "Remove from Recents", systemImage: "trash")
+                                    }
+                                } label: {
+                                    let isCurrent = project.path == store.projectRoot
+                                    let isCloud = project.name.contains("(Cloud)") || project.path.contains(".contextos/cloud_projects")
+                                    Label(
+                                        project.name,
+                                        systemImage: isCurrent ? "checkmark" : (isCloud ? "cloud" : "folder")
+                                    )
                                 }
                             }
                         }
@@ -512,66 +539,123 @@ private struct SettingsView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 14) {
-                // Group 1: 偏好设置 (PREFERENCES)
-                VStack(alignment: .leading, spacing: 6) {
-                    sectionHeader(store.activeLocale == "zh-Hans" ? "偏好设置" : "PREFERENCES")
-                    VStack(spacing: 0) {
-                        HStack {
-                            Label {
-                                Text(store.text("language"))
-                                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
-                                    .foregroundStyle(ContextOSTheme.ink)
-                            } icon: {
-                                Image(systemName: "globe")
-                                    .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundStyle(ContextOSTheme.muted)
-                                    .frame(width: 20)
+            HStack(alignment: .top, spacing: 16) {
+                // Left Column: 偏好设置 + 软件更新 + 数据内核
+                VStack(alignment: .leading, spacing: 12) {
+                    // Group 1: 偏好设置 (PREFERENCES)
+                    VStack(alignment: .leading, spacing: 5) {
+                        sectionHeader(store.activeLocale == "zh-Hans" ? "偏好设置" : "PREFERENCES")
+                        VStack(spacing: 0) {
+                            HStack {
+                                Label {
+                                    Text(store.text("language"))
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundStyle(ContextOSTheme.ink)
+                                } icon: {
+                                    Image(systemName: "globe")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(ContextOSTheme.muted)
+                                        .frame(width: 18)
+                                }
+                                Spacer()
+                                Picker("", selection: $store.language) {
+                                    Text(store.text("system")).tag(AppLanguage.system)
+                                    Text(store.text("chinese")).tag(AppLanguage.zhHans)
+                                    Text(store.text("english")).tag(AppLanguage.english)
+                                }
+                                .pickerStyle(.menu)
+                                .frame(width: 105)
                             }
-                            Spacer()
-                            Picker("", selection: $store.language) {
-                                Text(store.text("system")).tag(AppLanguage.system)
-                                Text(store.text("chinese")).tag(AppLanguage.zhHans)
-                                Text(store.text("english")).tag(AppLanguage.english)
-                            }
-                            .pickerStyle(.menu)
-                            .frame(width: 120)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
 
-                        Divider().padding(.leading, 38)
+                            Divider().padding(.leading, 32)
 
-                        HStack {
-                            Label {
-                                Text(store.text("appearance"))
-                                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
-                                    .foregroundStyle(ContextOSTheme.ink)
-                            } icon: {
-                                Image(systemName: "circle.righthalf.filled")
-                                    .font(.system(size: 12.5, weight: .medium))
-                                    .foregroundStyle(ContextOSTheme.muted)
-                                    .frame(width: 20)
+                            HStack {
+                                Label {
+                                    Text(store.text("appearance"))
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundStyle(ContextOSTheme.ink)
+                                } icon: {
+                                    Image(systemName: "circle.righthalf.filled")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(ContextOSTheme.muted)
+                                        .frame(width: 18)
+                                }
+                                Spacer()
+                                Picker("", selection: $appearance) {
+                                    Text(store.text("system")).tag(AppearancePreference.system.rawValue)
+                                    Text(store.text("light")).tag(AppearancePreference.light.rawValue)
+                                    Text(store.text("dark")).tag(AppearancePreference.dark.rawValue)
+                                }
+                                .pickerStyle(.menu)
+                                .frame(width: 105)
+                                .accessibilityLabel(store.text("appearance"))
                             }
-                            Spacer()
-                            Picker("", selection: $appearance) {
-                                Text(store.text("system")).tag(AppearancePreference.system.rawValue)
-                                Text(store.text("light")).tag(AppearancePreference.light.rawValue)
-                                Text(store.text("dark")).tag(AppearancePreference.dark.rawValue)
-                            }
-                            .pickerStyle(.menu)
-                            .frame(width: 120)
-                            .accessibilityLabel(store.text("appearance"))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
                     }
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
-                }
 
-                // Group 2: AI 编辑器集成 (AI CLIENT MCP BRIDGES)
-                VStack(alignment: .leading, spacing: 6) {
+                    // Group 2: 软件更新 (SOFTWARE UPDATE)
+                    SoftwareUpdateSection(store: store)
+
+                    // Group 3: 数据存储与内核 (DATA ENGINE & STORAGE)
+                    VStack(alignment: .leading, spacing: 5) {
+                        sectionHeader(store.text("liveData").uppercased())
+
+                        VStack(spacing: 0) {
+                            HStack(alignment: .center) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(store.activeLocale == "zh-Hans" ? "当前数据库" : "DATABASE")
+                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                        .tracking(0.7)
+                                        .foregroundStyle(ContextOSTheme.muted)
+                                    Text(store.databasePath)
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundStyle(ContextOSTheme.ink)
+                                        .lineLimit(1)
+                                        .truncationMode(.middle)
+                                        .textSelection(.enabled)
+                                }
+                                Spacer()
+                                Button(store.text("changeProject")) {
+                                    store.chooseProject()
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.mini)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+
+                            Divider().padding(.leading, 12)
+
+                            HStack {
+                                HStack(spacing: 4) {
+                                    Circle().fill(ContextOSTheme.success).frame(width: 5, height: 5)
+                                    Text(store.text("liveHelp"))
+                                        .font(.system(size: 10, design: .rounded))
+                                        .foregroundStyle(ContextOSTheme.muted)
+                                }
+                                Spacer()
+                                Text("SQLITE · GRAPH.JSON")
+                                    .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                                    .tracking(0.8)
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                        }
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+                    }
+                }
+                .frame(width: 320)
+
+                // Right Column: AI 编辑器集成 (AI CLIENT MCP BRIDGES)
+                VStack(alignment: .leading, spacing: 5) {
                     sectionHeader(store.text("plugin").uppercased())
 
                     if let syncError = store.syncErrorMessage {
@@ -602,7 +686,7 @@ private struct SettingsView: View {
                     VStack(spacing: 0) {
                         ForEach(Array(store.editorStatuses.enumerated()), id: \.element.id) { index, status in
                             if index > 0 {
-                                Divider().padding(.leading, 50)
+                                Divider().padding(.leading, 46)
                             }
                             EditorPlatformRow(status: status, store: store)
                         }
@@ -610,70 +694,455 @@ private struct SettingsView: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
 
-                    Text(store.runtimeHandshake).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+                    Text(store.runtimeHandshake)
+                        .font(.system(size: 9.5, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .padding(.top, 2)
                     Text(store.text("pluginHelp"))
-                        .font(.system(size: 10.5, design: .rounded))
+                        .font(.system(size: 10, design: .rounded))
                         .foregroundStyle(ContextOSTheme.muted)
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, 4)
                         .padding(.top, 1)
                 }
-
-                // Group 3: 数据存储与内核 (DATA ENGINE & STORAGE)
-                VStack(alignment: .leading, spacing: 6) {
-                    sectionHeader(store.text("liveData").uppercased())
-
-                    VStack(spacing: 0) {
-                        HStack(alignment: .center) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(store.activeLocale == "zh-Hans" ? "当前数据库" : "DATABASE")
-                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                    .tracking(0.7)
-                                    .foregroundStyle(ContextOSTheme.muted)
-                                Text(store.databasePath)
-                                    .font(.system(size: 10.5, design: .monospaced))
-                                    .foregroundStyle(ContextOSTheme.ink)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .textSelection(.enabled)
-                            }
-                            Spacer()
-                            Button(store.text("changeProject")) {
-                                store.chooseProject()
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-
-                        Divider().padding(.leading, 14)
-
-                        HStack {
-                            HStack(spacing: 5) {
-                                Circle().fill(ContextOSTheme.success).frame(width: 5.5, height: 5.5)
-                                Text(store.text("liveHelp"))
-                                    .font(.system(size: 10.5, design: .rounded))
-                                    .foregroundStyle(ContextOSTheme.muted)
-                            }
-                            Spacer()
-                            Text("SQLITE · GRAPH.JSON")
-                                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                .tracking(0.8)
-                                .foregroundStyle(ContextOSTheme.muted)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                    }
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
-                }
+                .frame(width: 340)
             }
-            .padding(.horizontal, 22)
+            .padding(.horizontal, 20)
             .padding(.top, 14)
             .padding(.bottom, 18)
         }
-        .frame(width: 530)
+        .frame(width: 716)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            store.updater.checkOnSettingsOpen()
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+            .tracking(1.1)
+            .foregroundStyle(ContextOSTheme.muted)
+            .padding(.leading, 6)
+    }
+}
+
+private struct SoftwareUpdateSection: View {
+    @ObservedObject var store: GraphStore
+    @State private var isEditingRepo = false
+    @State private var customRepoInput = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionHeader(store.text("softwareUpdate").uppercased())
+
+            VStack(spacing: 0) {
+                // 1. Current App Info & Status Row
+                HStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6.5)
+                            .fill(Color(nsColor: .controlBackgroundColor))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6.5)
+                                    .stroke(Color.black.opacity(0.07), lineWidth: 0.75)
+                            )
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(ContextOSTheme.ink)
+                    }
+                    .frame(width: 26, height: 26)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text("ContextOS")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(ContextOSTheme.ink)
+                            Text("v\(store.updater.currentAppVersion)")
+                                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                                .foregroundStyle(ContextOSTheme.muted)
+                                .padding(.horizontal, 4.5)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.black.opacity(0.04)))
+                        }
+
+                        // Status subtitle line
+                        switch store.updater.state {
+                        case .idle:
+                            Text(store.text("checkUpdate"))
+                                .font(.system(size: 10, design: .rounded))
+                                .foregroundStyle(ContextOSTheme.muted)
+                        case .checking:
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                Text(store.text("checkingUpdate"))
+                                    .font(.system(size: 10, design: .rounded))
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
+                        case .upToDate:
+                            HStack(spacing: 4) {
+                                Circle().fill(ContextOSTheme.success).frame(width: 5, height: 5)
+                                Text(store.text("upToDate"))
+                                    .font(.system(size: 10, design: .rounded))
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
+                        case .updateAvailable(let latest, _):
+                            HStack(spacing: 4) {
+                                Circle().fill(ContextOSTheme.focus).frame(width: 5, height: 5)
+                                Text("\(store.text("newVersionFound")): v\(latest.version)")
+                                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                                    .foregroundStyle(ContextOSTheme.focus)
+                            }
+                        case .downloading(let progress, _, _):
+                            HStack(spacing: 4) {
+                                Text("\(store.text("downloadingUpdate")) \(Int(progress * 100))%")
+                                    .font(.system(size: 10, design: .rounded))
+                                    .foregroundStyle(ContextOSTheme.focus)
+                            }
+                        case .readyToInstall:
+                            HStack(spacing: 4) {
+                                Circle().fill(ContextOSTheme.success).frame(width: 5, height: 5)
+                                Text(store.text("restartAndUpdate"))
+                                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                                    .foregroundStyle(ContextOSTheme.success)
+                            }
+                        case .installing:
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                Text(store.text("updating"))
+                                    .font(.system(size: 10, design: .rounded))
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
+                        case .failed(let msg):
+                            HStack(spacing: 4) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(ContextOSTheme.failure)
+                                Text(msg)
+                                    .font(.system(size: 10, design: .rounded))
+                                    .foregroundStyle(ContextOSTheme.failure)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    // Action button on header row
+                    switch store.updater.state {
+                    case .checking:
+                        ProgressView()
+                            .controlSize(.small)
+                    case .idle, .upToDate:
+                        Button(store.text("checkUpdate")) {
+                            Task { await store.updater.checkForUpdates(force: true) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    case .failed:
+                        Button(store.text("retry")) {
+                            Task { await store.updater.checkForUpdates(force: true) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    default:
+                        EmptyView()
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+
+                // 2. Selection & Update Details Area (When update available / downloading / ready)
+                if case .updateAvailable(let latest, let releases) = store.updater.state {
+                    renderUpdateControls(latest: latest, releases: releases)
+                } else if case .downloading(let progress, let written, let total) = store.updater.state {
+                    renderDownloadingProgress(progress: progress, written: written, total: total)
+                } else if case .readyToInstall(let stagedURL, let version) = store.updater.state {
+                    renderReadyToInstall(stagedURL: stagedURL, version: version)
+                }
+
+                Divider().padding(.leading, 14)
+
+                // 3. Git Repo & Remote Source Row
+                HStack {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 10))
+                            .foregroundStyle(ContextOSTheme.muted)
+                        Text(store.text("gitRepository"))
+                            .font(.system(size: 10.5, design: .rounded))
+                            .foregroundStyle(ContextOSTheme.muted)
+                    }
+
+                    Spacer()
+
+                    if isEditingRepo {
+                        TextField("owner/repo", text: $customRepoInput)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 10, design: .monospaced))
+                            .frame(width: 180)
+                            .onSubmit {
+                                let trimmed = customRepoInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !trimmed.isEmpty {
+                                    store.updater.repository = trimmed
+                                    Task { await store.updater.checkForUpdates(force: true) }
+                                }
+                                isEditingRepo = false
+                            }
+                        Button("确定") {
+                            let trimmed = customRepoInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !trimmed.isEmpty {
+                                store.updater.repository = trimmed
+                                Task { await store.updater.checkForUpdates(force: true) }
+                            }
+                            isEditingRepo = false
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    } else {
+                        Button {
+                            customRepoInput = store.updater.repository
+                            isEditingRepo = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(store.updater.repository)
+                                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(ContextOSTheme.ink)
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+            }
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+        }
+    }
+
+    @ViewBuilder
+    private func renderUpdateControls(latest: AppRelease, releases: [AppRelease]) -> some View {
+        let currentTarget = releases.first(where: { $0.id == store.updater.selectedReleaseId }) ?? latest
+
+        VStack(spacing: 0) {
+            Divider().padding(.leading, 14)
+
+            // Version Selector
+            HStack {
+                Label {
+                    Text(store.text("selectVersion"))
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(ContextOSTheme.ink)
+                } icon: {
+                    Image(systemName: "tag")
+                        .font(.system(size: 11))
+                        .foregroundStyle(ContextOSTheme.muted)
+                        .frame(width: 16)
+                }
+                Spacer()
+                Picker("", selection: Binding(
+                    get: { store.updater.selectedReleaseId ?? latest.id },
+                    set: { store.updater.selectedReleaseId = $0 }
+                )) {
+                    ForEach(releases) { rel in
+                        Text("\(rel.name)\(rel.id == latest.id ? " (最新)" : "")")
+                            .tag(rel.id)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 150)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+
+            Divider().padding(.leading, 38)
+
+            // Edition Selector (Full vs Standard)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(store.text("selectEdition"))
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(ContextOSTheme.ink)
+                            if let asset = currentTarget.asset(for: store.updater.selectedEdition) {
+                                Text(asset.formattedSize)
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
+                        }
+                    } icon: {
+                        Image(systemName: "shippingbox")
+                            .font(.system(size: 11))
+                            .foregroundStyle(ContextOSTheme.muted)
+                            .frame(width: 16)
+                    }
+                    Spacer()
+                    Picker("", selection: $store.updater.selectedEdition) {
+                        Text(store.activeLocale == "zh-Hans" ? "全功能版" : "Full").tag(UpdateEdition.full)
+                        Text(store.activeLocale == "zh-Hans" ? "轻量版" : "Standard").tag(UpdateEdition.standard)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 135)
+                }
+
+                // Node qualification badge
+                HStack(spacing: 4) {
+                    if store.updater.nodeEnvironment.isQualified {
+                        Circle().fill(ContextOSTheme.success).frame(width: 5, height: 5)
+                        Text(store.activeLocale == "zh-Hans"
+                             ? "系统 Node 22+ 合格 (推荐轻量版)"
+                             : "System Node 22+ qualified (Standard recommended)")
+                            .font(.system(size: 8.5, design: .rounded))
+                            .foregroundStyle(ContextOSTheme.muted)
+                    } else {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 8.5))
+                            .foregroundStyle(ContextOSTheme.failure)
+                        Text(store.activeLocale == "zh-Hans"
+                             ? "系统未检测到 Node 22+ (已默认选全功能版)"
+                             : "Node 22+ missing locally, Full edition auto-selected")
+                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                            .foregroundStyle(ContextOSTheme.failure)
+                    }
+                }
+                .padding(.leading, 26)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+
+            // Release Notes Toggle & Box
+            if !currentTarget.body.isEmpty {
+                Divider().padding(.leading, 38)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            store.updater.showReleaseNotes.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: store.updater.showReleaseNotes ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 8, weight: .semibold))
+                            Text(store.updater.showReleaseNotes ? store.text("hideReleaseNotes") : store.text("viewReleaseNotes"))
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                            Spacer()
+                        }
+                        .foregroundStyle(ContextOSTheme.focus)
+                    }
+                    .buttonStyle(.plain)
+
+                    if store.updater.showReleaseNotes {
+                        ScrollView(.vertical) {
+                            Text(currentTarget.body)
+                                .font(.system(size: 9.5, design: .monospaced))
+                                .foregroundStyle(ContextOSTheme.ink.opacity(0.85))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxHeight: 120)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor).opacity(0.6)))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.5))
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+            }
+
+            Divider().padding(.leading, 14)
+
+            // Action Buttons
+            HStack {
+                Button(store.text("openInBrowser")) {
+                    NSWorkspace.shared.open(currentTarget.htmlUrl)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Spacer()
+
+                Button {
+                    store.updater.downloadAndApplyUpdate(release: currentTarget, edition: store.updater.selectedEdition)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle.fill")
+                        Text(store.text("updateNow"))
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
+    private func renderDownloadingProgress(progress: Double, written: Int64, total: Int64) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider().padding(.leading, 14)
+
+            HStack {
+                Text(store.text("downloadingUpdate"))
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(ContextOSTheme.ink)
+                Spacer()
+                Text("\(ByteCountFormatter.string(fromByteCount: written, countStyle: .file)) / \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))")
+                    .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                    .foregroundStyle(ContextOSTheme.muted)
+            }
+
+            ProgressView(value: progress, total: 1.0)
+                .progressViewStyle(.linear)
+
+            HStack {
+                Spacer()
+                Button(store.text("cancelDownload")) {
+                    store.updater.cancelDownload()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func renderReadyToInstall(stagedURL: URL, version: String) -> some View {
+        VStack(spacing: 8) {
+            Divider().padding(.leading, 14)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("新版本 v\(version) 下载完成")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(ContextOSTheme.ink)
+                    Text("点击下方按钮将自动安全替换并重启 ContextOS")
+                        .font(.system(size: 9.5, design: .rounded))
+                        .foregroundStyle(ContextOSTheme.muted)
+                }
+                Spacer()
+                Button {
+                    store.updater.installAndRelaunch(stagedAppURL: stagedURL)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise.circle.fill")
+                        Text(store.text("restartAndUpdate"))
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 
     private func sectionHeader(_ title: String) -> some View {

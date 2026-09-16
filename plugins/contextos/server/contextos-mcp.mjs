@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path10) {
-      let input = path10;
+    function removeDotSegments(path11) {
+      let input = path11;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3668,8 +3668,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path10 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path10 && path10 !== "/" ? path10 : void 0;
+        const path11 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path11 && path11 !== "/" ? path11 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7181,12 +7181,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs9, exportName) {
+    function addFormats(ajv, list, fs10, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs9[f]);
+        ajv.addFormat(f, fs10[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7195,8 +7195,8 @@ var require_dist = __commonJS({
 });
 
 // packages/mcp/src/v2-server.mjs
-import fs8 from "node:fs";
-import path9 from "node:path";
+import fs9 from "node:fs";
+import path10 from "node:path";
 
 // node_modules/zod/v3/helpers/util.js
 var util;
@@ -7572,8 +7572,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path10, errorMaps, issueData } = params;
-  const fullPath = [...path10, ...issueData.path || []];
+  const { data, path: path11, errorMaps, issueData } = params;
+  const fullPath = [...path11, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7688,11 +7688,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path10, key) {
+  constructor(parent, value, path11, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path10;
+    this._path = path11;
     this._key = key;
   }
   get path() {
@@ -11274,10 +11274,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path10) {
-  if (!path10)
+function getElementAtPath(obj, path11) {
+  if (!path11)
     return obj;
-  return path10.reduce((acc, key) => acc?.[key], obj);
+  return path11.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11689,11 +11689,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path10, issues) {
+function prefixIssues(path11, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path10);
+    iss.path.unshift(path11);
     return iss;
   });
 }
@@ -12122,16 +12122,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path10 = []) => {
+  const processError = (error3, path11 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else {
-        const fullpath = [...path10, ...issue2.path];
+        const fullpath = [...path11, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -16646,11 +16646,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path10) {
-  if (path10.length === 0) {
+function getDotPath(path11) {
+  if (path11.length === 0) {
     return "object root";
   }
-  return path10.reduce((acc, seg, index) => {
+  return path11.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -39880,6 +39880,26 @@ var CodeTools = class {
     };
   }
   /**
+   * 1.5 Create: Create new file and initialize AST anchors
+   */
+  static create(filePath, content = "") {
+    const structure = LanguageRegistry.parseStructure(filePath, content);
+    const newHash = calculateHash(content);
+    return {
+      filePath,
+      content,
+      newHash,
+      locators: structure.symbols.map((s) => ({
+        path: filePath,
+        symbol: s.name,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        hash: s.hash,
+        role: "implementation"
+      }))
+    };
+  }
+  /**
    * 2. Read: Surgical code reader by symbol or line range
    */
   static read(filePath, content, selector = {}) {
@@ -40203,8 +40223,11 @@ var TaskService = class {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
     const task = new Task(raw);
+    const resolvedBlocks = blocks.map((b) => typeof b === "string" ? this.db.getBlock(b) : b).filter(Boolean);
+    const resolvedChains = chains.map((c) => typeof c === "string" ? this.db.getChain(c) : c).filter(Boolean);
+    const resolvedLinks = links.map((l) => typeof l === "string" ? this.db.getLink(l) : l).filter(Boolean);
     task.startSyncing();
-    const coverageReport = CoverageChecker.checkCoverage(task.workingSet.files || [], blocks);
+    const coverageReport = CoverageChecker.checkCoverage(task.workingSet.files || [], resolvedBlocks);
     if (!coverageReport.isFullyCovered) {
       task.failSync(`Coverage gap: Missing Block ownership for: ${coverageReport.uncoveredList.join(", ")}`);
       this.db.saveTask(task.toJSON());
@@ -40212,25 +40235,25 @@ var TaskService = class {
         `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverageReport.uncoveredList.join(", ")}`
       );
     }
-    for (const b of blocks) {
+    for (const b of resolvedBlocks) {
       assertBlockHasRealCode(b);
     }
     let syncResult;
     let exportResult;
     this.db.transaction((db) => {
-      for (const b of blocks) {
+      for (const b of resolvedBlocks) {
         db.saveBlock(b);
       }
-      for (const c of chains) {
+      for (const c of resolvedChains) {
         db.saveChain(c);
       }
-      for (const l of links) {
+      for (const l of resolvedLinks) {
         db.saveLink(l);
       }
       syncResult = {
-        createdBlockIds: blocks.map((b) => b.id),
-        updatedChainIds: chains.map((c) => c.id),
-        updatedLinkIds: links.map((l) => l.id || `${l.from}->${l.to}`)
+        createdBlockIds: resolvedBlocks.map((b) => b.id),
+        updatedChainIds: resolvedChains.map((c) => c.id),
+        updatedLinkIds: resolvedLinks.map((l) => l.id || `${l.from}->${l.to}`)
       };
       task.completeSync(syncResult);
       db.saveTask(task.toJSON());
@@ -40405,7 +40428,11 @@ function sanitizeTerminalOutput(rawText, options = {}) {
   }
   let summary = "";
   if (exitCode === 0 && errors.length === 0) {
-    summary = `Command succeeded (${lines.length} lines collapsed).`;
+    if (lines.length <= 15 && cleaned.length <= maxChars) {
+      summary = `Command succeeded (${lines.length} lines).`;
+    } else {
+      summary = `Command succeeded (${lines.length} lines collapsed).`;
+    }
     if (warnings.length > 0) {
       summary += ` ${warnings.length} warning(s).`;
     }
@@ -40414,7 +40441,11 @@ function sanitizeTerminalOutput(rawText, options = {}) {
   }
   let resultText = "";
   if (exitCode === 0 && errors.length === 0) {
-    resultText = summary;
+    if (lines.length <= 15 && cleaned.length <= maxChars) {
+      resultText = lines.join("\n");
+    } else {
+      resultText = summary;
+    }
     if (warnings.length > 0) {
       resultText += "\n\nWarnings:\n" + warnings.slice(0, 5).join("\n");
     }
@@ -41157,10 +41188,35 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
         return "# Block Search Results\n" + matches.map((b) => `- [${b.id}] ${b.title}: ${b.summary}`).join("\n");
       }
       case "bind": {
-        const block = { ...blockData, projectId: this.projectId };
+        const targetId = id || blockData?.id;
+        if (!targetId) {
+          throw new Error("Missing required 'id' parameter for block bind action (e.g. id: 'block-desktop-installer')");
+        }
+        const existing = this.db.getBlock(targetId);
+        const inputArtifactRefs = blockData?.artifactRefs || [];
+        const normalizedRefs = inputArtifactRefs.map((ref) => {
+          if (typeof ref === "string") {
+            return { path: ref, role: "implementation" };
+          }
+          return ref;
+        });
+        const existingRefs = existing?.artifactRefs || [];
+        const mergedRefs = [...existingRefs];
+        for (const nr of normalizedRefs) {
+          if (!mergedRefs.some((r) => r.path === nr.path && (!nr.symbol || r.symbol === nr.symbol))) {
+            mergedRefs.push(nr);
+          }
+        }
+        const block = {
+          ...existing || {},
+          ...blockData,
+          id: targetId,
+          projectId: this.projectId,
+          artifactRefs: mergedRefs
+        };
         this.db.saveBlock(block);
         this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
-        return `Block '${block.id}' bound with ${block.artifactRefs?.length || 0} code locators.`;
+        return `Block '${block.id}' bound with ${block.artifactRefs.length} code locators.`;
       }
       case "delete": {
         this.db.deleteBlock(id);
@@ -41240,12 +41296,12 @@ Members: ${chain.memberIds.join(", ")}`;
     }
   }
   // ================= 6. code =================
-  async code({ action, path: relPath, selector, targetContent, replacementContent, query, format = "markdown" }) {
-    if (action === "search" && (!relPath || relPath === "." || relPath === "./")) {
-      const blocks = this.db.listBlocks();
+  async code({ action, path: relPath, selector, targetContent, replacementContent, content: rawContent, query, format = "markdown" }) {
+    if (action === "search" && !relPath) {
+      const blocks = this.db.listBlocks(this.projectId);
       const allFiles = /* @__PURE__ */ new Set();
       for (const b of blocks) {
-        for (const ref of b.artifactRefs || []) {
+        for (const ref of b.artifactRefs) {
           allFiles.add(ref.path);
         }
       }
@@ -41264,6 +41320,18 @@ Members: ${chain.memberIds.join(", ")}`;
     }
     if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
     const fullPath = path8.resolve(this.projectRoot, relPath);
+    if (action === "create") {
+      fs7.mkdirSync(path8.dirname(fullPath), { recursive: true });
+      const initialContent = replacementContent || rawContent || "";
+      fs7.writeFileSync(fullPath, initialContent, "utf8");
+      const res = CodeTools.create(relPath, initialContent);
+      return {
+        filePath: relPath,
+        newHash: res.newHash,
+        locators: res.locators,
+        message: `File '${relPath}' created successfully with AST anchors initialized.`
+      };
+    }
     if (!fs7.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
     const content = fs7.readFileSync(fullPath, "utf8");
     switch (action) {
@@ -41391,33 +41459,719 @@ ${sec.content}`;
   }
 };
 
+// packages/mcp/src/cloud-client.mjs
+var ContextOSCloudClient = class {
+  constructor({ cloudUrl, token, projectId = "contextos", timeoutMs = 15e3 }) {
+    this.cloudUrl = cloudUrl.replace(/\/+$/, "");
+    this.token = token || "";
+    this.projectId = projectId;
+    this.timeoutMs = timeoutMs;
+  }
+  getHeaders() {
+    const headers = {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "x-contextos-project-id": this.projectId
+    };
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+    return headers;
+  }
+  async call(tool, args = {}) {
+    const url = `${this.cloudUrl}/api/v2/call`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          tool,
+          projectId: args.projectId || this.projectId,
+          input: {
+            ...args,
+            projectId: args.projectId || this.projectId
+          }
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Cloud server returned HTTP ${response.status}: ${errorText || response.statusText}`);
+      }
+      const data = await response.json();
+      return data.result ?? data;
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err.name === "AbortError") {
+        throw new Error(`[ContextOS Cloud] Request to ${url} timed out after ${this.timeoutMs}ms.`);
+      }
+      throw new Error(`[ContextOS Cloud Error] Failed to call '${tool}' on cloud hub (${this.cloudUrl}): ${err.message}`);
+    }
+  }
+  async fetchSnapshot(projectId) {
+    const pid = projectId || this.projectId;
+    const url = `${this.cloudUrl}/api/v2/snapshot?projectId=${encodeURIComponent(pid)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: this.getHeaders(),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        throw new Error(`Cloud server returned HTTP ${response.status}: ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (err) {
+      clearTimeout(timeout);
+      throw new Error(`[ContextOS Cloud Error] Failed to fetch snapshot from ${url}: ${err.message}`);
+    }
+  }
+  async pushSnapshot(snapshot, projectId) {
+    const pid = projectId || this.projectId;
+    const url = `${this.cloudUrl}/api/v2/snapshot?projectId=${encodeURIComponent(pid)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify(snapshot),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.status === "ok") {
+          return data;
+        }
+      }
+    } catch {
+      clearTimeout(timeout);
+    }
+    let pushedPlans = 0;
+    for (const p of snapshot.plans || []) {
+      await this.call("plan", {
+        action: "create",
+        planData: {
+          id: p.id,
+          title: p.title || p.id,
+          summary: p.summary || "",
+          priority: p.priority || "normal"
+        }
+      });
+      pushedPlans++;
+    }
+    let pushedBlocks = 0;
+    for (const b of snapshot.blocks || []) {
+      await this.call("block", {
+        action: "bind",
+        id: b.id,
+        blockData: {
+          title: b.title || b.id,
+          kind: b.kind || "service",
+          summary: b.summary || "",
+          details: b.details || b.body || "",
+          artifactRefs: b.artifactRefs || []
+        }
+      });
+      pushedBlocks++;
+    }
+    return { status: "ok", pushedBlocks, pushedPlans, mode: "call_fallback" };
+  }
+  async checkHealth() {
+    const url = `${this.cloudUrl}/api/v2/health`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5e3);
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: this.getHeaders(),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      return response.ok;
+    } catch {
+      clearTimeout(timeout);
+      return false;
+    }
+  }
+};
+
+// packages/mcp/src/hybrid-service.mjs
+var HybridContextOSService = class {
+  constructor({ cloudUrl, token, projectId = "contextos", projectRoot = process.cwd() } = {}) {
+    this.cloudUrl = cloudUrl;
+    this.token = token;
+    this.projectId = projectId;
+    this.projectRoot = projectRoot;
+    this.cloudClient = new ContextOSCloudClient({
+      cloudUrl,
+      token,
+      projectId
+    });
+    this.localService = new ContextOSV2Service({
+      projectRoot,
+      projectId
+    });
+  }
+  close() {
+    this.localService.close();
+  }
+  // ================= 1. os_context =================
+  async osContext(input) {
+    const { action = "brief", format = "markdown" } = input;
+    if (action === "reconcile") {
+      return await this.localService.osContext(input);
+    }
+    try {
+      const cloudRes = await this.cloudClient.call("os_context", input);
+      if (action === "brief" && format === "markdown" && typeof cloudRes === "string") {
+        const header = [
+          `> [!NOTE]`,
+          `> **ContextOS Mode**: \u2601\uFE0F Cloud Connected (\`${this.cloudUrl}\`) | **Project**: \`${this.projectId}\``,
+          `> **Execution**: Local AST & Shell (\`code\`, \`run_command\`) + Cloud Memory (\`plan\`, \`task\`, \`graph\`).`,
+          `> Follow C-D-C-S workflow: Create Plan/Task -> Develop -> Check -> Sync.`,
+          ""
+        ].join("\n");
+        return `${header}
+${cloudRes}`;
+      }
+      return cloudRes;
+    } catch (err) {
+      if (action === "brief") {
+        const warning = [
+          `> [!WARNING]`,
+          `> **ContextOS Cloud Unavailable**: Unable to connect to \`${this.cloudUrl}\`.`,
+          `> Reason: ${err.message}`,
+          `> Falling back to local workspace context. Verify \`CONTEXTOS_CLOUD_URL\` or unset it to run offline.`,
+          ""
+        ].join("\n");
+        const localBrief = await this.localService.osContext(input);
+        return format === "markdown" && typeof localBrief === "string" ? `${warning}
+${localBrief}` : localBrief;
+      }
+      throw err;
+    }
+  }
+  // ================= 2. plan =================
+  async plan(input) {
+    return await this.cloudClient.call("plan", input);
+  }
+  // ================= 3. task =================
+  async task(input) {
+    return await this.cloudClient.call("task", input);
+  }
+  // ================= 4. block =================
+  async block(input) {
+    return await this.cloudClient.call("block", input);
+  }
+  // ================= 5. chain =================
+  async chain(input) {
+    return await this.cloudClient.call("chain", input);
+  }
+  // ================= 6. code (100% Local) =================
+  async code(input) {
+    return await this.localService.code(input);
+  }
+  // ================= 7. run_command (100% Local) =================
+  async runCommand(input) {
+    return await this.localService.runCommand(input);
+  }
+  // ================= 8. process (100% Local) =================
+  async process(input) {
+    return await this.localService.process(input);
+  }
+  // ================= 9. knowledge =================
+  async knowledge(input) {
+    try {
+      return await this.cloudClient.call("knowledge", input);
+    } catch {
+      return await this.localService.knowledge(input);
+    }
+  }
+};
+
+// packages/mcp/src/bootstrap-util.mjs
+import fs8 from "node:fs";
+import path9 from "node:path";
+import os from "node:os";
+import { execSync } from "node:child_process";
+var HOME = os.homedir();
+function resolveNodeExecutable() {
+  const candidates = [
+    "/Applications/ContextOS.app/Contents/Resources/bin/node",
+    path9.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
+    "/opt/homebrew/bin/node",
+    "/usr/local/bin/node",
+    path9.join(HOME, ".nvm/current/bin/node"),
+    "/usr/bin/node",
+    process.execPath
+  ];
+  for (const candidate of candidates) {
+    if (fs8.existsSync(candidate)) {
+      try {
+        fs8.accessSync(candidate, fs8.constants.X_OK);
+        return candidate;
+      } catch (_) {
+      }
+    }
+  }
+  return "node";
+}
+function resolveCodexExecutable() {
+  const candidates = [
+    "/Applications/Codex.app/Contents/Resources/codex",
+    "/Applications/ChatGPT.app/Contents/Resources/codex",
+    path9.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
+    "/opt/homebrew/bin/codex",
+    "/usr/local/bin/codex",
+    path9.join(HOME, ".cargo/bin/codex"),
+    path9.join(HOME, ".local/bin/codex")
+  ];
+  for (const c of candidates) {
+    if (fs8.existsSync(c)) {
+      try {
+        fs8.accessSync(c, fs8.constants.X_OK);
+        return c;
+      } catch (_) {
+      }
+    }
+  }
+  return null;
+}
+function deployCanonicalServer(sourceScriptPath = null) {
+  const canonicalDir = path9.join(HOME, ".contextos", "server");
+  const canonicalScript = path9.join(canonicalDir, "contextos-mcp.mjs");
+  fs8.mkdirSync(canonicalDir, { recursive: true });
+  const candidates = [
+    sourceScriptPath,
+    "/Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs",
+    path9.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
+  ].filter(Boolean);
+  const found = candidates.find((p) => fs8.existsSync(p));
+  if (found && found !== canonicalScript) {
+    fs8.copyFileSync(found, canonicalScript);
+  }
+  return canonicalScript;
+}
+function copyDirectoryRecursive(src, dest) {
+  if (!fs8.existsSync(src)) return;
+  fs8.mkdirSync(dest, { recursive: true });
+  const entries = fs8.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path9.join(src, entry.name);
+    const destPath = path9.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectoryRecursive(srcPath, destPath);
+    } else {
+      fs8.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+function configureJsonMcp({ configPath, serverScript, nodePath, env = null, version: version2 = "2.1.0" }) {
+  const dir = path9.dirname(configPath);
+  fs8.mkdirSync(dir, { recursive: true });
+  let json = {};
+  if (fs8.existsSync(configPath)) {
+    try {
+      json = JSON.parse(fs8.readFileSync(configPath, "utf8"));
+    } catch (_) {
+      json = {};
+    }
+  }
+  json.mcpServers = json.mcpServers || {};
+  const serverEntry = {
+    command: nodePath,
+    args: ["--no-warnings=ExperimentalWarning", serverScript],
+    _version: version2
+  };
+  if (env && Object.keys(env).length > 0) {
+    serverEntry.env = env;
+  } else {
+    delete serverEntry.env;
+  }
+  json.mcpServers.contextos = serverEntry;
+  fs8.writeFileSync(configPath, JSON.stringify(json, null, 2) + "\n", "utf8");
+  return true;
+}
+function configureTomlCodex({ configPath, serverScript, nodePath, env = null }) {
+  const dir = path9.dirname(configPath);
+  fs8.mkdirSync(dir, { recursive: true });
+  let content = fs8.existsSync(configPath) ? fs8.readFileSync(configPath, "utf8") : "";
+  const sectionHeader = "[mcp_servers.contextos]";
+  const startIndex = content.indexOf(sectionHeader);
+  if (startIndex !== -1) {
+    const nextSectionIndex = content.indexOf("\n[", startIndex + sectionHeader.length);
+    if (nextSectionIndex !== -1) {
+      content = content.slice(0, startIndex) + content.slice(nextSectionIndex + 1);
+    } else {
+      content = content.slice(0, startIndex);
+    }
+  }
+  content = content.trimEnd();
+  let tomlBlock = `
+
+[mcp_servers.contextos]
+command = "${nodePath}"
+args = ["--no-warnings=ExperimentalWarning", "${serverScript}"]
+`;
+  if (env && Object.keys(env).length > 0) {
+    tomlBlock += `[mcp_servers.contextos.env]
+`;
+    for (const [k, v] of Object.entries(env)) {
+      tomlBlock += `${k} = "${v}"
+`;
+    }
+  }
+  fs8.writeFileSync(configPath, (content + tomlBlock).trim() + "\n", "utf8");
+}
+function cleanTomlCodex({ configPath }) {
+  if (!fs8.existsSync(configPath)) return;
+  let content = fs8.readFileSync(configPath, "utf8");
+  const regex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
+  content = content.replace(regex, "");
+  fs8.writeFileSync(configPath, content.trim() + "\n", "utf8");
+}
+function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
+  const userPluginsContextOS = path9.join(HOME, "plugins", "contextos");
+  const personalMarketplaceDir = path9.join(HOME, ".agents", "plugins");
+  const personalMarketplaceURL = path9.join(personalMarketplaceDir, "marketplace.json");
+  const codexConfigURL = path9.join(HOME, ".codex", "config.toml");
+  if (pluginSource && fs8.existsSync(pluginSource)) {
+    try {
+      fs8.rmSync(userPluginsContextOS, { recursive: true, force: true });
+    } catch (_) {
+    }
+    copyDirectoryRecursive(pluginSource, userPluginsContextOS);
+  } else if (!fs8.existsSync(userPluginsContextOS)) {
+    fs8.mkdirSync(path9.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
+    fs8.mkdirSync(path9.join(userPluginsContextOS, "server"), { recursive: true });
+    fs8.copyFileSync(serverScript, path9.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
+  }
+  fs8.mkdirSync(personalMarketplaceDir, { recursive: true });
+  let marketplaces = [];
+  if (fs8.existsSync(personalMarketplaceURL)) {
+    try {
+      const parsed = JSON.parse(fs8.readFileSync(personalMarketplaceURL, "utf8"));
+      marketplaces = Array.isArray(parsed) ? parsed : [parsed];
+    } catch (_) {
+    }
+  }
+  const personalEntry = {
+    name: "personal",
+    interface: { displayName: "Personal" },
+    plugins: [
+      {
+        name: "contextos",
+        source: { source: "local", path: "./plugins/contextos" },
+        policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+        category: "Productivity"
+      }
+    ]
+  };
+  const filtered = marketplaces.filter((m) => m.name !== "personal");
+  filtered.push(personalEntry);
+  fs8.writeFileSync(
+    personalMarketplaceURL,
+    JSON.stringify(filtered.length === 1 ? filtered[0] : filtered, null, 2) + "\n",
+    "utf8"
+  );
+  const codexBin = resolveCodexExecutable();
+  let installedViaCli = false;
+  if (codexBin) {
+    try {
+      try {
+        execSync(`"${codexBin}" plugin remove contextos@personal --json`, { stdio: "ignore" });
+      } catch (_) {
+      }
+      execSync(`"${codexBin}" plugin add contextos@personal --json`, { stdio: "pipe" });
+      installedViaCli = true;
+    } catch (_) {
+    }
+  }
+  if (!installedViaCli) {
+    configureTomlCodex({ configPath: codexConfigURL, serverScript, nodePath, env });
+    return "Codex (config.toml MCP)";
+  } else {
+    cleanTomlCodex({ configPath: codexConfigURL });
+    return "Codex (Official Plugin & Skill)";
+  }
+}
+function detectInstalledPlatforms() {
+  const isMac = process.platform === "darwin";
+  const isWin = process.platform === "win32";
+  const platforms = [];
+  let claudeConfigPath = "";
+  if (isMac) {
+    claudeConfigPath = path9.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
+  } else if (isWin) {
+    claudeConfigPath = path9.join(process.env.APPDATA || path9.join(HOME, "AppData/Roaming"), "Claude/claude_desktop_config.json");
+  } else {
+    claudeConfigPath = path9.join(HOME, ".config/Claude/claude_desktop_config.json");
+  }
+  const claudeAppExists = fs8.existsSync("/Applications/Claude.app") || fs8.existsSync(path9.join(HOME, "Applications/Claude.app")) || fs8.existsSync(path9.dirname(claudeConfigPath));
+  platforms.push({
+    id: "claude",
+    name: "Claude Desktop",
+    isInstalled: claudeAppExists,
+    configPath: claudeConfigPath,
+    type: "json"
+  });
+  const cursorDir = path9.join(HOME, ".cursor");
+  const cursorAppExists = fs8.existsSync("/Applications/Cursor.app") || fs8.existsSync(path9.join(HOME, "Applications/Cursor.app")) || fs8.existsSync(cursorDir);
+  platforms.push({
+    id: "cursor",
+    name: "Cursor",
+    isInstalled: cursorAppExists,
+    configPath: path9.join(cursorDir, "mcp.json"),
+    skillPath: path9.join(cursorDir, "skills", "contextos"),
+    type: "json"
+  });
+  const geminiDir = path9.join(HOME, ".gemini/config");
+  const antigravityAppExists = fs8.existsSync("/Applications/Antigravity.app") || fs8.existsSync(path9.join(HOME, "Applications/Antigravity.app")) || fs8.existsSync(geminiDir);
+  platforms.push({
+    id: "antigravity",
+    name: "Antigravity",
+    isInstalled: antigravityAppExists,
+    configPath: path9.join(geminiDir, "mcp_config.json"),
+    skillPath: path9.join(geminiDir, "skills", "contextos"),
+    type: "json"
+  });
+  const opencodeDir = path9.join(HOME, ".config/opencode");
+  const opencodeAppExists = fs8.existsSync("/Applications/OpenCode.app") || fs8.existsSync(path9.join(HOME, "Applications/OpenCode.app")) || fs8.existsSync(opencodeDir);
+  platforms.push({
+    id: "opencode",
+    name: "OpenCode",
+    isInstalled: opencodeAppExists,
+    configPath: path9.join(opencodeDir, "mcp.json"),
+    skillPath: path9.join(opencodeDir, "skills", "contextos"),
+    type: "json"
+  });
+  const codexDir = path9.join(HOME, ".codex");
+  const codexAppExists = fs8.existsSync("/Applications/ChatGPT.app") || fs8.existsSync("/Applications/Codex.app") || fs8.existsSync(codexDir) || fs8.existsSync(path9.join(HOME, ".agents/plugins"));
+  platforms.push({
+    id: "codex",
+    name: "Codex",
+    isInstalled: codexAppExists,
+    configPath: path9.join(codexDir, "config.toml"),
+    type: "codex-plugin"
+  });
+  return platforms;
+}
+function syncAllPlatforms({
+  serverScript,
+  nodePath,
+  env = null,
+  targetRoot = null,
+  skillSource = null,
+  pluginSource = null,
+  forceAll = false,
+  selectedPlatforms = null
+}) {
+  const allPlatforms = detectInstalledPlatforms();
+  const modified = [];
+  const platforms = selectedPlatforms && selectedPlatforms.length > 0 ? allPlatforms.filter((p) => selectedPlatforms.includes(p.id)) : allPlatforms;
+  for (const platform of platforms) {
+    if (!platform.isInstalled && !forceAll) continue;
+    if (platform.id === "codex") {
+      const resultName = installCodexPlugin({
+        serverScript,
+        nodePath,
+        env,
+        pluginSource
+      });
+      modified.push(resultName);
+      continue;
+    }
+    if (platform.skillPath && skillSource && fs8.existsSync(skillSource)) {
+      copyDirectoryRecursive(skillSource, platform.skillPath);
+    }
+    if (platform.type === "json") {
+      configureJsonMcp({
+        configPath: platform.configPath,
+        serverScript,
+        nodePath,
+        env
+      });
+      modified.push(platform.name);
+    }
+  }
+  if (targetRoot) {
+    const shouldSyncCursor = !selectedPlatforms || selectedPlatforms.includes("cursor");
+    const shouldSyncAntigravity = !selectedPlatforms || selectedPlatforms.includes("antigravity");
+    const shouldSyncOpencode = !selectedPlatforms || selectedPlatforms.includes("opencode");
+    if (shouldSyncCursor) {
+      const wsCursor = path9.join(targetRoot, ".cursor");
+      if (fs8.existsSync(wsCursor)) {
+        configureJsonMcp({
+          configPath: path9.join(wsCursor, "mcp.json"),
+          serverScript,
+          nodePath,
+          env
+        });
+        modified.push("Workspace .cursor/mcp.json");
+      }
+    }
+    if (shouldSyncAntigravity) {
+      const wsAgents = path9.join(targetRoot, ".agents");
+      if (fs8.existsSync(wsAgents)) {
+        configureJsonMcp({
+          configPath: path9.join(wsAgents, "mcp_config.json"),
+          serverScript,
+          nodePath,
+          env
+        });
+        modified.push("Workspace .agents/mcp_config.json");
+      }
+    }
+    if (shouldSyncOpencode) {
+      const wsOpencode = path9.join(targetRoot, ".opencode");
+      if (fs8.existsSync(wsOpencode)) {
+        configureJsonMcp({
+          configPath: path9.join(wsOpencode, "mcp.json"),
+          serverScript,
+          nodePath,
+          env
+        });
+        modified.push("Workspace .opencode/mcp.json");
+      }
+    }
+  }
+  return modified;
+}
+function getGlobalCloudConfig() {
+  const globalCloudPath = path9.join(HOME, ".contextos", "cloud.json");
+  if (fs8.existsSync(globalCloudPath)) {
+    try {
+      return JSON.parse(fs8.readFileSync(globalCloudPath, "utf8"));
+    } catch (_) {
+    }
+  }
+  return null;
+}
+function saveGlobalCloudConfig({ cloudUrl, token }) {
+  const dotContextos = path9.join(HOME, ".contextos");
+  fs8.mkdirSync(dotContextos, { recursive: true });
+  const globalCloudPath = path9.join(dotContextos, "cloud.json");
+  const config2 = {
+    cloudUrl: cloudUrl ? cloudUrl.replace(/\/+$/, "") : "",
+    token: token || "",
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  fs8.writeFileSync(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", "utf8");
+  return config2;
+}
+function initProjectWorkspace({
+  projectRoot = process.cwd(),
+  mode = "local",
+  cloudUrl = "",
+  token = "",
+  projectId = "contextos"
+}) {
+  const dotContextos = path9.join(projectRoot, ".contextos");
+  fs8.mkdirSync(dotContextos, { recursive: true });
+  const projectJsonPath = path9.join(dotContextos, "project.json");
+  let existing = {};
+  if (fs8.existsSync(projectJsonPath)) {
+    try {
+      existing = JSON.parse(fs8.readFileSync(projectJsonPath, "utf8"));
+    } catch (_) {
+    }
+  }
+  const isCloud = mode === "cloud";
+  const projectConfig = {
+    ...existing,
+    id: projectId || existing.id || "contextos",
+    name: existing.name || (projectId === "contextos" ? "ContextOS" : projectId),
+    storage: isCloud ? "cloud" : "local",
+    isCloud,
+    createdAt: existing.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  if (isCloud) {
+    if (cloudUrl) projectConfig.cloudUrl = cloudUrl.replace(/\/+$/, "");
+    if (token) projectConfig.token = token;
+  } else {
+    delete projectConfig.cloudUrl;
+    delete projectConfig.token;
+  }
+  fs8.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n", "utf8");
+  return projectConfig;
+}
+
 // packages/mcp/src/v2-server.mjs
 var serviceCache = /* @__PURE__ */ new Map();
 function findDefaultProjectRoot() {
-  if (process.env.CONTEXTOS_PROJECT_ROOT && fs8.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
+  if (process.env.CONTEXTOS_PROJECT_ROOT && fs9.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
     return process.env.CONTEXTOS_PROJECT_ROOT;
   }
   let cur = process.cwd();
   if (cur && cur !== "/") {
-    while (cur && cur !== path9.dirname(cur)) {
-      if (fs8.existsSync(path9.join(cur, ".contextos"))) {
+    while (cur && cur !== path10.dirname(cur)) {
+      if (fs9.existsSync(path10.join(cur, ".contextos"))) {
         return cur;
       }
-      cur = path9.dirname(cur);
+      cur = path10.dirname(cur);
     }
   }
   const defaultRepo = "/Users/a1-6/Documents/GitHub/mdflow";
-  if (fs8.existsSync(defaultRepo)) {
+  if (fs9.existsSync(defaultRepo)) {
     return defaultRepo;
   }
   return process.cwd();
 }
 function getService(projectRoot) {
   const root = projectRoot || findDefaultProjectRoot();
-  if (!serviceCache.has(root)) {
-    serviceCache.set(root, new ContextOSV2Service({ projectRoot: root }));
+  let mode = "local";
+  let cloudUrl = null;
+  let token = null;
+  let projectId = "contextos";
+  const projJsonPath = path10.join(root, ".contextos", "project.json");
+  if (fs9.existsSync(projJsonPath)) {
+    try {
+      const proj = JSON.parse(fs9.readFileSync(projJsonPath, "utf8"));
+      if (proj.id) projectId = proj.id;
+      if (proj.storage === "cloud" || proj.isCloud === true) {
+        mode = "cloud";
+        const globalCloud = getGlobalCloudConfig();
+        cloudUrl = proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
+        token = proj.token || proj.cloudToken || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
+      } else if (proj.storage === "local" || proj.isCloud === false) {
+        mode = "local";
+      }
+    } catch (_) {
+    }
+  } else {
+    if (process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL) {
+      mode = "cloud";
+      cloudUrl = process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
+      token = process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
+      projectId = process.env.CONTEXTOS_PROJECT_ID || "contextos";
+    }
   }
-  return serviceCache.get(root);
+  const cacheKey = mode === "cloud" && cloudUrl ? `cloud:${cloudUrl}:${projectId}:${root}` : `local:${root}:${projectId}`;
+  if (!serviceCache.has(cacheKey)) {
+    if (mode === "cloud" && cloudUrl) {
+      serviceCache.set(
+        cacheKey,
+        new HybridContextOSService({
+          cloudUrl,
+          token,
+          projectId,
+          projectRoot: root
+        })
+      );
+    } else {
+      serviceCache.set(cacheKey, new ContextOSV2Service({ projectRoot: root, projectId }));
+    }
+  }
+  return serviceCache.get(cacheKey);
 }
 function textResult(content) {
   const text = typeof content === "string" ? content : JSON.stringify(content, null, 2);
@@ -41427,9 +42181,9 @@ function textResult(content) {
 }
 function createV2Server() {
   const server = new McpServer(
-    { name: "contextos", version: "2.0.0" },
+    { name: "contextos", version: "2.1.0" },
     {
-      instructions: "ContextOS V2 is a context operating system for AI coding agents. Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Never create ghost Blocks."
+      instructions: "ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub."
     }
   );
   server.registerTool(
@@ -41534,13 +42288,14 @@ function createV2Server() {
   server.registerTool(
     "code",
     {
-      description: "Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, and symbol search.",
+      description: "Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, symbol search, and create new files with AST registration.",
       inputSchema: {
-        action: _enum(["outline", "read", "edit", "search"]),
+        action: _enum(["outline", "read", "edit", "search", "create"]),
         path: string2().optional(),
         selector: union([string2(), record(any())]).optional(),
         targetContent: string2().optional(),
         replacementContent: string2().optional(),
+        content: string2().optional(),
         query: string2().optional(),
         format: _enum(["markdown", "json"]).default("markdown"),
         projectRoot: string2().optional()
@@ -41608,6 +42363,280 @@ function createV2Server() {
       const service = getService(input.projectRoot);
       const res = await service.knowledge(input);
       return textResult(res);
+    }
+  );
+  server.registerTool(
+    "contextos_init",
+    {
+      description: "Initialize or switch ContextOS mode (local or cloud) for a project. User only chooses mode; AI performs setup.",
+      inputSchema: {
+        mode: _enum(["local", "cloud"]).default("local"),
+        projectId: string2().default("contextos"),
+        cloudUrl: string2().optional(),
+        token: string2().optional(),
+        saveGlobalCloud: boolean2().default(false),
+        platforms: array(string2()).optional(),
+        injectEditors: boolean2().default(false),
+        projectRoot: string2().optional()
+      }
+    },
+    async (input) => {
+      const root = input.projectRoot || findDefaultProjectRoot();
+      if (input.saveGlobalCloud && input.cloudUrl) {
+        saveGlobalCloudConfig({ cloudUrl: input.cloudUrl, token: input.token });
+      }
+      let resolvedCloudUrl = input.cloudUrl;
+      let resolvedToken = input.token;
+      if (input.mode === "cloud" && !resolvedCloudUrl) {
+        const globalCloud = getGlobalCloudConfig();
+        if (globalCloud?.cloudUrl) {
+          resolvedCloudUrl = globalCloud.cloudUrl;
+          if (!resolvedToken && globalCloud.token) resolvedToken = globalCloud.token;
+        }
+      }
+      const config2 = initProjectWorkspace({
+        projectRoot: root,
+        mode: input.mode,
+        cloudUrl: resolvedCloudUrl,
+        token: resolvedToken,
+        projectId: input.projectId || "contextos"
+      });
+      for (const k of Array.from(serviceCache.keys())) {
+        if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
+          try {
+            serviceCache.get(k).close();
+          } catch (_) {
+          }
+          serviceCache.delete(k);
+        }
+      }
+      let editorSummary = "";
+      if (input.injectEditors) {
+        const nodePath = resolveNodeExecutable();
+        const serverScript = deployCanonicalServer();
+        let env = null;
+        if (input.mode === "cloud" && resolvedCloudUrl) {
+          env = {
+            CONTEXTOS_MODE: "cloud",
+            CONTEXTOS_CLOUD_URL: resolvedCloudUrl.replace(/\/+$/, ""),
+            CONTEXTOS_PROJECT_ID: input.projectId || "contextos"
+          };
+          if (resolvedToken) env.CONTEXTOS_CLOUD_TOKEN = resolvedToken;
+        }
+        const skillSource = path10.join(findDefaultProjectRoot(), "plugins", "contextos", "skills", "contextos");
+        const pluginSource = path10.join(findDefaultProjectRoot(), "plugins", "contextos");
+        const modified = syncAllPlatforms({
+          serverScript,
+          nodePath,
+          env,
+          targetRoot: root,
+          skillSource,
+          pluginSource,
+          selectedPlatforms: input.platforms
+        });
+        editorSummary = `
+
+Injected MCP & Skills into:
+${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
+      }
+      return textResult(
+        `\u2713 Initialized ContextOS in **${config2.storage.toUpperCase()}** mode for project \`${config2.id}\` at \`${root}\`.${editorSummary}`
+      );
+    }
+  );
+  server.registerTool(
+    "contextos_doctor",
+    {
+      description: "Diagnose ContextOS environment, storage routing, and editor integrations.",
+      inputSchema: {
+        projectRoot: string2().optional()
+      }
+    },
+    async (input) => {
+      const root = input.projectRoot || findDefaultProjectRoot();
+      const nodePath = resolveNodeExecutable();
+      let nodeVer = process.version;
+      const projJsonPath = path10.join(root, ".contextos", "project.json");
+      let projectConfig = null;
+      if (fs9.existsSync(projJsonPath)) {
+        try {
+          projectConfig = JSON.parse(fs9.readFileSync(projJsonPath, "utf8"));
+        } catch (_) {
+        }
+      }
+      const globalCloud = getGlobalCloudConfig();
+      const mode = projectConfig?.storage || (process.env.CONTEXTOS_CLOUD_URL ? "cloud (env)" : "local (default)");
+      const projectId = projectConfig?.id || process.env.CONTEXTOS_PROJECT_ID || "contextos";
+      const cloudUrl = projectConfig?.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || "N/A";
+      let cloudHealth = "N/A";
+      if (mode.startsWith("cloud") && cloudUrl !== "N/A") {
+        try {
+          const res = await fetch(`${cloudUrl.replace(/\/+$/, "")}/api/v2/health`, {
+            headers: projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN ? { Authorization: `Bearer ${projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` } : {}
+          });
+          cloudHealth = res.ok ? "\u{1F7E2} Connected (200 OK)" : `\u{1F534} HTTP ${res.status}`;
+        } catch (err) {
+          cloudHealth = `\u{1F534} Connection failed: ${err.message}`;
+        }
+      }
+      const platforms = detectInstalledPlatforms();
+      const editorStatuses = platforms.map((p) => `  - **${p.name}**: ${p.isInstalled ? "Installed" : "Not detected"} (\`${p.configPath}\`)`).join("\n");
+      const lines = [
+        `# ContextOS Doctor Report`,
+        `- **Node Runtime**: \`${nodePath}\` (${nodeVer})`,
+        `- **Project Root**: \`${root}\``,
+        `- **Project ID**: \`${projectId}\``,
+        `- **Active Storage Mode**: \`${mode}\``,
+        `- **Cloud Hub URL**: \`${cloudUrl}\``,
+        `- **Global Cloud Config**: ${globalCloud ? `Configured (\`${globalCloud.cloudUrl}\`)` : "None"}`,
+        `- **Cloud Hub Connectivity**: ${cloudHealth}`,
+        ``,
+        `## Detected Editors on System:`,
+        editorStatuses
+      ];
+      return textResult(lines.join("\n"));
+    }
+  );
+  server.registerTool(
+    "contextos_switch",
+    {
+      description: "Losslessly switch project between Local (offline SQLite) and Cloud (Cloudflare Edge D1) modes, bidirectionally synchronizing all architecture data.",
+      inputSchema: {
+        targetMode: _enum(["local", "cloud"]),
+        cloudUrl: string2().optional(),
+        token: string2().optional(),
+        projectId: string2().default("contextos"),
+        projectRoot: string2().optional()
+      }
+    },
+    async (input) => {
+      const root = input.projectRoot || findDefaultProjectRoot();
+      const dotContextos = path10.join(root, ".contextos");
+      const projJsonPath = path10.join(dotContextos, "project.json");
+      let proj = {};
+      if (fs9.existsSync(projJsonPath)) {
+        try {
+          proj = JSON.parse(fs9.readFileSync(projJsonPath, "utf8"));
+        } catch (_) {
+        }
+      }
+      const globalCloud = getGlobalCloudConfig();
+      const resolvedCloudUrl = input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL;
+      const resolvedToken = input.token || proj.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN;
+      const pid = input.projectId || proj.id || "contextos";
+      if (input.targetMode === "cloud") {
+        if (!resolvedCloudUrl) {
+          throw new Error("Switching to cloud requires a cloudUrl. Provide cloudUrl or configure global credentials via ~/.contextos/cloud.json.");
+        }
+        let localSnapshot = { blocks: [], chains: [], links: [], plans: [] };
+        const localDbPath = path10.join(dotContextos, "state.sqlite");
+        if (fs9.existsSync(localDbPath)) {
+          try {
+            const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
+            const blocks = localService.db.listBlocks();
+            const chains = localService.db.listChains();
+            const links = localService.db.listLinks();
+            const plans = localService.db.listPlans();
+            localSnapshot = { blocks, chains, links, plans };
+            localService.close();
+          } catch (_) {
+          }
+        }
+        const cloudClient = new ContextOSCloudClient({
+          cloudUrl: resolvedCloudUrl,
+          token: resolvedToken,
+          projectId: pid
+        });
+        await cloudClient.pushSnapshot(localSnapshot, pid);
+        proj.storage = "cloud";
+        proj.isCloud = true;
+        proj.cloudUrl = resolvedCloudUrl.replace(/\/+$/, "");
+        if (resolvedToken) proj.token = resolvedToken;
+        proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        fs9.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+        for (const k of Array.from(serviceCache.keys())) {
+          if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
+            try {
+              serviceCache.get(k).close();
+            } catch (_) {
+            }
+            serviceCache.delete(k);
+          }
+        }
+        return textResult(
+          `\u2713 Successfully migrated project \`${pid}\` to **CLOUD** mode.
+- Uploaded ${localSnapshot.blocks.length} blocks, ${localSnapshot.chains.length} chains, and ${localSnapshot.plans.length} plans to ${resolvedCloudUrl}.
+- All future task & plan changes will synchronize with Cloudflare D1.`
+        );
+      } else {
+        if (resolvedCloudUrl) {
+          try {
+            const cloudClient = new ContextOSCloudClient({
+              cloudUrl: resolvedCloudUrl,
+              token: resolvedToken,
+              projectId: pid
+            });
+            const cloudSnapshot = await cloudClient.fetchSnapshot(pid);
+            if (cloudSnapshot) {
+              const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
+              for (const b of cloudSnapshot.blocks || []) {
+                localService.db.saveBlock({
+                  id: b.id,
+                  projectId: pid,
+                  title: b.title,
+                  kind: b.kind || "service",
+                  summary: b.summary || "",
+                  details: b.body || "",
+                  artifactRefs: []
+                });
+              }
+              for (const c of cloudSnapshot.chains || []) {
+                localService.db.saveChain({
+                  id: c.id,
+                  projectId: pid,
+                  title: c.title,
+                  summary: c.purpose || "",
+                  kind: c.chainType || "linear",
+                  memberIds: []
+                });
+              }
+              for (const p of cloudSnapshot.plans || []) {
+                localService.db.savePlan({
+                  id: p.id,
+                  projectId: pid,
+                  title: p.title,
+                  summary: p.summary || "",
+                  status: p.status || "active",
+                  priority: p.priority || "normal"
+                });
+              }
+              localService.close();
+            }
+          } catch (e) {
+            console.warn("[ContextOS Switch] Could not pull cloud snapshot before switching to local:", e.message);
+          }
+        }
+        proj.storage = "local";
+        proj.isCloud = false;
+        delete proj.cloudUrl;
+        delete proj.token;
+        proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        fs9.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+        for (const k of Array.from(serviceCache.keys())) {
+          if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
+            try {
+              serviceCache.get(k).close();
+            } catch (_) {
+            }
+            serviceCache.delete(k);
+          }
+        }
+        return textResult(
+          `\u2713 Successfully switched project \`${pid}\` to **LOCAL** mode.
+- Architecture snapshot is now stored in local SQLite.
+- Fully offline, private, and decoupled from Cloud Hub.`
+        );
+      }
     }
   );
   return server;

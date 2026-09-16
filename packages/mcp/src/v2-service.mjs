@@ -206,10 +206,37 @@ export class ContextOSV2Service {
         return '# Block Search Results\n' + matches.map((b) => `- [${b.id}] ${b.title}: ${b.summary}`).join('\n');
       }
       case 'bind': {
-        const block = { ...blockData, projectId: this.projectId };
+        const targetId = id || blockData?.id;
+        if (!targetId) {
+          throw new Error("Missing required 'id' parameter for block bind action (e.g. id: 'block-desktop-installer')");
+        }
+        const existing = this.db.getBlock(targetId);
+        const inputArtifactRefs = blockData?.artifactRefs || [];
+        const normalizedRefs = inputArtifactRefs.map((ref) => {
+          if (typeof ref === 'string') {
+            return { path: ref, role: 'implementation' };
+          }
+          return ref;
+        });
+
+        const existingRefs = existing?.artifactRefs || [];
+        const mergedRefs = [...existingRefs];
+        for (const nr of normalizedRefs) {
+          if (!mergedRefs.some((r) => r.path === nr.path && (!nr.symbol || r.symbol === nr.symbol))) {
+            mergedRefs.push(nr);
+          }
+        }
+
+        const block = {
+          ...(existing || {}),
+          ...blockData,
+          id: targetId,
+          projectId: this.projectId,
+          artifactRefs: mergedRefs,
+        };
         this.db.saveBlock(block);
         this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
-        return `Block '${block.id}' bound with ${block.artifactRefs?.length || 0} code locators.`;
+        return `Block '${block.id}' bound with ${block.artifactRefs.length} code locators.`;
       }
       case 'delete': {
         this.db.deleteBlock(id);
@@ -290,12 +317,13 @@ export class ContextOSV2Service {
   }
 
   // ================= 6. code =================
-  async code({ action, path: relPath, selector, targetContent, replacementContent, query, format = 'markdown' }) {
-    if (action === 'search' && (!relPath || relPath === '.' || relPath === './')) {
-      const blocks = this.db.listBlocks();
+  async code({ action, path: relPath, selector, targetContent, replacementContent, content: rawContent, query, format = 'markdown' }) {
+    if (action === 'search' && !relPath) {
+      // Global workspace symbol search
+      const blocks = this.db.listBlocks(this.projectId);
       const allFiles = new Set();
       for (const b of blocks) {
-        for (const ref of b.artifactRefs || []) {
+        for (const ref of b.artifactRefs) {
           allFiles.add(ref.path);
         }
       }
@@ -315,6 +343,20 @@ export class ContextOSV2Service {
 
     if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
     const fullPath = path.resolve(this.projectRoot, relPath);
+
+    if (action === 'create') {
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      const initialContent = replacementContent || rawContent || '';
+      fs.writeFileSync(fullPath, initialContent, 'utf8');
+      const res = CodeTools.create(relPath, initialContent);
+      return {
+        filePath: relPath,
+        newHash: res.newHash,
+        locators: res.locators,
+        message: `File '${relPath}' created successfully with AST anchors initialized.`,
+      };
+    }
+
     if (!fs.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
     const content = fs.readFileSync(fullPath, 'utf8');
 

@@ -1,17 +1,24 @@
 <div align="center">
   <img src="assets/logo.png" width="76" alt="ContextOS" />
-  <h1>Automated Context Management: Cut 90% of AI Coding Context Waste.</h1>
-  <p><strong>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</strong></p>
-  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文说明</a></p>
+  <h1>A High-Precision Powered Exoskeleton for AI Coding</h1>
+  <p><strong>Auto-governing context via MCP, reducing context window waste by 90%+ in practice.</strong></p>
+  <p>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</p>
+  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-30-seconds-ai-auto-setup">Start in 30 seconds</a> · <a href="README_zh.md">中文文档</a></p>
 </div>
 
 ![ContextOS Interactive Workflow Demo](assets/contextos-demo.gif)
 
 ## What problem does ContextOS solve?
 
-An AI coding conversation often starts by rebuilding the project map: reading files, finding module relationships, checking design decisions, and locating unfinished work. As the repository grows, architecture notes, progress updates, and build logs compete with the task itself for context space.
+**ContextOS acts as a high-precision powered exoskeleton for AI coding assistants**:
+In traditional workflows with large repositories, an AI agent is forced to haul massive raw files, noisy build dumps, and repetitive documentation in its prompt. It quickly runs out of breath — the context window explodes, hallucinations multiply, and previous design decisions are forgotten.
 
-ContextOS stores that working memory beside the code in one synchronized OS graph. Each conversation receives the architecture and progress relevant to its task, and the Native Desktop App visualizes the exact same state as an intuitive Metro Map. A new conversation can continue seamlessly from the recorded state.
+With ContextOS, the AI sheds the deadweight and lets the **MCP protocol auto-govern context**:
+1. **Exoskeleton-Powered Precision**: Compiler-grade AST tools surgically inspect and edit only the relevant symbols and syntax blocks, eliminating whole-file dumps;
+2. **Out-of-Context Isolation**: Terminal logs are safely captured to a sandboxed disk store, returning compact diagnostic receipts to strip 98%+ of terminal noise;
+3. **Unified Neural Metro Map**: Architectural memory and the C-D-C-S task lifecycle are synchronized in a visual subway map, giving the AI immediate full-picture clarity.
+
+**In real-world multi-step tasks, ContextOS reduces redundant context consumption by over 90%**, eliminating context explosion and memory loss across long-running sessions.
 
 ![ContextOS V2 Metro Map Architecture and Desktop App](docs/images/contextos-desktop-v2.png)
 
@@ -41,18 +48,97 @@ Dev servers, watchers, and background workers are managed by the Process Host an
 
 ![Station Detail and Drawer Inspection](assets/readme-reader.png)
 
-## Start in three minutes
+## Quick Start & Setup Options
 
-### macOS App
+ContextOS offers three flexible onboarding options for any workflow:
 
-1. [Download the latest App](https://github.com/yubinbin32-ops/ContextOS/releases/latest), unzip it, and open **ContextOS**.
-2. Open **Settings**, choose the detected AI editor (Cursor / Claude Desktop / Antigravity / Windsurf, etc.), and click **Install / Sync Plugin**.
-3. Open your project in the editor and verify the plugin is active.
-4. During your AI conversation, simply activate ContextOS with a single sentence (e.g., **"把这个方案写入os后开始执行"** / *"Write this proposal into the OS and start execution"*, or **"查看os继续开发"** / *"Inspect the OS and resume development"*). The AI will automatically leverage ContextOS for progressive context budgeting, C-D-C-S tasks, surgical code tools, and receipt verification.
+```mermaid
+graph TD
+    User([Choose Your Setup Route]) --> ChoiceA[Option A: Download Desktop App]
+    User --> ChoiceB[Option B: AI Auto-Setup via Prompt]
+    User --> ChoiceC[Option C: Standalone mjs Plugin]
+    
+    ChoiceA --> FlowA[Plug & Play · Visual Metro Map · One-Click Editor Injection]
+    ChoiceB --> FlowB[Zero Effort · AI Detects Environment & Configures MCP]
+    ChoiceC --> FlowC[Geek & Headless · Linux/Windows/Containers · Direct stdio/npx]
+```
 
-The desktop App supports macOS 14 or later. The MCP runtime uses Node.js 22 or later. The App writes the editor configuration and plugin entry for you.
+---
+
+### Option A: macOS Desktop App (Plug & Play · Recommended)
+
+Download the package matching your environment from [GitHub Releases](https://github.com/yubinbin32-ops/ContextOS/releases/latest):
+
+| Package | File | Size | Node.js Requirement | Best For |
+|---|---|---|---|---|
+| **Full Standalone** *(Recommended)* | `ContextOS-macos-full.zip` | ~35 MB | **None** (Bundles standalone Node 22) | Zero-setup, plug-and-play. Ideal if you don't have Node installed. |
+| **Standard Lite** | `ContextOS-macos.zip` | ~1.6 MB | Requires Node.js 22+ on system | Ultra-compact download if you already have Node installed. |
+
+#### Setup Steps:
+1. Unzip the downloaded archive and drag **ContextOS.app** into `/Applications`.
+2. Launch **ContextOS**, open **Settings** (gear icon or `Cmd+,`), select your detected AI editor (Cursor / Claude Desktop / Antigravity / OpenCode / Codex), and click **Install / Sync Plugin**.
+3. The App injects the ContextOS MCP configuration and unique Skills directly into your editors. **Once configured, you can close the desktop App; it does NOT need to stay running.**
+4. In your AI coding chat, simply activate ContextOS:
+   > *"Write this proposal into ContextOS and start execution"* or *"Inspect ContextOS and resume development"*
 
 ![One-click editor and MCP synchronization](assets/settings-sync.png)
+
+---
+
+### Option B: AI Auto-Setup via Prompt (Zero Effort)
+
+If you are already in an AI coding assistant (Cursor / Codex / Claude Code / Windsurf / Antigravity), let the AI configure everything automatically:
+
+> **Copy and paste this instruction into your AI coding assistant:**  
+> **"Please read `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`, detect my system environment, and configure ContextOS for me."**
+
+#### What the AI does in the background:
+1. **System & Client Inspection**: If on macOS, asks if you want the native Desktop App (`ContextOS.app`) and deploys it automatically.
+2. **Runtime Verification**: Checks for Node.js 22+ (or uses the runtime bundled with ContextOS.app).
+3. **Targeted Precision Injection**: Asks which editors you use (Cursor / Codex / Claude Desktop, etc.) and injects only the selected platforms, eliminating duplicate skill noise.
+4. **Cloud Hub Configuration**: Asks if you want a global Cloudflare Edge Hub for remote sync, and saves credentials securely.
+5. **Project Initialization**: Initializes the current project with your chosen storage mode (local offline by default, or cloud).
+
+---
+
+### Option C: Standalone `contextos-mcp.mjs` Plugin (Headless / Linux / Geek)
+
+> [!NOTE]
+> Ideal for Linux, Windows CLI, Docker containers, remote SSH servers, or headless CI environments without a desktop GUI.
+> **Requirement**: Node.js >= 22.
+
+#### 1. Run directly with npx
+```bash
+npx -y github:yubinbin32-ops/ContextOS
+```
+
+#### 2. Download the pre-bundled single-file plugin
+Download the compiled single-file bundle from the repository: [`plugins/contextos/server/contextos-mcp.mjs`](plugins/contextos/server/contextos-mcp.mjs).
+
+Add standard stdio MCP configuration to your editor (`mcp.json` or `claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "contextos": {
+      "command": "node",
+      "args": ["/absolute/path/to/plugins/contextos/server/contextos-mcp.mjs"]
+    }
+  }
+}
+```
+
+---
+
+## Local Project Centricity & Multi-Project Cloud Isolation
+
+ContextOS treats the **local workspace project directory** as the absolute source of truth (code reads, AST edits, test runs, and logs always run locally):
+
+- **Local Storage Mode (Default)**: Architecture data is stored in the project's `.contextos/state.sqlite`. 100% offline, private, and zero network dependency.
+- **Cloud Collaboration Mode (Optional)**: Connects to a serverless Cloud Hub (Cloudflare D1 edge database) to share architectural topology and progress across devices.
+  - **Multi-Project Isolation Built-In**: Cloud Hub partitions entities by `projectId`. A single Cloudflare Worker can back all your distinct projects with strict isolation.
+- **Lossless Two-Way Switching**: Switch storage modes anytime by prompting your AI:
+  - *"Switch current project to cloud collaboration mode"* ➔ Local SQLite graph is pushed to Cloud D1.
+  - *"Switch current project back to offline local mode"* ➔ Cloud snapshot is synced back to local SQLite for offline development.
 
 ## Reproducible V2 Benchmark
 

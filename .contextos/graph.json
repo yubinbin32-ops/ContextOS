@@ -1,10 +1,150 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 3,
-  "exportedAt": "2026-09-15T04:22:46.888Z",
+  "graphRevision": 12,
+  "exportedAt": "2026-09-16T19:23:29.984Z",
   "data": {
     "plans": [
+      {
+        "id": "plan-1789544378269",
+        "projectId": "contextos",
+        "title": "Git Release Auto-Detection and Selective Update",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "Auto-detect new releases from Git/GitHub, support edition and version selection, and provide in-app or browser update in Settings.",
+        "completedSummary": "Implemented full Git release auto-detection and selective update in SettingsView. AppUpdater handles GitHub Releases API parsing, version comparison, download progress, ditto extraction, and in-place app swap and restart. Full Chinese and English localization integrated. All Swift compilation and verification tests passed.",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-1",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "pending",
+            "taskIds": [],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [],
+        "createdAt": "2026-09-16T07:39:38.269Z",
+        "updatedAt": "2026-09-16T07:43:14.880Z"
+      },
+      {
+        "id": "plan-1789575227717",
+        "projectId": "contextos",
+        "title": "AI 驱动自举安装、项目级隔离与标准编辑器注入机制",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "实现面向宿主 AI 的极简自动安装指南（AI_SETUP.md），用户仅作二选一选择，由 AI 依照 App 相同标准自动注入 Claude/Cursor/Codex/Antigravity/OpenCode 配置；固定默认项目名为 contextos；实现本地与云端项目级完全分流并完成实机测试。",
+        "completedSummary": "成功落地 AI-to-AI 自动安装自举规范（AI_SETUP.md），用户仅作二选一选择，由 AI 依照 App 原生标准全自动探测并注入 Claude/Cursor/Antigravity/OpenCode/Codex 配置；在 MCP 与工作区实现基于 project.json 的本地/云端隔离机制；固定默认项目名为 contextos；全套单元测试与端到端自举验证 100% 通过。",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-bootstrap-isolation",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "pending",
+            "taskIds": [],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [],
+        "createdAt": "2026-09-16T16:13:47.717Z",
+        "updatedAt": "2026-09-16T16:47:32.503Z"
+      },
+      {
+        "id": "plan-1789578547837",
+        "projectId": "contextos",
+        "title": "平台按需配置、项目级双向切换与 Codex 原生插件闭环",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "解决用户反馈的 3 大问题：1) 安装前询问平台，按需精准注入而非全量安装；2) 全局凭据解耦，项目级独立声明，支持 contextos_switch 随时双向无损切换与数据同步；3) 依照 App 标准实现 Codex 官方插件安装 (codex plugin add)，杜绝重复 skill 冗余。",
+        "completedSummary": "已全面修复用户反馈的 3 个问题：1) 增加平台多选与参数过滤，仅对用户指定平台注入配置；2) 解耦全局云端凭据 (~/.contextos/cloud.json) 与项目级存储，新增 contextos_switch 工具实现本地 SQLite 与云端 D1 随时双向无损数据同步；3) 对照 App 标准实现 Codex 官方插件安装 (codex plugin add)，杜绝重复 skill 冗余，保持单一纯净实例；4) 全套自动化测试通过率 100%。",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-selective-switch-codex",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "pending",
+            "taskIds": [],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [],
+        "createdAt": "2026-09-16T17:09:07.837Z",
+        "updatedAt": "2026-09-16T17:33:25.254Z"
+      },
+      {
+        "id": "plan-1789580844309",
+        "projectId": "contextos",
+        "title": "云端双向同步实测、无感上云无差别验证、工程瘦身与 Release v2.1.0 交付",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "全面执行最后一轮手动测试：1) 本地写入云端同步测试；2) 云端直接写入测试；3) 云端拉取本地同步测试；4) 验证除 Graph 在云端外其余工具本地无差别执行（无感上云）；5) 清理工作区冗余与临时文件；6) 升级 v2.1.0 并 push to main。",
+        "completedSummary": "完成云端双向同步全链路测试、无感上云无差别运行验证、仓库瘦身、版本升级 v2.1.0 与发布交付。",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-cloud-verify-and-release",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "pending",
+            "taskIds": [],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [],
+        "createdAt": "2026-09-16T17:47:24.309Z",
+        "updatedAt": "2026-09-16T18:32:14.063Z"
+      },
+      {
+        "id": "plan-1789585003632",
+        "projectId": "contextos",
+        "title": "修复 macOS Desktop App CI 编译失败",
+        "priority": "normal",
+        "status": "active",
+        "summary": "修复 GitHub Actions 中 macOS Desktop App 的 Swift 编译错误与警告并交付",
+        "completedSummary": null,
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-fix-ci",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "active",
+            "taskIds": [],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [],
+        "createdAt": "2026-09-16T18:56:43.632Z",
+        "updatedAt": "2026-09-16T18:56:43.632Z"
+      },
       {
         "id": "plan-v2-rebuild",
         "projectId": "contextos",
@@ -234,7 +374,57 @@
         "updatedAt": "2026-09-14T20:11:41.821Z"
       }
     ],
-    "tasks": [],
+    "tasks": [
+      {
+        "id": "task-1789585290824",
+        "planId": "plan-1789585003632",
+        "phaseId": "phase-fix-ci",
+        "title": "修复 Swift CI 编译、移除桌面端云项目导入、验证云端多项目隔离与优化三套部署方案文档",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "",
+          "constraints": [],
+          "references": {},
+          "locators": [],
+          "nextSteps": [],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [],
+          "symbols": [],
+          "candidateBlockIds": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "baseline": {
+          "gitHead": null,
+          "dirtyHash": null,
+          "indexRevision": 0
+        },
+        "notes": [],
+        "checks": [
+          {
+            "id": "check-1789586593535-0ksf6",
+            "receiptId": "receipt-1789586507485-d0ff92",
+            "description": "Swift build passes with 0 warnings/errors, plugin:verify passed, full npm test suite passed, and Cloud Hub multi-project isolation verified.",
+            "passed": true,
+            "evidence": "",
+            "recordedAt": "2026-09-16T19:23:13.535Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "completedAt": "2026-09-16T19:23:29.982Z"
+        },
+        "createdAt": "2026-09-16T19:01:30.824Z",
+        "updatedAt": "2026-09-16T19:23:29.982Z"
+      }
+    ],
     "blocks": [
       {
         "id": "block-code-gateway",
@@ -839,71 +1029,55 @@
           {
             "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
             "symbol": "EditorPlatformStatus",
-            "startLine": 4,
-            "endLine": 25,
+            "startLine": null,
+            "endLine": null,
             "hash": "cc0b7231a5af0f28",
             "role": "implementation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
-            "symbol": "PluginInstallStatus",
-            "startLine": 27,
-            "endLine": 33,
-            "hash": "b235a8e0c67e230e",
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "syncAllPlatforms",
+            "startLine": null,
+            "endLine": null,
+            "hash": "fd468287f5862cc5",
             "role": "implementation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
-            "symbol": "PluginInstaller",
-            "startLine": 35,
-            "endLine": 727,
-            "hash": "a89652a1e13329ab",
+            "path": "scripts/bootstrap.mjs",
+            "symbol": "bootstrap",
+            "startLine": null,
+            "endLine": null,
+            "hash": "e4ba11c08ec9a757",
             "role": "implementation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift",
-            "symbol": "PluginInstaller.bundledPluginBuildID",
-            "startLine": 76,
-            "endLine": 80,
-            "hash": "c0b7f00f8dc0f869",
-            "role": "implementation"
+            "path": "AI_SETUP.md",
+            "symbol": "AI_SETUP",
+            "startLine": null,
+            "endLine": null,
+            "hash": "1e1927cf6dcf058e",
+            "role": "documentation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
-            "symbol": "ProjectLocation",
-            "startLine": 3,
-            "endLine": 103,
-            "hash": "1297ae4ea187c2cf",
-            "role": "implementation"
+            "path": "plugins/contextos/skills/contextos/SKILL.md",
+            "symbol": "SKILL",
+            "startLine": null,
+            "endLine": null,
+            "hash": "fec671dbe13dd2ad",
+            "role": "documentation"
           },
           {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
-            "symbol": "ProjectLocation.resolve",
-            "startLine": 10,
-            "endLine": 32,
-            "hash": "264fa2839c69e0d9",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
-            "symbol": "ProjectLocation.resolve",
-            "startLine": 34,
-            "endLine": 77,
-            "hash": "9a4a7aedf0c622ac",
-            "role": "implementation"
-          },
-          {
-            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
-            "symbol": "ProjectLocation.recentProjects",
-            "startLine": 79,
-            "endLine": 89,
-            "hash": "43fff413f3f24c32",
-            "role": "implementation"
+            "path": "README.md",
+            "symbol": "README",
+            "startLine": null,
+            "endLine": null,
+            "hash": "2ec4c02d8854f015",
+            "role": "documentation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-16T17:33:11.119Z",
+        "updatedAt": "2026-09-16T17:33:11.119Z"
       },
       {
         "id": "block-desktop-shell",
@@ -1437,87 +1611,39 @@
           {
             "path": "packages/mcp/src/v2-server.mjs",
             "symbol": "findDefaultProjectRoot",
-            "startLine": 10,
-            "endLine": 28,
+            "startLine": null,
+            "endLine": null,
             "hash": "506c86e29dbb5265",
             "role": "implementation"
           },
           {
-            "path": "packages/mcp/src/v2-server.mjs",
-            "symbol": "getService",
-            "startLine": 30,
-            "endLine": 36,
-            "hash": "b8f4fe03b1ba3790",
+            "path": "worker.js",
+            "symbol": "fetch",
+            "startLine": null,
+            "endLine": null,
+            "hash": "74da7b6b7f8249fb",
             "role": "implementation"
           },
           {
-            "path": "packages/mcp/src/v2-server.mjs",
-            "symbol": "textResult",
-            "startLine": 38,
-            "endLine": 43,
-            "hash": "df19c89cc78bb0f0",
+            "path": "plugins/contextos/server/contextos-mcp.mjs",
+            "symbol": "server",
+            "startLine": null,
+            "endLine": null,
+            "hash": "e4ba11c08ec9a757",
             "role": "implementation"
           },
           {
-            "path": "packages/mcp/src/v2-server.mjs",
-            "symbol": "createV2Server",
-            "startLine": 45,
-            "endLine": 251,
-            "hash": "c214871e7c254d2b",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/mcp/src/v2-service.mjs",
-            "symbol": "ContextOSV2Service",
-            "startLine": 10,
-            "endLine": 436,
-            "hash": "f05cb68328c5c97d",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/mcp/src/v2-service.mjs",
-            "symbol": "ContextOSV2Service.constructor",
-            "startLine": 11,
-            "endLine": 26,
-            "hash": "aff1139de0317c9a",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/mcp/src/v2-service.mjs",
-            "symbol": "ContextOSV2Service.close",
-            "startLine": 28,
-            "endLine": 31,
-            "hash": "88af55e03d767504",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/mcp/src/v2-service.mjs",
-            "symbol": "ContextOSV2Service.osContext",
-            "startLine": 34,
-            "endLine": 103,
-            "hash": "c24f1c0a837b2d99",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/mcp/src/server.mjs",
-            "symbol": null,
-            "startLine": 1,
-            "endLine": 4,
-            "hash": "file",
-            "role": "implementation"
-          },
-          {
-            "path": "packages/mcp/src/service.mjs",
-            "symbol": null,
-            "startLine": 1,
-            "endLine": 2,
-            "hash": "file",
+            "path": "packages/mcp/src/cloud-client.mjs",
+            "symbol": "ContextOSCloudClient",
+            "startLine": null,
+            "endLine": null,
+            "hash": "6cb837e8fccc27de",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-16T17:33:11.120Z",
+        "updatedAt": "2026-09-16T17:33:11.120Z"
       },
       {
         "id": "block-process-host",
