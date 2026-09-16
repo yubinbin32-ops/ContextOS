@@ -49,9 +49,6 @@ struct ContentView: View {
                 if syncIssues != issues { syncIssues = issues }
                 if !initialized {
                     initialized = true
-                    if store.selection == nil, requestedDocument == nil, let firstPlan = store.snapshot.plans.first {
-                        store.focusPlan(firstPlan.id)
-                    }
                 }
                 try? await Task.sleep(for: .seconds(2))
             }
