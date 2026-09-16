@@ -69,7 +69,7 @@ async function seedStarterProjectIfNeeded(db, projectId) {
     if (existing) return;
 
     const now = new Date().toISOString();
-    await db.prepare('INSERT OR REPLACE INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, ?, ?, ?)')
+    await db.prepare('INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET exported_at = excluded.exported_at')
       .bind(projectId, '', 1, now, 2).run();
 
     const planId = `plan-init-${Date.now().toString(36)}`;
@@ -120,7 +120,7 @@ async function executeTool(tool, input = {}, projectId = 'contextos', db) {
       const p = input.planData || input;
       const now = new Date().toISOString();
       const planId = p.id || `plan-${Date.now()}`;
-      await db.prepare('INSERT OR REPLACE INTO projects (id, repo_root, exported_at) VALUES (?, ?, ?)')
+      await db.prepare('INSERT INTO projects (id, repo_root, exported_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET exported_at = excluded.exported_at')
         .bind(projectId, '', now).run();
       await db.prepare('INSERT OR REPLACE INTO plans (id, project_id, title, priority, status, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .bind(planId, projectId, p.title || 'Untitled Plan', p.priority || 'normal', p.status || 'active', p.summary || '', now, now).run();
@@ -287,7 +287,7 @@ async function handleJsonRpc(msg, env, db, projectId = 'contextos') {
         },
         serverInfo: {
           name: 'contextos',
-          version: '2.0.3',
+          version: '2.1.0',
         },
         instructions:
           'ContextOS Cloud Hub: Spatial architecture and C-D-C-S context manager for AI coding agents. Plans, tasks, and blocks synchronize with Cloudflare edge D1 SQLite.',
@@ -429,7 +429,7 @@ export default {
       return new Response(
         JSON.stringify({
           status: 'ok',
-          version: '2.0.3',
+          version: '2.1.0',
           mode: 'cloud',
           storage: db ? 'd1' : 'ephemeral',
           authRequired: hasAuthToken,
@@ -522,9 +522,46 @@ export default {
       return new Response(JSON.stringify({ status: 'ContextOS Streamable HTTP MCP Active' }), { headers: CORS_HEADERS });
     }
 
-    // 6. Snapshot export (/api/v2/snapshot)
+    // 6. Snapshot export & sync (/api/v2/snapshot)
     if (url.pathname === '/api/v2/snapshot') {
-      const projectId = url.searchParams.get('projectId') || 'contextos';
+      const projectId = request.headers.get('x-contextos-project-id') || url.searchParams.get('projectId') || 'contextos';
+      if (request.method === 'POST') {
+        try {
+          const body = await request.json();
+          const now = new Date().toISOString();
+          if (db) {
+            await db.prepare('INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET exported_at = excluded.exported_at')
+              .bind(projectId, '', 1, now, 2).run();
+
+            for (const b of body.blocks || []) {
+              await db.prepare('INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                .bind(b.id, projectId, b.title || b.id, b.kind || 'service', b.summary || '', b.details || b.body || '', now, now).run();
+            }
+            for (const c of body.chains || []) {
+              const members = JSON.stringify(c.memberIds || c.member_ids || []);
+              await db.prepare('INSERT OR REPLACE INTO chains (id, project_id, title, summary, kind, member_ids_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                .bind(c.id, projectId, c.title || c.id, c.summary || c.purpose || '', c.kind || c.chainType || 'linear', members, now, now).run();
+            }
+            for (const l of body.links || []) {
+              const fromId = l.fromId || l.from_id || l.sourceId || l.from;
+              const toId = l.toId || l.to_id || l.targetId || l.to;
+              if (fromId && toId) {
+                const linkId = l.id || `link-${fromId}-${toId}`;
+                await db.prepare('INSERT OR REPLACE INTO links (id, project_id, from_id, to_id, kind, reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                  .bind(linkId, projectId, fromId, toId, l.kind || 'depends_on', l.reason || l.label || '', now, now).run();
+              }
+            }
+            for (const p of body.plans || []) {
+              await db.prepare('INSERT OR REPLACE INTO plans (id, project_id, title, priority, status, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                .bind(p.id, projectId, p.title || p.id, p.priority || 'normal', p.status || 'active', p.summary || '', now, now).run();
+            }
+          }
+          return new Response(JSON.stringify({ status: 'ok', projectId, syncedAt: now }), { headers: CORS_HEADERS });
+        } catch (err) {
+          return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: CORS_HEADERS });
+        }
+      }
+
       if (db) {
         await seedStarterProjectIfNeeded(db, projectId);
       }

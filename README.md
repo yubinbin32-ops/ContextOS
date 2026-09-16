@@ -3,12 +3,7 @@
   <h1>A High-Precision Powered Exoskeleton for AI Coding</h1>
   <p><strong>Auto-governing context via MCP, reducing context window waste by 90%+ in practice.</strong></p>
   <p>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</p>
-  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文文档</a></p>
-  <p>
-    <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main" target="_blank">
-      <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
-    </a>
-  </p>
+  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-30-seconds-ai-auto-setup">Start in 30 seconds</a> · <a href="README_zh.md">中文文档</a></p>
 </div>
 
 ![ContextOS Interactive Workflow Demo](assets/contextos-demo.gif)
@@ -53,11 +48,24 @@ Dev servers, watchers, and background workers are managed by the Process Host an
 
 ![Station Detail and Drawer Inspection](assets/readme-reader.png)
 
-## Start in three minutes
+## Start in 30 Seconds: AI Auto-Setup
 
-ContextOS provides flexible setup options tailored to your environment:
+You don't need to manually configure config files or install scripts. ContextOS features **AI-to-AI Self-Bootstrapping**: simply copy the prompt below and send it to your AI coding assistant (Cursor / Codex / Claude Code / Windsurf / Antigravity):
 
-### Option 1: macOS Desktop App (Visual Architecture & One-Click Setup)
+> **"Please read `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`, detect my system environment, and configure ContextOS for me."**  
+> *(中文: "请阅读 `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`，检测我的系统环境，为我自动安装并配置好 ContextOS。")*
+
+### What the AI will do for you:
+1. **System & Client Inspection**: If you're on macOS, it asks if you'd like the native Desktop App (`ContextOS.app`). If confirmed, it downloads and installs it automatically.
+2. **Runtime Verification**: Checks for Node.js 22+ (or uses the runtime bundled with ContextOS.app).
+3. **Storage Mode Selection**: Asks whether you prefer **Local Mode** (100% offline & private) or **Cloud Hub Mode** (multi-device edge sync). If you choose Cloud, it provides the 1-click Cloudflare link and asks for the returned URL/Token.
+4. **Zero-Touch Editor Injection**: Automatically detects and injects ContextOS MCP configuration and Skills into **Claude Desktop, Cursor, Antigravity, OpenCode, and Codex**.
+
+---
+
+## Alternative Setup Methods
+
+### Option A: macOS Desktop App (Visual Architecture & Manual Setup)
 
 Download the package matching your environment from [GitHub Releases](https://github.com/yubinbin32-ops/ContextOS/releases/latest):
 
@@ -77,66 +85,16 @@ Download the package matching your environment from [GitHub Releases](https://gi
 
 ![One-click editor and MCP synchronization](assets/settings-sync.png)
 
-### Option 2: Lightweight Pure Plugin Stream (For Headless, Linux, or CLI-Only Workflows)
+### Option B: Lightweight CLI-Only Workflow (Headless / Linux / Servers)
 
 > [!NOTE]
-> **Best for remote servers, Docker containers, or purely terminal-driven setups without a macOS desktop GUI.**
-> The plugin package is extremely lightweight and runs directly via `npx` or as an editor plugin.
+> **Best for remote servers, Docker containers, or terminal-driven workflows without a macOS desktop GUI.**
 > **Prerequisites**: Node.js 22 or later installed on the host machine.
 
 ```bash
 # Launch MCP server directly from command line
 npx -y github:yubinbin32-ops/ContextOS
 ```
-
-### Option 3: Deploy ContextOS Cloud Hub (Recommended for Windows / Cloud Sync / Remote MCP)
-
-> [!TIP]
-> **Target Audience:**
-> 1. **Windows Users**: The desktop App is natively tailored for macOS. Windows users can run headless with the Cloud Hub and connect via **Remote MCP over HTTP**, enjoying 100% of the context reduction and C-D-C-S workflow without needing a desktop GUI or local Node server.
-> 2. **Cloud Sync & Team Collaboration**: Sync plans, tasks, and architectural graphs across multiple machines or teams.
-> 3. Powered by Cloudflare Workers + D1 (Edge SQLite) — **100% free serverless architecture deployed in 60 seconds with zero servers to manage**.
-
-#### 1. One-Click Web Deployment
-Click the button below to deploy the serverless hub directly to your Cloudflare account (Cloudflare will automatically provision the D1 database):
-
-<p>
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub" target="_blank">
-    <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
-  </a>
-</p>
-
-*Direct deployment link:* [https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub](https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub)
-
-#### 2. Obtain Your Cloud URL & Set Auth Token
-1. **Get your Cloud URL**: Once deployment finishes, copy your live Cloud Hub URL from the Cloudflare Workers overview (e.g. `https://contextos-cloud.<your-subdomain>.workers.dev`).
-2. **Configure your Token (Security)**:
-   - In the Cloudflare Dashboard, go to **Workers & Pages** -> select **`contextos-cloud`**.
-   - Navigate to **Settings** -> **Variables and Secrets**.
-   - Click **Add** and define:
-     - **Variable Name:** `AUTH_TOKEN`
-     - **Value:** Any secret key you choose (e.g. `sk_ctx_12345678`).
-     - *(Optional: If `AUTH_TOKEN` is left blank, the hub runs in open access mode).*
-
-#### 3. Connect MCP via HTTP (Cursor / Claude / Windsurf)
-No local Node process needed! Connect your AI editor directly to the cloud hub via standard HTTP/SSE:
-
-##### In Cursor / Windsurf / Claude Desktop (`mcp.json`):
-```json
-{
-  "mcpServers": {
-    "contextos": {
-      "url": "https://contextos-cloud.<your-subdomain>.workers.dev/sse",
-      "headers": {
-        "Authorization": "Bearer <YOUR_TOKEN>"
-      }
-    }
-  }
-}
-```
-*(In Cursor: Open **Settings -> Features -> MCP -> Add Server**, set Type to `SSE`, enter the URL `.../sse`, and add the `Authorization` header).*
-
-##### Alternative: Local STDIO Bridge (for CLI tools only supporting local commands):
 ```json
 {
   "mcpServers": {

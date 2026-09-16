@@ -86,6 +86,68 @@ export class ContextOSCloudClient {
     }
   }
 
+  async pushSnapshot(snapshot, projectId) {
+    const pid = projectId || this.projectId;
+    const url = `${this.cloudUrl}/api/v2/snapshot?projectId=${encodeURIComponent(pid)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(snapshot),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.status === 'ok') {
+          return data;
+        }
+      }
+    } catch {
+      clearTimeout(timeout);
+      // Fall through to resilient individual tool calls
+    }
+
+    // Resilient fallback for cloud hubs running earlier worker builds: push via /api/v2/call
+    // Push plans first so project anchor is established without triggering child cascades
+    let pushedPlans = 0;
+    for (const p of snapshot.plans || []) {
+      await this.call('plan', {
+        action: 'create',
+        planData: {
+          id: p.id,
+          title: p.title || p.id,
+          summary: p.summary || '',
+          priority: p.priority || 'normal',
+        },
+      });
+      pushedPlans++;
+    }
+
+    let pushedBlocks = 0;
+    for (const b of snapshot.blocks || []) {
+      await this.call('block', {
+        action: 'bind',
+        id: b.id,
+        blockData: {
+          title: b.title || b.id,
+          kind: b.kind || 'service',
+          summary: b.summary || '',
+          details: b.details || b.body || '',
+          artifactRefs: b.artifactRefs || [],
+        },
+      });
+      pushedBlocks++;
+    }
+
+    return { status: 'ok', pushedBlocks, pushedPlans, mode: 'call_fallback' };
+  }
+
   async checkHealth() {
     const url = `${this.cloudUrl}/api/v2/health`;
     const controller = new AbortController();

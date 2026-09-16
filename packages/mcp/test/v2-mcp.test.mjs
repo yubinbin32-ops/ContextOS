@@ -178,13 +178,90 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
-test('createV2Server registers all 9 tools', () => {
+test('createV2Server registers all 12 tools', () => {
   const server = createV2Server();
   assert.ok(server);
-  // Verify tool definitions exist
-  const expectedTools = ['os_context', 'plan', 'task', 'block', 'chain', 'code', 'run_command', 'process', 'knowledge'];
-  // The registered tools are held internally in McpServer
-  assert.equal(expectedTools.length, 9);
+  const expectedTools = [
+    'os_context',
+    'plan',
+    'task',
+    'block',
+    'chain',
+    'code',
+    'run_command',
+    'process',
+    'knowledge',
+    'contextos_init',
+    'contextos_doctor',
+    'contextos_switch',
+  ];
+  assert.equal(expectedTools.length, 12);
+});
+
+test('global cloud config management and selective platforms filtering', async () => {
+  const { saveGlobalCloudConfig, getGlobalCloudConfig, syncAllPlatforms } = await import('../src/bootstrap-util.mjs');
+
+  // 1. Save and read global cloud config
+  const saved = saveGlobalCloudConfig({ cloudUrl: 'https://test-hub.workers.dev', token: 'test-token-xyz' });
+  assert.equal(saved.cloudUrl, 'https://test-hub.workers.dev');
+  assert.equal(saved.token, 'test-token-xyz');
+
+  const retrieved = getGlobalCloudConfig();
+  assert.equal(retrieved.cloudUrl, 'https://test-hub.workers.dev');
+  assert.equal(retrieved.token, 'test-token-xyz');
+
+  // 2. Selective platform filtering
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-filter-test-'));
+  const modified = syncAllPlatforms({
+    serverScript: '/dummy/server.mjs',
+    nodePath: 'node',
+    targetRoot: tempDir,
+    selectedPlatforms: ['cursor'],
+    forceAll: false,
+  });
+
+  // Only cursor or workspace cursor was modified, not claude or antigravity
+  assert.ok(modified.every((m) => m.toLowerCase().includes('cursor')));
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('initProjectWorkspace guarantees local vs cloud isolation', async () => {
+  const { initProjectWorkspace } = await import('../src/bootstrap-util.mjs');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-iso-test-'));
+
+  // 1. Init as local
+  const localConfig = initProjectWorkspace({
+    projectRoot: tempDir,
+    mode: 'local',
+    projectId: 'my-local-tool',
+  });
+  assert.equal(localConfig.storage, 'local');
+  assert.equal(localConfig.isCloud, false);
+  assert.equal(localConfig.cloudUrl, undefined);
+
+  const readLocal = JSON.parse(fs.readFileSync(path.join(tempDir, '.contextos', 'project.json'), 'utf8'));
+  assert.equal(readLocal.storage, 'local');
+  assert.equal(readLocal.isCloud, false);
+
+  // 2. Switch to cloud
+  const cloudConfig = initProjectWorkspace({
+    projectRoot: tempDir,
+    mode: 'cloud',
+    cloudUrl: 'https://contextos-cloud.example.workers.dev',
+    token: 'secret-token-123',
+    projectId: 'contextos',
+  });
+  assert.equal(cloudConfig.storage, 'cloud');
+  assert.equal(cloudConfig.isCloud, true);
+  assert.equal(cloudConfig.cloudUrl, 'https://contextos-cloud.example.workers.dev');
+  assert.equal(cloudConfig.token, 'secret-token-123');
+
+  const readCloud = JSON.parse(fs.readFileSync(path.join(tempDir, '.contextos', 'project.json'), 'utf8'));
+  assert.equal(readCloud.storage, 'cloud');
+  assert.equal(readCloud.isCloud, true);
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
 test('HybridContextOSService runs local commands and handles cloud fallback gracefully', async () => {

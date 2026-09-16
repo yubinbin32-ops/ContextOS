@@ -37,9 +37,9 @@ ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控�
 
 ---
 
-## 一、9 大核心 Facade 工具全景与参数规范
+## 一、12 大核心 Facade 工具全景与参数规范
 
-ContextOS 收敛为 9 个高内聚 Facade 工具，覆盖 AI 开发全生命周期：
+ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周期：
 
 ### 1. `os_context` —— 项目全景与上下文切片
 - **核心作用**：会话启动引导、实体快速搜索、按需提取上下文切片。
@@ -131,6 +131,27 @@ ContextOS 收敛为 9 个高内聚 Facade 工具，覆盖 AI 开发全生命周�
   - `action: "decision_open", sectionId: "可选DEC-ID"`：调阅 ADR 决策文档或指定章节。
   - `action: "decision_write", sectionId: "DEC-xxx", sectionTitle: "...", content: "..."`：按章节增量追加或修正重大架构决策。
 - **最佳使用时机**：形成工程规范时写 Rule；做出技术取舍、重构设计或经历路线弯路教训时写 Decision。
+
+### 10. `contextos_init` —— 模式切换与自举初始化
+- **核心作用**：在当前工作区初始化或切换存储模式（本地模式 vs 云端协同模式）。
+- **关键入参**：
+  - `mode: "local" | "cloud"`（模式选择，默认 `local`）
+  - `projectId: "contextos"`（项目名称，默认预设为 `contextos`）
+  - `cloudUrl: "https://..."`（云端 Hub URL）
+  - `token: "..."`（鉴权 Token）
+  - `injectEditors: true`（是否自动同步宿主编辑器配置）
+- **核心价值**：用户只做二选一选择，由 AI 在后台直接调用该工具完成项目元数据建立与编辑器注入。
+
+### 11. `contextos_doctor` —— 环境与中枢连接自检
+- **核心作用**：全方位诊断当前宿主环境、Node 运行时、存储路由模式、Cloudflare 连通性以及各大已安装编辑器的 MCP 配置状态。
+- **使用时机**：配置完毕后进行自检，或在遇到连接异常时快速获取排障诊断报告。
+
+### 12. `contextos_switch` —— 本地与云端无损双向切换与数据同步
+- **核心作用**：在当前项目自由切换本地离线模式与云端协同模式，并自动完成架构数据的双向迁移。
+- **关键入参**：`targetMode: "local" | "cloud"`, `cloudUrl?: "..."`, `token?: "..."`。
+- **迁移机制**：
+  - `local ➔ cloud`：读取本地 SQLite 数据库中的所有 Block、Chain、Link、Plan 并无损同步至 Cloud Hub，更新 project.json；
+  - `cloud ➔ local`：拉取云端最新架构快照写入本地 SQLite，更新 project.json 并完全切断网络依赖。
 
 ---
 
@@ -250,6 +271,36 @@ ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文
 1. **任务完成即清理**：一旦当前 Task 的验证完成（`task(check)` 通过），或者即将调用 `task(sync)` 提交成果，或者即将结束当前对话前，**AI 必须主动调用 `process(action: "list")` 检查自己启动的临时服务，并逐一调用 `process(action: "stop", id: "...")` 停止！**
 2. **整棵进程树彻底拔除**：`process.stop` 会向整棵子进程组发送 `SIGTERM` 与 `SIGKILL`，杜绝任何僵尸进程或孤儿子进程在后台持续消耗系统资源与电量；
 3. **清理退出记录**：停止后可调用 `process(action: "clear")` 清除已停止的历史记录，保持工作区干净整洁。
+
+---
+
+## 七、项目初始化与存储隔离规范 (用户仅做二选一，AI 全自动自举配置)
+
+当用户在新工作区开启对话、要求初始化项目或切换模式时，**必须严格遵循极简交互准则：不要让用户去改代码或配置文件，用户只做选择，AI 在后台完成所有注入！**
+
+### 1. 模式引导决策流
+若工作区尚未初始化（`.contextos/project.json` 不存在）：
+1. **AI 向用户发起二选一询问**：
+   ```text
+   检测到当前项目尚未初始化 ContextOS。请选择数据存储模式：
+   [1] 纯本地模式（默认）：数据存储在本地 .contextos/，100% 离线隐私安全。
+   [2] 云端协同模式：通过 Cloudflare Edge + D1 进行多端实时同步与跨设备协同。
+   ```
+2. **若用户选择 [1] 纯本地模式**：
+   * AI 调用 `contextos_init(mode: "local", projectId: "contextos")`。
+   * 系统自动在本地 `.contextos/project.json` 标记 `"storage": "local"`。
+   * **隔离保证**：即使系统环境变量设置了全局云端 URL，本地项目也绝对强制走本地 SQLite，杜绝任何数据冲突！
+3. **若用户选择 [2] 云端协同模式**：
+   * 若环境已有 Cloudflare 配置，AI 直接调用 `contextos_init(mode: "cloud", projectId: "contextos")`。
+   * 若尚无配置，AI 向用户输出由 `AI_SETUP.md` 提供的 Cloudflare 一键部署链接，索取 URL + Token 并调用 `contextos_init`。
+
+### 2. 自动化验证
+初始化后，AI 调用 `contextos_doctor` 进行轻量自检，向用户汇报配置就绪后，直接进入 C-D-C-S 正常开发节奏。
+
+### 3. 随时双向无损切换规范
+若用户在对话中提出切换模式要求：
+- 用户说：“把本项目切换到云端协同模式” ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，本地架构数据完整上云；
+- 用户说：“把本项目切回本地纯离线模式” ➔ AI 调用 `contextos_switch(targetMode: "local")`，云端最新数据落盘为本地 SQLite，完全断网离线。
 
 
 

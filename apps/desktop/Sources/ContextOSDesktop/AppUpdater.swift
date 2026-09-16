@@ -124,7 +124,7 @@ public final class AppUpdater: NSObject, ObservableObject {
         if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, !version.isEmpty {
             return version
         }
-        return "2.0.3"
+        return "2.1.0"
     }
 
     public var currentBuildNumber: String {

@@ -3,12 +3,7 @@
   <h1>AI 编码的高精度外骨骼动力装甲</h1>
   <p><strong>通过 MCP 自动管理上下文，实测减少 90%+ 上下文开销。</strong></p>
   <p>解决大项目上下文挤爆与记忆遗忘：以手术刀级 AST 读写代替盲读长文件，以脱敏沙箱隔绝终端日志，以地铁图谱让 AI 秒懂架构。</p>
-  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>下载 macOS App</strong></a> · <a href="#三分钟开始使用">三分钟开始使用</a> · <a href="README.md">English</a></p>
-  <p>
-    <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main" target="_blank">
-      <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
-    </a>
-  </p>
+  <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>下载 macOS App</strong></a> · <a href="#30-秒极速配置ai-自动安装引导">30 秒极速开启</a> · <a href="README.md">English</a></p>
 </div>
 
 ![ContextOS 交互工作流演示](assets/contextos-demo.gif)
@@ -53,11 +48,24 @@ Block 描述真实的物理代码能力（杜绝虚空 Ghost Block）。Chain �
 
 ![节点抽屉与详情查看](assets/readme-reader.png)
 
-## 三分钟开始使用
+## 30 秒极速配置：AI 自动安装引导
 
-ContextOS 提供灵活的运行方式，满足不同开发环境的需求：
+您无需手动编写繁琐的配置文件或命令行。ContextOS 现已支持**面向 AI 智能体的自举安装模式**，用户只做选择，全套配置由 AI 自动完成：
 
-### 方式 A：macOS 桌面端（可视化架构与一键配置）
+> **只需复制下方指令，发送给您的 AI 编程助手（Cursor / Codex / Claude Code / Windsurf / Antigravity）：**  
+> **“请阅读 `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`，检测我的系统环境，为我自动安装并配置好 ContextOS。”**
+
+### AI 将在后台为您自动完成：
+1. **环境与桌面端探测**：若您是 macOS，AI 会询问是否需要安装原生的可视化桌面端（ContextOS.app）；如确认则全自动下载就绪。
+2. **Node 运行时自检**：检测 Node 22+ 环境（或使用 ContextOS.app 内置的独立运行包）。
+3. **存储模式二选一**：询问您偏好**纯本地模式**（100% 离线与隐私）还是**云端协同模式**（边缘多端同步）。若选云端，AI 提供 1-Click 链接并协助填入配置。
+4. **全自动编辑器注入**：依照原生桌面端同等标准，自动检测并注入 **Claude Desktop、Cursor、Antigravity、OpenCode、Codex** 的 MCP 服务与架构规则。
+
+---
+
+## 传统手动安装方式
+
+### 方式 A：macOS 桌面端（可视化架构与手动配置）
 
 从 [GitHub Releases 最新发布页](https://github.com/yubinbin32-ops/ContextOS/releases/latest) 下载对应安装包：
 
@@ -88,31 +96,6 @@ ContextOS 提供灵活的运行方式，满足不同开发环境的需求：
 # 纯命令行直接启动 MCP 服务
 npx -y github:yubinbin32-ops/ContextOS
 ```
-
-### 方式 C：一键部署 ContextOS 云端中枢（Windows / 云端协作 / HTTP 远程 MCP 推荐）
-
-> [!TIP]
-> **适用人群：**
-> 1. **Windows 用户**：桌面端 App 为 macOS 原生设计。Windows 用户无需桌面 App，直接部署云端中枢并通过 **HTTP/SSE 远程 MCP** 直连，拥有 100% 的上下文削减与 C-D-C-S 交付外骨骼能力，无需本地启动 Node 后台。
-> 2. **云端协作与多设备用户**：跨多台电脑、团队成员之间秒级同步空间拓扑图与验收计划。
-> 3. 借助 Cloudflare Workers + D1（边缘 SQLite），无需购买或配置服务器，**纯网页点击 60 秒内拥有永久免费的专属私有云端中枢**。
-
-#### 1. 网页一键部署
-点击下方按钮，Cloudflare 会自动在你的账户中免费创建 D1 数据库并部署 Worker：
-
-<p>
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub" target="_blank">
-    <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
-  </a>
-</p>
-
-*直接部署链接：* [https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub](https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub)
-
-#### 2. 获取云端 URL 与配置鉴权 Token
-1. **获取 URL**：部署完成后，在 Cloudflare Workers 控制台概览页直接复制你的专属域名（例如 `https://contextos-cloud.<your-subdomain>.workers.dev`）。
-2. **配置私有 Token（安全性）**：
-   - 在 Cloudflare 控制台进入 **Workers & Pages** -> 点击进入 **`contextos-cloud`**；
-   - 点击 **设置 (Settings)** -> **变量和机密 (Variables and Secrets)**；
    - 点击 **添加 (Add)**：
      - **变量名称**：`AUTH_TOKEN`
      - **变量值**：自行设置的私密密钥（例如 `sk_ctx_12345678`）。

@@ -20,4 +20,4 @@ assets/截屏*.png
 *.xcuserstate
 .cache/
 .wrangler/
-
+.agents/mcp_config.json

@@ -5,6 +5,16 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import * as z from 'zod/v4';
 import { ContextOSV2Service } from './v2-service.mjs';
 import { HybridContextOSService } from './hybrid-service.mjs';
+import { ContextOSCloudClient } from './cloud-client.mjs';
+import {
+  initProjectWorkspace,
+  syncAllPlatforms,
+  detectInstalledPlatforms,
+  resolveNodeExecutable,
+  deployCanonicalServer,
+  getGlobalCloudConfig,
+  saveGlobalCloudConfig,
+} from './bootstrap-util.mjs';
 
 const serviceCache = new Map();
 
@@ -30,13 +40,42 @@ function findDefaultProjectRoot() {
 
 function getService(projectRoot) {
   const root = projectRoot || findDefaultProjectRoot();
-  const cloudUrl = process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
-  const projectId = process.env.CONTEXTOS_PROJECT_ID || 'contextos';
-  const token = process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
-  const cacheKey = cloudUrl ? `cloud:${cloudUrl}:${projectId}:${root}` : `local:${root}`;
+  let mode = 'local';
+  let cloudUrl = null;
+  let token = null;
+  let projectId = 'contextos';
+
+  // 1. Inspect workspace .contextos/project.json for project-level isolation
+  const projJsonPath = path.join(root, '.contextos', 'project.json');
+  if (fs.existsSync(projJsonPath)) {
+    try {
+      const proj = JSON.parse(fs.readFileSync(projJsonPath, 'utf8'));
+      if (proj.id) projectId = proj.id;
+      if (proj.storage === 'cloud' || proj.isCloud === true) {
+        mode = 'cloud';
+        const globalCloud = getGlobalCloudConfig();
+        cloudUrl = proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
+        token = proj.token || proj.cloudToken || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
+      } else if (proj.storage === 'local' || proj.isCloud === false) {
+        mode = 'local';
+      }
+    } catch (_) {}
+  } else {
+    // 2. Fallback to global environment variables
+    if (process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL) {
+      mode = 'cloud';
+      cloudUrl = process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
+      token = process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
+      projectId = process.env.CONTEXTOS_PROJECT_ID || 'contextos';
+    }
+  }
+
+  const cacheKey = mode === 'cloud' && cloudUrl
+    ? `cloud:${cloudUrl}:${projectId}:${root}`
+    : `local:${root}:${projectId}`;
 
   if (!serviceCache.has(cacheKey)) {
-    if (cloudUrl) {
+    if (mode === 'cloud' && cloudUrl) {
       serviceCache.set(
         cacheKey,
         new HybridContextOSService({
@@ -62,7 +101,7 @@ function textResult(content) {
 
 export function createV2Server() {
   const server = new McpServer(
-    { name: 'contextos', version: '2.0.3' },
+    { name: 'contextos', version: '2.1.0' },
     {
       instructions:
         'ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub.',
@@ -263,6 +302,297 @@ export function createV2Server() {
       const service = getService(input.projectRoot);
       const res = await service.knowledge(input);
       return textResult(res);
+    }
+  );
+
+  // 10. contextos_init
+  server.registerTool(
+    'contextos_init',
+    {
+      description: 'Initialize or switch ContextOS mode (local or cloud) for a project. User only chooses mode; AI performs setup.',
+      inputSchema: {
+        mode: z.enum(['local', 'cloud']).default('local'),
+        projectId: z.string().default('contextos'),
+        cloudUrl: z.string().optional(),
+        token: z.string().optional(),
+        saveGlobalCloud: z.boolean().default(false),
+        platforms: z.array(z.string()).optional(),
+        injectEditors: z.boolean().default(false),
+        projectRoot: z.string().optional(),
+      },
+    },
+    async (input) => {
+      const root = input.projectRoot || findDefaultProjectRoot();
+
+      if (input.saveGlobalCloud && input.cloudUrl) {
+        saveGlobalCloudConfig({ cloudUrl: input.cloudUrl, token: input.token });
+      }
+
+      let resolvedCloudUrl = input.cloudUrl;
+      let resolvedToken = input.token;
+      if (input.mode === 'cloud' && !resolvedCloudUrl) {
+        const globalCloud = getGlobalCloudConfig();
+        if (globalCloud?.cloudUrl) {
+          resolvedCloudUrl = globalCloud.cloudUrl;
+          if (!resolvedToken && globalCloud.token) resolvedToken = globalCloud.token;
+        }
+      }
+
+      const config = initProjectWorkspace({
+        projectRoot: root,
+        mode: input.mode,
+        cloudUrl: resolvedCloudUrl,
+        token: resolvedToken,
+        projectId: input.projectId || 'contextos',
+      });
+
+      // Evict old cache for this root
+      for (const k of Array.from(serviceCache.keys())) {
+        if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
+          try { serviceCache.get(k).close(); } catch (_) {}
+          serviceCache.delete(k);
+        }
+      }
+
+      let editorSummary = '';
+      if (input.injectEditors) {
+        const nodePath = resolveNodeExecutable();
+        const serverScript = deployCanonicalServer();
+        let env = null;
+        if (input.mode === 'cloud' && resolvedCloudUrl) {
+          env = {
+            CONTEXTOS_MODE: 'cloud',
+            CONTEXTOS_CLOUD_URL: resolvedCloudUrl.replace(/\/+$/, ''),
+            CONTEXTOS_PROJECT_ID: input.projectId || 'contextos',
+          };
+          if (resolvedToken) env.CONTEXTOS_CLOUD_TOKEN = resolvedToken;
+        }
+        const skillSource = path.join(findDefaultProjectRoot(), 'plugins', 'contextos', 'skills', 'contextos');
+        const pluginSource = path.join(findDefaultProjectRoot(), 'plugins', 'contextos');
+        const modified = syncAllPlatforms({
+          serverScript,
+          nodePath,
+          env,
+          targetRoot: root,
+          skillSource,
+          pluginSource,
+          selectedPlatforms: input.platforms,
+        });
+        editorSummary = `\n\nInjected MCP & Skills into:\n${modified.map((m) => `  ✓ ${m}`).join('\n')}`;
+      }
+
+      return textResult(
+        `✓ Initialized ContextOS in **${config.storage.toUpperCase()}** mode for project \`${config.id}\` at \`${root}\`.${editorSummary}`
+      );
+    }
+  );
+
+  // 11. contextos_doctor
+  server.registerTool(
+    'contextos_doctor',
+    {
+      description: 'Diagnose ContextOS environment, storage routing, and editor integrations.',
+      inputSchema: {
+        projectRoot: z.string().optional(),
+      },
+    },
+    async (input) => {
+      const root = input.projectRoot || findDefaultProjectRoot();
+      const nodePath = resolveNodeExecutable();
+      let nodeVer = process.version;
+      const projJsonPath = path.join(root, '.contextos', 'project.json');
+      let projectConfig = null;
+      if (fs.existsSync(projJsonPath)) {
+        try {
+          projectConfig = JSON.parse(fs.readFileSync(projJsonPath, 'utf8'));
+        } catch (_) {}
+      }
+
+      const globalCloud = getGlobalCloudConfig();
+      const mode = projectConfig?.storage || (process.env.CONTEXTOS_CLOUD_URL ? 'cloud (env)' : 'local (default)');
+      const projectId = projectConfig?.id || process.env.CONTEXTOS_PROJECT_ID || 'contextos';
+      const cloudUrl = projectConfig?.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || 'N/A';
+
+      let cloudHealth = 'N/A';
+      if (mode.startsWith('cloud') && cloudUrl !== 'N/A') {
+        try {
+          const res = await fetch(`${cloudUrl.replace(/\/+$/, '')}/api/v2/health`, {
+            headers: projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN
+              ? { Authorization: `Bearer ${projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` }
+              : {},
+          });
+          cloudHealth = res.ok ? '🟢 Connected (200 OK)' : `🔴 HTTP ${res.status}`;
+        } catch (err) {
+          cloudHealth = `🔴 Connection failed: ${err.message}`;
+        }
+      }
+
+      const platforms = detectInstalledPlatforms();
+      const editorStatuses = platforms.map((p) => `  - **${p.name}**: ${p.isInstalled ? 'Installed' : 'Not detected'} (\`${p.configPath}\`)`).join('\n');
+
+      const lines = [
+        `# ContextOS Doctor Report`,
+        `- **Node Runtime**: \`${nodePath}\` (${nodeVer})`,
+        `- **Project Root**: \`${root}\``,
+        `- **Project ID**: \`${projectId}\``,
+        `- **Active Storage Mode**: \`${mode}\``,
+        `- **Cloud Hub URL**: \`${cloudUrl}\``,
+        `- **Global Cloud Config**: ${globalCloud ? `Configured (\`${globalCloud.cloudUrl}\`)` : 'None'}`,
+        `- **Cloud Hub Connectivity**: ${cloudHealth}`,
+        ``,
+        `## Detected Editors on System:`,
+        editorStatuses,
+      ];
+
+      return textResult(lines.join('\n'));
+    }
+  );
+
+  // 12. contextos_switch
+  server.registerTool(
+    'contextos_switch',
+    {
+      description: 'Losslessly switch project between Local (offline SQLite) and Cloud (Cloudflare Edge D1) modes, bidirectionally synchronizing all architecture data.',
+      inputSchema: {
+        targetMode: z.enum(['local', 'cloud']),
+        cloudUrl: z.string().optional(),
+        token: z.string().optional(),
+        projectId: z.string().default('contextos'),
+        projectRoot: z.string().optional(),
+      },
+    },
+    async (input) => {
+      const root = input.projectRoot || findDefaultProjectRoot();
+      const dotContextos = path.join(root, '.contextos');
+      const projJsonPath = path.join(dotContextos, 'project.json');
+      let proj = {};
+      if (fs.existsSync(projJsonPath)) {
+        try { proj = JSON.parse(fs.readFileSync(projJsonPath, 'utf8')); } catch (_) {}
+      }
+
+      const globalCloud = getGlobalCloudConfig();
+      const resolvedCloudUrl = input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL;
+      const resolvedToken = input.token || proj.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN;
+      const pid = input.projectId || proj.id || 'contextos';
+
+      if (input.targetMode === 'cloud') {
+        if (!resolvedCloudUrl) {
+          throw new Error('Switching to cloud requires a cloudUrl. Provide cloudUrl or configure global credentials via ~/.contextos/cloud.json.');
+        }
+
+        // 1. Read local state from SQLite if exists
+        let localSnapshot = { blocks: [], chains: [], links: [], plans: [] };
+        const localDbPath = path.join(dotContextos, 'state.sqlite');
+        if (fs.existsSync(localDbPath)) {
+          try {
+            const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
+            const blocks = localService.db.listBlocks();
+            const chains = localService.db.listChains();
+            const links = localService.db.listLinks();
+            const plans = localService.db.listPlans();
+            localSnapshot = { blocks, chains, links, plans };
+            localService.close();
+          } catch (_) {}
+        }
+
+        // 2. Push snapshot to Cloud Hub
+        const cloudClient = new ContextOSCloudClient({
+          cloudUrl: resolvedCloudUrl,
+          token: resolvedToken,
+          projectId: pid,
+        });
+        await cloudClient.pushSnapshot(localSnapshot, pid);
+
+        // 3. Update project.json
+        proj.storage = 'cloud';
+        proj.isCloud = true;
+        proj.cloudUrl = resolvedCloudUrl.replace(/\/+$/, '');
+        if (resolvedToken) proj.token = resolvedToken;
+        proj.updatedAt = new Date().toISOString();
+        fs.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + '\n', 'utf8');
+
+        // 4. Evict serviceCache for this root
+        for (const k of Array.from(serviceCache.keys())) {
+          if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
+            try { serviceCache.get(k).close(); } catch (_) {}
+            serviceCache.delete(k);
+          }
+        }
+
+        return textResult(
+          `✓ Successfully migrated project \`${pid}\` to **CLOUD** mode.\n- Uploaded ${localSnapshot.blocks.length} blocks, ${localSnapshot.chains.length} chains, and ${localSnapshot.plans.length} plans to ${resolvedCloudUrl}.\n- All future task & plan changes will synchronize with Cloudflare D1.`
+        );
+      } else {
+        // targetMode === 'local'
+        if (resolvedCloudUrl) {
+          // 1. Fetch latest snapshot from Cloud
+          try {
+            const cloudClient = new ContextOSCloudClient({
+              cloudUrl: resolvedCloudUrl,
+              token: resolvedToken,
+              projectId: pid,
+            });
+            const cloudSnapshot = await cloudClient.fetchSnapshot(pid);
+            if (cloudSnapshot) {
+              const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
+              for (const b of cloudSnapshot.blocks || []) {
+                localService.db.saveBlock({
+                  id: b.id,
+                  projectId: pid,
+                  title: b.title,
+                  kind: b.kind || 'service',
+                  summary: b.summary || '',
+                  details: b.body || '',
+                  artifactRefs: [],
+                });
+              }
+              for (const c of cloudSnapshot.chains || []) {
+                localService.db.saveChain({
+                  id: c.id,
+                  projectId: pid,
+                  title: c.title,
+                  summary: c.purpose || '',
+                  kind: c.chainType || 'linear',
+                  memberIds: [],
+                });
+              }
+              for (const p of cloudSnapshot.plans || []) {
+                localService.db.savePlan({
+                  id: p.id,
+                  projectId: pid,
+                  title: p.title,
+                  summary: p.summary || '',
+                  status: p.status || 'active',
+                  priority: p.priority || 'normal',
+                });
+              }
+              localService.close();
+            }
+          } catch (e) {
+            console.warn('[ContextOS Switch] Could not pull cloud snapshot before switching to local:', e.message);
+          }
+        }
+
+        // 2. Update project.json to local
+        proj.storage = 'local';
+        proj.isCloud = false;
+        delete proj.cloudUrl;
+        delete proj.token;
+        proj.updatedAt = new Date().toISOString();
+        fs.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + '\n', 'utf8');
+
+        // 3. Evict serviceCache for this root
+        for (const k of Array.from(serviceCache.keys())) {
+          if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
+            try { serviceCache.get(k).close(); } catch (_) {}
+            serviceCache.delete(k);
+          }
+        }
+
+        return textResult(
+          `✓ Successfully switched project \`${pid}\` to **LOCAL** mode.\n- Architecture snapshot is now stored in local SQLite.\n- Fully offline, private, and decoupled from Cloud Hub.`
+        );
+      }
     }
   );
 

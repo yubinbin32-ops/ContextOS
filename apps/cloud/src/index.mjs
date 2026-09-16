@@ -89,7 +89,7 @@ export CONTEXTOS_PROJECT_ID="contextos"</pre>
       return new Response(
         JSON.stringify({
           status: 'ok',
-          version: '2.0.3',
+          version: '2.1.0',
           mode: 'cloud',
           storage: db ? 'd1' : 'ephemeral',
           url: url.origin,
