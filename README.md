@@ -4,6 +4,11 @@
   <p><strong>Auto-governing context via MCP, reducing context window waste by 90%+ in practice.</strong></p>
   <p>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</p>
   <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文文档</a></p>
+  <p>
+    <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main" target="_blank">
+      <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
+    </a>
+  </p>
 </div>
 
 ![ContextOS Interactive Workflow Demo](assets/contextos-demo.gif)
@@ -84,6 +89,22 @@ Download the package matching your environment from [GitHub Releases](https://gi
 npx -y github:yubinbin32-ops/ContextOS
 ```
 
+### Option 3: Deploy ContextOS Cloud Hub (Serverless on Cloudflare)
+
+> [!TIP]
+> **Best for multi-device sync, remote teams, and cloud-hosted architecture graphs.**
+> Deploy your private ContextOS Cloud Hub in under 60 seconds using Cloudflare Workers and D1 SQLite.
+
+1. Click the **Deploy to Cloudflare Workers** button above (or fork this repo).
+2. Follow Cloudflare's prompts to deploy the serverless hub to your Cloudflare account.
+3. Once deployed, get your live Cloud Hub URL (e.g. `https://contextos-cloud.<user>.workers.dev`).
+4. **Connect your Local MCP**:
+   ```bash
+   export CONTEXTOS_MODE="cloud"
+   export CONTEXTOS_CLOUD_URL="https://contextos-cloud.<user>.workers.dev"
+   export CONTEXTOS_PROJECT_ID="my-project"
+   ```
+5. **Connect Desktop App**: In ContextOS Desktop, open the top-left menu, choose **Connect Cloud MCP Project…**, and enter your Cloud Hub URL!
 
 ## Reproducible V2 Benchmark
 

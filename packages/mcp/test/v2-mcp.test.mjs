@@ -186,3 +186,29 @@ test('createV2Server registers all 9 tools', () => {
   // The registered tools are held internally in McpServer
   assert.equal(expectedTools.length, 9);
 });
+
+test('HybridContextOSService runs local commands and handles cloud fallback gracefully', async () => {
+  const { HybridContextOSService } = await import('../src/hybrid-service.mjs');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-hybrid-test-'));
+
+  const hybrid = new HybridContextOSService({
+    cloudUrl: 'http://127.0.0.1:59999', // unreachable port for fallback test
+    token: 'test-token',
+    projectId: 'hybrid-test',
+    projectRoot: tempDir,
+  });
+
+  // 1. runCommand runs locally
+  const receipt = await hybrid.runCommand({ command: 'echo "hybrid local execution"' });
+  assert.equal(receipt.exitCode, 0);
+  assert.ok(receipt.text.includes('hybrid local execution'));
+
+  // 2. osContext falls back to local brief with diagnostic warning when cloud is offline
+  const brief = await hybrid.osContext({ action: 'brief', format: 'markdown' });
+  assert.ok(brief.includes('ContextOS Cloud Unavailable'));
+  assert.ok(brief.includes('ContextOS Project Brief'));
+
+  hybrid.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+

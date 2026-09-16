@@ -41456,6 +41456,191 @@ ${sec.content}`;
   }
 };
 
+// packages/mcp/src/cloud-client.mjs
+var ContextOSCloudClient = class {
+  constructor({ cloudUrl, token, projectId = "contextos", timeoutMs = 15e3 }) {
+    this.cloudUrl = cloudUrl.replace(/\/+$/, "");
+    this.token = token || "";
+    this.projectId = projectId;
+    this.timeoutMs = timeoutMs;
+  }
+  getHeaders() {
+    const headers = {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "x-contextos-project-id": this.projectId
+    };
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+    return headers;
+  }
+  async call(tool, args = {}) {
+    const url = `${this.cloudUrl}/api/v2/call`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          tool,
+          input: {
+            ...args,
+            projectId: args.projectId || this.projectId
+          }
+        }),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Cloud server returned HTTP ${response.status}: ${errorText || response.statusText}`);
+      }
+      const data = await response.json();
+      return data.result ?? data;
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err.name === "AbortError") {
+        throw new Error(`[ContextOS Cloud] Request to ${url} timed out after ${this.timeoutMs}ms.`);
+      }
+      throw new Error(`[ContextOS Cloud Error] Failed to call '${tool}' on cloud hub (${this.cloudUrl}): ${err.message}`);
+    }
+  }
+  async fetchSnapshot(projectId) {
+    const pid = projectId || this.projectId;
+    const url = `${this.cloudUrl}/api/v2/snapshot?projectId=${encodeURIComponent(pid)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: this.getHeaders(),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      if (!response.ok) {
+        throw new Error(`Cloud server returned HTTP ${response.status}: ${response.statusText}`);
+      }
+      return await response.json();
+    } catch (err) {
+      clearTimeout(timeout);
+      throw new Error(`[ContextOS Cloud Error] Failed to fetch snapshot from ${url}: ${err.message}`);
+    }
+  }
+  async checkHealth() {
+    const url = `${this.cloudUrl}/api/v2/health`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5e3);
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: this.getHeaders(),
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+      return response.ok;
+    } catch {
+      clearTimeout(timeout);
+      return false;
+    }
+  }
+};
+
+// packages/mcp/src/hybrid-service.mjs
+var HybridContextOSService = class {
+  constructor({ cloudUrl, token, projectId = "contextos", projectRoot = process.cwd() } = {}) {
+    this.cloudUrl = cloudUrl;
+    this.token = token;
+    this.projectId = projectId;
+    this.projectRoot = projectRoot;
+    this.cloudClient = new ContextOSCloudClient({
+      cloudUrl,
+      token,
+      projectId
+    });
+    this.localService = new ContextOSV2Service({
+      projectRoot,
+      projectId
+    });
+  }
+  close() {
+    this.localService.close();
+  }
+  // ================= 1. os_context =================
+  async osContext(input) {
+    const { action = "brief", format = "markdown" } = input;
+    if (action === "reconcile") {
+      return await this.localService.osContext(input);
+    }
+    try {
+      const cloudRes = await this.cloudClient.call("os_context", input);
+      if (action === "brief" && format === "markdown" && typeof cloudRes === "string") {
+        const header = [
+          `> [!NOTE]`,
+          `> **ContextOS Mode**: \u2601\uFE0F Cloud Connected (\`${this.cloudUrl}\`) | **Project**: \`${this.projectId}\``,
+          `> **Execution**: Local AST & Shell (\`code\`, \`run_command\`) + Cloud Memory (\`plan\`, \`task\`, \`graph\`).`,
+          `> Follow C-D-C-S workflow: Create Plan/Task -> Develop -> Check -> Sync.`,
+          ""
+        ].join("\n");
+        return `${header}
+${cloudRes}`;
+      }
+      return cloudRes;
+    } catch (err) {
+      if (action === "brief") {
+        const warning = [
+          `> [!WARNING]`,
+          `> **ContextOS Cloud Unavailable**: Unable to connect to \`${this.cloudUrl}\`.`,
+          `> Reason: ${err.message}`,
+          `> Falling back to local workspace context. Verify \`CONTEXTOS_CLOUD_URL\` or unset it to run offline.`,
+          ""
+        ].join("\n");
+        const localBrief = await this.localService.osContext(input);
+        return format === "markdown" && typeof localBrief === "string" ? `${warning}
+${localBrief}` : localBrief;
+      }
+      throw err;
+    }
+  }
+  // ================= 2. plan =================
+  async plan(input) {
+    return await this.cloudClient.call("plan", input);
+  }
+  // ================= 3. task =================
+  async task(input) {
+    return await this.cloudClient.call("task", input);
+  }
+  // ================= 4. block =================
+  async block(input) {
+    return await this.cloudClient.call("block", input);
+  }
+  // ================= 5. chain =================
+  async chain(input) {
+    return await this.cloudClient.call("chain", input);
+  }
+  // ================= 6. code (100% Local) =================
+  async code(input) {
+    return await this.localService.code(input);
+  }
+  // ================= 7. run_command (100% Local) =================
+  async runCommand(input) {
+    return await this.localService.runCommand(input);
+  }
+  // ================= 8. process (100% Local) =================
+  async process(input) {
+    return await this.localService.process(input);
+  }
+  // ================= 9. knowledge =================
+  async knowledge(input) {
+    try {
+      return await this.cloudClient.call("knowledge", input);
+    } catch {
+      return await this.localService.knowledge(input);
+    }
+  }
+};
+
 // packages/mcp/src/v2-server.mjs
 var serviceCache = /* @__PURE__ */ new Map();
 function findDefaultProjectRoot() {
@@ -41479,10 +41664,26 @@ function findDefaultProjectRoot() {
 }
 function getService(projectRoot) {
   const root = projectRoot || findDefaultProjectRoot();
-  if (!serviceCache.has(root)) {
-    serviceCache.set(root, new ContextOSV2Service({ projectRoot: root }));
+  const cloudUrl = process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
+  const projectId = process.env.CONTEXTOS_PROJECT_ID || "contextos";
+  const token = process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
+  const cacheKey = cloudUrl ? `cloud:${cloudUrl}:${projectId}:${root}` : `local:${root}`;
+  if (!serviceCache.has(cacheKey)) {
+    if (cloudUrl) {
+      serviceCache.set(
+        cacheKey,
+        new HybridContextOSService({
+          cloudUrl,
+          token,
+          projectId,
+          projectRoot: root
+        })
+      );
+    } else {
+      serviceCache.set(cacheKey, new ContextOSV2Service({ projectRoot: root, projectId }));
+    }
   }
-  return serviceCache.get(root);
+  return serviceCache.get(cacheKey);
 }
 function textResult(content) {
   const text = typeof content === "string" ? content : JSON.stringify(content, null, 2);
@@ -41492,9 +41693,9 @@ function textResult(content) {
 }
 function createV2Server() {
   const server = new McpServer(
-    { name: "contextos", version: "2.0.0" },
+    { name: "contextos", version: "2.0.3" },
     {
-      instructions: "ContextOS V2 is a context operating system for AI coding agents. Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Never create ghost Blocks."
+      instructions: "ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub."
     }
   );
   server.registerTool(

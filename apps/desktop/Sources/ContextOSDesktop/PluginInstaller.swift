@@ -290,12 +290,27 @@ enum PluginInstaller {
             .standardizedFileURL
         let home = FileManager.default.homeDirectoryForCurrentUser
 
+        var cloudEnv: [String: String]? = nil
+        if let root = projectRoot {
+            let projJson = root.appending(path: ".contextos/project.json")
+            if let data = try? Data(contentsOf: projJson),
+               let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+               let isCloud = dict["isCloud"] as? Bool, isCloud,
+               let cloudUrl = dict["cloudUrl"] as? String {
+                cloudEnv = [
+                    "CONTEXTOS_MODE": "cloud",
+                    "CONTEXTOS_CLOUD_URL": cloudUrl,
+                    "CONTEXTOS_PROJECT_ID": (dict["id"] as? String) ?? "contextos"
+                ]
+            }
+        }
+
         switch id {
         case "claude":
             let claudeConfigURL = home.appending(path: "Library/Application Support/Claude/claude_desktop_config.json")
             try? FileManager.default.createDirectory(at: claudeConfigURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             cleanJsonMcp(at: claudeConfigURL)
-            _ = configureJsonMcp(at: claudeConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild)
+            _ = configureJsonMcp(at: claudeConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
 
         case "cursor":
             // 1. Clean old skill and MCP config
@@ -308,14 +323,14 @@ enum PluginInstaller {
 
             // 2. Copy fresh skill and write fresh MCP config
             syncDirectory(from: skillSource, to: userSkillDest)
-            _ = configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild)
+            _ = configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
 
             // 3. Update project root IF .cursor directory already explicitly existed
             if let root = projectRoot {
                 let projectCursorDir = root.appending(path: ".cursor")
                 if FileManager.default.fileExists(atPath: projectCursorDir.path) {
                     cleanJsonMcp(at: projectCursorDir.appending(path: "mcp.json"))
-                    _ = configureJsonMcp(at: projectCursorDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild)
+                    _ = configureJsonMcp(at: projectCursorDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
                 }
             }
 
@@ -330,14 +345,14 @@ enum PluginInstaller {
 
             // 2. Copy fresh skill and write fresh MCP config
             syncDirectory(from: skillSource, to: userSkillDest)
-            _ = configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild)
+            _ = configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
 
             // 3. Update project root IF .agents/mcp_config.json already explicitly existed
             if let root = projectRoot {
                 let projectAgentsConfig = root.appending(path: ".agents/mcp_config.json")
                 if FileManager.default.fileExists(atPath: projectAgentsConfig.path) {
                     cleanJsonMcp(at: projectAgentsConfig)
-                    _ = configureJsonMcp(at: projectAgentsConfig, serverScript: serverScript, version: targetVersion, build: targetBuild)
+                    _ = configureJsonMcp(at: projectAgentsConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
                 }
             }
 
@@ -352,14 +367,14 @@ enum PluginInstaller {
 
             // 2. Copy fresh skill and write fresh MCP config
             syncDirectory(from: skillSource, to: userSkillDest)
-            _ = configureJsonMcp(at: userOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild)
+            _ = configureJsonMcp(at: userOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
 
             // 3. Update project root IF .opencode directory already explicitly existed
             if let root = projectRoot {
                 let projectOpencodeDir = root.appending(path: ".opencode")
                 if FileManager.default.fileExists(atPath: projectOpencodeDir.path) {
                     cleanJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"))
-                    _ = configureJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild)
+                    _ = configureJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
                 }
             }
 
@@ -435,10 +450,10 @@ enum PluginInstaller {
             if let executable = try? codexExecutable() {
                 let installResult = try? run(executable, arguments: ["plugin", "add", "contextos@personal", "--json"])
                 if installResult?.status != 0 {
-                    configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild)
+                    configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
                 }
             } else {
-                configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild)
+                configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
             }
 
         default:
@@ -541,7 +556,7 @@ enum PluginInstaller {
         return "node"
     }
 
-    private static func configureJsonMcp(at configURL: URL, serverScript: String, version: String, build: String) -> Bool {
+    private static func configureJsonMcp(at configURL: URL, serverScript: String, version: String, build: String, env: [String: String]? = nil) -> Bool {
         var json: [String: Any] = [:]
         if FileManager.default.fileExists(atPath: configURL.path),
            let data = try? Data(contentsOf: configURL),
@@ -550,12 +565,16 @@ enum PluginInstaller {
         }
         var mcpServers = json["mcpServers"] as? [String: Any] ?? [:]
         mcpServers.removeValue(forKey: "contextos")
-        mcpServers["contextos"] = [
+        var entry: [String: Any] = [
             "command": nodeExecutablePath(),
             "args": ["--no-warnings=ExperimentalWarning", serverScript],
             "_version": version,
             "_build": build
         ]
+        if let env, !env.isEmpty {
+            entry["env"] = env
+        }
+        mcpServers["contextos"] = entry
         json["mcpServers"] = mcpServers
         guard let outputData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) else {
             return false
@@ -737,7 +756,7 @@ enum PluginInstaller {
         try? cleanedLines.joined(separator: "\n").write(to: configURL, atomically: true, encoding: .utf8)
     }
 
-    private static func configureTomlMcp(at configURL: URL, serverScript: String, version: String, build: String) {
+    private static func configureTomlMcp(at configURL: URL, serverScript: String, version: String, build: String, env: [String: String]? = nil) {
         cleanTomlMcp(at: configURL)
         var content = (try? String(contentsOf: configURL, encoding: .utf8)) ?? ""
         let nodeCmd = nodeExecutablePath()
@@ -751,6 +770,11 @@ enum PluginInstaller {
         CONTEXTOS_VERSION = "\(version)"
         CONTEXTOS_BUILD = "\(build)"
         """
+        if let env {
+            for (k, v) in env.sorted(by: { $0.key < $1.key }) {
+                content += "\n\(k) = \"\(v)\""
+            }
+        }
         try? content.write(to: configURL, atomically: true, encoding: .utf8)
     }
 }

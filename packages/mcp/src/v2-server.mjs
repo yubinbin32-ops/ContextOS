@@ -4,6 +4,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as z from 'zod/v4';
 import { ContextOSV2Service } from './v2-service.mjs';
+import { HybridContextOSService } from './hybrid-service.mjs';
 
 const serviceCache = new Map();
 
@@ -29,10 +30,27 @@ function findDefaultProjectRoot() {
 
 function getService(projectRoot) {
   const root = projectRoot || findDefaultProjectRoot();
-  if (!serviceCache.has(root)) {
-    serviceCache.set(root, new ContextOSV2Service({ projectRoot: root }));
+  const cloudUrl = process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
+  const projectId = process.env.CONTEXTOS_PROJECT_ID || 'contextos';
+  const token = process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
+  const cacheKey = cloudUrl ? `cloud:${cloudUrl}:${projectId}:${root}` : `local:${root}`;
+
+  if (!serviceCache.has(cacheKey)) {
+    if (cloudUrl) {
+      serviceCache.set(
+        cacheKey,
+        new HybridContextOSService({
+          cloudUrl,
+          token,
+          projectId,
+          projectRoot: root,
+        })
+      );
+    } else {
+      serviceCache.set(cacheKey, new ContextOSV2Service({ projectRoot: root, projectId }));
+    }
   }
-  return serviceCache.get(root);
+  return serviceCache.get(cacheKey);
 }
 
 function textResult(content) {
@@ -44,10 +62,10 @@ function textResult(content) {
 
 export function createV2Server() {
   const server = new McpServer(
-    { name: 'contextos', version: '2.0.0' },
+    { name: 'contextos', version: '2.0.3' },
     {
       instructions:
-        'ContextOS V2 is a context operating system for AI coding agents. Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Never create ghost Blocks.',
+        'ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub.',
     }
   );
 

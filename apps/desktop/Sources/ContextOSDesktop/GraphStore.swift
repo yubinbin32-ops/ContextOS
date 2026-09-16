@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CSQLite
 import Foundation
 import SwiftUI
 
@@ -19,6 +20,7 @@ final class GraphStore: ObservableObject {
     }
     @Published private(set) var recentlyChangedRefs: Set<String> = []
     @Published private(set) var errorMessage: String?
+    @Published var showConnectCloudSheet = false
     @Published var settingsPresented = false {
         didSet {
             if settingsPresented {
@@ -145,6 +147,197 @@ final class GraphStore: ObservableObject {
             errorMessage = error.localizedDescription
             Self.log(error, context: url.path)
         }
+    }
+
+    func connectCloudProject(cloudUrl: String, projectId: String, token: String?) async throws {
+        var normalizedUrl = cloudUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedUrl.lowercased().hasPrefix("http://") && !normalizedUrl.lowercased().hasPrefix("https://") {
+            normalizedUrl = "http://" + normalizedUrl
+        }
+        while normalizedUrl.hasSuffix("/") {
+            normalizedUrl.removeLast()
+        }
+
+        guard let serverURL = URL(string: normalizedUrl) else {
+            throw CocoaError(.formatting, userInfo: [NSLocalizedDescriptionKey: "Invalid Cloud URL format"])
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let cloudBase = home.appending(path: ".contextos/cloud_projects/\(projectId)", directoryHint: .isDirectory)
+        let dotContextOS = cloudBase.appending(path: ".contextos", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: dotContextOS, withIntermediateDirectories: true)
+
+        // 1. Write project.json
+        let descriptorURL = dotContextOS.appending(path: "project.json")
+        let descriptorJSON: [String: Any] = [
+            "id": projectId,
+            "name": "\(projectId) (Cloud)",
+            "schemaVersion": 2,
+            "isCloud": true,
+            "cloudUrl": normalizedUrl
+        ]
+        let descriptorData = try JSONSerialization.data(withJSONObject: descriptorJSON, options: [.prettyPrinted, .sortedKeys])
+        try descriptorData.write(to: descriptorURL)
+
+        // 2. Ensure state.sqlite schema exists
+        let dbURL = dotContextOS.appending(path: "state.sqlite")
+        Self.ensureCloudDatabaseSchema(at: dbURL, projectId: projectId, repoRoot: cloudBase.path)
+
+        // 3. Attempt to fetch remote snapshot from cloud hub if available
+        if var comps = URLComponents(url: serverURL.appending(path: "api/v2/snapshot"), resolvingAgainstBaseURL: false) {
+            comps.queryItems = [URLQueryItem(name: "projectId", value: projectId)]
+            if let snapshotReqURL = comps.url {
+                var req = URLRequest(url: snapshotReqURL)
+                req.timeoutInterval = 8
+                if let token, !token.isEmpty {
+                    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
+                req.setValue("application/json", forHTTPHeaderField: "Accept")
+                if let (data, response) = try? await URLSession.shared.data(for: req),
+                   let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
+                    let snapshotCacheURL = dotContextOS.appending(path: "snapshot.json")
+                    try? data.write(to: snapshotCacheURL)
+                }
+            }
+        }
+
+        // 4. Load the cloud project locally
+        await MainActor.run {
+            self.loadProject(at: cloudBase)
+            self.recentProjects = ProjectLocation.recentProjects()
+        }
+    }
+
+    private static func ensureCloudDatabaseSchema(at url: URL, projectId: String, repoRoot: String) {
+        var handle: OpaquePointer?
+        let status = sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil)
+        guard status == SQLITE_OK, let handle else { return }
+        defer { sqlite3_close(handle) }
+
+        let schema = """
+        PRAGMA journal_mode = WAL;
+        PRAGMA foreign_keys = ON;
+
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY,
+          repo_root TEXT NOT NULL,
+          graph_revision INTEGER NOT NULL DEFAULT 0,
+          exported_at TEXT,
+          schema_version INTEGER NOT NULL DEFAULT 2
+        );
+
+        CREATE TABLE IF NOT EXISTS plans (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          priority TEXT NOT NULL DEFAULT 'normal',
+          status TEXT NOT NULL DEFAULT 'active',
+          summary TEXT NOT NULL DEFAULT '',
+          completed_summary TEXT,
+          history_ref TEXT,
+          rule_refs_json TEXT NOT NULL DEFAULT '[]',
+          decision_refs_json TEXT NOT NULL DEFAULT '[]',
+          dependency_refs_json TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS phases (
+          id TEXT NOT NULL,
+          plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+          phase_order INTEGER NOT NULL DEFAULT 0,
+          objective TEXT NOT NULL DEFAULT '',
+          scope TEXT NOT NULL DEFAULT '',
+          deliverables_json TEXT NOT NULL DEFAULT '[]',
+          status TEXT NOT NULL DEFAULT 'pending',
+          task_ids_json TEXT NOT NULL DEFAULT '[]',
+          acceptance_json TEXT NOT NULL DEFAULT '[]',
+          PRIMARY KEY (id, plan_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS checkpoints (
+          id TEXT PRIMARY KEY,
+          plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+          phase_id TEXT,
+          title TEXT NOT NULL,
+          criteria TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'pending',
+          evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+          completed_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS tasks (
+          id TEXT PRIMARY KEY,
+          plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+          phase_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          context_slice_json TEXT NOT NULL DEFAULT '{}',
+          working_set_json TEXT NOT NULL DEFAULT '{}',
+          references_json TEXT NOT NULL DEFAULT '{}',
+          baseline_json TEXT NOT NULL DEFAULT '{}',
+          notes_json TEXT NOT NULL DEFAULT '[]',
+          checks_json TEXT NOT NULL DEFAULT '[]',
+          sync_result_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS blocks (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          kind TEXT NOT NULL DEFAULT 'service',
+          summary TEXT NOT NULL DEFAULT '',
+          details TEXT NOT NULL DEFAULT '',
+          history_json TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS artifact_refs (
+          id TEXT PRIMARY KEY,
+          block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+          path TEXT NOT NULL,
+          symbol TEXT,
+          start_line INTEGER,
+          end_line INTEGER,
+          hash TEXT NOT NULL DEFAULT '',
+          role TEXT NOT NULL DEFAULT 'implementation'
+        );
+
+        CREATE TABLE IF NOT EXISTS chains (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'leaf',
+          member_ids_json TEXT NOT NULL DEFAULT '[]',
+          metadata_json TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS links (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          source_type TEXT NOT NULL,
+          source_id TEXT NOT NULL,
+          target_type TEXT NOT NULL,
+          target_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          label TEXT NOT NULL DEFAULT '',
+          contract TEXT NOT NULL DEFAULT '',
+          health_state TEXT NOT NULL DEFAULT 'healthy',
+          current_revision INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL
+        );
+
+        INSERT OR IGNORE INTO projects (id, repo_root, graph_revision, exported_at, schema_version)
+        VALUES ('\(projectId)', '\(repoRoot)', 0, datetime('now'), 2);
+        """
+
+        sqlite3_exec(handle, schema, nil, nil, nil)
     }
 
     private func saveCurrentProjectViewState() {
@@ -963,6 +1156,7 @@ final class GraphStore: ObservableObject {
             "upstream":"直接上游", "downstream":"直接下游", "memberships":"所在 Chain", "relatedPlans":"关联 Plan", "path":"路径", "revision":"版本",
             "fitNetwork":"适配全图", "focusMode":"聚焦", "exitFocus":"退出聚焦", "isolate":"仅显示关联", "projectRules":"项目规则", "decisions":"架构决策",
             "openProject":"打开项目", "changeProject":"切换项目", "recentProjects":"最近项目", "openProjectHelp":"请选择包含 .contextos/project.json 的项目目录。", "open":"打开",
+            "connectCloudProject":"连接到云端 MCP 项目…", "cloudUrl":"云端服务器地址", "projectId":"项目 ID", "authToken":"访问令牌 (可选)", "connectAndImport":"连接并导入图谱", "connecting":"正在连接云端…", "cloudProject":"云端项目",
             "all":"全部", "verification":"验证", "unassigned":"独立验证", "verified":"已验证", "checkpointsPassed":"检查点通过", "noCheckpoints":"0 检查点", "directBlockWork":"直接 Block 工作", "principle":"原则", "product":"产品", "requirement":"需求", "decision":"决策", "flow":"流程", "ui":"界面", "service":"服务", "function":"函数", "api":"API", "integration":"集成", "data":"数据", "database":"数据库", "risk":"风险", "test":"测试", "checkpoint":"检查点",
             "softwareUpdate":"软件更新", "currentVersion":"当前版本", "checkUpdate":"检查更新", "checkingUpdate":"正在检查更新…", "upToDate":"当前已是最新版本", "newVersionFound":"发现新版本", "updateNow":"立即更新", "updating":"正在处理更新…", "restartAndUpdate":"重启并完成更新", "viewReleaseNotes":"发行说明", "hideReleaseNotes":"收起说明", "selectEdition":"安装包规格", "fullEdition":"全功能版 (内置 Node 22 · 推荐)", "standardEdition":"轻量版 (依赖系统 Node)", "openInBrowser":"在浏览器中查看", "openReleasePage":"打开 GitHub Release 页面", "gitRepository":"Git 仓库", "selectVersion":"选择更新版本", "retry":"重试", "devModeUpdateNotice":"开发模式下已解压至缓存目录", "cancelDownload":"取消下载", "releaseNotes":"更新日志", "downloadingUpdate":"正在下载更新…"
         ]
@@ -978,6 +1172,7 @@ final class GraphStore: ObservableObject {
             "upstream":"Direct Upstream", "downstream":"Direct Downstream", "memberships":"Chain Memberships", "relatedPlans":"Related Plans", "path":"Path", "revision":"Revision",
             "fitNetwork":"Fit Network", "focusMode":"Focus", "exitFocus":"Exit Focus", "isolate":"Related Only", "projectRules":"Project Rules", "decisions":"Architecture Decisions",
             "openProject":"Open Project", "changeProject":"Change Project", "recentProjects":"Recent Projects", "openProjectHelp":"Choose a project folder containing .contextos/project.json.", "open":"Open",
+            "connectCloudProject":"Connect Cloud MCP Project…", "cloudUrl":"Cloud Server URL", "projectId":"Project ID", "authToken":"Auth Token (Optional)", "connectAndImport":"Connect & Import Graph", "connecting":"Connecting to Cloud…", "cloudProject":"Cloud Project",
             "all":"All", "verification":"Verification", "unassigned":"Standalone checks", "verified":"Verified", "checkpointsPassed":"checkpoints passed", "noCheckpoints":"0 Checkpoints", "directBlockWork":"Direct Block work", "principle":"Principle", "product":"Product", "requirement":"Requirement", "decision":"Decision", "flow":"Flow", "ui":"UI", "service":"Service", "function":"Function", "api":"API", "integration":"Integration", "data":"Data", "database":"Database", "risk":"Risk", "test":"Test", "checkpoint":"Checkpoint",
             "softwareUpdate":"SOFTWARE UPDATE", "currentVersion":"Current Version", "checkUpdate":"Check for Updates", "checkingUpdate":"Checking for updates…", "upToDate":"ContextOS is up to date", "newVersionFound":"New Version Available", "updateNow":"Update Now", "updating":"Processing update…", "restartAndUpdate":"Restart & Install", "viewReleaseNotes":"Release Notes", "hideReleaseNotes":"Hide Notes", "selectEdition":"Package Edition", "fullEdition":"Full (Bundled Node 22 · Recommended)", "standardEdition":"Standard Lite (Requires Node.js)", "openInBrowser":"View in Browser", "openReleasePage":"Open GitHub Release", "gitRepository":"Git Repository", "selectVersion":"Select Version", "retry":"Retry", "devModeUpdateNotice":"Extracted to cache directory in development mode", "cancelDownload":"Cancel", "releaseNotes":"Release Notes", "downloadingUpdate":"Downloading update…"
         ]

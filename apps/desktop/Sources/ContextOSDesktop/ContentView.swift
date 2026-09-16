@@ -40,6 +40,7 @@ struct ContentView: View {
         .background(ContextOSTheme.canvas)
         .preferredColorScheme(preferredColorScheme)
         .sheet(isPresented: $store.settingsPresented) { SettingsView(store: store) }
+        .sheet(isPresented: $store.showConnectCloudSheet) { ConnectCloudProjectView(store: store) }
         .task(id: store.projectRoot) {
             let root = store.projectRoot
             var initialized = false
@@ -240,24 +241,36 @@ struct ContentView: View {
 
     private var projectHeader: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .center, spacing: 8) {
+            let isCloudProject = store.snapshot.project.name.contains("(Cloud)") || store.projectRoot.contains(".contextos/cloud_projects")
+            HStack(alignment: .center, spacing: 6) {
                 Text(store.snapshot.project.name)
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(ContextOSTheme.ink)
                     .lineLimit(1)
+                if isCloudProject {
+                    Image(systemName: "cloud.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(ContextOSTheme.focus)
+                }
                 Spacer()
                 Menu {
                     if !store.recentProjects.isEmpty {
                         Section(store.text("recentProjects")) {
                             ForEach(store.recentProjects) { project in
                                 Button { store.openProject(project) } label: {
-                                    project.path == store.projectRoot ? Label(project.name, systemImage: "checkmark") : Label(project.name, systemImage: "folder")
+                                    let isCurrent = project.path == store.projectRoot
+                                    let isCloud = project.name.contains("(Cloud)") || project.path.contains(".contextos/cloud_projects")
+                                    Label(
+                                        project.name,
+                                        systemImage: isCurrent ? "checkmark" : (isCloud ? "cloud" : "folder")
+                                    )
                                 }
                             }
                         }
                         Divider()
                     }
                     Button(store.text("openProject")) { store.chooseProject() }
+                    Button(store.text("connectCloudProject")) { store.showConnectCloudSheet = true }
                 } label: {
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 10, weight: .semibold)).foregroundStyle(ContextOSTheme.muted)

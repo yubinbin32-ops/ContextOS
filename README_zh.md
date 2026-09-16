@@ -4,6 +4,11 @@
   <p><strong>通过 MCP 自动管理上下文，实测减少 90%+ 上下文开销。</strong></p>
   <p>解决大项目上下文挤爆与记忆遗忘：以手术刀级 AST 读写代替盲读长文件，以脱敏沙箱隔绝终端日志，以地铁图谱让 AI 秒懂架构。</p>
   <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>下载 macOS App</strong></a> · <a href="#三分钟开始使用">三分钟开始使用</a> · <a href="README.md">English</a></p>
+  <p>
+    <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main" target="_blank">
+      <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
+    </a>
+  </p>
 </div>
 
 ![ContextOS 交互工作流演示](assets/contextos-demo.gif)
@@ -84,6 +89,22 @@ ContextOS 提供灵活的运行方式，满足不同开发环境的需求：
 npx -y github:yubinbin32-ops/ContextOS
 ```
 
+### 方式 C：一键部署 ContextOS 云端中枢（基于 Cloudflare Workers 免费无服务器）
+
+> [!TIP]
+> **适合多设备协作、远程开发及多人共享架构图谱与计划状态。**
+> 借助 Cloudflare Workers + D1（边缘 SQLite），无需自建服务器，60 秒内拥有专属的免费私有云端中枢。
+
+1. 点击顶部的 **Deploy to Cloudflare Workers** 按钮（或 Fork 本仓库）。
+2. 根据 Cloudflare 引导授权并一键部署到你自己的 Cloudflare 账号。
+3. 部署完成后，获得你的专属云端中枢域名（如 `https://contextos-cloud.<user>.workers.dev`）。
+4. **本地 MCP 零感连接**：
+   ```bash
+   export CONTEXTOS_MODE="cloud"
+   export CONTEXTOS_CLOUD_URL="https://contextos-cloud.<user>.workers.dev"
+   export CONTEXTOS_PROJECT_ID="my-project"
+   ```
+5. **桌面 App 一键连接**：在 ContextOS 桌面端左上角菜单点击 **“连接到云端 MCP 项目…”**，粘贴你的云端域名，即可跨设备无缝加载架构图与 C-D-C-S 计划进度！
 
 ## 实测 V2 上下文节省基准
 
