@@ -62,15 +62,50 @@ function checkAuth(request, env) {
 }
 
 // Execute a ContextOS tool operation
+async function seedStarterProjectIfNeeded(db, projectId) {
+  if (!db) return;
+  try {
+    const existing = await db.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first();
+    if (existing) return;
+
+    const now = new Date().toISOString();
+    await db.prepare('INSERT OR REPLACE INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, ?, ?, ?)')
+      .bind(projectId, '', 1, now, 2).run();
+
+    const planId = `plan-init-${Date.now().toString(36)}`;
+    await db.prepare('INSERT OR REPLACE INTO plans (id, project_id, title, priority, status, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(planId, projectId, 'System Architecture & Baseline Setup', 'high', 'active', 'Initial spatial architecture and baseline milestone', now, now).run();
+
+    const b1 = 'block-api-gateway';
+    const b2 = 'block-core-service';
+    await db.prepare('INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(b1, projectId, 'API Gateway & MCP Interface', 'gateway', 'External protocol entrypoint and client integration', '', now, now).run();
+    await db.prepare('INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(b2, projectId, 'Core Domain Service', 'service', 'Core domain business logic and data processing', '', now, now).run();
+
+    const c1 = 'chain-main-flow';
+    await db.prepare('INSERT OR REPLACE INTO chains (id, project_id, title, summary, kind, member_ids_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(c1, projectId, 'Main Request Pipeline', 'End-to-end execution flow from API to Core Domain', 'linear', JSON.stringify([b1, b2]), now, now).run();
+
+    const l1 = `link-${Date.now().toString(36)}`;
+    await db.prepare('INSERT OR REPLACE INTO links (id, project_id, from_id, to_id, kind, reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(l1, projectId, b1, b2, 'depends_on', 'Gateway invokes core service', now, now).run();
+  } catch (err) {
+    console.error('Error seeding starter project:', err);
+  }
+}
+
 async function executeTool(tool, input = {}, projectId = 'contextos', db) {
   let result = '';
+  await seedStarterProjectIfNeeded(db, projectId);
 
   if (tool === 'os_context') {
     const action = input.action || 'brief';
     if (action === 'brief') {
       const countPlans = db ? (await db.prepare('SELECT count(*) as c FROM plans WHERE project_id = ?').bind(projectId).first())?.c ?? 0 : 0;
       const countBlocks = db ? (await db.prepare('SELECT count(*) as c FROM blocks WHERE project_id = ?').bind(projectId).first())?.c ?? 0 : 0;
-      result = `# ContextOS Cloud Hub Brief (${projectId})\n\n- Plans: ${countPlans}\n- Blocks: ${countBlocks}\n- Storage: Cloudflare D1\n- Serverless Edge: Active\n\nAI Coding agent connected via remote MCP over HTTP. Follow the C-D-C-S workflow.`;
+      const countChains = db ? (await db.prepare('SELECT count(*) as c FROM chains WHERE project_id = ?').bind(projectId).first())?.c ?? 0 : 0;
+      result = `# ContextOS Cloud Hub Brief (${projectId})\n\n- Plans: ${countPlans}\n- Blocks: ${countBlocks}\n- Chains: ${countChains}\n- Storage: Cloudflare D1\n- Serverless Edge: Active\n\nAI Coding agent connected via remote MCP over HTTP. Follow the C-D-C-S workflow.`;
     } else if (action === 'search' && db) {
       const q = `%${input.query || ''}%`;
       const blocks = (await db.prepare('SELECT id, title, kind, summary FROM blocks WHERE project_id = ? AND (title LIKE ? OR summary LIKE ?) LIMIT 10').bind(projectId, q, q).all()).results || [];
@@ -81,17 +116,17 @@ async function executeTool(tool, input = {}, projectId = 'contextos', db) {
     }
   } else if (tool === 'plan') {
     const action = input.action || 'list';
-    if (action === 'create' && input.planData && db) {
-      const p = input.planData;
+    if (action === 'create' && db) {
+      const p = input.planData || input;
       const now = new Date().toISOString();
       const planId = p.id || `plan-${Date.now()}`;
       await db.prepare('INSERT OR REPLACE INTO projects (id, repo_root, exported_at) VALUES (?, ?, ?)')
         .bind(projectId, '', now).run();
-      await db.prepare('INSERT OR REPLACE INTO plans (id, project_id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(planId, projectId, p.title || 'Untitled Plan', p.status || 'active', now, now).run();
+      await db.prepare('INSERT OR REPLACE INTO plans (id, project_id, title, priority, status, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(planId, projectId, p.title || 'Untitled Plan', p.priority || 'normal', p.status || 'active', p.summary || '', now, now).run();
       result = { id: planId, status: 'created', title: p.title };
     } else if (action === 'list' && db) {
-      const rows = (await db.prepare('SELECT * FROM plans WHERE project_id = ?').bind(projectId).all()).results || [];
+      const rows = (await db.prepare('SELECT * FROM plans WHERE project_id = ? ORDER BY created_at DESC').bind(projectId).all()).results || [];
       result = rows;
     } else {
       result = `Plan action '${action}' executed on cloud hub.`;
@@ -101,18 +136,48 @@ async function executeTool(tool, input = {}, projectId = 'contextos', db) {
     result = `Task '${input.id || 'draft'}' action '${action}' synchronized to cloud hub.`;
   } else if (tool === 'block') {
     const action = input.action || 'list';
-    if (action === 'bind' && input.id && db) {
-      const now = new Date().toISOString();
-      await db.prepare('INSERT OR REPLACE INTO blocks (id, project_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-        .bind(input.id, projectId, input.id, now, now).run();
-      result = `Block '${input.id}' bound on cloud hub.`;
+    if ((action === 'bind' || action === 'create') && db) {
+      const b = input.blockData || input;
+      const blockId = b.id || input.id;
+      if (blockId) {
+        const now = new Date().toISOString();
+        await db.prepare('INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(blockId, projectId, b.title || blockId, b.kind || 'service', b.summary || '', b.details || '', now, now).run();
+        result = `Block '${blockId}' bound on cloud hub.`;
+      } else {
+        result = 'Missing block id';
+      }
     } else if (db) {
-      result = (await db.prepare('SELECT * FROM blocks WHERE project_id = ?').bind(projectId).all()).results || [];
+      result = (await db.prepare('SELECT * FROM blocks WHERE project_id = ? ORDER BY title').bind(projectId).all()).results || [];
     } else {
       result = [];
     }
   } else if (tool === 'chain') {
-    result = `Chain operation executed on cloud hub.`;
+    const action = input.action || 'list';
+    if ((action === 'compose' || action === 'create') && db) {
+      const c = input.chainData || input;
+      const chainId = c.id || input.id;
+      if (chainId) {
+        const now = new Date().toISOString();
+        const memberIds = JSON.stringify(c.memberIds || []);
+        await db.prepare('INSERT OR REPLACE INTO chains (id, project_id, title, summary, kind, member_ids_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(chainId, projectId, c.title || chainId, c.summary || '', c.kind || 'leaf', memberIds, now, now).run();
+        result = `Chain '${chainId}' composed on cloud hub.`;
+      } else {
+        result = 'Missing chain id';
+      }
+    } else if (action === 'link' && db) {
+      const l = input.linkData || input;
+      const linkId = l.id || `link-${Date.now().toString(36)}`;
+      const now = new Date().toISOString();
+      await db.prepare('INSERT OR REPLACE INTO links (id, project_id, from_id, to_id, kind, reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(linkId, projectId, l.fromId || l.sourceId, l.toId || l.targetId, l.kind || 'depends_on', l.reason || l.label || '', now, now).run();
+      result = `Link '${linkId}' created between '${l.fromId || l.sourceId}' and '${l.toId || l.targetId}'.`;
+    } else if (db) {
+      result = (await db.prepare('SELECT * FROM chains WHERE project_id = ? ORDER BY id').bind(projectId).all()).results || [];
+    } else {
+      result = [];
+    }
   } else if (tool === 'knowledge') {
     result = `Knowledge rule retrieved from cloud hub.`;
   } else {
@@ -460,6 +525,9 @@ export default {
     // 6. Snapshot export (/api/v2/snapshot)
     if (url.pathname === '/api/v2/snapshot') {
       const projectId = url.searchParams.get('projectId') || 'contextos';
+      if (db) {
+        await seedStarterProjectIfNeeded(db, projectId);
+      }
       let snapshot = {
         project: { id: projectId, name: `${projectId} (Cloud)`, root: '', graphRevision: 1 },
         changeSequence: 1,
