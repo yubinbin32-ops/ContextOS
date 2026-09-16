@@ -89,11 +89,11 @@ Download the package matching your environment from [GitHub Releases](https://gi
 npx -y github:yubinbin32-ops/ContextOS
 ```
 
-### Option 3: Deploy ContextOS Cloud Hub (Recommended for Windows / Cloud Sync / Pure CLI)
+### Option 3: Deploy ContextOS Cloud Hub (Recommended for Windows / Cloud Sync / Remote MCP)
 
 > [!TIP]
 > **Target Audience:**
-> 1. **Windows Users**: The desktop App is natively tailored for macOS. Windows users can run headless with the Cloud Hub + local MCP plugin, enjoying 100% of the context reduction and C-D-C-S workflow without needing a desktop GUI.
+> 1. **Windows Users**: The desktop App is natively tailored for macOS. Windows users can run headless with the Cloud Hub and connect via **Remote MCP over HTTP**, enjoying 100% of the context reduction and C-D-C-S workflow without needing a desktop GUI or local Node server.
 > 2. **Cloud Sync & Team Collaboration**: Sync plans, tasks, and architectural graphs across multiple machines or teams.
 > 3. Powered by Cloudflare Workers + D1 (Edge SQLite) — **100% free serverless architecture deployed in 60 seconds with zero servers to manage**.
 
@@ -101,16 +101,42 @@ npx -y github:yubinbin32-ops/ContextOS
 Click the button below to deploy the serverless hub directly to your Cloudflare account (Cloudflare will automatically provision the D1 database):
 
 <p>
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main" target="_blank">
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub" target="_blank">
     <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
   </a>
 </p>
 
-Once deployed, copy your live Cloud Hub URL (e.g. `https://contextos-cloud.<user>.workers.dev`).
+*Direct deployment link:* [https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub](https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub)
 
-#### 2. Configure MCP in Your AI Editor / CLI
-In Cursor, Codex, Claude Code, or Windsurf's MCP configuration, set the cloud hub variables:
+#### 2. Obtain Your Cloud URL & Set Auth Token
+1. **Get your Cloud URL**: Once deployment finishes, copy your live Cloud Hub URL from the Cloudflare Workers overview (e.g. `https://contextos-cloud.<your-subdomain>.workers.dev`).
+2. **Configure your Token (Security)**:
+   - In the Cloudflare Dashboard, go to **Workers & Pages** -> select **`contextos-cloud`**.
+   - Navigate to **Settings** -> **Variables and Secrets**.
+   - Click **Add** and define:
+     - **Variable Name:** `AUTH_TOKEN`
+     - **Value:** Any secret key you choose (e.g. `sk_ctx_12345678`).
+     - *(Optional: If `AUTH_TOKEN` is left blank, the hub runs in open access mode).*
 
+#### 3. Connect MCP via HTTP (Cursor / Claude / Windsurf)
+No local Node process needed! Connect your AI editor directly to the cloud hub via standard HTTP/SSE:
+
+##### In Cursor / Windsurf / Claude Desktop (`mcp.json`):
+```json
+{
+  "mcpServers": {
+    "contextos": {
+      "url": "https://contextos-cloud.<your-subdomain>.workers.dev/sse",
+      "headers": {
+        "Authorization": "Bearer <YOUR_TOKEN>"
+      }
+    }
+  }
+}
+```
+*(In Cursor: Open **Settings -> Features -> MCP -> Add Server**, set Type to `SSE`, enter the URL `.../sse`, and add the `Authorization` header).*
+
+##### Alternative: Local STDIO Bridge (for CLI tools only supporting local commands):
 ```json
 {
   "mcpServers": {
@@ -119,17 +145,20 @@ In Cursor, Codex, Claude Code, or Windsurf's MCP configuration, set the cloud hu
       "args": ["./plugins/contextos/server/contextos-mcp.mjs"],
       "env": {
         "CONTEXTOS_MODE": "cloud",
-        "CONTEXTOS_CLOUD_URL": "https://contextos-cloud.<user>.workers.dev",
+        "CONTEXTOS_CLOUD_URL": "https://contextos-cloud.<your-subdomain>.workers.dev",
+        "CONTEXTOS_CLOUD_TOKEN": "<YOUR_TOKEN>",
         "CONTEXTOS_PROJECT_ID": "my-project"
       }
     }
   }
 }
 ```
-*Alternatively, export in your terminal: `export CONTEXTOS_CLOUD_URL="https://..."`*
 
-#### 3. Connect & Sync in Desktop App
-If you use ContextOS Desktop on macOS, click the top-left project menu -> **"Connect Cloud MCP Project…"**, paste your Cloud Hub URL, and watch your spatial architecture graph and plans synchronize live!
+#### 4. Connect & Sync in Desktop App
+If you use the ContextOS macOS Desktop App:
+1. Click the top-left project switcher -> **“Connect Cloud MCP Project…”**.
+2. Enter your **Cloud Hub URL** (`https://contextos-cloud.<your-subdomain>.workers.dev`), **Project ID**, and optional **Auth Token**.
+3. Click **Connect & Sync** to immediately render and synchronize the spatial architecture graph and plan progress!
 
 ## Reproducible V2 Benchmark
 

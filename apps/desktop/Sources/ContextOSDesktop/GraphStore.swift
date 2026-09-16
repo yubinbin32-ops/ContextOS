@@ -169,13 +169,16 @@ final class GraphStore: ObservableObject {
 
         // 1. Write project.json
         let descriptorURL = dotContextOS.appending(path: "project.json")
-        let descriptorJSON: [String: Any] = [
+        var descriptorJSON: [String: Any] = [
             "id": projectId,
             "name": "\(projectId) (Cloud)",
             "schemaVersion": 2,
             "isCloud": true,
             "cloudUrl": normalizedUrl
         ]
+        if let token, !token.isEmpty {
+            descriptorJSON["token"] = token
+        }
         let descriptorData = try JSONSerialization.data(withJSONObject: descriptorJSON, options: [.prettyPrinted, .sortedKeys])
         try descriptorData.write(to: descriptorURL)
 

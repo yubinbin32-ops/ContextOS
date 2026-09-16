@@ -3,6 +3,10 @@ main = "worker.js"
 compatibility_date = "2025-03-01"
 compatibility_flags = ["nodejs_compat"]
 
+[vars]
+# Optional bearer token for authentication. Leave empty for open access or set your secret.
+AUTH_TOKEN = ""
+
 [[d1_databases]]
 binding = "DB"
 database_name = "contextos-db"

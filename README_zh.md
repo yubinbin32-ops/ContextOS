@@ -89,28 +89,54 @@ ContextOS 提供灵活的运行方式，满足不同开发环境的需求：
 npx -y github:yubinbin32-ops/ContextOS
 ```
 
-### 方式 C：一键部署 ContextOS 云端中枢（Windows / 云端协作 / 纯 CLI 推荐）
+### 方式 C：一键部署 ContextOS 云端中枢（Windows / 云端协作 / HTTP 远程 MCP 推荐）
 
 > [!TIP]
 > **适用人群：**
-> 1. **Windows 用户**：目前桌面 App 为 macOS 原生打造，Windows 用户无需桌面 App，通过云端中枢 + 本地 AI 插件即可拥有 100% 的上下文削减与 C-D-C-S 外骨骼能力；
-> 2. **云端协作与多端用户**：跨设备开发、团队共享同一套架构拓扑与验收计划；
-> 3. 借助 Cloudflare Workers + D1（边缘 SQLite），无需购买服务器，**纯网页点击 60 秒内拥有永久免费的私有云端中枢**。
+> 1. **Windows 用户**：桌面端 App 为 macOS 原生设计。Windows 用户无需桌面 App，直接部署云端中枢并通过 **HTTP/SSE 远程 MCP** 直连，拥有 100% 的上下文削减与 C-D-C-S 交付外骨骼能力，无需本地启动 Node 后台。
+> 2. **云端协作与多设备用户**：跨多台电脑、团队成员之间秒级同步空间拓扑图与验收计划。
+> 3. 借助 Cloudflare Workers + D1（边缘 SQLite），无需购买或配置服务器，**纯网页点击 60 秒内拥有永久免费的专属私有云端中枢**。
 
 #### 1. 网页一键部署
 点击下方按钮，Cloudflare 会自动在你的账户中免费创建 D1 数据库并部署 Worker：
 
 <p>
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main" target="_blank">
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub" target="_blank">
     <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
   </a>
 </p>
 
-部署完成后，在 Cloudflare 控制台直接获得你的专属云端域名（例如 `https://contextos-cloud.<user>.workers.dev`）。
+*直接部署链接：* [https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub](https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub)
 
-#### 2. 在对应的 AI 编辑器 / CLI 中配置 MCP 插件
-在 Cursor、Codex、Claude Code 或 Windsurf 的 MCP 配置文件中加入云端中枢环境变量：
+#### 2. 获取云端 URL 与配置鉴权 Token
+1. **获取 URL**：部署完成后，在 Cloudflare Workers 控制台概览页直接复制你的专属域名（例如 `https://contextos-cloud.<your-subdomain>.workers.dev`）。
+2. **配置私有 Token（安全性）**：
+   - 在 Cloudflare 控制台进入 **Workers & Pages** -> 点击进入 **`contextos-cloud`**；
+   - 点击 **设置 (Settings)** -> **变量和机密 (Variables and Secrets)**；
+   - 点击 **添加 (Add)**：
+     - **变量名称**：`AUTH_TOKEN`
+     - **变量值**：自行设置的私密密钥（例如 `sk_ctx_12345678`）。
+     - *(注：若未配置 `AUTH_TOKEN`，中枢将处于开放访问模式，方便快速体验)。*
 
+#### 3. 通过 HTTP 直连 MCP（Cursor / Windsurf / Claude Desktop）
+无需本地运行 Node 脚本！在 AI 编辑器中配置标准 HTTP / SSE 类型的远程 MCP 服务：
+
+##### 在 Cursor / Windsurf / Claude Desktop (`mcp.json`)：
+```json
+{
+  "mcpServers": {
+    "contextos": {
+      "url": "https://contextos-cloud.<your-subdomain>.workers.dev/sse",
+      "headers": {
+        "Authorization": "Bearer <YOUR_TOKEN>"
+      }
+    }
+  }
+}
+```
+*(在 Cursor 中操作：打开 **Settings -> Features -> MCP -> Add Server**，Type 选择 `SSE`，输入 URL `.../sse`，并在 Headers 中填入 `Authorization` 即可)*。
+
+##### 备用方式：本地 STDIO 桥接（针对仅支持本地命令行运行的 CLI）：
 ```json
 {
   "mcpServers": {
@@ -119,17 +145,20 @@ npx -y github:yubinbin32-ops/ContextOS
       "args": ["./plugins/contextos/server/contextos-mcp.mjs"],
       "env": {
         "CONTEXTOS_MODE": "cloud",
-        "CONTEXTOS_CLOUD_URL": "https://contextos-cloud.<user>.workers.dev",
+        "CONTEXTOS_CLOUD_URL": "https://contextos-cloud.<your-subdomain>.workers.dev",
+        "CONTEXTOS_CLOUD_TOKEN": "<YOUR_TOKEN>",
         "CONTEXTOS_PROJECT_ID": "my-project"
       }
     }
   }
 }
 ```
-*也可以在终端环境变量中直接指定：`export CONTEXTOS_CLOUD_URL="https://..."`*
 
-#### 3. 在桌面 App 左上角一键连接同步
-如果你使用 macOS 桌面 App，打开 ContextOS，点击左上角项目切换菜单 -> **“连接到云端 MCP 项目…”**，粘贴你的云端域名，全套空间架构图与计划状态秒级加载呈现，随时双向同步！
+#### 4. 在桌面 App 左上角一键连接同步
+如果你使用 macOS 桌面 App：
+1. 打开 ContextOS，点击左上角项目切换菜单 -> **“连接到云端 MCP 项目…”**；
+2. 输入 **云端中枢 URL**（`https://contextos-cloud.<your-subdomain>.workers.dev`）、**项目标识** 以及可选的 **Auth Token**；
+3. 点击 **连接并同步**，全套空间架构图与计划状态秒级加载呈现，随时双向同步！
 
 ## 实测 V2 上下文节省基准
 
