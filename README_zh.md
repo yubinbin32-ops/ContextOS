@@ -89,22 +89,47 @@ ContextOS 提供灵活的运行方式，满足不同开发环境的需求：
 npx -y github:yubinbin32-ops/ContextOS
 ```
 
-### 方式 C：一键部署 ContextOS 云端中枢（基于 Cloudflare Workers 免费无服务器）
+### 方式 C：一键部署 ContextOS 云端中枢（Windows / 云端协作 / 纯 CLI 推荐）
 
 > [!TIP]
-> **适合多设备协作、远程开发及多人共享架构图谱与计划状态。**
-> 借助 Cloudflare Workers + D1（边缘 SQLite），无需自建服务器，60 秒内拥有专属的免费私有云端中枢。
+> **适用人群：**
+> 1. **Windows 用户**：目前桌面 App 为 macOS 原生打造，Windows 用户无需桌面 App，通过云端中枢 + 本地 AI 插件即可拥有 100% 的上下文削减与 C-D-C-S 外骨骼能力；
+> 2. **云端协作与多端用户**：跨设备开发、团队共享同一套架构拓扑与验收计划；
+> 3. 借助 Cloudflare Workers + D1（边缘 SQLite），无需购买服务器，**纯网页点击 60 秒内拥有永久免费的私有云端中枢**。
 
-1. 点击顶部的 **Deploy to Cloudflare Workers** 按钮（或 Fork 本仓库）。
-2. 根据 Cloudflare 引导授权并一键部署到你自己的 Cloudflare 账号。
-3. 部署完成后，获得你的专属云端中枢域名（如 `https://contextos-cloud.<user>.workers.dev`）。
-4. **本地 MCP 零感连接**：
-   ```bash
-   export CONTEXTOS_MODE="cloud"
-   export CONTEXTOS_CLOUD_URL="https://contextos-cloud.<user>.workers.dev"
-   export CONTEXTOS_PROJECT_ID="my-project"
-   ```
-5. **桌面 App 一键连接**：在 ContextOS 桌面端左上角菜单点击 **“连接到云端 MCP 项目…”**，粘贴你的云端域名，即可跨设备无缝加载架构图与 C-D-C-S 计划进度！
+#### 1. 网页一键部署
+点击下方按钮，Cloudflare 会自动在你的账户中免费创建 D1 数据库并部署 Worker：
+
+<p>
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main" target="_blank">
+    <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers" />
+  </a>
+</p>
+
+部署完成后，在 Cloudflare 控制台直接获得你的专属云端域名（例如 `https://contextos-cloud.<user>.workers.dev`）。
+
+#### 2. 在对应的 AI 编辑器 / CLI 中配置 MCP 插件
+在 Cursor、Codex、Claude Code 或 Windsurf 的 MCP 配置文件中加入云端中枢环境变量：
+
+```json
+{
+  "mcpServers": {
+    "contextos": {
+      "command": "node",
+      "args": ["./plugins/contextos/server/contextos-mcp.mjs"],
+      "env": {
+        "CONTEXTOS_MODE": "cloud",
+        "CONTEXTOS_CLOUD_URL": "https://contextos-cloud.<user>.workers.dev",
+        "CONTEXTOS_PROJECT_ID": "my-project"
+      }
+    }
+  }
+}
+```
+*也可以在终端环境变量中直接指定：`export CONTEXTOS_CLOUD_URL="https://..."`*
+
+#### 3. 在桌面 App 左上角一键连接同步
+如果你使用 macOS 桌面 App，打开 ContextOS，点击左上角项目切换菜单 -> **“连接到云端 MCP 项目…”**，粘贴你的云端域名，全套空间架构图与计划状态秒级加载呈现，随时双向同步！
 
 ## 实测 V2 上下文节省基准
 
