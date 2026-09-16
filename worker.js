@@ -250,8 +250,9 @@ async function handleJsonRpc(msg, env, db, projectId = 'contextos') {
 
   if (method === 'tools/call') {
     const { name, arguments: args = {} } = params;
+    const targetProject = args.projectId || projectId;
     try {
-      const outputText = await executeTool(name, args, projectId, db);
+      const outputText = await executeTool(name, args, targetProject, db);
       return {
         jsonrpc: '2.0',
         id,
@@ -420,7 +421,7 @@ export default {
       try {
         const body = await request.json();
         const sessionId = url.searchParams.get('sessionId') || '';
-        const projectId = request.headers.get('x-contextos-project-id') || 'contextos';
+        const projectId = request.headers.get('x-contextos-project-id') || url.searchParams.get('projectId') || 'contextos';
 
         const rpcResponse = await handleJsonRpc(body, env, db, projectId);
 
@@ -446,7 +447,7 @@ export default {
       if (request.method === 'POST') {
         try {
           const body = await request.json();
-          const projectId = request.headers.get('x-contextos-project-id') || 'contextos';
+          const projectId = request.headers.get('x-contextos-project-id') || url.searchParams.get('projectId') || 'contextos';
           const rpcResponse = await handleJsonRpc(body, env, db, projectId);
           return new Response(JSON.stringify(rpcResponse || {}), { status: 200, headers: CORS_HEADERS });
         } catch (err) {
