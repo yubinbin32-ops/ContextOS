@@ -164,13 +164,14 @@ export function createV2Server() {
   server.registerTool(
     'code',
     {
-      description: 'Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, and symbol search.',
+      description: 'Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, symbol search, and create new files with AST registration.',
       inputSchema: {
-        action: z.enum(['outline', 'read', 'edit', 'search']),
+        action: z.enum(['outline', 'read', 'edit', 'search', 'create']),
         path: z.string().optional(),
         selector: z.union([z.string(), z.record(z.any())]).optional(),
         targetContent: z.string().optional(),
         replacementContent: z.string().optional(),
+        content: z.string().optional(),
         query: z.string().optional(),
         format: z.enum(['markdown', 'json']).default('markdown'),
         projectRoot: z.string().optional(),

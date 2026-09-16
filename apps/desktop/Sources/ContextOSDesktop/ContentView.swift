@@ -512,22 +512,23 @@ private struct SettingsView: View {
 
             Divider()
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
+                // Left Column: 偏好设置 + 软件更新 + 数据内核
+                VStack(alignment: .leading, spacing: 12) {
                     // Group 1: 偏好设置 (PREFERENCES)
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 5) {
                         sectionHeader(store.activeLocale == "zh-Hans" ? "偏好设置" : "PREFERENCES")
                         VStack(spacing: 0) {
                             HStack {
                                 Label {
                                     Text(store.text("language"))
-                                        .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
                                         .foregroundStyle(ContextOSTheme.ink)
                                 } icon: {
                                     Image(systemName: "globe")
-                                        .font(.system(size: 12.5, weight: .medium))
+                                        .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(ContextOSTheme.muted)
-                                        .frame(width: 20)
+                                        .frame(width: 18)
                                 }
                                 Spacer()
                                 Picker("", selection: $store.language) {
@@ -536,23 +537,23 @@ private struct SettingsView: View {
                                     Text(store.text("english")).tag(AppLanguage.english)
                                 }
                                 .pickerStyle(.menu)
-                                .frame(width: 120)
+                                .frame(width: 105)
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
 
-                            Divider().padding(.leading, 38)
+                            Divider().padding(.leading, 32)
 
                             HStack {
                                 Label {
                                     Text(store.text("appearance"))
-                                        .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
                                         .foregroundStyle(ContextOSTheme.ink)
                                 } icon: {
                                     Image(systemName: "circle.righthalf.filled")
-                                        .font(.system(size: 12.5, weight: .medium))
+                                        .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(ContextOSTheme.muted)
-                                        .frame(width: 20)
+                                        .frame(width: 18)
                                 }
                                 Spacer()
                                 Picker("", selection: $appearance) {
@@ -561,77 +562,32 @@ private struct SettingsView: View {
                                     Text(store.text("dark")).tag(AppearancePreference.dark.rawValue)
                                 }
                                 .pickerStyle(.menu)
-                                .frame(width: 120)
+                                .frame(width: 105)
                                 .accessibilityLabel(store.text("appearance"))
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
                         }
                         .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
                     }
 
-                    // Group 2: AI 编辑器集成 (AI CLIENT MCP BRIDGES)
-                    VStack(alignment: .leading, spacing: 6) {
-                        sectionHeader(store.text("plugin").uppercased())
-
-                        if let syncError = store.syncErrorMessage {
-                            HStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(ContextOSTheme.failure)
-                                Text(syncError)
-                                    .font(.system(size: 10, design: .rounded))
-                                    .foregroundStyle(ContextOSTheme.failure)
-                                    .lineLimit(3)
-                                Spacer()
-                                Button {
-                                    store.syncErrorMessage = nil
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(ContextOSTheme.muted)
-                                }
-                                .buttonStyle(.plain)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(ContextOSTheme.failure.opacity(0.1)))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(ContextOSTheme.failure.opacity(0.3), lineWidth: 0.8))
-                        }
-
-                        VStack(spacing: 0) {
-                            ForEach(Array(store.editorStatuses.enumerated()), id: \.element.id) { index, status in
-                                if index > 0 {
-                                    Divider().padding(.leading, 50)
-                                }
-                                EditorPlatformRow(status: status, store: store)
-                            }
-                        }
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
-
-                        Text(store.runtimeHandshake).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
-                        Text(store.text("pluginHelp"))
-                            .font(.system(size: 10.5, design: .rounded))
-                            .foregroundStyle(ContextOSTheme.muted)
-                            .padding(.horizontal, 6)
-                            .padding(.top, 1)
-                    }
+                    // Group 2: 软件更新 (SOFTWARE UPDATE)
+                    SoftwareUpdateSection(store: store)
 
                     // Group 3: 数据存储与内核 (DATA ENGINE & STORAGE)
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 5) {
                         sectionHeader(store.text("liveData").uppercased())
 
                         VStack(spacing: 0) {
                             HStack(alignment: .center) {
-                                VStack(alignment: .leading, spacing: 2) {
+                                VStack(alignment: .leading, spacing: 1) {
                                     Text(store.activeLocale == "zh-Hans" ? "当前数据库" : "DATABASE")
                                         .font(.system(size: 8, weight: .bold, design: .monospaced))
                                         .tracking(0.7)
                                         .foregroundStyle(ContextOSTheme.muted)
                                     Text(store.databasePath)
-                                        .font(.system(size: 10.5, design: .monospaced))
+                                        .font(.system(size: 10, design: .monospaced))
                                         .foregroundStyle(ContextOSTheme.ink)
                                         .lineLimit(1)
                                         .truncationMode(.middle)
@@ -642,43 +598,93 @@ private struct SettingsView: View {
                                     store.chooseProject()
                                 }
                                 .buttonStyle(.bordered)
-                                .controlSize(.small)
+                                .controlSize(.mini)
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
 
-                            Divider().padding(.leading, 14)
+                            Divider().padding(.leading, 12)
 
                             HStack {
-                                HStack(spacing: 5) {
-                                    Circle().fill(ContextOSTheme.success).frame(width: 5.5, height: 5.5)
+                                HStack(spacing: 4) {
+                                    Circle().fill(ContextOSTheme.success).frame(width: 5, height: 5)
                                     Text(store.text("liveHelp"))
-                                        .font(.system(size: 10.5, design: .rounded))
+                                        .font(.system(size: 10, design: .rounded))
                                         .foregroundStyle(ContextOSTheme.muted)
                                 }
                                 Spacer()
                                 Text("SQLITE · GRAPH.JSON")
-                                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                    .font(.system(size: 7.5, weight: .bold, design: .monospaced))
                                     .tracking(0.8)
                                     .foregroundStyle(ContextOSTheme.muted)
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
                         }
                         .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
                     }
-
-                    // Group 4: 软件更新 (SOFTWARE UPDATE)
-                    SoftwareUpdateSection(store: store)
                 }
-                .padding(.horizontal, 22)
-                .padding(.top, 14)
-                .padding(.bottom, 18)
+                .frame(width: 320)
+
+                // Right Column: AI 编辑器集成 (AI CLIENT MCP BRIDGES)
+                VStack(alignment: .leading, spacing: 5) {
+                    sectionHeader(store.text("plugin").uppercased())
+
+                    if let syncError = store.syncErrorMessage {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(ContextOSTheme.failure)
+                            Text(syncError)
+                                .font(.system(size: 10, design: .rounded))
+                                .foregroundStyle(ContextOSTheme.failure)
+                                .lineLimit(3)
+                            Spacer()
+                            Button {
+                                store.syncErrorMessage = nil
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(ContextOSTheme.failure.opacity(0.1)))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(ContextOSTheme.failure.opacity(0.3), lineWidth: 0.8))
+                    }
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(store.editorStatuses.enumerated()), id: \.element.id) { index, status in
+                            if index > 0 {
+                                Divider().padding(.leading, 46)
+                            }
+                            EditorPlatformRow(status: status, store: store)
+                        }
+                    }
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+
+                    Text(store.runtimeHandshake)
+                        .font(.system(size: 9.5, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .padding(.top, 2)
+                    Text(store.text("pluginHelp"))
+                        .font(.system(size: 10, design: .rounded))
+                        .foregroundStyle(ContextOSTheme.muted)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 1)
+                }
+                .frame(width: 340)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 18)
         }
-        .frame(width: 530)
-        .frame(maxHeight: 680)
+        .frame(width: 716)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             store.updater.checkOnSettingsOpen()
@@ -922,7 +928,7 @@ private struct SoftwareUpdateSection: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 180)
+                .frame(width: 150)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
@@ -950,11 +956,11 @@ private struct SoftwareUpdateSection: View {
                 }
                 Spacer()
                 Picker("", selection: $store.updater.selectedEdition) {
-                    Text(store.activeLocale == "zh-Hans" ? "全功能版 (内置 Node)" : "Full Standalone").tag(UpdateEdition.full)
-                    Text(store.activeLocale == "zh-Hans" ? "轻量版 (系统 Node)" : "Standard Lite").tag(UpdateEdition.standard)
+                    Text(store.activeLocale == "zh-Hans" ? "全功能版" : "Full").tag(UpdateEdition.full)
+                    Text(store.activeLocale == "zh-Hans" ? "轻量版" : "Standard").tag(UpdateEdition.standard)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 220)
+                .frame(width: 135)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 6)

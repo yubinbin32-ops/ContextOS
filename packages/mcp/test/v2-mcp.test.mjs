@@ -140,10 +140,28 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
   const blockList = await service.block({ action: 'list', format: 'json' });
   assert.equal(blockList.length, 1);
 
+  // 7.5 code create
+  const createdFile = await service.code({
+    action: 'create',
+    path: 'src/created-file.mjs',
+    content: 'export function helloNew() { return 1; }',
+  });
+  assert.equal(createdFile.filePath, 'src/created-file.mjs');
+  assert.ok(createdFile.newHash);
+
+  // 7.6 block bind with root id and string ref
+  const bindRes = await service.block({
+    action: 'bind',
+    id: 'block-sample',
+    blockData: { artifactRefs: ['src/created-file.mjs'] },
+  });
+  assert.ok(bindRes.includes('bound with'));
+
   // 8. run_command
   const receipt = await service.runCommand({ command: 'echo "v2 mcp success"' });
   assert.equal(receipt.exitCode, 0);
   assert.ok(receipt.summary.includes('succeeded'));
+  assert.ok(receipt.text.includes('v2 mcp success'));
 
   // 9. complete plan
   await service.plan({

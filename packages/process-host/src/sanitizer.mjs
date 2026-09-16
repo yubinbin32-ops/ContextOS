@@ -49,7 +49,11 @@ export function sanitizeTerminalOutput(rawText, options = {}) {
 
   let summary = '';
   if (exitCode === 0 && errors.length === 0) {
-    summary = `Command succeeded (${lines.length} lines collapsed).`;
+    if (lines.length <= 15 && cleaned.length <= maxChars) {
+      summary = `Command succeeded (${lines.length} lines).`;
+    } else {
+      summary = `Command succeeded (${lines.length} lines collapsed).`;
+    }
     if (warnings.length > 0) {
       summary += ` ${warnings.length} warning(s).`;
     }
@@ -60,7 +64,11 @@ export function sanitizeTerminalOutput(rawText, options = {}) {
   // Construct compact text
   let resultText = '';
   if (exitCode === 0 && errors.length === 0) {
-    resultText = summary;
+    if (lines.length <= 15 && cleaned.length <= maxChars) {
+      resultText = lines.join('\n');
+    } else {
+      resultText = summary;
+    }
     if (warnings.length > 0) {
       resultText += '\n\nWarnings:\n' + warnings.slice(0, 5).join('\n');
     }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.yubinbin32-ops/contextos",
-  "title": "ContextOS — Spatial Architecture Canvas & Context OS for AI Coding Agents",
-  "description": "Spatial architecture canvas and context optimization OS for AI coding agents.",
+  "title": "ContextOS — AI 编码高精度外骨骼动力装甲 (Powered Exoskeleton for AI Coding)",
+  "description": "AI 编码的高精度外骨骼动力装甲：通过 MCP 自动管理上下文，实测减少 90%+ 上下文开销。(High-Precision Powered Exoskeleton for AI Coding: Auto-governs context via MCP, reducing context waste by 90%+)",
   "repository": {
     "url": "https://github.com/yubinbin32-ops/ContextOS",
     "source": "github"

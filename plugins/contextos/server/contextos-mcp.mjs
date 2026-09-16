@@ -39880,6 +39880,26 @@ var CodeTools = class {
     };
   }
   /**
+   * 1.5 Create: Create new file and initialize AST anchors
+   */
+  static create(filePath, content = "") {
+    const structure = LanguageRegistry.parseStructure(filePath, content);
+    const newHash = calculateHash(content);
+    return {
+      filePath,
+      content,
+      newHash,
+      locators: structure.symbols.map((s) => ({
+        path: filePath,
+        symbol: s.name,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        hash: s.hash,
+        role: "implementation"
+      }))
+    };
+  }
+  /**
    * 2. Read: Surgical code reader by symbol or line range
    */
   static read(filePath, content, selector = {}) {
@@ -40405,7 +40425,11 @@ function sanitizeTerminalOutput(rawText, options = {}) {
   }
   let summary = "";
   if (exitCode === 0 && errors.length === 0) {
-    summary = `Command succeeded (${lines.length} lines collapsed).`;
+    if (lines.length <= 15 && cleaned.length <= maxChars) {
+      summary = `Command succeeded (${lines.length} lines).`;
+    } else {
+      summary = `Command succeeded (${lines.length} lines collapsed).`;
+    }
     if (warnings.length > 0) {
       summary += ` ${warnings.length} warning(s).`;
     }
@@ -40414,7 +40438,11 @@ function sanitizeTerminalOutput(rawText, options = {}) {
   }
   let resultText = "";
   if (exitCode === 0 && errors.length === 0) {
-    resultText = summary;
+    if (lines.length <= 15 && cleaned.length <= maxChars) {
+      resultText = lines.join("\n");
+    } else {
+      resultText = summary;
+    }
     if (warnings.length > 0) {
       resultText += "\n\nWarnings:\n" + warnings.slice(0, 5).join("\n");
     }
@@ -41157,10 +41185,35 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
         return "# Block Search Results\n" + matches.map((b) => `- [${b.id}] ${b.title}: ${b.summary}`).join("\n");
       }
       case "bind": {
-        const block = { ...blockData, projectId: this.projectId };
+        const targetId = id || blockData?.id;
+        if (!targetId) {
+          throw new Error("Missing required 'id' parameter for block bind action (e.g. id: 'block-desktop-installer')");
+        }
+        const existing = this.db.getBlock(targetId);
+        const inputArtifactRefs = blockData?.artifactRefs || [];
+        const normalizedRefs = inputArtifactRefs.map((ref) => {
+          if (typeof ref === "string") {
+            return { path: ref, role: "implementation" };
+          }
+          return ref;
+        });
+        const existingRefs = existing?.artifactRefs || [];
+        const mergedRefs = [...existingRefs];
+        for (const nr of normalizedRefs) {
+          if (!mergedRefs.some((r) => r.path === nr.path && (!nr.symbol || r.symbol === nr.symbol))) {
+            mergedRefs.push(nr);
+          }
+        }
+        const block = {
+          ...existing || {},
+          ...blockData,
+          id: targetId,
+          projectId: this.projectId,
+          artifactRefs: mergedRefs
+        };
         this.db.saveBlock(block);
         this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
-        return `Block '${block.id}' bound with ${block.artifactRefs?.length || 0} code locators.`;
+        return `Block '${block.id}' bound with ${block.artifactRefs.length} code locators.`;
       }
       case "delete": {
         this.db.deleteBlock(id);
@@ -41240,12 +41293,12 @@ Members: ${chain.memberIds.join(", ")}`;
     }
   }
   // ================= 6. code =================
-  async code({ action, path: relPath, selector, targetContent, replacementContent, query, format = "markdown" }) {
-    if (action === "search" && (!relPath || relPath === "." || relPath === "./")) {
-      const blocks = this.db.listBlocks();
+  async code({ action, path: relPath, selector, targetContent, replacementContent, content: rawContent, query, format = "markdown" }) {
+    if (action === "search" && !relPath) {
+      const blocks = this.db.listBlocks(this.projectId);
       const allFiles = /* @__PURE__ */ new Set();
       for (const b of blocks) {
-        for (const ref of b.artifactRefs || []) {
+        for (const ref of b.artifactRefs) {
           allFiles.add(ref.path);
         }
       }
@@ -41264,6 +41317,18 @@ Members: ${chain.memberIds.join(", ")}`;
     }
     if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
     const fullPath = path8.resolve(this.projectRoot, relPath);
+    if (action === "create") {
+      fs7.mkdirSync(path8.dirname(fullPath), { recursive: true });
+      const initialContent = replacementContent || rawContent || "";
+      fs7.writeFileSync(fullPath, initialContent, "utf8");
+      const res = CodeTools.create(relPath, initialContent);
+      return {
+        filePath: relPath,
+        newHash: res.newHash,
+        locators: res.locators,
+        message: `File '${relPath}' created successfully with AST anchors initialized.`
+      };
+    }
     if (!fs7.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
     const content = fs7.readFileSync(fullPath, "utf8");
     switch (action) {
@@ -41534,13 +41599,14 @@ function createV2Server() {
   server.registerTool(
     "code",
     {
-      description: "Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, and symbol search.",
+      description: "Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, symbol search, and create new files with AST registration.",
       inputSchema: {
-        action: _enum(["outline", "read", "edit", "search"]),
+        action: _enum(["outline", "read", "edit", "search", "create"]),
         path: string2().optional(),
         selector: union([string2(), record(any())]).optional(),
         targetContent: string2().optional(),
         replacementContent: string2().optional(),
+        content: string2().optional(),
         query: string2().optional(),
         format: _enum(["markdown", "json"]).default("markdown"),
         projectRoot: string2().optional()

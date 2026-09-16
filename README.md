@@ -1,7 +1,8 @@
 <div align="center">
   <img src="assets/logo.png" width="76" alt="ContextOS" />
-  <h1>Automated Context Management: Cut 90% of AI Coding Context Waste.</h1>
-  <p><strong>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</strong></p>
+  <h1>A High-Precision Powered Exoskeleton for AI Coding</h1>
+  <p><strong>Auto-governing context via MCP, reducing context window waste by 90%+ in practice.</strong></p>
+  <p>Stopping context window explosion and hallucination in large codebases: surgical AST read/write instead of dumping whole files, out-of-context command receipts, and an intuitive Metro Map architecture.</p>
   <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>Download macOS Desktop App</strong></a> · <a href="#start-in-three-minutes">Start in three minutes</a> · <a href="README_zh.md">中文文档</a></p>
 </div>
 
@@ -9,9 +10,15 @@
 
 ## What problem does ContextOS solve?
 
-An AI coding conversation often starts by rebuilding the project map: reading files, finding module relationships, checking design decisions, and locating unfinished work. As the repository grows, architecture notes, progress updates, and build logs compete with the task itself for context space.
+**ContextOS acts as a high-precision powered exoskeleton for AI coding assistants**:
+In traditional workflows with large repositories, an AI agent is forced to haul massive raw files, noisy build dumps, and repetitive documentation in its prompt. It quickly runs out of breath — the context window explodes, hallucinations multiply, and previous design decisions are forgotten.
 
-ContextOS stores that working memory beside the code in one synchronized OS graph. Each conversation receives the architecture and progress relevant to its task, and the Native Desktop App visualizes the exact same state as an intuitive Metro Map. A new conversation can continue seamlessly from the recorded state.
+With ContextOS, the AI sheds the deadweight and lets the **MCP protocol auto-govern context**:
+1. **Exoskeleton-Powered Precision**: Compiler-grade AST tools surgically inspect and edit only the relevant symbols and syntax blocks, eliminating whole-file dumps;
+2. **Out-of-Context Isolation**: Terminal logs are safely captured to a sandboxed disk store, returning compact diagnostic receipts to strip 98%+ of terminal noise;
+3. **Unified Neural Metro Map**: Architectural memory and the C-D-C-S task lifecycle are synchronized in a visual subway map, giving the AI immediate full-picture clarity.
+
+**In real-world multi-step tasks, ContextOS reduces redundant context consumption by over 90%**, eliminating context explosion and memory loss across long-running sessions.
 
 ![ContextOS V2 Metro Map Architecture and Desktop App](docs/images/contextos-desktop-v2.png)
 

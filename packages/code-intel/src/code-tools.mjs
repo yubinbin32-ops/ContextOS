@@ -47,6 +47,27 @@ export class CodeTools {
   }
 
   /**
+   * 1.5 Create: Create new file and initialize AST anchors
+   */
+  static create(filePath, content = '') {
+    const structure = LanguageRegistry.parseStructure(filePath, content);
+    const newHash = calculateHash(content);
+    return {
+      filePath,
+      content,
+      newHash,
+      locators: structure.symbols.map((s) => ({
+        path: filePath,
+        symbol: s.name,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        hash: s.hash,
+        role: 'implementation',
+      })),
+    };
+  }
+
+  /**
    * 2. Read: Surgical code reader by symbol or line range
    */
   static read(filePath, content, selector = {}) {
