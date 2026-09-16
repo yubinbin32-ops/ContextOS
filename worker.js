@@ -698,7 +698,8 @@ export default {
     if (url.pathname === '/api/v2/call' && request.method === 'POST') {
       try {
         const body = await request.json();
-        const { tool, input = {}, projectId = 'contextos' } = body;
+        const { tool, input = {} } = body;
+        const projectId = body.projectId || input.projectId || request.headers.get('x-contextos-project-id') || url.searchParams.get('projectId') || 'contextos';
         const result = await executeTool(tool, input, projectId, db);
         return new Response(JSON.stringify({ result }), { headers: CORS_HEADERS });
       } catch (err) {

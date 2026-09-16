@@ -48,24 +48,24 @@ Dev servers, watchers, and background workers are managed by the Process Host an
 
 ![Station Detail and Drawer Inspection](assets/readme-reader.png)
 
-## Start in 30 Seconds: AI Auto-Setup
+## Quick Start & Setup Options
 
-You don't need to manually configure config files or install scripts. ContextOS features **AI-to-AI Self-Bootstrapping**: simply copy the prompt below and send it to your AI coding assistant (Cursor / Codex / Claude Code / Windsurf / Antigravity):
+ContextOS offers three flexible onboarding options for any workflow:
 
-> **"Please read `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`, detect my system environment, and configure ContextOS for me."**  
-> *(中文: "请阅读 `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`，检测我的系统环境，为我自动安装并配置好 ContextOS。")*
-
-### What the AI will do for you:
-1. **System & Client Inspection**: If you're on macOS, it asks if you'd like the native Desktop App (`ContextOS.app`). If confirmed, it downloads and installs it automatically.
-2. **Runtime Verification**: Checks for Node.js 22+ (or uses the runtime bundled with ContextOS.app).
-3. **Storage Mode Selection**: Asks whether you prefer **Local Mode** (100% offline & private) or **Cloud Hub Mode** (multi-device edge sync). If you choose Cloud, it provides the 1-click Cloudflare link and asks for the returned URL/Token.
-4. **Zero-Touch Editor Injection**: Automatically detects and injects ContextOS MCP configuration and Skills into **Claude Desktop, Cursor, Antigravity, OpenCode, and Codex**.
+```mermaid
+graph TD
+    User([Choose Your Setup Route]) --> ChoiceA[Option A: Download Desktop App]
+    User --> ChoiceB[Option B: AI Auto-Setup via Prompt]
+    User --> ChoiceC[Option C: Standalone mjs Plugin]
+    
+    ChoiceA --> FlowA[Plug & Play · Visual Metro Map · One-Click Editor Injection]
+    ChoiceB --> FlowB[Zero Effort · AI Detects Environment & Configures MCP]
+    ChoiceC --> FlowC[Geek & Headless · Linux/Windows/Containers · Direct stdio/npx]
+```
 
 ---
 
-## Alternative Setup Methods
-
-### Option A: macOS Desktop App (Visual Architecture & Manual Setup)
+### Option A: macOS Desktop App (Plug & Play · Recommended)
 
 Download the package matching your environment from [GitHub Releases](https://github.com/yubinbin32-ops/ContextOS/releases/latest):
 
@@ -75,48 +75,70 @@ Download the package matching your environment from [GitHub Releases](https://gi
 | **Standard Lite** | `ContextOS-macos.zip` | ~1.6 MB | Requires Node.js 22+ on system | Ultra-compact download if you already have Node installed. |
 
 #### Setup Steps:
-1. Unzip the downloaded file and drag **ContextOS.app** into `/Applications`.
+1. Unzip the downloaded archive and drag **ContextOS.app** into `/Applications`.
 2. Launch **ContextOS**, open **Settings** (gear icon or `Cmd+,`), select your detected AI editor (Cursor / Claude Desktop / Antigravity / OpenCode / Codex), and click **Install / Sync Plugin**.
-3. The App configures your editor to connect to ContextOS MCP. **Once configured, you can close the desktop App; it does NOT need to stay running in the background.**
-4. In your AI coding chat, activate ContextOS with a simple prompt:
+3. The App injects the ContextOS MCP configuration and unique Skills directly into your editors. **Once configured, you can close the desktop App; it does NOT need to stay running.**
+4. In your AI coding chat, simply activate ContextOS:
    > *"Write this proposal into ContextOS and start execution"* or *"Inspect ContextOS and resume development"*
-
-   The AI agent will immediately follow the C-D-C-S task lifecycle, perform surgical AST code reads/writes, generate compact command receipts, and safely clean up long-running background processes.
 
 ![One-click editor and MCP synchronization](assets/settings-sync.png)
 
-### Option B: Lightweight CLI-Only Workflow (Headless / Linux / Servers)
+---
+
+### Option B: AI Auto-Setup via Prompt (Zero Effort)
+
+If you are already in an AI coding assistant (Cursor / Codex / Claude Code / Windsurf / Antigravity), let the AI configure everything automatically:
+
+> **Copy and paste this instruction into your AI coding assistant:**  
+> **"Please read `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`, detect my system environment, and configure ContextOS for me."**
+
+#### What the AI does in the background:
+1. **System & Client Inspection**: If on macOS, asks if you want the native Desktop App (`ContextOS.app`) and deploys it automatically.
+2. **Runtime Verification**: Checks for Node.js 22+ (or uses the runtime bundled with ContextOS.app).
+3. **Targeted Precision Injection**: Asks which editors you use (Cursor / Codex / Claude Desktop, etc.) and injects only the selected platforms, eliminating duplicate skill noise.
+4. **Cloud Hub Configuration**: Asks if you want a global Cloudflare Edge Hub for remote sync, and saves credentials securely.
+5. **Project Initialization**: Initializes the current project with your chosen storage mode (local offline by default, or cloud).
+
+---
+
+### Option C: Standalone `contextos-mcp.mjs` Plugin (Headless / Linux / Geek)
 
 > [!NOTE]
-> **Best for remote servers, Docker containers, or terminal-driven workflows without a macOS desktop GUI.**
-> **Prerequisites**: Node.js 22 or later installed on the host machine.
+> Ideal for Linux, Windows CLI, Docker containers, remote SSH servers, or headless CI environments without a desktop GUI.
+> **Requirement**: Node.js >= 22.
 
+#### 1. Run directly with npx
 ```bash
-# Launch MCP server directly from command line
 npx -y github:yubinbin32-ops/ContextOS
 ```
+
+#### 2. Download the pre-bundled single-file plugin
+Download the compiled single-file bundle from the repository: [`plugins/contextos/server/contextos-mcp.mjs`](plugins/contextos/server/contextos-mcp.mjs).
+
+Add standard stdio MCP configuration to your editor (`mcp.json` or `claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
     "contextos": {
       "command": "node",
-      "args": ["./plugins/contextos/server/contextos-mcp.mjs"],
-      "env": {
-        "CONTEXTOS_MODE": "cloud",
-        "CONTEXTOS_CLOUD_URL": "https://contextos-cloud.<your-subdomain>.workers.dev",
-        "CONTEXTOS_CLOUD_TOKEN": "<YOUR_TOKEN>",
-        "CONTEXTOS_PROJECT_ID": "my-project"
-      }
+      "args": ["/absolute/path/to/plugins/contextos/server/contextos-mcp.mjs"]
     }
   }
 }
 ```
 
-#### 4. Connect & Sync in Desktop App
-If you use the ContextOS macOS Desktop App:
-1. Click the top-left project switcher -> **“Connect Cloud MCP Project…”**.
-2. Enter your **Cloud Hub URL** (`https://contextos-cloud.<your-subdomain>.workers.dev`), **Project ID**, and optional **Auth Token**.
-3. Click **Connect & Sync** to immediately render and synchronize the spatial architecture graph and plan progress!
+---
+
+## Local Project Centricity & Multi-Project Cloud Isolation
+
+ContextOS treats the **local workspace project directory** as the absolute source of truth (code reads, AST edits, test runs, and logs always run locally):
+
+- **Local Storage Mode (Default)**: Architecture data is stored in the project's `.contextos/state.sqlite`. 100% offline, private, and zero network dependency.
+- **Cloud Collaboration Mode (Optional)**: Connects to a serverless Cloud Hub (Cloudflare D1 edge database) to share architectural topology and progress across devices.
+  - **Multi-Project Isolation Built-In**: Cloud Hub partitions entities by `projectId`. A single Cloudflare Worker can back all your distinct projects with strict isolation.
+- **Lossless Two-Way Switching**: Switch storage modes anytime by prompting your AI:
+  - *"Switch current project to cloud collaboration mode"* ➔ Local SQLite graph is pushed to Cloud D1.
+  - *"Switch current project back to offline local mode"* ➔ Cloud snapshot is synced back to local SQLite for offline development.
 
 ## Reproducible V2 Benchmark
 

@@ -48,100 +48,97 @@ Block 描述真实的物理代码能力（杜绝虚空 Ghost Block）。Chain �
 
 ![节点抽屉与详情查看](assets/readme-reader.png)
 
-## 30 秒极速配置：AI 自动安装引导
+## 快速上手与安装方式
 
-您无需手动编写繁琐的配置文件或命令行。ContextOS 现已支持**面向 AI 智能体的自举安装模式**，用户只做选择，全套配置由 AI 自动完成：
+ContextOS 提供了三种灵活的安装与接入方式，满足从小白到硬核极客的所有场景：
 
-> **只需复制下方指令，发送给您的 AI 编程助手（Cursor / Codex / Claude Code / Windsurf / Antigravity）：**  
-> **“请阅读 `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`，检测我的系统环境，为我自动安装并配置好 ContextOS。”**
-
-### AI 将在后台为您自动完成：
-1. **环境与桌面端探测**：若您是 macOS，AI 会询问是否需要安装原生的可视化桌面端（ContextOS.app）；如确认则全自动下载就绪。
-2. **Node 运行时自检**：检测 Node 22+ 环境（或使用 ContextOS.app 内置的独立运行包）。
-3. **存储模式二选一**：询问您偏好**纯本地模式**（100% 离线与隐私）还是**云端协同模式**（边缘多端同步）。若选云端，AI 提供 1-Click 链接并协助填入配置。
-4. **全自动编辑器注入**：依照原生桌面端同等标准，自动检测并注入 **Claude Desktop、Cursor、Antigravity、OpenCode、Codex** 的 MCP 服务与架构规则。
+```mermaid
+graph TD
+    User([选择适合您的接入方式]) --> ChoiceA[方案 A: 直接下载 macOS 桌面端]
+    User --> ChoiceB[方案 B: 把一句话发给 AI 自动配置]
+    User --> ChoiceC[方案 C: 自行下载/运行 mjs 纯插件]
+    
+    ChoiceA --> FlowA[开箱即用 · 原生地铁图交互 · 一键注入编辑器]
+    ChoiceB --> FlowB[零操作 · AI 自动检测环境并按需精准注入]
+    ChoiceC --> FlowC[极客轻量 · Linux/Windows/无头环境 · stdio/npx 直跑]
+```
 
 ---
 
-## 传统手动安装方式
-
-### 方式 A：macOS 桌面端（可视化架构与手动配置）
+### 方案 A：直接下载 macOS 桌面端（开箱即用 · 强烈推荐）
 
 从 [GitHub Releases 最新发布页](https://github.com/yubinbin32-ops/ContextOS/releases/latest) 下载对应安装包：
 
 | 安装包版本 | 压缩包文件 | 体积 | Node.js 依赖 | 适用场景 |
 |---|---|---|---|---|
-| **完整版 (Full)** *(推荐)* | `ContextOS-macos-full.zip` | 约 35 MB | **零依赖**（内置独立 Node 22） | 电脑未安装 Node 或追求纯傻瓜式开箱即用 |
+| **完整版 (Full)** *(首选推荐)* | `ContextOS-macos-full.zip` | 约 35 MB | **零依赖**（内置独立 Node 22） | 电脑未装 Node 或追求纯傻瓜式开箱即用 |
 | **轻量原版 (Standard)** | `ContextOS-macos.zip` | 约 1.6 MB | 需系统已有 Node.js 22+ | 本地已有 Homebrew/nvm Node 环境的开发者 |
 
 #### 极速配置流程：
 1. 解压下载的压缩包，将 **ContextOS.app** 拖入 `Applications`（应用程序）目录。
-2. 打开 **ContextOS**，进入 **设置**（齿轮图标或快捷键 `Cmd+,`），选择检测到的 AI 编辑器（Cursor / Claude Desktop / Antigravity / OpenCode / Codex 等），点击 **一键安装 / 同步插件**。
+2. 打开 **ContextOS**，进入 **设置**（齿轮图标或快捷键 `Cmd+,`），勾选需要配置的 AI 编辑器（Cursor / Claude Desktop / Antigravity / OpenCode / Codex 等），点击 **一键安装 / 同步插件**。
 3. App 会自动将 MCP 配置及对应运行路径注入编辑器。**配置完成后，你可以随时关闭桌面 App，平时无需保持开启**。
 4. 在编辑器对话中只需一句话唤醒 ContextOS 协作：
    > **“把这个方案写入 ContextOS 后开始执行”** 或 **“查看 ContextOS 继续开发”**
 
-   AI 即会自动通过 ContextOS 渐进式管理方案、执行 C-D-C-S 任务闭环、手术刀读写代码、生成脱敏命令回执并自动回收常驻进程。
-
 ![一键同步编辑器和 MCP](assets/settings-sync.png)
 
-### 方式 B：轻量纯插件流（针对纯终端 / Linux / 无头环境，无需桌面 App）
+---
+
+### 方案 B：把一句话发给 AI，全流程自动配置（零操作）
+
+适合已经打开 AI 编程助手（Cursor / Codex / Claude Code / Windsurf / Antigravity）的开发者。用户无需敲打命令行，只需做选择，由 AI 在后台自举完成全部配置：
+
+> **只需复制下方指令，发送给您的 AI 编程助手对话框：**  
+> **“请阅读 `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`，检测我的系统环境，为我自动安装并配置好 ContextOS。”**
+
+#### AI 将在后台为您自动完成：
+1. **系统与桌面端探测**：若检测为 macOS，AI 会主动询问是否需要下载原生的可视化桌面端（ContextOS.app），确认后全自动下载部署。
+2. **Node 运行时自检**：自动验证 Node.js 22+ 环境（或使用桌面端自带的内嵌 Node）。
+3. **按需精准注入**：向用户确认需要配置哪些编辑器（如 Cursor / Codex / Claude 等），精准注入对应 MCP 配置与唯一 Skill，**杜绝重复 Skill 冗余**。
+4. **云端中枢配置支持**：询问用户是否需要配置云端协同中枢，若需要则提供 1-Click 链接并将凭据安全保存在本地。
+5. **当前项目初始化**：按用户选择将当前项目初始化为本地离线模式或云端模式。
+
+---
+
+### 方案 C：自行下载/运行 `contextos-mcp.mjs` 纯插件流（无桌面端 · 极客首选）
 
 > [!NOTE]
-> **适合不想下载桌面 App、在远程服务器、容器环境或纯 CLI 模式下开发的开发者。**
-> 插件包极度轻量（仅数十 KB），可直接通过 Codex 插件市场安装或直接使用 `npx` 启动。
-> **前提环境要求**：由于纯插件直接在宿主环境运行，**需要你的系统已安装 Node.js 22 或以上版本**。
+> 适合不想安装桌面 App、在 Linux / Windows 纯命令行、远程服务器、容器环境或纯 CLI 模式下开发的开发者。
+> **前提环境要求**：系统已安装 Node.js >= 22。
 
+#### 1. 纯命令行直接通过 npx 启动
 ```bash
-# 纯命令行直接启动 MCP 服务
 npx -y github:yubinbin32-ops/ContextOS
 ```
-   - 点击 **添加 (Add)**：
-     - **变量名称**：`AUTH_TOKEN`
-     - **变量值**：自行设置的私密密钥（例如 `sk_ctx_12345678`）。
-     - *(注：若未配置 `AUTH_TOKEN`，中枢将处于开放访问模式，方便快速体验)。*
 
-#### 3. 通过 HTTP 直连 MCP（Cursor / Windsurf / Claude Desktop）
-无需本地运行 Node 脚本！在 AI 编辑器中配置标准 HTTP / SSE 类型的远程 MCP 服务：
+#### 2. 自行下载编译好的独立单文件插件
+直接从 Release 或代码仓库获取编译就绪的单文件包：[`plugins/contextos/server/contextos-mcp.mjs`](plugins/contextos/server/contextos-mcp.mjs)。
 
-##### 在 Cursor / Windsurf / Claude Desktop (`mcp.json`)：
-```json
-{
-  "mcpServers": {
-    "contextos": {
-      "url": "https://contextos-cloud.<your-subdomain>.workers.dev/sse",
-      "headers": {
-        "Authorization": "Bearer <YOUR_TOKEN>"
-      }
-    }
-  }
-}
-```
-*(在 Cursor 中操作：打开 **Settings -> Features -> MCP -> Add Server**，Type 选择 `SSE`，输入 URL `.../sse`，并在 Headers 中填入 `Authorization` 即可)*。
-
-##### 备用方式：本地 STDIO 桥接（针对仅支持本地命令行运行的 CLI）：
+在你的编辑器配置（如 Cursor `mcp.json` 或 Claude Desktop 配置）中添加本地 stdio 命令：
 ```json
 {
   "mcpServers": {
     "contextos": {
       "command": "node",
-      "args": ["./plugins/contextos/server/contextos-mcp.mjs"],
-      "env": {
-        "CONTEXTOS_MODE": "cloud",
-        "CONTEXTOS_CLOUD_URL": "https://contextos-cloud.<your-subdomain>.workers.dev",
-        "CONTEXTOS_CLOUD_TOKEN": "<YOUR_TOKEN>",
-        "CONTEXTOS_PROJECT_ID": "my-project"
-      }
+      "args": ["/绝对路径/plugins/contextos/server/contextos-mcp.mjs"]
     }
   }
 }
 ```
 
-#### 4. 在桌面 App 左上角一键连接同步
-如果你使用 macOS 桌面 App：
-1. 打开 ContextOS，点击左上角项目切换菜单 -> **“连接到云端 MCP 项目…”**；
-2. 输入 **云端中枢 URL**（`https://contextos-cloud.<your-subdomain>.workers.dev`）、**项目标识** 以及可选的 **Auth Token**；
-3. 点击 **连接并同步**，全套空间架构图与计划状态秒级加载呈现，随时双向同步！
+---
+
+## 本地项目与云端多项目隔离说明
+
+ContextOS 始终以**本地工作区项目目录**为核心基石（代码阅读、AST 手术刀修改、脱敏命令执行均在本地完成）：
+
+- **本地存储模式（默认）**：每个项目的数据保存在项目根目录的 `.contextos/state.sqlite`，100% 离线，完全保护代码与架构隐私。
+- **云端协同模式（可选）**：通过项目配置将架构图谱（Plans, Tasks, Blocks, Chains）托管在 Serverless 云端中枢（Cloudflare D1）。
+  - **天然支持多项目严格隔离**：云端中枢基于严格的 `projectId` 分区存储，同一套云端 Worker 和 D1 数据库可同时支持您开发无数个不同项目，彼此独立互不串扰。
+- **随时双向无损切换**：开发过程中，您只需对 AI 说：
+  - *“把当前项目切换为云端协同模式”* ➔ 本地数据自动完整推送到云端 D1；
+  - *“把当前项目切回本地离线模式”* ➔ 云端最新架构快照自动下载至本地 SQLite，后续开发完全离线。
 
 ## 实测 V2 上下文节省基准
 

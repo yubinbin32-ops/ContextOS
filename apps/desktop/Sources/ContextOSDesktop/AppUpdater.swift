@@ -375,7 +375,7 @@ public final class AppUpdater: NSObject, ObservableObject {
     private func unpackAndStage(downloadedZipURL: URL, release: AppRelease) {
         state = .installing
 
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        Task.detached(priority: .userInitiated) { [weak self] in
             let fm = FileManager.default
             let tempDir = fm.temporaryDirectory.appendingPathComponent("ContextOS-Update-\(UUID().uuidString)")
 
@@ -416,15 +416,15 @@ public final class AppUpdater: NSObject, ObservableObject {
                     throw NSError(domain: "AppUpdater", code: 3, userInfo: [NSLocalizedDescriptionKey: "解压的 ContextOS.app 缺少可执行程序"])
                 }
 
-                DispatchQueue.main.async {
-                    self?.state = .readyToInstall(stagedAppURL: stagedApp, version: release.version)
-                }
+                await self?.updateStateOnMain(.readyToInstall(stagedAppURL: stagedApp, version: release.version))
             } catch {
-                DispatchQueue.main.async {
-                    self?.state = .failed(message: error.localizedDescription)
-                }
+                await self?.updateStateOnMain(.failed(message: error.localizedDescription))
             }
         }
+    }
+
+    private func updateStateOnMain(_ newState: UpdateState) {
+        self.state = newState
     }
 
     // MARK: - Final Swap & Relaunch

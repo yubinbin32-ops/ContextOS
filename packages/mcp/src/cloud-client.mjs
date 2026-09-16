@@ -34,6 +34,7 @@ export class ContextOSCloudClient {
         headers: this.getHeaders(),
         body: JSON.stringify({
           tool,
+          projectId: args.projectId || this.projectId,
           input: {
             ...args,
             projectId: args.projectId || this.projectId,

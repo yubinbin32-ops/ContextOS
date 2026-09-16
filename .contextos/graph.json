@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 11,
-  "exportedAt": "2026-09-16T18:31:36.718Z",
+  "graphRevision": 12,
+  "exportedAt": "2026-09-16T19:23:29.984Z",
   "data": {
     "plans": [
       {
@@ -94,9 +94,9 @@
         "projectId": "contextos",
         "title": "云端双向同步实测、无感上云无差别验证、工程瘦身与 Release v2.1.0 交付",
         "priority": "normal",
-        "status": "active",
+        "status": "completed",
         "summary": "全面执行最后一轮手动测试：1) 本地写入云端同步测试；2) 云端直接写入测试；3) 云端拉取本地同步测试；4) 验证除 Graph 在云端外其余工具本地无差别执行（无感上云）；5) 清理工作区冗余与临时文件；6) 升级 v2.1.0 并 push to main。",
-        "completedSummary": null,
+        "completedSummary": "完成云端双向同步全链路测试、无感上云无差别运行验证、仓库瘦身、版本升级 v2.1.0 与发布交付。",
         "historyRef": null,
         "ruleRefs": [],
         "decisionRefs": [],
@@ -115,7 +115,35 @@
         ],
         "checkpoints": [],
         "createdAt": "2026-09-16T17:47:24.309Z",
-        "updatedAt": "2026-09-16T17:47:24.309Z"
+        "updatedAt": "2026-09-16T18:32:14.063Z"
+      },
+      {
+        "id": "plan-1789585003632",
+        "projectId": "contextos",
+        "title": "修复 macOS Desktop App CI 编译失败",
+        "priority": "normal",
+        "status": "active",
+        "summary": "修复 GitHub Actions 中 macOS Desktop App 的 Swift 编译错误与警告并交付",
+        "completedSummary": null,
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-fix-ci",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "active",
+            "taskIds": [],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [],
+        "createdAt": "2026-09-16T18:56:43.632Z",
+        "updatedAt": "2026-09-16T18:56:43.632Z"
       },
       {
         "id": "plan-v2-rebuild",
@@ -348,10 +376,10 @@
     ],
     "tasks": [
       {
-        "id": "task-1789580868532",
-        "planId": "plan-1789580844309",
-        "phaseId": "phase-cloud-verify-and-release",
-        "title": "云端双向同步实测、清理与发布交付",
+        "id": "task-1789585290824",
+        "planId": "plan-1789585003632",
+        "phaseId": "phase-fix-ci",
+        "title": "修复 Swift CI 编译、移除桌面端云项目导入、验证云端多项目隔离与优化三套部署方案文档",
         "status": "completed",
         "contextSlice": {
           "objective": "",
@@ -379,22 +407,22 @@
         "notes": [],
         "checks": [
           {
-            "id": "check-1789583472125-1x1vf",
-            "receiptId": "receipt-1789583258624-349876",
-            "description": "Full suite npm test and plugin:verify passed with version 2.1.0 and cloud hub sync verified",
+            "id": "check-1789586593535-0ksf6",
+            "receiptId": "receipt-1789586507485-d0ff92",
+            "description": "Swift build passes with 0 warnings/errors, plugin:verify passed, full npm test suite passed, and Cloud Hub multi-project isolation verified.",
             "passed": true,
             "evidence": "",
-            "recordedAt": "2026-09-16T18:31:12.125Z"
+            "recordedAt": "2026-09-16T19:23:13.535Z"
           }
         ],
         "syncResult": {
           "createdBlockIds": [],
           "updatedChainIds": [],
           "updatedLinkIds": [],
-          "completedAt": "2026-09-16T18:31:36.715Z"
+          "completedAt": "2026-09-16T19:23:29.982Z"
         },
-        "createdAt": "2026-09-16T17:47:48.532Z",
-        "updatedAt": "2026-09-16T18:31:36.715Z"
+        "createdAt": "2026-09-16T19:01:30.824Z",
+        "updatedAt": "2026-09-16T19:23:29.982Z"
       }
     ],
     "blocks": [

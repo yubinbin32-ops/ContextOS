@@ -234,7 +234,8 @@ export CONTEXTOS_PROJECT_ID="contextos"</pre>
     if (url.pathname === '/api/v2/call' && request.method === 'POST') {
       try {
         const body = await request.json();
-        const { tool, input = {}, projectId = 'contextos' } = body;
+        const { tool, input = {} } = body;
+        const projectId = body.projectId || input.projectId || request.headers.get('x-contextos-project-id') || url.searchParams.get('projectId') || 'contextos';
 
         let result = '';
 

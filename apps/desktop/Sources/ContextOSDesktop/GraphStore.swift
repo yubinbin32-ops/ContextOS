@@ -20,7 +20,6 @@ final class GraphStore: ObservableObject {
     }
     @Published private(set) var recentlyChangedRefs: Set<String> = []
     @Published private(set) var errorMessage: String?
-    @Published var showConnectCloudSheet = false
     @Published var settingsPresented = false {
         didSet {
             if settingsPresented {
@@ -161,77 +160,6 @@ final class GraphStore: ObservableObject {
             } else if let fallback = try? ProjectLocation.resolve() {
                 self.loadProject(at: fallback.root)
             }
-        }
-    }
-
-    func connectCloudProject(cloudUrl: String, projectId: String, token: String?) async throws {
-        var normalizedUrl = cloudUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !normalizedUrl.lowercased().hasPrefix("http://") && !normalizedUrl.lowercased().hasPrefix("https://") {
-            normalizedUrl = "http://" + normalizedUrl
-        }
-        while normalizedUrl.hasSuffix("/") {
-            normalizedUrl.removeLast()
-        }
-        for suffix in ["/sse", "/mcp", "/api/v2/snapshot", "/api/v2/health", "/api/v2"] {
-            if normalizedUrl.lowercased().hasSuffix(suffix) {
-                normalizedUrl = String(normalizedUrl.dropLast(suffix.count))
-            }
-        }
-        while normalizedUrl.hasSuffix("/") {
-            normalizedUrl.removeLast()
-        }
-
-        guard let serverURL = URL(string: normalizedUrl) else {
-            throw CocoaError(.formatting, userInfo: [NSLocalizedDescriptionKey: "Invalid Cloud URL format"])
-        }
-
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        let cloudBase = home.appending(path: ".contextos/cloud_projects/\(projectId)", directoryHint: .isDirectory)
-        let dotContextOS = cloudBase.appending(path: ".contextos", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: dotContextOS, withIntermediateDirectories: true)
-
-        // 1. Write project.json
-        let descriptorURL = dotContextOS.appending(path: "project.json")
-        var descriptorJSON: [String: Any] = [
-            "id": projectId,
-            "name": "\(projectId) (Cloud)",
-            "schemaVersion": 2,
-            "isCloud": true,
-            "cloudUrl": normalizedUrl
-        ]
-        if let token, !token.isEmpty {
-            descriptorJSON["token"] = token
-        }
-        let descriptorData = try JSONSerialization.data(withJSONObject: descriptorJSON, options: [.prettyPrinted, .sortedKeys])
-        try descriptorData.write(to: descriptorURL)
-
-        // 2. Ensure state.sqlite schema exists
-        let dbURL = dotContextOS.appending(path: "state.sqlite")
-        Self.ensureCloudDatabaseSchema(at: dbURL, projectId: projectId, repoRoot: cloudBase.path)
-
-        // 3. Attempt to fetch remote snapshot from cloud hub if available
-        if var comps = URLComponents(url: serverURL.appending(path: "api/v2/snapshot"), resolvingAgainstBaseURL: false) {
-            comps.queryItems = [URLQueryItem(name: "projectId", value: projectId)]
-            if let snapshotReqURL = comps.url {
-                var req = URLRequest(url: snapshotReqURL)
-                req.timeoutInterval = 8
-                if let token, !token.isEmpty {
-                    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                }
-                req.setValue("application/json", forHTTPHeaderField: "Accept")
-                if let (data, response) = try? await URLSession.shared.data(for: req),
-                   let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                    let snapshotCacheURL = dotContextOS.appending(path: "snapshot.json")
-                    try? data.write(to: snapshotCacheURL)
-                    Self.importSnapshotIntoDatabase(at: dbURL, snapshotData: data, projectId: projectId, projectName: "\(projectId) (Cloud)")
-                }
-            }
-        }
-
-        // 4. Load the cloud project locally
-        await MainActor.run {
-            self.loadProject(at: cloudBase)
-            self.recentProjects = ProjectLocation.recentProjects()
         }
     }
 

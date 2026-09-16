@@ -40,7 +40,6 @@ struct ContentView: View {
         .background(ContextOSTheme.canvas)
         .preferredColorScheme(preferredColorScheme)
         .sheet(isPresented: $store.settingsPresented) { SettingsView(store: store) }
-        .sheet(isPresented: $store.showConnectCloudSheet) { ConnectCloudProjectView(store: store) }
         .task(id: store.projectRoot) {
             let root = store.projectRoot
             var initialized = false
@@ -289,7 +288,6 @@ struct ContentView: View {
                         Divider()
                     }
                     Button(store.text("openProject")) { store.chooseProject() }
-                    Button(store.text("connectCloudProject")) { store.showConnectCloudSheet = true }
                 } label: {
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 10, weight: .semibold)).foregroundStyle(ContextOSTheme.muted)
