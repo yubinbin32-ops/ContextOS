@@ -53,6 +53,20 @@ public enum UpdateEdition: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
+public struct LocalNodeEnvironment: Equatable, Sendable {
+    public let isQualified: Bool // Node >= 22
+    public let version: String?
+    public let executablePath: String?
+    public let message: String
+
+    public static let unknown = LocalNodeEnvironment(
+        isQualified: false,
+        version: nil,
+        executablePath: nil,
+        message: "未检测到本地 Node.js 22+ 环境"
+    )
+}
+
 public enum UpdateState: Equatable, Sendable {
     case idle
     case checking
@@ -100,6 +114,7 @@ public final class AppUpdater: NSObject, ObservableObject {
     @Published public var selectedEdition: UpdateEdition = .full
     @Published public var selectedReleaseId: Int? = nil
     @Published public var showReleaseNotes = false
+    @Published public var nodeEnvironment: LocalNodeEnvironment = AppUpdater.detectSystemNodeEnvironment()
 
     private var activeDownloadTask: URLSessionDownloadTask?
     private var downloadDelegateHandler: DownloadProgressHandler?
@@ -122,6 +137,10 @@ public final class AppUpdater: NSObject, ObservableObject {
     public override init() {
         let savedRepo = UserDefaults.standard.string(forKey: "contextos.update_repo")
         self.repository = (savedRepo?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) ? savedRepo! : Self.defaultRepository
+        let nodeEnv = Self.detectSystemNodeEnvironment()
+        self.nodeEnvironment = nodeEnv
+        // 检测本地 Node 环境：不合格（未安装或 < 22）则默认下载全功能版 (Full)；合格则推荐轻量版 (Standard)
+        self.selectedEdition = nodeEnv.isQualified ? .standard : .full
         super.init()
     }
 
@@ -213,6 +232,12 @@ public final class AppUpdater: NSObject, ObservableObject {
             let releases = try parseReleases(from: data)
             lastCheckedDate = Date()
 
+            let nodeEnv = Self.detectSystemNodeEnvironment()
+            self.nodeEnvironment = nodeEnv
+            if !nodeEnv.isQualified {
+                self.selectedEdition = .full
+            }
+
             if let latest = releases.first(where: { !$0.isPrerelease }) ?? releases.first {
                 if selectedReleaseId == nil || !releases.contains(where: { $0.id == selectedReleaseId }) {
                     selectedReleaseId = latest.id
@@ -298,6 +323,11 @@ public final class AppUpdater: NSObject, ObservableObject {
     // MARK: - Download & In-App Update
 
     public func downloadAndApplyUpdate(release: AppRelease, edition: UpdateEdition) {
+        if edition == .standard && !nodeEnvironment.isQualified {
+            state = .failed(message: "本地未检测到合格的 Node 22+ 环境，无法运行轻量版，请选择全功能版更新")
+            return
+        }
+
         guard let asset = release.asset(for: edition) else {
             state = .failed(message: "该版本未提供所选规格的下载产物")
             return
@@ -451,6 +481,104 @@ public final class AppUpdater: NSObject, ObservableObject {
             NSApplication.shared.terminate(nil)
         } catch {
             state = .failed(message: "启动更新替换程序失败: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Local Node.js Environment Detection
+
+    public static func isVersionAtLeast22(_ verString: String) -> Bool {
+        var clean = verString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if clean.lowercased().hasPrefix("v") {
+            clean = String(clean.dropFirst())
+        }
+        guard let majorStr = clean.split(separator: ".").first,
+              let major = Int(majorStr) else {
+            return false
+        }
+        return major >= 22
+    }
+
+    public static func detectSystemNodeEnvironment() -> LocalNodeEnvironment {
+        let manager = FileManager.default
+        let home = manager.homeDirectoryForCurrentUser.path
+
+        // 1. Candidate paths to probe directly (excluding ContextOS.app bundle)
+        var candidatePaths = [
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "\(home)/.nvm/current/bin/node",
+            "\(home)/.volta/bin/node",
+            "\(home)/.asdf/shims/node",
+            "/usr/bin/node"
+        ]
+
+        let nvmVersionsDir = "\(home)/.nvm/versions/node"
+        if let versions = try? manager.contentsOfDirectory(atPath: nvmVersionsDir) {
+            for v in versions.sorted().reversed() {
+                let p = "\(nvmVersionsDir)/\(v)/bin/node"
+                if !candidatePaths.contains(p) {
+                    candidatePaths.append(p)
+                }
+            }
+        }
+
+        for path in candidatePaths {
+            if manager.isExecutableFile(atPath: path) {
+                if let ver = queryNodeVersion(executablePath: path) {
+                    let qualified = isVersionAtLeast22(ver)
+                    let msg = qualified ? "Node.js \(ver) (>= 22，环境合格)" : "Node.js \(ver) (低于要求的 22+)"
+                    return LocalNodeEnvironment(isQualified: qualified, version: ver, executablePath: path, message: msg)
+                }
+            }
+        }
+
+        // 2. Try login shell to query node -v
+        if let shellOutput = runShell("node -v")?.trimmingCharacters(in: .whitespacesAndNewlines),
+           shellOutput.hasPrefix("v") {
+            let qualified = isVersionAtLeast22(shellOutput)
+            let whichPath = runShell("which node")?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let msg = qualified ? "Node.js \(shellOutput) (>= 22，环境合格)" : "Node.js \(shellOutput) (低于要求的 22+)"
+            return LocalNodeEnvironment(isQualified: qualified, version: shellOutput, executablePath: whichPath, message: msg)
+        }
+
+        return LocalNodeEnvironment(isQualified: false, version: nil, executablePath: nil, message: "未检测到本地 Node.js 22+ 环境")
+    }
+
+    private static func queryNodeVersion(executablePath: String) -> String? {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = ["-v"]
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            return output.isEmpty ? nil : output
+        } catch {
+            return nil
+        }
+    }
+
+    private static func runShell(_ command: String) -> String? {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-l", "-c", command]
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            return output.isEmpty ? nil : output
+        } catch {
+            return nil
         }
     }
 }

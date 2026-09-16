@@ -936,31 +936,55 @@ private struct SoftwareUpdateSection: View {
             Divider().padding(.leading, 38)
 
             // Edition Selector (Full vs Standard)
-            HStack {
-                Label {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(store.text("selectEdition"))
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(ContextOSTheme.ink)
-                        if let asset = currentTarget.asset(for: store.updater.selectedEdition) {
-                            Text(asset.formattedSize)
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundStyle(ContextOSTheme.muted)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(store.text("selectEdition"))
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(ContextOSTheme.ink)
+                            if let asset = currentTarget.asset(for: store.updater.selectedEdition) {
+                                Text(asset.formattedSize)
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundStyle(ContextOSTheme.muted)
+                            }
                         }
+                    } icon: {
+                        Image(systemName: "shippingbox")
+                            .font(.system(size: 11))
+                            .foregroundStyle(ContextOSTheme.muted)
+                            .frame(width: 16)
                     }
-                } icon: {
-                    Image(systemName: "shippingbox")
-                        .font(.system(size: 11))
-                        .foregroundStyle(ContextOSTheme.muted)
-                        .frame(width: 16)
+                    Spacer()
+                    Picker("", selection: $store.updater.selectedEdition) {
+                        Text(store.activeLocale == "zh-Hans" ? "全功能版" : "Full").tag(UpdateEdition.full)
+                        Text(store.activeLocale == "zh-Hans" ? "轻量版" : "Standard").tag(UpdateEdition.standard)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 135)
                 }
-                Spacer()
-                Picker("", selection: $store.updater.selectedEdition) {
-                    Text(store.activeLocale == "zh-Hans" ? "全功能版" : "Full").tag(UpdateEdition.full)
-                    Text(store.activeLocale == "zh-Hans" ? "轻量版" : "Standard").tag(UpdateEdition.standard)
+
+                // Node qualification badge
+                HStack(spacing: 4) {
+                    if store.updater.nodeEnvironment.isQualified {
+                        Circle().fill(ContextOSTheme.success).frame(width: 5, height: 5)
+                        Text(store.activeLocale == "zh-Hans"
+                             ? "系统 Node 22+ 合格 (推荐轻量版)"
+                             : "System Node 22+ qualified (Standard recommended)")
+                            .font(.system(size: 8.5, design: .rounded))
+                            .foregroundStyle(ContextOSTheme.muted)
+                    } else {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 8.5))
+                            .foregroundStyle(ContextOSTheme.failure)
+                        Text(store.activeLocale == "zh-Hans"
+                             ? "系统未检测到 Node 22+ (已默认选全功能版)"
+                             : "Node 22+ missing locally, Full edition auto-selected")
+                            .font(.system(size: 8.5, weight: .medium, design: .rounded))
+                            .foregroundStyle(ContextOSTheme.failure)
+                    }
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 135)
+                .padding(.leading, 26)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
