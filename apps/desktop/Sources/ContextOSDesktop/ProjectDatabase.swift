@@ -133,18 +133,22 @@ final class ProjectDatabase {
             "SELECT id, name, repo_root, graph_revision FROM projects WHERE id = ?",
             bindings: [location.descriptor.id]
         )
-        guard let projectRow = projectRows.first else {
-            throw DatabaseError.step("Project metadata is missing")
+        let project: ProjectInfo
+        if let projectRow = projectRows.first {
+            project = ProjectInfo(
+                id: projectRow.text("id"),
+                name: projectRow.text("name").isEmpty ? location.descriptor.name : projectRow.text("name"),
+                root: location.root.path,
+                graphRevision: projectRow.int("graph_revision")
+            )
+        } else {
+            project = ProjectInfo(
+                id: location.descriptor.id,
+                name: location.descriptor.name,
+                root: location.root.path,
+                graphRevision: 1
+            )
         }
-        let project = ProjectInfo(
-            id: projectRow.text("id"),
-            name: projectRow.text("name"),
-            // repo_root is a stable repository-relative marker in the
-            // versioned database. The active checkout is runtime state owned
-            // by ProjectLocation and may differ across clones or worktrees.
-            root: location.root.path,
-            graphRevision: projectRow.int("graph_revision")
-        )
         let blocks = try rows(
             "SELECT * FROM blocks WHERE project_id = ? AND archived = 0 ORDER BY title",
             bindings: [project.id]
@@ -528,15 +532,22 @@ final class ProjectDatabase {
     private func loadV2Snapshot() throws -> GraphSnapshot {
         let projectRows = try rows("SELECT id, repo_root, graph_revision FROM projects WHERE id = ?", bindings: [location.descriptor.id])
         let projectRow = try (projectRows.first ?? rows("SELECT id, repo_root, graph_revision FROM projects LIMIT 1", bindings: []).first)
-        guard let projectRow else {
-            throw DatabaseError.step("Project metadata is missing")
+        let project: ProjectInfo
+        if let projectRow {
+            project = ProjectInfo(
+                id: projectRow.text("id"),
+                name: location.descriptor.name,
+                root: location.root.path,
+                graphRevision: projectRow.int("graph_revision")
+            )
+        } else {
+            project = ProjectInfo(
+                id: location.descriptor.id,
+                name: location.descriptor.name,
+                root: location.root.path,
+                graphRevision: 1
+            )
         }
-        let project = ProjectInfo(
-            id: projectRow.text("id"),
-            name: location.descriptor.name,
-            root: location.root.path,
-            graphRevision: projectRow.int("graph_revision")
-        )
 
         let blocks = try rows("SELECT * FROM blocks WHERE project_id = ? ORDER BY title", bindings: [project.id]).map { row in
             let rawKind = row.optionalText("kind") ?? ""

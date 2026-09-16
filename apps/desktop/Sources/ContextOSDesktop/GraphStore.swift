@@ -281,9 +281,11 @@ final class GraphStore: ObservableObject {
 
         CREATE TABLE IF NOT EXISTS projects (
           id TEXT PRIMARY KEY,
+          name TEXT NOT NULL DEFAULT '',
           repo_root TEXT NOT NULL,
           graph_revision INTEGER NOT NULL DEFAULT 0,
           exported_at TEXT,
+          updated_at TEXT,
           schema_version INTEGER NOT NULL DEFAULT 2
         );
 
@@ -396,7 +398,7 @@ final class GraphStore: ObservableObject {
           created_at TEXT NOT NULL DEFAULT ''
         );
 
-        INSERT OR IGNORE INTO projects (id, name, repo_root, graph_revision, exported_at, schema_version)
+        INSERT OR REPLACE INTO projects (id, name, repo_root, graph_revision, exported_at, schema_version)
         VALUES ('\(projectId)', '\(projectId) (Cloud)', '\(repoRoot)', 0, datetime('now'), 2);
         """
 
@@ -407,6 +409,7 @@ final class GraphStore: ObservableObject {
         sqlite3_exec(handle, "ALTER TABLE links ADD COLUMN to_id TEXT NOT NULL DEFAULT '';", nil, nil, nil)
         sqlite3_exec(handle, "ALTER TABLE projects ADD COLUMN updated_at TEXT;", nil, nil, nil)
         sqlite3_exec(handle, "ALTER TABLE projects ADD COLUMN name TEXT NOT NULL DEFAULT '';", nil, nil, nil)
+        sqlite3_exec(handle, "INSERT OR REPLACE INTO projects (id, name, repo_root, graph_revision, exported_at, schema_version) VALUES ('\(projectId)', '\(projectId) (Cloud)', '\(repoRoot)', 0, datetime('now'), 2);", nil, nil, nil)
     }
 
     private static func importSnapshotIntoDatabase(at url: URL, snapshotData: Data, projectId: String, projectName: String) {
@@ -475,7 +478,7 @@ final class GraphStore: ObservableObject {
         }
 
         // Update project revision
-        sqlite3_exec(handle, "UPDATE projects SET graph_revision = graph_revision + 1, exported_at = datetime('now') WHERE id = '\(projectId)';", nil, nil, nil)
+        sqlite3_exec(handle, "INSERT OR REPLACE INTO projects (id, name, repo_root, graph_revision, exported_at, schema_version) VALUES ('\(projectId)', '\(projectName)', '', 1, datetime('now'), 2);", nil, nil, nil)
 
         sqlite3_exec(handle, "COMMIT;", nil, nil, nil)
     }
