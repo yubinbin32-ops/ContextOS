@@ -149,10 +149,33 @@ final class GraphStore: ObservableObject {
         }
     }
 
+    func removeRecentProject(_ project: RecentProject) {
+        ProjectLocation.forget(path: project.path)
+        if project.path.contains(".contextos/cloud_projects") {
+            try? FileManager.default.removeItem(atPath: project.path)
+        }
+        self.recentProjects = ProjectLocation.recentProjects()
+        if self.projectRoot == project.path {
+            if let next = self.recentProjects.first {
+                self.openProject(next)
+            } else if let fallback = try? ProjectLocation.resolve() {
+                self.loadProject(at: fallback.root)
+            }
+        }
+    }
+
     func connectCloudProject(cloudUrl: String, projectId: String, token: String?) async throws {
         var normalizedUrl = cloudUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         if !normalizedUrl.lowercased().hasPrefix("http://") && !normalizedUrl.lowercased().hasPrefix("https://") {
             normalizedUrl = "http://" + normalizedUrl
+        }
+        while normalizedUrl.hasSuffix("/") {
+            normalizedUrl.removeLast()
+        }
+        for suffix in ["/sse", "/mcp", "/api/v2/snapshot", "/api/v2/health", "/api/v2"] {
+            if normalizedUrl.lowercased().hasSuffix(suffix) {
+                normalizedUrl = String(normalizedUrl.dropLast(suffix.count))
+            }
         }
         while normalizedUrl.hasSuffix("/") {
             normalizedUrl.removeLast()
@@ -200,6 +223,7 @@ final class GraphStore: ObservableObject {
                    let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
                     let snapshotCacheURL = dotContextOS.appending(path: "snapshot.json")
                     try? data.write(to: snapshotCacheURL)
+                    Self.importSnapshotIntoDatabase(at: dbURL, snapshotData: data, projectId: projectId, projectName: "\(projectId) (Cloud)")
                 }
             }
         }
@@ -208,6 +232,40 @@ final class GraphStore: ObservableObject {
         await MainActor.run {
             self.loadProject(at: cloudBase)
             self.recentProjects = ProjectLocation.recentProjects()
+        }
+    }
+
+    func refreshCloudProject() async {
+        guard let location = self.location else { return }
+        let descriptorURL = location.root.appending(path: ".contextos/project.json")
+        guard let data = try? Data(contentsOf: descriptorURL),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let isCloud = json["isCloud"] as? Bool, isCloud,
+              let cloudUrlStr = json["cloudUrl"] as? String,
+              let serverURL = URL(string: cloudUrlStr) else { return }
+
+        let projectId = json["id"] as? String ?? location.descriptor.id
+        let token = json["token"] as? String
+
+        if var comps = URLComponents(url: serverURL.appending(path: "api/v2/snapshot"), resolvingAgainstBaseURL: false) {
+            comps.queryItems = [URLQueryItem(name: "projectId", value: projectId)]
+            if let snapshotReqURL = comps.url {
+                var req = URLRequest(url: snapshotReqURL)
+                req.timeoutInterval = 8
+                if let token, !token.isEmpty {
+                    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
+                req.setValue("application/json", forHTTPHeaderField: "Accept")
+                if let (snapshotData, response) = try? await URLSession.shared.data(for: req),
+                   let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
+                    let snapshotCacheURL = location.database.deletingLastPathComponent().appending(path: "snapshot.json")
+                    try? snapshotData.write(to: snapshotCacheURL)
+                    Self.importSnapshotIntoDatabase(at: location.database, snapshotData: snapshotData, projectId: projectId, projectName: location.descriptor.name)
+                    await MainActor.run {
+                        self.loadProject(at: location.root)
+                    }
+                }
+            }
         }
     }
 
@@ -324,23 +382,102 @@ final class GraphStore: ObservableObject {
         CREATE TABLE IF NOT EXISTS links (
           id TEXT PRIMARY KEY,
           project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          source_type TEXT NOT NULL,
-          source_id TEXT NOT NULL,
-          target_type TEXT NOT NULL,
-          target_id TEXT NOT NULL,
-          kind TEXT NOT NULL,
+          from_id TEXT NOT NULL DEFAULT '',
+          to_id TEXT NOT NULL DEFAULT '',
+          source_type TEXT NOT NULL DEFAULT 'block',
+          source_id TEXT NOT NULL DEFAULT '',
+          target_type TEXT NOT NULL DEFAULT 'block',
+          target_id TEXT NOT NULL DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'depends_on',
           label TEXT NOT NULL DEFAULT '',
           contract TEXT NOT NULL DEFAULT '',
           health_state TEXT NOT NULL DEFAULT 'healthy',
           current_revision INTEGER NOT NULL DEFAULT 1,
-          created_at TEXT NOT NULL
+          created_at TEXT NOT NULL DEFAULT ''
         );
 
-        INSERT OR IGNORE INTO projects (id, repo_root, graph_revision, exported_at, schema_version)
-        VALUES ('\(projectId)', '\(repoRoot)', 0, datetime('now'), 2);
+        INSERT OR IGNORE INTO projects (id, name, repo_root, graph_revision, exported_at, schema_version)
+        VALUES ('\(projectId)', '\(projectId) (Cloud)', '\(repoRoot)', 0, datetime('now'), 2);
         """
 
         sqlite3_exec(handle, schema, nil, nil, nil)
+
+        // Run migrations for existing sqlite databases that missed from_id/to_id
+        sqlite3_exec(handle, "ALTER TABLE links ADD COLUMN from_id TEXT NOT NULL DEFAULT '';", nil, nil, nil)
+        sqlite3_exec(handle, "ALTER TABLE links ADD COLUMN to_id TEXT NOT NULL DEFAULT '';", nil, nil, nil)
+        sqlite3_exec(handle, "ALTER TABLE projects ADD COLUMN updated_at TEXT;", nil, nil, nil)
+        sqlite3_exec(handle, "ALTER TABLE projects ADD COLUMN name TEXT NOT NULL DEFAULT '';", nil, nil, nil)
+    }
+
+    private static func importSnapshotIntoDatabase(at url: URL, snapshotData: Data, projectId: String, projectName: String) {
+        var handle: OpaquePointer?
+        let status = sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil)
+        guard status == SQLITE_OK, let handle else { return }
+        defer { sqlite3_close(handle) }
+
+        guard let json = (try? JSONSerialization.jsonObject(with: snapshotData)) as? [String: Any] else { return }
+
+        sqlite3_exec(handle, "BEGIN TRANSACTION;", nil, nil, nil)
+
+        // Clear existing tables for this project
+        sqlite3_exec(handle, "DELETE FROM blocks WHERE project_id = '\(projectId)';", nil, nil, nil)
+        sqlite3_exec(handle, "DELETE FROM chains WHERE project_id = '\(projectId)';", nil, nil, nil)
+        sqlite3_exec(handle, "DELETE FROM links WHERE project_id = '\(projectId)';", nil, nil, nil)
+        sqlite3_exec(handle, "DELETE FROM plans WHERE project_id = '\(projectId)';", nil, nil, nil)
+
+        // Insert blocks
+        if let blocks = json["blocks"] as? [[String: Any]] {
+            for b in blocks {
+                let id = (b["id"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let title = (b["title"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let kind = (b["kind"] as? String ?? "service").replacingOccurrences(of: "'", with: "''")
+                let summary = (b["summary"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let body = (b["body"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let sql = "INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, created_at, updated_at) VALUES ('\(id)', '\(projectId)', '\(title)', '\(kind)', '\(summary)', '\(body)', datetime('now'), datetime('now'));"
+                sqlite3_exec(handle, sql, nil, nil, nil)
+            }
+        }
+
+        // Insert chains
+        if let chains = json["chains"] as? [[String: Any]] {
+            for c in chains {
+                let id = (c["id"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let title = (c["title"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let kind = (c["chainType"] as? String ?? "leaf").replacingOccurrences(of: "'", with: "''")
+                let summary = (c["purpose"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let sql = "INSERT OR REPLACE INTO chains (id, project_id, title, summary, kind, member_ids_json, created_at, updated_at) VALUES ('\(id)', '\(projectId)', '\(title)', '\(summary)', '\(kind)', '[]', datetime('now'), datetime('now'));"
+                sqlite3_exec(handle, sql, nil, nil, nil)
+            }
+        }
+
+        // Insert links
+        if let links = json["links"] as? [[String: Any]] {
+            for l in links {
+                let id = (l["id"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let fromId = (l["sourceId"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let toId = (l["targetId"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let kind = (l["kind"] as? String ?? "depends_on").replacingOccurrences(of: "'", with: "''")
+                let sql = "INSERT OR REPLACE INTO links (id, project_id, from_id, to_id, source_id, target_id, kind, created_at) VALUES ('\(id)', '\(projectId)', '\(fromId)', '\(toId)', '\(fromId)', '\(toId)', '\(kind)', datetime('now'));"
+                sqlite3_exec(handle, sql, nil, nil, nil)
+            }
+        }
+
+        // Insert plans
+        if let plans = json["plans"] as? [[String: Any]] {
+            for p in plans {
+                let id = (p["id"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let title = (p["title"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let status = (p["status"] as? String ?? "active").replacingOccurrences(of: "'", with: "''")
+                let summary = (p["summary"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
+                let sql = "INSERT OR REPLACE INTO plans (id, project_id, title, priority, status, summary, created_at, updated_at) VALUES ('\(id)', '\(projectId)', '\(title)', 'normal', '\(status)', '\(summary)', datetime('now'), datetime('now'));"
+                sqlite3_exec(handle, sql, nil, nil, nil)
+            }
+        }
+
+        // Update project revision
+        sqlite3_exec(handle, "UPDATE projects SET graph_revision = graph_revision + 1, exported_at = datetime('now') WHERE id = '\(projectId)';", nil, nil, nil)
+
+        sqlite3_exec(handle, "COMMIT;", nil, nil, nil)
     }
 
     private func saveCurrentProjectViewState() {

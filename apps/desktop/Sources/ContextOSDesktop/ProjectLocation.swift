@@ -88,6 +88,13 @@ struct ProjectLocation {
         }
     }
 
+    static func forget(path: String) {
+        let projects = recentProjects().filter { $0.path != path }
+        if let data = try? JSONEncoder().encode(projects) {
+            UserDefaults.standard.set(data, forKey: recentProjectsKey)
+        }
+    }
+
     private static func remember(_ location: ProjectLocation) {
         let current = RecentProject(path: location.root.path, name: location.descriptor.name)
         var projects = recentProjects().filter { $0.path != current.path }

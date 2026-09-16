@@ -248,16 +248,35 @@ struct ContentView: View {
                     .foregroundStyle(ContextOSTheme.ink)
                     .lineLimit(1)
                 if isCloudProject {
-                    Image(systemName: "cloud.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(ContextOSTheme.focus)
+                    HStack(spacing: 4) {
+                        Image(systemName: "cloud.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(ContextOSTheme.focus)
+                        Button {
+                            Task { await store.refreshCloudProject() }
+                        } label: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(ContextOSTheme.focus)
+                        }
+                        .buttonStyle(.plain)
+                        .help(store.activeLocale == "zh-Hans" ? "从云端中枢拉取最新图谱" : "Sync latest graph from cloud")
+                    }
                 }
                 Spacer()
                 Menu {
                     if !store.recentProjects.isEmpty {
                         Section(store.text("recentProjects")) {
                             ForEach(store.recentProjects) { project in
-                                Button { store.openProject(project) } label: {
+                                Menu {
+                                    Button(store.text("open")) { store.openProject(project) }
+                                    Divider()
+                                    Button(role: .destructive) {
+                                        store.removeRecentProject(project)
+                                    } label: {
+                                        Label(store.activeLocale == "zh-Hans" ? "从最近列表中移除" : "Remove from Recents", systemImage: "trash")
+                                    }
+                                } label: {
                                     let isCurrent = project.path == store.projectRoot
                                     let isCloud = project.name.contains("(Cloud)") || project.path.contains(".contextos/cloud_projects")
                                     Label(
