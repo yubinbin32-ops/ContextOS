@@ -274,33 +274,20 @@ ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文
 
 ---
 
-## 七、项目初始化与存储隔离规范 (用户仅做二选一，AI 全自动自举配置)
+## 七、项目初始化与随时双向切换规范
 
-当用户在新工作区开启对话、要求初始化项目或切换模式时，**必须严格遵循极简交互准则：不要让用户去改代码或配置文件，用户只做选择，AI 在后台完成所有注入！**
+在日常开发中，**遵循最少打扰原则：项目初始化直接默认走本地模式，无需询问用户是否上云；用户明确要求上云时再执行切换。**
 
-### 1. 模式引导决策流
-若工作区尚未初始化（`.contextos/project.json` 不存在）：
-1. **AI 向用户发起二选一询问**：
-   ```text
-   检测到当前项目尚未初始化 ContextOS。请选择数据存储模式：
-   [1] 纯本地模式（默认）：数据存储在本地 .contextos/，100% 离线隐私安全。
-   [2] 云端协同模式：通过 Cloudflare Edge + D1 进行多端实时同步与跨设备协同。
-   ```
-2. **若用户选择 [1] 纯本地模式**：
-   * AI 调用 `contextos_init(mode: "local", projectId: "contextos")`。
-   * 系统自动在本地 `.contextos/project.json` 标记 `"storage": "local"`。
-   * **隔离保证**：即使系统环境变量设置了全局云端 URL，本地项目也绝对强制走本地 SQLite，杜绝任何数据冲突！
-3. **若用户选择 [2] 云端协同模式**：
-   * 若环境已有 Cloudflare 配置，AI 直接调用 `contextos_init(mode: "cloud", projectId: "contextos")`。
-   * 若尚无配置，AI 向用户输出由 `AI_SETUP.md` 提供的 Cloudflare 一键部署链接，索取 URL + Token 并调用 `contextos_init`。
+### 1. 默认直接初始化本地模式
+若当前工作区尚未初始化（`.contextos/project.json` 不存在）：
+- **无需询问用户**，AI 直接调用 `contextos_init(mode: "local", projectId: "contextos")` 完成本地初始化；
+- 系统在工作区 `.contextos/project.json` 标记 `"storage": "local"` 并建立本地 SQLite；
+- 初始化完成后，直接进入 C-D-C-S 正常开发流程。
 
-### 2. 自动化验证
-初始化后，AI 调用 `contextos_doctor` 进行轻量自检，向用户汇报配置就绪后，直接进入 C-D-C-S 正常开发节奏。
-
-### 3. 随时双向无损切换规范
-若用户在对话中提出切换模式要求：
-- 用户说：“把本项目切换到云端协同模式” ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，本地架构数据完整上云；
-- 用户说：“把本项目切回本地纯离线模式” ➔ AI 调用 `contextos_switch(targetMode: "local")`，云端最新数据落盘为本地 SQLite，完全断网离线。
+### 2. 随时双向无损切换规范
+仅当用户在对话中主动提出切换要求时才执行切换：
+- 用户说：“把本项目切换到云端协同模式” ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，本地架构数据完整推送到云端 D1；
+- 用户说：“把本项目切回本地模式” ➔ AI 调用 `contextos_switch(targetMode: "local")`，云端最新快照自动落盘为本地 SQLite，后续完全离线运行。
 
 
 
