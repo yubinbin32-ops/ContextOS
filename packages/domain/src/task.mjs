@@ -70,6 +70,7 @@ export class Task {
       gitHead: baseline.gitHead || null,
       dirtyHash: baseline.dirtyHash || null,
       indexRevision: baseline.indexRevision || 0,
+      fileSnapshots: baseline.fileSnapshots ? { ...baseline.fileSnapshots } : {},
     };
 
     this.notes = Array.isArray(notes) ? [...notes] : [];

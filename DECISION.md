@@ -137,3 +137,24 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
 - **Consequences (收益)**:
   - Zero lock contention; high desktop UI responsiveness.
   - Real-time supervision of long-running servers and background tasks.
+
+---
+
+## [DEC-010] Tree-sitter WebAssembly True AST Engine & mtime+SHA256 Host Native Modification Reconciler
+
+- **Status**: Accepted
+- **Context & Mistaken Paths (历史弯路)**:
+  1. Relying on coarse heuristic bracket counters or external Python CLI child processes caused performance overhead and false matches on edge cases (e.g. lifetimes in Rust, generics in Swift/TypeScript, raw string literals in C++).
+  2. Relying purely on `git status --porcelain` to detect changes failed to track in-place host IDE edits, mtime touch operations, and untracked file state shifts without Git.
+- **Decision (架构决策)**:
+  1. **Tree-sitter WASM Engine**:
+     - Integrate `web-tree-sitter` (v0.27.0) and vendor prebuilt WASM grammars in `packages/code-intel/grammars/` for 14 target languages (JavaScript, TypeScript, TSX, Python, Rust, Go, Swift, Java, Kotlin, C/C++, C#, PHP, Ruby).
+     - Provide 100% syntactically accurate AST extraction for classes, structs, traits, interfaces, types, enums, functions, and methods.
+     - Maintain resilient fallback parsers for rare languages without WASM grammars.
+  2. **Host Native Modification Detection via mtime + SHA256 Comparison**:
+     - Maintain `baseline.fileSnapshots` in SQLite database and Task baseline state tracking `mtimeMs`, `size`, and SHA256 hash.
+     - Automatically scan working set files and Block artifactRefs upon `task(develop)`, `task(reconcile)`, and `task(sync)`.
+     - Detect changes by comparing file stats (`mtimeMs` / `size`), verifying content diff via SHA256, reconciling modified files into `workingSet`, and seamlessly refreshing AST outlines and Block locators.
+- **Consequences (收益)**:
+  - True compiler-grade AST parsing with zero native C++ compiler build dependencies across 14 languages.
+  - Full resilience to host IDE direct disk edits with automated working set reconciliation and AST locator re-anchoring.

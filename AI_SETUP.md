@@ -18,12 +18,10 @@ graph TD
     AskDesktop -->|选择 2: 否| Step1
     Step1 --> Step2[Step 2: 平台探测与多选]
     Step2 --> AskPlatform{询问用户配置哪些编辑器?\n[1] Cursor [2] Codex [3] Claude\n[4] Antigravity [5] OpenCode [6] 全部}
-    AskPlatform --> Step3[Step 3: 是否预设全局云端 Hub?]
-    Step3 --> AskCloud{配置全局云端中枢?\n[1] 暂不配置 (纯本地)\n[2] 立即配置 (1-Click Deploy)}
-    AskCloud -->|选择 1: 暂不配置| Step4[Step 4: 执行按需注入]
-    AskCloud -->|选择 2: 立即配置| SaveCloud[输出 1-Click 链接，索取 URL+Token\n存入 ~/.contextos/cloud.json] --> Step4
-    Step4 --> Step5[Step 5: 初始化当前项目与双向切换]
-    Step5 --> Finish([完成！开启 C-D-C-S 架构治理])
+    AskPlatform --> Step3[Step 3: 询问协作需求]
+    Step3 --> AskTeam{是否需要团队协同?\n[1] 单人开发 (本地模式)\n[2] 团队协同 (云端模式)}
+    AskTeam -->|选择 1: 单人开发| InjectLocal[按需注入平台 & 初始化本地模式] --> Finish([完成！开启 C-D-C-S 架构治理])
+    AskTeam -->|选择 2: 团队协同| CloudSetup[索取/配置 Cloudflare 凭据 & 初始化云端] --> Finish
 ```
 
 ---
@@ -36,8 +34,8 @@ graph TD
        ```text
        检测到您当前系统为 macOS。ContextOS 提供了原生架构图谱桌面端（ContextOS.app），支持实时地铁图拓扑交互。
        请选择：
-       [1] 安装桌面端 + 插件（推荐，拥有可视化图谱与原生交互）
-       [2] 仅安装插件（轻量纯命令行与 MCP 模式）
+       [1] 安装桌面端 + 插件（拥有可视化图谱与原生交互）
+       [2] 仅安装插件（轻量命令行与 MCP 模式）
        ```
      * 若用户选择 `1`：
        * AI 自动下载最新的 `ContextOS.app.zip` 并解压部署至 `/Applications/ContextOS.app`（或用户应用目录）。
@@ -77,64 +75,66 @@ AI 先在后台探测用户电脑中实际安装的平台，然后向用户发�
 
 ---
 
-## Step 3: 是否预先配置全局云端中枢 (Global Cloud Hub)
+## Step 3: 询问协作需求并按需配置 (Collaboration Mode & Injection)
 
-AI 向用户询问是否配置备用全局云端中枢（**注意：配置全局云端仅作为凭据仓库，各项目依然可独立选择本地或云端，并支持随时一键迁移**）：
+AI 询问用户的实际开发需求：
 
 ```text
-是否需要预先配置全局云端 Hub？（配置后可在各项目中随时自由选择本地或云端，并支持一键双向迁移）
-[1] 暂不配置（优先使用纯本地模式，100% 离线隐私安全）
-[2] 立即配置（提供 1-Click Cloudflare 部署链接，保存全局凭据）
+请确认您的项目协作需求：
+[1] 单人开发（使用本地模式，数据存放于当前项目 .contextos/，离线运行）
+[2] 团队协同（使用云端模式，通过 Cloudflare D1 进行多端与多人同步）
 ```
 
-* **若用户选择 [1] 暂不配置**：直接进入 Step 4。
-* **若用户选择 [2] 立即配置**：
-  AI 输出由 Cloudflare 提供的一键部署链接，并索取返回值：
-  ```markdown
-  👉 请点击下方链接，一键部署云端中枢到您的 Cloudflare 免费账户：
-  https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub
-  
-  💡 部署完成后，Cloudflare 会生成一个 Worker 网址并提示设定 AUTH_TOKEN。
-  请将 Worker 网址 和 AUTH_TOKEN 发送给我（例如：URL: https://... Token: ...），我将为您保存至全局配置。
-  ```
-  用户提供后，AI 执行 `node scripts/bootstrap.mjs --save-global-cloud --cloud-url "<URL>" --token "<TOKEN>"`，将凭据安全保存在 `~/.contextos/cloud.json` 中。
-
----
-
-## Step 4: 执行按需精准注入 (App-Parity & Zero Skill Duplication)
-
-AI 根据用户在 Step 2 选定的平台执行自举注入命令：
-```bash
-node scripts/bootstrap.mjs --platforms <选定平台如: cursor,codex>
-```
-
-### 各平台注入规范与杜绝冗余原则：
-1. **Cursor / Antigravity / OpenCode**：
-   * 注入对应编辑器的 MCP JSON 配置；
-   * 同步唯一 Skill 到对应目录（如 `~/.cursor/skills/contextos`、`~/.gemini/config/skills/contextos`）。
-2. **Codex（官方完整插件闭环）**：
-   * 同步插件包至 `~/plugins/contextos`（含 `.codex-plugin/plugin.json`、`skills/contextos`、`server/contextos-mcp.mjs`）；
-   * 在 `~/.agents/plugins/marketplace.json` 注册 personal 市场；
-   * 调用 `codex plugin add contextos@personal` 安装；
-   * **严禁在 `~/.codex/skills` 写入多余兜底，防止 Codex 读取两个重复 Skill 造成上下文污染**；
-   * 安装插件成功后，自动清除 `config.toml` 中的冗余条目，保持干净单一实例。
-3. **Claude Desktop**：
-   * 仅写入 `claude_desktop_config.json`，不生成冗余文件。
-
----
-
-## Step 5: 当前项目初始化与随时双向无损切换 (Project Routing & Switch)
-
-1. **询问当前项目模式**：
-   ```text
-   请选择当前项目的存储模式：
-   [1] 纯本地模式（默认）：数据存放在当前仓库 .contextos/，离线隐私。
-   [2] 云端协同模式：连接云端 Hub，支持多设备跨端拓扑实时同步。
+### 选项 1：单人开发（本地模式）
+1. **AI 执行平台注入**：
+   ```bash
+   node scripts/bootstrap.mjs --platforms <选定平台>
    ```
-2. **AI 执行初始化**：
-   * 若选 [1]：AI 调用 `contextos_init(mode: "local")`，项目标记为本地 SQLite；
-   * 若选 [2]：AI 调用 `contextos_init(mode: "cloud")`，继承全局凭据并连通云端。
-3. **随时双向无损切换机制 (`contextos_switch`)**：
-   后续开发过程中，用户可随时在对话中发出指令切换模式，数据将自动双向迁移：
-   * **本地 ➔ 云端**：用户说 *“把当前项目切换为云端协同模式”* ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，本地 SQLite 中的所有 Block、Chain、Link、Plan 自动无损推送到 Cloud Hub；
-   * **云端 ➔ 本地**：用户说 *“把当前项目切回本地离线开发”* ➔ AI 调用 `contextos_switch(targetMode: "local")`，云端最新快照自动拉取并持久化至本地 SQLite，后续开发完全离线。
+2. **初始化当前项目**：
+   * 调用 `contextos_init(mode: "local", projectId: "contextos")`。
+3. **完成反馈**：
+   ```text
+   🎉 ContextOS 已配置完成（本地单人开发模式）！
+   - 已注入平台：<选定平台>
+   - 存储路径：当前项目 .contextos/
+   - 12 个核心 Facade 工具已就绪，即可开始日常开发。
+   ```
+
+### 选项 2：团队协同（云端模式）
+1. **AI 引导配置云端凭据**：
+   * 若当前环境已有全局凭据，直接复用；
+   * 若尚无凭据，AI 提供 1-Click Cloudflare 部署链接：
+     ```markdown
+     👉 请点击下方链接，一键部署云端中枢至您的 Cloudflare 账户：
+     https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub
+     
+     💡 部署完成后，请将生成的 Worker 网址与 AUTH_TOKEN 发送给我。
+     ```
+   * 用户提供后，AI 执行 `node scripts/bootstrap.mjs --save-global-cloud --cloud-url "<URL>" --token "<TOKEN>"`。
+2. **AI 执行平台注入与项目初始化**：
+   ```bash
+   node scripts/bootstrap.mjs --platforms <选定平台>
+   ```
+   * 调用 `contextos_init(mode: "cloud", projectId: "contextos")`。
+3. **完成反馈**：
+   ```text
+   🎉 ContextOS 已配置完成（团队云端协同模式）！
+   - 已注入平台：<选定平台>
+   - 云端中枢：已连接至指定 Cloudflare Worker
+   - 架构图谱将在团队多端间实时同步。
+   ```
+
+---
+
+## 平台注入规范与杜绝冗余原则：
+1. **Cursor / Antigravity / OpenCode**：注入对应编辑器的 MCP JSON 配置；同步唯一 Skill 到对应目录，杜绝重复 Skill 冗余。
+2. **Codex（官方完整插件闭环）**：同步插件包至 `~/plugins/contextos`，注册 personal 市场并执行 `codex plugin add contextos@personal` 安装。**严禁在 `~/.codex/skills` 写入多余兜底**，安装成功后自动清理 `config.toml` 冗余条目。
+3. **Claude Desktop**：仅写入 `claude_desktop_config.json`，不生成多余文件。
+
+---
+
+## 随时双向无损切换机制 (`contextos_switch`)
+
+无论初始选择哪种模式，后续开发过程中均可根据需要随时通过一句话无损切换：
+* **本地 ➔ 云端**：用户说 *“把当前项目切换为云端协同模式”* ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，本地所有 Block、Chain、Link、Plan 自动完整推送到 Cloud Hub；
+* **云端 ➔ 本地**：用户说 *“把当前项目切回本地开发”* ➔ AI 调用 `contextos_switch(targetMode: "local")`，云端最新快照自动落盘为本地 SQLite，后续完全离线运行。

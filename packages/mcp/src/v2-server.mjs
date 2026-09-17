@@ -23,17 +23,23 @@ function findDefaultProjectRoot() {
     return process.env.CONTEXTOS_PROJECT_ROOT;
   }
   let cur = process.cwd();
-  if (cur && cur !== '/') {
-    while (cur && cur !== path.dirname(cur)) {
-      if (fs.existsSync(path.join(cur, '.contextos'))) {
-        return cur;
-      }
-      cur = path.dirname(cur);
+  while (cur && cur !== path.dirname(cur)) {
+    if (
+      fs.existsSync(path.join(cur, '.contextos')) ||
+      fs.existsSync(path.join(cur, '.git')) ||
+      fs.existsSync(path.join(cur, 'package.json'))
+    ) {
+      return cur;
     }
+    cur = path.dirname(cur);
   }
-  const defaultRepo = '/Users/a1-6/Documents/GitHub/mdflow';
-  if (fs.existsSync(defaultRepo)) {
-    return defaultRepo;
+  if (
+    cur &&
+    (fs.existsSync(path.join(cur, '.contextos')) ||
+      fs.existsSync(path.join(cur, '.git')) ||
+      fs.existsSync(path.join(cur, 'package.json')))
+  ) {
+    return cur;
   }
   return process.cwd();
 }
@@ -226,6 +232,8 @@ export function createV2Server() {
         action: z.enum(['outline', 'read', 'edit', 'search', 'create']),
         path: z.string().optional(),
         selector: z.union([z.string(), z.record(z.any())]).optional(),
+        startLine: z.number().optional(),
+        endLine: z.number().optional(),
         targetContent: z.string().optional(),
         replacementContent: z.string().optional(),
         content: z.string().optional(),
@@ -481,16 +489,16 @@ export function createV2Server() {
         }
 
         // 1. Read local state from SQLite if exists
-        let localSnapshot = { blocks: [], chains: [], links: [], plans: [] };
-        const localDbPath = path.join(dotContextos, 'state.sqlite');
-        if (fs.existsSync(localDbPath)) {
+        let localSnapshot = { blocks: [], chains: [], links: [], plans: [], tasks: [] };
+        if (fs.existsSync(dbPath)) {
           try {
             const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
-            const blocks = localService.db.listBlocks();
-            const chains = localService.db.listChains();
-            const links = localService.db.listLinks();
-            const plans = localService.db.listPlans();
-            localSnapshot = { blocks, chains, links, plans };
+            const blocks = localService.db.listBlocks(pid);
+            const chains = localService.db.listChains(pid);
+            const links = localService.db.listLinks(pid);
+            const plans = localService.db.listPlans(pid);
+            const tasks = localService.db.listTasks();
+            localSnapshot = { blocks, chains, links, plans, tasks };
             localService.close();
           } catch (_) {}
         }
@@ -520,7 +528,7 @@ export function createV2Server() {
         }
 
         return textResult(
-          `✓ Successfully migrated project \`${pid}\` to **CLOUD** mode.\n- Uploaded ${localSnapshot.blocks.length} blocks, ${localSnapshot.chains.length} chains, and ${localSnapshot.plans.length} plans to ${resolvedCloudUrl}.\n- All future task & plan changes will synchronize with Cloudflare D1.`
+          `✓ Successfully migrated project \`${pid}\` to **CLOUD** mode.\n- Uploaded ${localSnapshot.blocks.length} blocks, ${localSnapshot.chains.length} chains, ${localSnapshot.plans.length} plans, and ${localSnapshot.tasks?.length || 0} tasks to ${resolvedCloudUrl}.\n- All future task & plan changes will synchronize with Cloudflare D1.`
         );
       } else {
         // targetMode === 'local'
@@ -543,7 +551,7 @@ export function createV2Server() {
                   kind: b.kind || 'service',
                   summary: b.summary || '',
                   details: b.body || '',
-                  artifactRefs: [],
+                  artifactRefs: b.artifactRefs || b.artifact_refs || [],
                 });
               }
               for (const c of cloudSnapshot.chains || []) {
@@ -553,7 +561,16 @@ export function createV2Server() {
                   title: c.title,
                   summary: c.purpose || '',
                   kind: c.chainType || 'linear',
-                  memberIds: [],
+                  memberIds: c.memberIds || c.member_ids || [],
+                });
+              }
+              for (const l of cloudSnapshot.links || []) {
+                localService.db.saveLink({
+                  id: l.id,
+                  projectId: pid,
+                  fromBlockId: l.fromBlockId || l.from_block_id || l.from,
+                  toBlockId: l.toBlockId || l.to_block_id || l.to,
+                  kind: l.kind || 'calls',
                 });
               }
               for (const p of cloudSnapshot.plans || []) {
@@ -564,6 +581,24 @@ export function createV2Server() {
                   summary: p.summary || '',
                   status: p.status || 'active',
                   priority: p.priority || 'normal',
+                });
+              }
+              for (const t of cloudSnapshot.tasks || []) {
+                localService.db.saveTask({
+                  id: t.id,
+                  planId: t.planId || t.plan_id || 'plan-v2-rebuild',
+                  phaseId: t.phaseId || t.phase_id || 'P0',
+                  title: t.title || 'Untitled Task',
+                  status: t.status || 'draft',
+                  contextSlice: t.contextSlice || t.context_slice || {},
+                  workingSet: t.workingSet || t.working_set || {},
+                  references: t.references || {},
+                  baseline: t.baseline || {},
+                  notes: t.notes || [],
+                  checks: t.checks || [],
+                  syncResult: t.syncResult || t.sync_result || null,
+                  createdAt: t.createdAt || t.created_at,
+                  updatedAt: t.updatedAt || t.updated_at,
                 });
               }
               localService.close();

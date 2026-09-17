@@ -28,7 +28,7 @@ export async function runBenchmark() {
     const briefJsonStr = JSON.stringify(briefJson);
 
     const searchResult = await service.osContext({ action: 'search', query: 'storage' });
-    const blockOpen = await service.osContext({ action: 'open', entityId: 'block:block-domain-core' });
+    const blockOpen = await service.osContext({ action: 'open', entityId: 'block:block-domain-models' });
 
     const contextBenchmark = {
       fullGraphChars: graphText.length,

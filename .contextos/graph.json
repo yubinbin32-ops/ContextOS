@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 12,
-  "exportedAt": "2026-09-16T19:23:29.984Z",
+  "graphRevision": 109,
+  "exportedAt": "2026-09-17T10:33:37.213Z",
   "data": {
     "plans": [
       {
@@ -122,9 +122,9 @@
         "projectId": "contextos",
         "title": "修复 macOS Desktop App CI 编译失败",
         "priority": "normal",
-        "status": "active",
+        "status": "completed",
         "summary": "修复 GitHub Actions 中 macOS Desktop App 的 Swift 编译错误与警告并交付",
-        "completedSummary": null,
+        "completedSummary": "彻底修复 Swift 6 编译警告与 ContentView ConnectCloudProjectView 缺失错误，移除桌面端导入云端项目菜单，验证 Cloud Hub 多项目分区隔离，重构 README/README_zh 三大安装接入方案（方案A桌面端、方案B发给AI自动配、方案C纯插件流）。",
         "historyRef": null,
         "ruleRefs": [],
         "decisionRefs": [],
@@ -143,7 +143,7 @@
         ],
         "checkpoints": [],
         "createdAt": "2026-09-16T18:56:43.632Z",
-        "updatedAt": "2026-09-16T18:56:43.632Z"
+        "updatedAt": "2026-09-16T19:23:49.452Z"
       },
       {
         "id": "plan-v2-rebuild",
@@ -152,7 +152,7 @@
         "priority": "critical",
         "status": "completed",
         "summary": "Ground-up rebuild of ContextOS to eliminate context pollution, ghost blocks, and snake layout.",
-        "completedSummary": "Ground-up rebuild of ContextOS to eliminate context pollution, ghost blocks, and snake layout.",
+        "completedSummary": "ContextOS V2 Ground-up Rebuild 100% complete. Dual benchmark proves 89.6% context reduction. Native SwiftUI Metro layout running on desktop. Zero ghost blocks. 100% code coverage across all 49 files.",
         "historyRef": null,
         "ruleRefs": [
           "rule-cdcs-workflow",
@@ -366,27 +366,48 @@
             "title": "Context reduction quantified by benchmark and real tests",
             "criteria": "",
             "status": "passed",
-            "evidenceRefs": [],
-            "completedAt": "2026-09-14T20:11:41.716Z"
+            "evidenceRefs": [
+              "receipt-1789638942542-2a94d1",
+              "receipt-1789638974011-9fb4a0",
+              "receipt-1789639052018-402b45",
+              "receipt-1789639560556-2d3ca9",
+              "receipt-1789639592490-7100da",
+              "receipt-1789639643145-fb0dfc",
+              "receipt-1789639720815-3d38ad",
+              "receipt-1789640301586-c8347f",
+              "receipt-1789640387100-d79c5c",
+              "receipt-1789640481978-1700dd",
+              "receipt-1789640538807-8c84c7",
+              "receipt-1789641139183-c57104",
+              "receipt-1789641211226-0e9cc9"
+            ],
+            "completedAt": "2026-09-17T10:33:32.520Z"
           }
         ],
         "createdAt": "2026-09-14T20:11:41.716Z",
-        "updatedAt": "2026-09-14T20:11:41.821Z"
+        "updatedAt": "2026-09-17T10:33:32.523Z"
       }
     ],
     "tasks": [
       {
-        "id": "task-1789585290824",
-        "planId": "plan-1789585003632",
-        "phaseId": "phase-fix-ci",
-        "title": "修复 Swift CI 编译、移除桌面端云项目导入、验证云端多项目隔离与优化三套部署方案文档",
+        "id": "task-1789641214905",
+        "planId": "plan-v2-rebuild",
+        "phaseId": "P8",
+        "title": "Real-time Metrics & Code Intelligence Tuning",
         "status": "completed",
         "contextSlice": {
-          "objective": "",
-          "constraints": [],
+          "objective": "Evaluate surgical editing and verify multi-language AST capabilities.",
+          "constraints": [
+            "Zero full file overwrites",
+            "Zero ghost blocks"
+          ],
           "references": {},
           "locators": [],
-          "nextSteps": [],
+          "nextSteps": [
+            "Run surgical code edit",
+            "Verify command receipt",
+            "Sync with coverage gate"
+          ],
           "openQuestions": []
         },
         "workingSet": {
@@ -402,27 +423,573 @@
         "baseline": {
           "gitHead": null,
           "dirtyHash": null,
-          "indexRevision": 0
+          "indexRevision": 0,
+          "fileSnapshots": {
+            "apps/desktop/Sources/ContextOSDesktop/ContextOSDesktopApp.swift": {
+              "mtimeMs": 1789209801000.452,
+              "size": 247,
+              "hash": "58fde1ebb1f49854",
+              "snapshottedAt": "2026-09-17T10:33:34.908Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/ContentView.swift": {
+              "mtimeMs": 1789585696923.9,
+              "size": 70384,
+              "hash": "daef6c8dee0c0dc4",
+              "snapshottedAt": "2026-09-17T10:33:34.908Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/Theme.swift": {
+              "mtimeMs": 1789383880721.2961,
+              "size": 4332,
+              "hash": "ffb3533219805200",
+              "snapshottedAt": "2026-09-17T10:33:34.908Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/Models.swift": {
+              "mtimeMs": 1789583713972.181,
+              "size": 12356,
+              "hash": "8ee333ad3795d622",
+              "snapshottedAt": "2026-09-17T10:33:34.908Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift": {
+              "mtimeMs": 1789446491572.0693,
+              "size": 34081,
+              "hash": "1347a54e53cb1772",
+              "snapshottedAt": "2026-09-17T10:33:34.909Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift": {
+              "mtimeMs": 1789383880718.7485,
+              "size": 17582,
+              "hash": "6b869d3cdd4432f8",
+              "snapshottedAt": "2026-09-17T10:33:34.909Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift": {
+              "mtimeMs": 1789446491573.8867,
+              "size": 30106,
+              "hash": "28d392123a50e38e",
+              "snapshottedAt": "2026-09-17T10:33:34.909Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/DetailView.swift": {
+              "mtimeMs": 1789383880719.805,
+              "size": 80269,
+              "hash": "d58c8a7139246316",
+              "snapshottedAt": "2026-09-17T10:33:34.910Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift": {
+              "mtimeMs": 1789446491573.138,
+              "size": 14332,
+              "hash": "8d7ddb25c76de4ea",
+              "snapshottedAt": "2026-09-17T10:33:34.910Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift": {
+              "mtimeMs": 1789383880720.5786,
+              "size": 9404,
+              "hash": "218a798485907bcd",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/domain/src/plan.mjs": {
+              "mtimeMs": 1789446491590.5474,
+              "size": 6900,
+              "hash": "24e23a253dcc57ac",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/domain/src/task.mjs": {
+              "mtimeMs": 1789640221797.4932,
+              "size": 6332,
+              "hash": "4bbe596b90c22ded",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/domain/src/block.mjs": {
+              "mtimeMs": 1789446491589.7805,
+              "size": 2999,
+              "hash": "187be3d0fb2e4bfc",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/domain/src/chain.mjs": {
+              "mtimeMs": 1789446491589.9026,
+              "size": 1947,
+              "hash": "f52cf37abfa1abbc",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/domain/src/link.mjs": {
+              "mtimeMs": 1789446491590.4038,
+              "size": 1967,
+              "hash": "b460566d824aa2be",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/domain/src/knowledge.mjs": {
+              "mtimeMs": 1789446491590.292,
+              "size": 3402,
+              "hash": "229b543cf5f0e164",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/domain/src/index.mjs": {
+              "mtimeMs": 1789446491590.0254,
+              "size": 209,
+              "hash": "45b3723ecdb8982f",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/domain/src/invariants.mjs": {
+              "mtimeMs": 1789446491590.164,
+              "size": 2115,
+              "hash": "31d6d87c843bbcb0",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/storage/src/database.mjs": {
+              "mtimeMs": 1789446491594.467,
+              "size": 17646,
+              "hash": "f002e97e47b49f44",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/storage/src/schema.mjs": {
+              "mtimeMs": 1789446491594.6873,
+              "size": 4039,
+              "hash": "a9b73168f080073e",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/storage/src/index.mjs": {
+              "mtimeMs": 1789446491594.5747,
+              "size": 97,
+              "hash": "37dc39bffc96857d",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "packages/storage/src/sync-engine.mjs": {
+              "mtimeMs": 1789446491594.8079,
+              "size": 5019,
+              "hash": "3075f92d97214b12",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift": {
+              "mtimeMs": 1789583713972.8838,
+              "size": 62116,
+              "hash": "242864e5cd165dcf",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift": {
+              "mtimeMs": 1789585843568.2334,
+              "size": 78219,
+              "hash": "89fd314eccf2d4f4",
+              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+            },
+            "apps/daemon/src/osd.mjs": {
+              "mtimeMs": 1789446491570.6199,
+              "size": 4213,
+              "hash": "11351f091d8c9887",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/protocol/src/ipc.mjs": {
+              "mtimeMs": 1789446491594.118,
+              "size": 4382,
+              "hash": "aac2c8b78cac875b",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/protocol/src/index.mjs": {
+              "mtimeMs": 1789446491593.98,
+              "size": 27,
+              "hash": "2a7e7a9f78117da9",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/code-intel/src/coverage.mjs": {
+              "mtimeMs": 1789446491588.3843,
+              "size": 1793,
+              "hash": "e1f49ec1f4af8a64",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/process-host/src/runner.mjs": {
+              "mtimeMs": 1789639482724.662,
+              "size": 3146,
+              "hash": "0cadb0c9d41a0a95",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/process-host/src/sanitizer.mjs": {
+              "mtimeMs": 1789545673304.8938,
+              "size": 3067,
+              "hash": "3687a08f928b47b0",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/process-host/src/process-manager.mjs": {
+              "mtimeMs": 1789639493926.9907,
+              "size": 8609,
+              "hash": "2af42bdc65fbb7df",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/process-host/src/index.mjs": {
+              "mtimeMs": 1789446491593.0674,
+              "size": 102,
+              "hash": "165ca36bab5fdd3e",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/context/src/markdown-renderer.mjs": {
+              "mtimeMs": 1789636542695.9756,
+              "size": 6482,
+              "hash": "4446a0bfefcd8dbe",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/context/src/index.mjs": {
+              "mtimeMs": 1789446491589.2837,
+              "size": 41,
+              "hash": "6b8557f7ad952b90",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/layout/src/network-layout.mjs": {
+              "mtimeMs": 1789446491591.3567,
+              "size": 3614,
+              "hash": "0d66879bdb8bddb1",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/layout/src/index.mjs": {
+              "mtimeMs": 1789446491591.2317,
+              "size": 38,
+              "hash": "bc3c0554a49e22ec",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/application/src/plan-service.mjs": {
+              "mtimeMs": 1789446491587.2202,
+              "size": 2214,
+              "hash": "af28dfa6edf5de90",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/application/src/task-service.mjs": {
+              "mtimeMs": 1789641063327.258,
+              "size": 17656,
+              "hash": "a34ec6fe6eae8203",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/application/src/knowledge-service.mjs": {
+              "mtimeMs": 1789446491587.0852,
+              "size": 4325,
+              "hash": "b751b072441ec364",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/application/src/index.mjs": {
+              "mtimeMs": 1789446491586.9524,
+              "size": 113,
+              "hash": "8829539717742ceb",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift": {
+              "mtimeMs": 1789583713972.5269,
+              "size": 38427,
+              "hash": "3bb5a678092491dd",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "packages/mcp/src/bootstrap-util.mjs": {
+              "mtimeMs": 1789639501514.3918,
+              "size": 18861,
+              "hash": "fc6348076b104cd1",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "scripts/bootstrap.mjs": {
+              "mtimeMs": 1789583713976.9438,
+              "size": 3827,
+              "hash": "61c63d5aa19b6726",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "AI_SETUP.md": {
+              "mtimeMs": 1789629884801.511,
+              "size": 6770,
+              "hash": "52c5625307a6b82f",
+              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+            },
+            "plugins/contextos/skills/contextos/SKILL.md": {
+              "mtimeMs": 1789629897672.8174,
+              "size": 23087,
+              "hash": "835318ba1be31837",
+              "snapshottedAt": "2026-09-17T10:33:34.913Z"
+            },
+            "README.md": {
+              "mtimeMs": 1789629912789.664,
+              "size": 10376,
+              "hash": "f44e860604127cb9",
+              "snapshottedAt": "2026-09-17T10:33:34.913Z"
+            },
+            "packages/mcp/src/v2-server.mjs": {
+              "mtimeMs": 1789639411347.847,
+              "size": 24569,
+              "hash": "1921673ebfb850ea",
+              "snapshottedAt": "2026-09-17T10:33:34.913Z"
+            },
+            "worker.js": {
+              "mtimeMs": 1789639451674.6987,
+              "size": 40232,
+              "hash": "c82648ddec486159",
+              "snapshottedAt": "2026-09-17T10:33:34.913Z"
+            },
+            "plugins/contextos/server/contextos-mcp.mjs": {
+              "mtimeMs": 1789641159414.2534,
+              "size": 1700127,
+              "hash": "9dac3f3806142e13",
+              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+            },
+            "packages/mcp/src/cloud-client.mjs": {
+              "mtimeMs": 1789586298747.469,
+              "size": 4973,
+              "hash": "8f99bb4b652e664c",
+              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+            },
+            "packages/mcp/src/v2-service.mjs": {
+              "mtimeMs": 1789640989508.1284,
+              "size": 24116,
+              "hash": "642f0b8a87ae8a5b",
+              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+            },
+            "packages/code-intel/test/code-intel.test.mjs": {
+              "mtimeMs": 1789641080736.3633,
+              "size": 21540,
+              "hash": "f330609f8438b513",
+              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+            },
+            "scripts/benchmark.mjs": {
+              "mtimeMs": 1789638888258.0945,
+              "size": 9735,
+              "hash": "03a6492e664d19f8",
+              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+            },
+            "scripts/e2e-project-lifecycle.mjs": {
+              "mtimeMs": 1789638938560.1682,
+              "size": 10005,
+              "hash": "03a53ebd40d5640e",
+              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+            },
+            "packages/mcp/test/v2-mcp.test.mjs": {
+              "mtimeMs": 1789641053131.335,
+              "size": 10191,
+              "hash": "849e41d041fb12b2",
+              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+            },
+            "package-lock.json": {
+              "mtimeMs": 1789639834146.7192,
+              "size": 61583,
+              "hash": "ce211ee48ae8a688",
+              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+            },
+            "package.json": {
+              "mtimeMs": 1789639834132.717,
+              "size": 1972,
+              "hash": "f67ae7f49ff48a6a",
+              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+            },
+            "packages/code-intel/src/tree-sitter-parser.mjs": {
+              "mtimeMs": 1789640920868.197,
+              "size": 46057,
+              "hash": "65208b6daa3a87b0",
+              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+            },
+            "packages/application/test/application.test.mjs": {
+              "mtimeMs": 1789641088402.6836,
+              "size": 11718,
+              "hash": "ea9c168c525c58a1",
+              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+            },
+            "scripts/verify-all-features.mjs": {
+              "mtimeMs": 1789641122437.253,
+              "size": 13580,
+              "hash": "65c7bda1e6a34d3b",
+              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+            },
+            "DECISION.md": {
+              "mtimeMs": 1789640430265.6443,
+              "size": 11140,
+              "hash": "ba28c4f77d394e0c",
+              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+            },
+            "packages/domain/test/domain.test.mjs": {
+              "mtimeMs": 1789446491590.886,
+              "size": 6454,
+              "hash": "8246148b07cffc3a",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "packages/layout/test/layout.test.mjs": {
+              "mtimeMs": 1789446491591.5183,
+              "size": 2067,
+              "hash": "3c68effaaedbe41a",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "packages/mcp/src/hybrid-service.mjs": {
+              "mtimeMs": 1789583713974.2612,
+              "size": 3627,
+              "hash": "3328513d555c5814",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "packages/mcp/src/server.mjs": {
+              "mtimeMs": 1789446491591.8506,
+              "size": 79,
+              "hash": "604eca120f3fd6dc",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "packages/mcp/src/service.mjs": {
+              "mtimeMs": 1789446491592.1646,
+              "size": 34,
+              "hash": "e71187861ae412c7",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "packages/process-host/test/process-host.test.mjs": {
+              "mtimeMs": 1789446491593.6362,
+              "size": 2969,
+              "hash": "46ce83bf357a3a7c",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "packages/storage/test/storage.test.mjs": {
+              "mtimeMs": 1789446491594.983,
+              "size": 4704,
+              "hash": "349b711f7a33791c",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "apps/cloud/src/index.mjs": {
+              "mtimeMs": 1789629744732.3716,
+              "size": 14817,
+              "hash": "63abec8c6367db5d",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "apps/daemon/test/daemon.test.mjs": {
+              "mtimeMs": 1789446491570.8186,
+              "size": 2136,
+              "hash": "4237c27d1b93fccf",
+              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+            },
+            "apps/desktop/.build/arm64-apple-macosx/debug/contextos-desktopPackageTests.derived/runner.swift": {
+              "mtimeMs": 1789315098991.077,
+              "size": 16466,
+              "hash": "88fa73d509522c48",
+              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+            },
+            "apps/desktop/.build/arm64-apple-macosx/debug/mdflow-desktopPackageTests.derived/runner.swift": {
+              "mtimeMs": 1788508342089.517,
+              "size": 16466,
+              "hash": "88fa73d509522c48",
+              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+            },
+            "apps/desktop/Package.swift": {
+              "mtimeMs": 1789317848853.36,
+              "size": 419,
+              "hash": "81eabd2ed0fd7feb",
+              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+            },
+            "apps/desktop/Sources/CSQLite/shim.h": {
+              "mtimeMs": 1789209771005.074,
+              "size": 21,
+              "hash": "b052d8e561e942f9",
+              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/AppUpdater.swift": {
+              "mtimeMs": 1789585970418.7852,
+              "size": 23936,
+              "hash": "8bd12c33d84efffd",
+              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+            },
+            "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift": {
+              "mtimeMs": 1789583713973.1875,
+              "size": 4943,
+              "hash": "105dd2dec0c922ac",
+              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+            },
+            "apps/desktop/generate_xcodeproj.rb": {
+              "mtimeMs": 1789453547171.814,
+              "size": 4466,
+              "hash": "bb778db3b07ebf47",
+              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+            },
+            "scripts/comprehensive-dev-eval.mjs": {
+              "mtimeMs": 1789446491599.5386,
+              "size": 15720,
+              "hash": "454a00631d593d55",
+              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+            },
+            "scripts/package-macos.mjs": {
+              "mtimeMs": 1789458414348.6338,
+              "size": 7494,
+              "hash": "b53b0541256f4df9",
+              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+            },
+            "scripts/plugin-smoke.mjs": {
+              "mtimeMs": 1789583713977.0984,
+              "size": 3313,
+              "hash": "c9b4f89669a2f4d3",
+              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+            },
+            "scripts/practical-test.mjs": {
+              "mtimeMs": 1789446491600.1907,
+              "size": 7090,
+              "hash": "d4e0e52f949ea6f3",
+              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+            },
+            "scripts/self-adopt.mjs": {
+              "mtimeMs": 1789446491600.337,
+              "size": 25575,
+              "hash": "bbec63e85ff45f62",
+              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+            },
+            "packages/code-intel/src/code-tools.mjs": {
+              "mtimeMs": 1789639358692.9375,
+              "size": 9741,
+              "hash": "9df2209f0f728924",
+              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+            },
+            "packages/code-intel/src/language-registry.mjs": {
+              "mtimeMs": 1789641217126.0994,
+              "size": 45340,
+              "hash": "98d1df4a2af93a16",
+              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+            },
+            "packages/code-intel/src/index.mjs": {
+              "mtimeMs": 1789640154439.5732,
+              "size": 149,
+              "hash": "8cd8c22095ba75fd",
+              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+            }
+          }
         },
-        "notes": [],
+        "notes": [
+          {
+            "id": "note-1789641214975-2dxte",
+            "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
+            "kind": "journal",
+            "createdAt": "2026-09-17T10:33:34.975Z"
+          }
+        ],
         "checks": [
           {
-            "id": "check-1789586593535-0ksf6",
-            "receiptId": "receipt-1789586507485-d0ff92",
-            "description": "Swift build passes with 0 warnings/errors, plugin:verify passed, full npm test suite passed, and Cloud Hub multi-project isolation verified.",
+            "id": "check-1789641217153-vq5sx",
+            "receiptId": "receipt-1789641215975-f49eee",
+            "description": "Code-intel tests passed with out-of-context logging",
             "passed": true,
             "evidence": "",
-            "recordedAt": "2026-09-16T19:23:13.535Z"
+            "recordedAt": "2026-09-17T10:33:37.153Z"
           }
         ],
         "syncResult": {
-          "createdBlockIds": [],
+          "createdBlockIds": [
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-domain-models",
+            "block-domain-invariants",
+            "block-storage-sqlite",
+            "block-storage-sync",
+            "block-desktop-database",
+            "block-daemon-host",
+            "block-coverage-guard",
+            "block-command-runner",
+            "block-process-host",
+            "block-context-envelope",
+            "block-layout-engine",
+            "block-lifecycle-services",
+            "block-desktop-installer",
+            "block-mcp-facades",
+            "block-unassigned-task-1789638684511",
+            "block-unassigned-task-1789638942267",
+            "block-unassigned-task-1789639560285",
+            "block-unassigned-task-1789640196222",
+            "block-unassigned-task-1789640300915",
+            "block-unassigned-task-1789640386382",
+            "block-unassigned-task-1789640481226",
+            "block-unassigned-task-1789641138055",
+            "block-code-gateway"
+          ],
           "updatedChainIds": [],
           "updatedLinkIds": [],
-          "completedAt": "2026-09-16T19:23:29.982Z"
+          "completedAt": "2026-09-17T10:33:37.185Z"
         },
-        "createdAt": "2026-09-16T19:01:30.824Z",
-        "updatedAt": "2026-09-16T19:23:29.982Z"
+        "createdAt": "2026-09-17T10:33:34.905Z",
+        "updatedAt": "2026-09-17T10:33:37.185Z"
       }
     ],
     "blocks": [
@@ -439,7 +1006,7 @@
             "symbol": "CodeTools",
             "startLine": 5,
             "endLine": 259,
-            "hash": "e9751272b62a6107",
+            "hash": "9df2209f0f728924",
             "role": "implementation"
           },
           {
@@ -447,7 +1014,7 @@
             "symbol": "CodeTools.outline",
             "startLine": 9,
             "endLine": 47,
-            "hash": "7561b3ddff2a7b7f",
+            "hash": "9df2209f0f728924",
             "role": "implementation"
           },
           {
@@ -455,7 +1022,7 @@
             "symbol": "CodeTools.read",
             "startLine": 52,
             "endLine": 116,
-            "hash": "c26ba137a98407a8",
+            "hash": "9df2209f0f728924",
             "role": "implementation"
           },
           {
@@ -463,7 +1030,7 @@
             "symbol": "CodeTools.edit",
             "startLine": 121,
             "endLine": 181,
-            "hash": "12c3d0f228f8d134",
+            "hash": "9df2209f0f728924",
             "role": "implementation"
           },
           {
@@ -471,7 +1038,7 @@
             "symbol": "calculateHash",
             "startLine": 6,
             "endLine": 8,
-            "hash": "43dac33a145ec63d",
+            "hash": "98d1df4a2af93a16",
             "role": "implementation"
           },
           {
@@ -479,7 +1046,7 @@
             "symbol": "LanguageRegistry",
             "startLine": 10,
             "endLine": 751,
-            "hash": "9328002d265cfeae",
+            "hash": "98d1df4a2af93a16",
             "role": "implementation"
           },
           {
@@ -487,7 +1054,7 @@
             "symbol": "LanguageRegistry.getLanguage",
             "startLine": 11,
             "endLine": 33,
-            "hash": "de261d6278bbd353",
+            "hash": "98d1df4a2af93a16",
             "role": "implementation"
           },
           {
@@ -495,7 +1062,7 @@
             "symbol": "LanguageRegistry.parseStructure",
             "startLine": 38,
             "endLine": 76,
-            "hash": "dfcb5ab71ebc0c01",
+            "hash": "98d1df4a2af93a16",
             "role": "implementation"
           },
           {
@@ -503,13 +1070,13 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 4,
-            "hash": "file",
+            "hash": "8cd8c22095ba75fd",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       },
       {
         "id": "block-command-runner",
@@ -524,7 +1091,7 @@
             "symbol": "runCommand",
             "startLine": 7,
             "endLine": 94,
-            "hash": "4d1c90fdefb7f5c3",
+            "hash": "0cadb0c9d41a0a95",
             "role": "implementation"
           },
           {
@@ -532,7 +1099,7 @@
             "symbol": "stripAnsi",
             "startLine": 9,
             "endLine": 11,
-            "hash": "51af3e8356213e49",
+            "hash": "3687a08f928b47b0",
             "role": "implementation"
           },
           {
@@ -540,7 +1107,7 @@
             "symbol": "redactSecrets",
             "startLine": 13,
             "endLine": 20,
-            "hash": "9256c98d3f50078d",
+            "hash": "3687a08f928b47b0",
             "role": "implementation"
           },
           {
@@ -548,13 +1115,13 @@
             "symbol": "sanitizeTerminalOutput",
             "startLine": 22,
             "endLine": 88,
-            "hash": "ac3521dc8fc9c382",
+            "hash": "3687a08f928b47b0",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       },
       {
         "id": "block-context-envelope",
@@ -569,7 +1136,7 @@
             "symbol": "MarkdownRenderer",
             "startLine": 6,
             "endLine": 170,
-            "hash": "0985925543898e8f",
+            "hash": "4446a0bfefcd8dbe",
             "role": "implementation"
           },
           {
@@ -577,7 +1144,7 @@
             "symbol": "MarkdownRenderer.renderBrief",
             "startLine": 9,
             "endLine": 63,
-            "hash": "d8531596b6d73033",
+            "hash": "4446a0bfefcd8dbe",
             "role": "implementation"
           },
           {
@@ -585,7 +1152,7 @@
             "symbol": "MarkdownRenderer.renderPlan",
             "startLine": 65,
             "endLine": 101,
-            "hash": "2fc8cd117c6bf036",
+            "hash": "4446a0bfefcd8dbe",
             "role": "implementation"
           },
           {
@@ -593,7 +1160,7 @@
             "symbol": "MarkdownRenderer.renderTask",
             "startLine": 103,
             "endLine": 142,
-            "hash": "68d2fa2714f97bf0",
+            "hash": "4446a0bfefcd8dbe",
             "role": "implementation"
           },
           {
@@ -601,13 +1168,13 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 2,
-            "hash": "file",
+            "hash": "6b8557f7ad952b90",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       },
       {
         "id": "block-coverage-guard",
@@ -622,7 +1189,7 @@
             "symbol": "CoverageChecker",
             "startLine": 6,
             "endLine": 63,
-            "hash": "318071e52be4fbf7",
+            "hash": "e1f49ec1f4af8a64",
             "role": "implementation"
           },
           {
@@ -630,13 +1197,13 @@
             "symbol": "CoverageChecker.checkCoverage",
             "startLine": 7,
             "endLine": 62,
-            "hash": "fb1236b85772c32b",
+            "hash": "e1f49ec1f4af8a64",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-daemon-host",
@@ -651,7 +1218,7 @@
             "symbol": "Daemon",
             "startLine": 7,
             "endLine": 122,
-            "hash": "52a97da30f7c1c4c",
+            "hash": "11351f091d8c9887",
             "role": "implementation"
           },
           {
@@ -659,7 +1226,7 @@
             "symbol": "Daemon.constructor",
             "startLine": 8,
             "endLine": 18,
-            "hash": "8a85c2519c53db6f",
+            "hash": "11351f091d8c9887",
             "role": "implementation"
           },
           {
@@ -667,7 +1234,7 @@
             "symbol": "Daemon.start",
             "startLine": 20,
             "endLine": 31,
-            "hash": "449878f2d6c465d5",
+            "hash": "11351f091d8c9887",
             "role": "implementation"
           },
           {
@@ -675,7 +1242,7 @@
             "symbol": "Daemon.stop",
             "startLine": 33,
             "endLine": 39,
-            "hash": "c835aca4e3fcdbd0",
+            "hash": "11351f091d8c9887",
             "role": "implementation"
           },
           {
@@ -683,7 +1250,7 @@
             "symbol": "getSocketPath",
             "startLine": 6,
             "endLine": 10,
-            "hash": "6dcfa80714e9f4e5",
+            "hash": "aac2c8b78cac875b",
             "role": "implementation"
           },
           {
@@ -691,7 +1258,7 @@
             "symbol": "IPCServer",
             "startLine": 12,
             "endLine": 92,
-            "hash": "d8b844d842dd0837",
+            "hash": "aac2c8b78cac875b",
             "role": "implementation"
           },
           {
@@ -699,7 +1266,7 @@
             "symbol": "IPCServer.constructor",
             "startLine": 13,
             "endLine": 18,
-            "hash": "9f1a9b7bad91730c",
+            "hash": "aac2c8b78cac875b",
             "role": "implementation"
           },
           {
@@ -707,7 +1274,7 @@
             "symbol": "IPCServer.start",
             "startLine": 20,
             "endLine": 73,
-            "hash": "ca7cbb95ff704824",
+            "hash": "aac2c8b78cac875b",
             "role": "implementation"
           },
           {
@@ -715,19 +1282,19 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 2,
-            "hash": "file",
+            "hash": "2a7e7a9f78117da9",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-desktop-canvas",
         "projectId": "contextos",
         "title": "Metro Map Subway Canvas",
-        "kind": "ui",
+        "kind": "service",
         "summary": "SwiftUI subway rail network view, station nodes, orthogonal rail connections, and zoom/pan scene.",
         "details": "",
         "artifactRefs": [
@@ -736,7 +1303,7 @@
             "symbol": "GraphCanvasView",
             "startLine": 5,
             "endLine": 656,
-            "hash": "bbb27b285ffd10d7",
+            "hash": "1347a54e53cb1772",
             "role": "implementation"
           },
           {
@@ -744,7 +1311,7 @@
             "symbol": "GraphCanvasView.body",
             "startLine": 15,
             "endLine": 85,
-            "hash": "71502c47d306686d",
+            "hash": "1347a54e53cb1772",
             "role": "implementation"
           },
           {
@@ -752,7 +1319,7 @@
             "symbol": "GraphCanvasView.rebuildScene",
             "startLine": 98,
             "endLine": 111,
-            "hash": "7cb3fa44ef7cbfb5",
+            "hash": "1347a54e53cb1772",
             "role": "implementation"
           },
           {
@@ -760,7 +1327,7 @@
             "symbol": "GraphCanvasView.grid",
             "startLine": 135,
             "endLine": 150,
-            "hash": "deefc3307623b2f2",
+            "hash": "1347a54e53cb1772",
             "role": "implementation"
           },
           {
@@ -768,7 +1335,7 @@
             "symbol": "CanvasScene",
             "startLine": 5,
             "endLine": 135,
-            "hash": "939667e7d13cb5e1",
+            "hash": "6b869d3cdd4432f8",
             "role": "implementation"
           },
           {
@@ -776,7 +1343,7 @@
             "symbol": "CanvasScene.compile",
             "startLine": 23,
             "endLine": 98,
-            "hash": "75adbd0eae411bd8",
+            "hash": "6b869d3cdd4432f8",
             "role": "implementation"
           },
           {
@@ -784,7 +1351,7 @@
             "symbol": "CanvasScene.resolvedChainNodes",
             "startLine": 42,
             "endLine": 57,
-            "hash": "0d2902adf01ae95a",
+            "hash": "6b869d3cdd4432f8",
             "role": "implementation"
           },
           {
@@ -792,7 +1359,7 @@
             "symbol": "CanvasScene.connectedComponent",
             "startLine": 100,
             "endLine": 111,
-            "hash": "9f07f6ecf043fcc4",
+            "hash": "6b869d3cdd4432f8",
             "role": "implementation"
           },
           {
@@ -800,7 +1367,7 @@
             "symbol": "LayoutEdge",
             "startLine": 3,
             "endLine": 7,
-            "hash": "149c1226dfc52218",
+            "hash": "28d392123a50e38e",
             "role": "implementation"
           },
           {
@@ -808,7 +1375,7 @@
             "symbol": "LayoutNodeMetadata",
             "startLine": 9,
             "endLine": 13,
-            "hash": "2303bc420eeed383",
+            "hash": "28d392123a50e38e",
             "role": "implementation"
           },
           {
@@ -816,7 +1383,7 @@
             "symbol": "LayoutBand",
             "startLine": 15,
             "endLine": 19,
-            "hash": "0ba246663fc8f911",
+            "hash": "28d392123a50e38e",
             "role": "implementation"
           },
           {
@@ -824,19 +1391,19 @@
             "symbol": "NetworkLayoutSnapshot",
             "startLine": 21,
             "endLine": 27,
-            "hash": "1748237ec9a9e07e",
+            "hash": "28d392123a50e38e",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-desktop-database",
         "projectId": "contextos",
         "title": "Desktop Native SQLite Store",
-        "kind": "database",
+        "kind": "service",
         "summary": "Swift native SQLite reader, reactive GraphStore publisher, and background file change watcher.",
         "details": "",
         "artifactRefs": [
@@ -845,7 +1412,7 @@
             "symbol": "DatabaseFileIdentity",
             "startLine": 10,
             "endLine": 12,
-            "hash": "487c20cbefce5ce7",
+            "hash": "242864e5cd165dcf",
             "role": "implementation"
           },
           {
@@ -853,7 +1420,7 @@
             "symbol": "ProjectDatabase",
             "startLine": 14,
             "endLine": 941,
-            "hash": "c80548b03cdc4983",
+            "hash": "242864e5cd165dcf",
             "role": "implementation"
           },
           {
@@ -861,7 +1428,7 @@
             "symbol": "ProjectDatabase.fileIdentity",
             "startLine": 34,
             "endLine": 38,
-            "hash": "665c3a9e5e20cf38",
+            "hash": "242864e5cd165dcf",
             "role": "implementation"
           },
           {
@@ -869,7 +1436,7 @@
             "symbol": "ProjectDatabase.close",
             "startLine": 65,
             "endLine": 69,
-            "hash": "3b82aea4ec91d1e2",
+            "hash": "242864e5cd165dcf",
             "role": "implementation"
           },
           {
@@ -877,7 +1444,7 @@
             "symbol": "GraphStore",
             "startLine": 7,
             "endLine": 1253,
-            "hash": "8913236db8c7a6c5",
+            "hash": "89fd314eccf2d4f4",
             "role": "implementation"
           },
           {
@@ -885,7 +1452,7 @@
             "symbol": "GraphStore.chooseProject",
             "startLine": 97,
             "endLine": 108,
-            "hash": "3fbf5b5684da7e96",
+            "hash": "89fd314eccf2d4f4",
             "role": "implementation"
           },
           {
@@ -893,7 +1460,7 @@
             "symbol": "GraphStore.openProject",
             "startLine": 110,
             "endLine": 112,
-            "hash": "9b8e7e1d287f416b",
+            "hash": "89fd314eccf2d4f4",
             "role": "implementation"
           },
           {
@@ -901,19 +1468,19 @@
             "symbol": "GraphStore.openKnowledgeProject",
             "startLine": 114,
             "endLine": 114,
-            "hash": "369c1234529ffead",
+            "hash": "89fd314eccf2d4f4",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-desktop-inspector",
         "projectId": "contextos",
         "title": "Inspector & Knowledge Reader",
-        "kind": "ui",
+        "kind": "service",
         "summary": "Right drawer inspector, task journal, and rich Markdown knowledge document reader.",
         "details": "",
         "artifactRefs": [
@@ -922,7 +1489,7 @@
             "symbol": "DetailView",
             "startLine": 4,
             "endLine": 1391,
-            "hash": "526d4e12630c3302",
+            "hash": "d58c8a7139246316",
             "role": "implementation"
           },
           {
@@ -930,7 +1497,7 @@
             "symbol": "DetailView.body",
             "startLine": 16,
             "endLine": 46,
-            "hash": "8ea09fb68fd34469",
+            "hash": "d58c8a7139246316",
             "role": "implementation"
           },
           {
@@ -938,7 +1505,7 @@
             "symbol": "DetailView.metadataLabel",
             "startLine": 188,
             "endLine": 193,
-            "hash": "4db98ff2ce74af7f",
+            "hash": "d58c8a7139246316",
             "role": "implementation"
           },
           {
@@ -946,7 +1513,7 @@
             "symbol": "DetailView.planDocument",
             "startLine": 202,
             "endLine": 387,
-            "hash": "89e0e65e4cb6db8a",
+            "hash": "d58c8a7139246316",
             "role": "implementation"
           },
           {
@@ -954,7 +1521,7 @@
             "symbol": "KnowledgeDocument",
             "startLine": 5,
             "endLine": 14,
-            "hash": "de7e673e1a2048ba",
+            "hash": "8d7ddb25c76de4ea",
             "role": "implementation"
           },
           {
@@ -962,7 +1529,7 @@
             "symbol": "KnowledgeLibrary",
             "startLine": 17,
             "endLine": 57,
-            "hash": "41902bcdafe84360",
+            "hash": "8d7ddb25c76de4ea",
             "role": "implementation"
           },
           {
@@ -970,7 +1537,7 @@
             "symbol": "KnowledgeLibrary.reload",
             "startLine": 22,
             "endLine": 30,
-            "hash": "61b6747f5d96cc45",
+            "hash": "8d7ddb25c76de4ea",
             "role": "implementation"
           },
           {
@@ -978,7 +1545,7 @@
             "symbol": "KnowledgeView",
             "startLine": 60,
             "endLine": 133,
-            "hash": "31192342a1fc38ee",
+            "hash": "8d7ddb25c76de4ea",
             "role": "implementation"
           },
           {
@@ -986,7 +1553,7 @@
             "symbol": "MarkdownPage",
             "startLine": 5,
             "endLine": 111,
-            "hash": "a1d275a160e6af3d",
+            "hash": "218a798485907bcd",
             "role": "implementation"
           },
           {
@@ -994,7 +1561,7 @@
             "symbol": "MarkdownPage.escape",
             "startLine": 6,
             "endLine": 8,
-            "hash": "c2aae18ef9207df1",
+            "hash": "218a798485907bcd",
             "role": "implementation"
           },
           {
@@ -1002,7 +1569,7 @@
             "symbol": "MarkdownPage.replace",
             "startLine": 9,
             "endLine": 18,
-            "hash": "79e7c712c6235611",
+            "hash": "218a798485907bcd",
             "role": "implementation"
           },
           {
@@ -1010,13 +1577,13 @@
             "symbol": "MarkdownPage.safeURL",
             "startLine": 19,
             "endLine": 25,
-            "hash": "17c5768ccd2b6632",
+            "hash": "218a798485907bcd",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-desktop-installer",
@@ -1031,7 +1598,7 @@
             "symbol": "EditorPlatformStatus",
             "startLine": null,
             "endLine": null,
-            "hash": "cc0b7231a5af0f28",
+            "hash": "3bb5a678092491dd",
             "role": "implementation"
           },
           {
@@ -1039,7 +1606,7 @@
             "symbol": "syncAllPlatforms",
             "startLine": null,
             "endLine": null,
-            "hash": "fd468287f5862cc5",
+            "hash": "fc6348076b104cd1",
             "role": "implementation"
           },
           {
@@ -1047,7 +1614,7 @@
             "symbol": "bootstrap",
             "startLine": null,
             "endLine": null,
-            "hash": "e4ba11c08ec9a757",
+            "hash": "61c63d5aa19b6726",
             "role": "implementation"
           },
           {
@@ -1055,7 +1622,7 @@
             "symbol": "AI_SETUP",
             "startLine": null,
             "endLine": null,
-            "hash": "1e1927cf6dcf058e",
+            "hash": "52c5625307a6b82f",
             "role": "documentation"
           },
           {
@@ -1063,7 +1630,7 @@
             "symbol": "SKILL",
             "startLine": null,
             "endLine": null,
-            "hash": "fec671dbe13dd2ad",
+            "hash": "835318ba1be31837",
             "role": "documentation"
           },
           {
@@ -1071,19 +1638,19 @@
             "symbol": "README",
             "startLine": null,
             "endLine": null,
-            "hash": "2ec4c02d8854f015",
+            "hash": "f44e860604127cb9",
             "role": "documentation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-16T17:33:11.119Z",
-        "updatedAt": "2026-09-16T17:33:11.119Z"
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       },
       {
         "id": "block-desktop-shell",
         "projectId": "contextos",
         "title": "Desktop Window & App Shell",
-        "kind": "ui",
+        "kind": "service",
         "summary": "Main desktop app entrypoint, window frame, global theme, and data models.",
         "details": "",
         "artifactRefs": [
@@ -1092,7 +1659,7 @@
             "symbol": "ContextOSDesktopApp",
             "startLine": 4,
             "endLine": 12,
-            "hash": "e34d7498f5afed18",
+            "hash": "58fde1ebb1f49854",
             "role": "implementation"
           },
           {
@@ -1100,7 +1667,7 @@
             "symbol": "ContentView",
             "startLine": 3,
             "endLine": 455,
-            "hash": "8dfbe3246c555e69",
+            "hash": "daef6c8dee0c0dc4",
             "role": "implementation"
           },
           {
@@ -1108,7 +1675,7 @@
             "symbol": "ContentView.body",
             "startLine": 13,
             "endLine": 67,
-            "hash": "8b8cb93099b15251",
+            "hash": "daef6c8dee0c0dc4",
             "role": "implementation"
           },
           {
@@ -1116,7 +1683,7 @@
             "symbol": "ContentView.openDocument",
             "startLine": 69,
             "endLine": 74,
-            "hash": "2a407d2b71e12afa",
+            "hash": "daef6c8dee0c0dc4",
             "role": "implementation"
           },
           {
@@ -1124,7 +1691,7 @@
             "symbol": "ContentView.closeDocument",
             "startLine": 75,
             "endLine": 75,
-            "hash": "67d81e0b610df2f7",
+            "hash": "daef6c8dee0c0dc4",
             "role": "implementation"
           },
           {
@@ -1132,7 +1699,7 @@
             "symbol": "ContextOSTheme",
             "startLine": 4,
             "endLine": 113,
-            "hash": "10b1e69166e1e12c",
+            "hash": "ffb3533219805200",
             "role": "implementation"
           },
           {
@@ -1140,7 +1707,7 @@
             "symbol": "ContextOSTheme.healthColor",
             "startLine": 18,
             "endLine": 26,
-            "hash": "d8f35b01b49d1517",
+            "hash": "ffb3533219805200",
             "role": "implementation"
           },
           {
@@ -1148,7 +1715,7 @@
             "symbol": "ContextOSTheme.deliveryColor",
             "startLine": 28,
             "endLine": 37,
-            "hash": "2666341ccb716038",
+            "hash": "ffb3533219805200",
             "role": "implementation"
           },
           {
@@ -1156,7 +1723,7 @@
             "symbol": "ContextOSTheme.planColor",
             "startLine": 39,
             "endLine": 49,
-            "hash": "4bb0ccc65d4b855d",
+            "hash": "ffb3533219805200",
             "role": "implementation"
           },
           {
@@ -1164,7 +1731,7 @@
             "symbol": "ProjectDescriptor",
             "startLine": 3,
             "endLine": 7,
-            "hash": "a55ce6d89135d762",
+            "hash": "8ee333ad3795d622",
             "role": "implementation"
           },
           {
@@ -1172,7 +1739,7 @@
             "symbol": "RecentProject",
             "startLine": 9,
             "endLine": 13,
-            "hash": "70201a6a6bd0b8e7",
+            "hash": "8ee333ad3795d622",
             "role": "implementation"
           },
           {
@@ -1180,7 +1747,7 @@
             "symbol": "ProjectInfo",
             "startLine": 15,
             "endLine": 20,
-            "hash": "54ead291fdb3f6ef",
+            "hash": "8ee333ad3795d622",
             "role": "implementation"
           },
           {
@@ -1188,13 +1755,13 @@
             "symbol": "BlockItem",
             "startLine": 22,
             "endLine": 40,
-            "hash": "3a5c85323726905b",
+            "hash": "8ee333ad3795d622",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-domain-invariants",
@@ -1209,7 +1776,7 @@
             "symbol": "InvariantViolationError",
             "startLine": 5,
             "endLine": 11,
-            "hash": "4fff1e04699ee846",
+            "hash": "31d6d87c843bbcb0",
             "role": "implementation"
           },
           {
@@ -1217,7 +1784,7 @@
             "symbol": "InvariantViolationError.constructor",
             "startLine": 6,
             "endLine": 10,
-            "hash": "08886e2f2449662b",
+            "hash": "31d6d87c843bbcb0",
             "role": "implementation"
           },
           {
@@ -1225,7 +1792,7 @@
             "symbol": "assertBlockHasRealCode",
             "startLine": 16,
             "endLine": 23,
-            "hash": "18499f283a6880fb",
+            "hash": "31d6d87c843bbcb0",
             "role": "implementation"
           },
           {
@@ -1233,19 +1800,19 @@
             "symbol": "assertCheckpointBelongsToPlan",
             "startLine": 28,
             "endLine": 35,
-            "hash": "9ca9d1d57636ee76",
+            "hash": "31d6d87c843bbcb0",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-domain-models",
         "projectId": "contextos",
         "title": "Domain Entities & Knowledge Models",
-        "kind": "data",
+        "kind": "service",
         "summary": "Unified core entity definitions for Plans, Phases, Tasks, Blocks, Chains, Links, and Decision records.",
         "details": "",
         "artifactRefs": [
@@ -1254,7 +1821,7 @@
             "symbol": "PlanCheckpoint",
             "startLine": 11,
             "endLine": 66,
-            "hash": "3ef5731873c8e585",
+            "hash": "24e23a253dcc57ac",
             "role": "implementation"
           },
           {
@@ -1262,7 +1829,7 @@
             "symbol": "PlanCheckpoint.constructor",
             "startLine": 12,
             "endLine": 37,
-            "hash": "bb87445200cf3c40",
+            "hash": "24e23a253dcc57ac",
             "role": "implementation"
           },
           {
@@ -1270,7 +1837,7 @@
             "symbol": "PlanCheckpoint.pass",
             "startLine": 39,
             "endLine": 43,
-            "hash": "a58200bc8f23ee83",
+            "hash": "24e23a253dcc57ac",
             "role": "implementation"
           },
           {
@@ -1278,7 +1845,7 @@
             "symbol": "PlanCheckpoint.fail",
             "startLine": 45,
             "endLine": 48,
-            "hash": "0e0b4d40322d6e5a",
+            "hash": "24e23a253dcc57ac",
             "role": "implementation"
           },
           {
@@ -1286,7 +1853,7 @@
             "symbol": "Task",
             "startLine": 17,
             "endLine": 202,
-            "hash": "8cf5258b8ed08133",
+            "hash": "4bbe596b90c22ded",
             "role": "implementation"
           },
           {
@@ -1294,7 +1861,7 @@
             "symbol": "Task.constructor",
             "startLine": 18,
             "endLine": 80,
-            "hash": "f41764f6cdcb472f",
+            "hash": "4bbe596b90c22ded",
             "role": "implementation"
           },
           {
@@ -1302,7 +1869,7 @@
             "symbol": "Task.activate",
             "startLine": 82,
             "endLine": 88,
-            "hash": "925d005d84c55ab3",
+            "hash": "4bbe596b90c22ded",
             "role": "implementation"
           },
           {
@@ -1310,7 +1877,7 @@
             "symbol": "Task.addNote",
             "startLine": 90,
             "endLine": 101,
-            "hash": "89bfc02912abb4bd",
+            "hash": "4bbe596b90c22ded",
             "role": "implementation"
           },
           {
@@ -1318,7 +1885,7 @@
             "symbol": "ArtifactRef",
             "startLine": 6,
             "endLine": 34,
-            "hash": "985e76351272511f",
+            "hash": "187be3d0fb2e4bfc",
             "role": "implementation"
           },
           {
@@ -1326,7 +1893,7 @@
             "symbol": "ArtifactRef.constructor",
             "startLine": 7,
             "endLine": 22,
-            "hash": "761a8e6828570ae0",
+            "hash": "187be3d0fb2e4bfc",
             "role": "implementation"
           },
           {
@@ -1334,7 +1901,7 @@
             "symbol": "ArtifactRef.toJSON",
             "startLine": 24,
             "endLine": 33,
-            "hash": "2f70edfb5b393956",
+            "hash": "187be3d0fb2e4bfc",
             "role": "implementation"
           },
           {
@@ -1342,7 +1909,7 @@
             "symbol": "Block",
             "startLine": 36,
             "endLine": 105,
-            "hash": "2008e2b5bd1318cf",
+            "hash": "187be3d0fb2e4bfc",
             "role": "implementation"
           },
           {
@@ -1350,7 +1917,7 @@
             "symbol": "Chain",
             "startLine": 9,
             "endLine": 68,
-            "hash": "8a024926e22cd9ee",
+            "hash": "f52cf37abfa1abbc",
             "role": "implementation"
           },
           {
@@ -1358,7 +1925,7 @@
             "symbol": "Chain.constructor",
             "startLine": 10,
             "endLine": 37,
-            "hash": "3a525a465815dd53",
+            "hash": "f52cf37abfa1abbc",
             "role": "implementation"
           },
           {
@@ -1366,7 +1933,7 @@
             "symbol": "Chain.addMember",
             "startLine": 39,
             "endLine": 45,
-            "hash": "47bc342b022b6191",
+            "hash": "f52cf37abfa1abbc",
             "role": "implementation"
           },
           {
@@ -1374,7 +1941,7 @@
             "symbol": "Chain.removeMember",
             "startLine": 47,
             "endLine": 53,
-            "hash": "9be21cb2a14d117b",
+            "hash": "f52cf37abfa1abbc",
             "role": "implementation"
           },
           {
@@ -1382,7 +1949,7 @@
             "symbol": "Link",
             "startLine": 20,
             "endLine": 73,
-            "hash": "0a0e011aed05ec40",
+            "hash": "b460566d824aa2be",
             "role": "implementation"
           },
           {
@@ -1390,7 +1957,7 @@
             "symbol": "Link.constructor",
             "startLine": 21,
             "endLine": 56,
-            "hash": "3dc7563378f2b1b5",
+            "hash": "b460566d824aa2be",
             "role": "implementation"
           },
           {
@@ -1398,7 +1965,7 @@
             "symbol": "Link.toJSON",
             "startLine": 58,
             "endLine": 72,
-            "hash": "e49ad1ba749f66a7",
+            "hash": "b460566d824aa2be",
             "role": "implementation"
           },
           {
@@ -1406,7 +1973,7 @@
             "symbol": "DecisionDocument",
             "startLine": 21,
             "endLine": 93,
-            "hash": "b072aea098056483",
+            "hash": "229b543cf5f0e164",
             "role": "implementation"
           },
           {
@@ -1414,7 +1981,7 @@
             "symbol": "DecisionDocument.constructor",
             "startLine": 22,
             "endLine": 25,
-            "hash": "5b290dafb4991e9a",
+            "hash": "229b543cf5f0e164",
             "role": "implementation"
           },
           {
@@ -1422,7 +1989,7 @@
             "symbol": "DecisionDocument.parseSections",
             "startLine": 27,
             "endLine": 58,
-            "hash": "fa1460b06a4cd599",
+            "hash": "229b543cf5f0e164",
             "role": "implementation"
           },
           {
@@ -1430,7 +1997,7 @@
             "symbol": "DecisionDocument.getSection",
             "startLine": 60,
             "endLine": 62,
-            "hash": "07d05210e4a7da45",
+            "hash": "229b543cf5f0e164",
             "role": "implementation"
           },
           {
@@ -1438,13 +2005,13 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 8,
-            "hash": "file",
+            "hash": "45b3723ecdb8982f",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-layout-engine",
@@ -1459,7 +2026,7 @@
             "symbol": "NetworkLayoutEngine",
             "startLine": 12,
             "endLine": 119,
-            "hash": "bd1abadf2fc36529",
+            "hash": "0d66879bdb8bddb1",
             "role": "implementation"
           },
           {
@@ -1467,7 +2034,7 @@
             "symbol": "NetworkLayoutEngine.computeLayout",
             "startLine": 13,
             "endLine": 118,
-            "hash": "ea019709df850dc8",
+            "hash": "0d66879bdb8bddb1",
             "role": "implementation"
           },
           {
@@ -1475,13 +2042,13 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 2,
-            "hash": "file",
+            "hash": "bc3c0554a49e22ec",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       },
       {
         "id": "block-lifecycle-services",
@@ -1496,7 +2063,7 @@
             "symbol": "PlanService",
             "startLine": 3,
             "endLine": 85,
-            "hash": "27813a824b13f070",
+            "hash": "af28dfa6edf5de90",
             "role": "implementation"
           },
           {
@@ -1504,7 +2071,7 @@
             "symbol": "PlanService.constructor",
             "startLine": 4,
             "endLine": 6,
-            "hash": "687dc238fe89647d",
+            "hash": "af28dfa6edf5de90",
             "role": "implementation"
           },
           {
@@ -1512,7 +2079,7 @@
             "symbol": "PlanService.createPlan",
             "startLine": 8,
             "endLine": 36,
-            "hash": "65b2cf63f05260fe",
+            "hash": "af28dfa6edf5de90",
             "role": "implementation"
           },
           {
@@ -1520,7 +2087,7 @@
             "symbol": "PlanService.getPlan",
             "startLine": 38,
             "endLine": 40,
-            "hash": "5000c54db21b7196",
+            "hash": "af28dfa6edf5de90",
             "role": "implementation"
           },
           {
@@ -1528,7 +2095,7 @@
             "symbol": "TaskService",
             "startLine": 4,
             "endLine": 160,
-            "hash": "c880b534765072ac",
+            "hash": "a34ec6fe6eae8203",
             "role": "implementation"
           },
           {
@@ -1536,7 +2103,7 @@
             "symbol": "TaskService.constructor",
             "startLine": 5,
             "endLine": 8,
-            "hash": "5395da07e565222f",
+            "hash": "a34ec6fe6eae8203",
             "role": "implementation"
           },
           {
@@ -1544,7 +2111,7 @@
             "symbol": "TaskService.createTask",
             "startLine": 10,
             "endLine": 35,
-            "hash": "ad82c8b95dbca977",
+            "hash": "a34ec6fe6eae8203",
             "role": "implementation"
           },
           {
@@ -1552,7 +2119,7 @@
             "symbol": "TaskService.getTask",
             "startLine": 37,
             "endLine": 39,
-            "hash": "4f33e67f6abd56d6",
+            "hash": "a34ec6fe6eae8203",
             "role": "implementation"
           },
           {
@@ -1560,7 +2127,7 @@
             "symbol": "KnowledgeService",
             "startLine": 5,
             "endLine": 135,
-            "hash": "c6ea9f798d534880",
+            "hash": "b751b072441ec364",
             "role": "implementation"
           },
           {
@@ -1568,7 +2135,7 @@
             "symbol": "KnowledgeService.getDecisionPath",
             "startLine": 6,
             "endLine": 11,
-            "hash": "5d1d715d01afa0ba",
+            "hash": "b751b072441ec364",
             "role": "implementation"
           },
           {
@@ -1576,7 +2143,7 @@
             "symbol": "KnowledgeService.getDecision",
             "startLine": 13,
             "endLine": 26,
-            "hash": "8efe61419f99ade2",
+            "hash": "b751b072441ec364",
             "role": "implementation"
           },
           {
@@ -1584,7 +2151,7 @@
             "symbol": "KnowledgeService.patchDecisionSection",
             "startLine": 28,
             "endLine": 37,
-            "hash": "7764fc2495f66b4e",
+            "hash": "b751b072441ec364",
             "role": "implementation"
           },
           {
@@ -1592,19 +2159,19 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 4,
-            "hash": "file",
+            "hash": "8829539717742ceb",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       },
       {
         "id": "block-mcp-facades",
         "projectId": "contextos",
         "title": "Consolidated 9 MCP Facades",
-        "kind": "gateway",
+        "kind": "service",
         "summary": "High-level action-based MCP facades replacing legacy micro-tools with clean context control.",
         "details": "",
         "artifactRefs": [
@@ -1613,7 +2180,7 @@
             "symbol": "findDefaultProjectRoot",
             "startLine": null,
             "endLine": null,
-            "hash": "506c86e29dbb5265",
+            "hash": "1921673ebfb850ea",
             "role": "implementation"
           },
           {
@@ -1621,7 +2188,7 @@
             "symbol": "fetch",
             "startLine": null,
             "endLine": null,
-            "hash": "74da7b6b7f8249fb",
+            "hash": "c82648ddec486159",
             "role": "implementation"
           },
           {
@@ -1629,7 +2196,7 @@
             "symbol": "server",
             "startLine": null,
             "endLine": null,
-            "hash": "e4ba11c08ec9a757",
+            "hash": "9dac3f3806142e13",
             "role": "implementation"
           },
           {
@@ -1637,13 +2204,13 @@
             "symbol": "ContextOSCloudClient",
             "startLine": null,
             "endLine": null,
-            "hash": "6cb837e8fccc27de",
+            "hash": "8f99bb4b652e664c",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-16T17:33:11.120Z",
-        "updatedAt": "2026-09-16T17:33:11.120Z"
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       },
       {
         "id": "block-process-host",
@@ -1658,7 +2225,7 @@
             "symbol": "ProcessManager",
             "startLine": 6,
             "endLine": 222,
-            "hash": "8d48f3a8b174ad56",
+            "hash": "2af42bdc65fbb7df",
             "role": "implementation"
           },
           {
@@ -1666,7 +2233,7 @@
             "symbol": "ProcessManager.constructor",
             "startLine": 7,
             "endLine": 10,
-            "hash": "73e50677096400a6",
+            "hash": "2af42bdc65fbb7df",
             "role": "implementation"
           },
           {
@@ -1674,7 +2241,7 @@
             "symbol": "ProcessManager.startProcess",
             "startLine": 12,
             "endLine": 95,
-            "hash": "d4a9d7c1b2348643",
+            "hash": "2af42bdc65fbb7df",
             "role": "implementation"
           },
           {
@@ -1682,7 +2249,7 @@
             "symbol": "ProcessManager._persistProcesses",
             "startLine": 97,
             "endLine": 103,
-            "hash": "c055ca2f2892ffdb",
+            "hash": "2af42bdc65fbb7df",
             "role": "implementation"
           },
           {
@@ -1690,19 +2257,19 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 4,
-            "hash": "file",
+            "hash": "165ca36bab5fdd3e",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       },
       {
         "id": "block-storage-sqlite",
         "projectId": "contextos",
         "title": "SQLite WAL Database Engine",
-        "kind": "database",
+        "kind": "service",
         "summary": "WAL-mode SQLite schema, atomic transactions, and relational projection persistence.",
         "details": "",
         "artifactRefs": [
@@ -1711,7 +2278,7 @@
             "symbol": "V2Database",
             "startLine": 6,
             "endLine": 520,
-            "hash": "f44a5db3a3caddd3",
+            "hash": "f002e97e47b49f44",
             "role": "implementation"
           },
           {
@@ -1719,7 +2286,7 @@
             "symbol": "V2Database.constructor",
             "startLine": 7,
             "endLine": 14,
-            "hash": "24bfb4ade4df6cfd",
+            "hash": "f002e97e47b49f44",
             "role": "implementation"
           },
           {
@@ -1727,7 +2294,7 @@
             "symbol": "V2Database.init",
             "startLine": 16,
             "endLine": 20,
-            "hash": "c85b53a05880b6ec",
+            "hash": "f002e97e47b49f44",
             "role": "implementation"
           },
           {
@@ -1735,7 +2302,7 @@
             "symbol": "V2Database.transaction",
             "startLine": 22,
             "endLine": 32,
-            "hash": "ee44571933d89ed1",
+            "hash": "f002e97e47b49f44",
             "role": "implementation"
           },
           {
@@ -1743,7 +2310,7 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 135,
-            "hash": "file",
+            "hash": "a9b73168f080073e",
             "role": "implementation"
           },
           {
@@ -1751,13 +2318,13 @@
             "symbol": null,
             "startLine": 1,
             "endLine": 4,
-            "hash": "file",
+            "hash": "37dc39bffc96857d",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
       },
       {
         "id": "block-storage-sync",
@@ -1772,7 +2339,7 @@
             "symbol": "calculateSha256",
             "startLine": 5,
             "endLine": 7,
-            "hash": "673df096ac6b21ff",
+            "hash": "3075f92d97214b12",
             "role": "implementation"
           },
           {
@@ -1780,7 +2347,7 @@
             "symbol": "SyncEngine",
             "startLine": 9,
             "endLine": 159,
-            "hash": "ae1a169bc781406f",
+            "hash": "3075f92d97214b12",
             "role": "implementation"
           },
           {
@@ -1788,7 +2355,7 @@
             "symbol": "SyncEngine.constructor",
             "startLine": 10,
             "endLine": 12,
-            "hash": "687dc238fe89647d",
+            "hash": "3075f92d97214b12",
             "role": "implementation"
           },
           {
@@ -1796,13 +2363,381 @@
             "symbol": "SyncEngine.exportGraphToJson",
             "startLine": 14,
             "endLine": 59,
-            "hash": "e4a6cac9cd41e089",
+            "hash": "3075f92d97214b12",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-14T20:11:41.792Z",
-        "updatedAt": "2026-09-14T20:11:41.792Z"
+        "createdAt": "2026-09-17T10:33:37.183Z",
+        "updatedAt": "2026-09-17T10:33:37.183Z"
+      },
+      {
+        "id": "block-unassigned-task-1789638684511",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (Real-time Metrics & Code Intelligence Tuning)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: packages/mcp/src/v2-service.mjs",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "packages/mcp/src/v2-service.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "642f0b8a87ae8a5b",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
+      },
+      {
+        "id": "block-unassigned-task-1789638942267",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (E2E Real Code Writing, Verification & Plan Completion)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: packages/code-intel/test/code-intel.test.mjs, scripts/benchmark.mjs, scripts/e2e-project-lifecycle.mjs",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "packages/code-intel/test/code-intel.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "f330609f8438b513",
+            "role": "implementation"
+          },
+          {
+            "path": "scripts/benchmark.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "03a6492e664d19f8",
+            "role": "implementation"
+          },
+          {
+            "path": "scripts/e2e-project-lifecycle.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "03a53ebd40d5640e",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
+      },
+      {
+        "id": "block-unassigned-task-1789639560285",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (E2E Real Code Writing, Verification & Plan Completion)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: packages/mcp/test/v2-mcp.test.mjs",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "packages/mcp/test/v2-mcp.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "849e41d041fb12b2",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
+      },
+      {
+        "id": "block-unassigned-task-1789640196222",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (Real-time Metrics & Code Intelligence Tuning)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: package-lock.json, package.json, packages/code-intel/grammars/, packages/code-intel/src/tree-sitter-parser.mjs",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "package-lock.json",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "ce211ee48ae8a688",
+            "role": "implementation"
+          },
+          {
+            "path": "package.json",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "f67ae7f49ff48a6a",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/code-intel/grammars/",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "untracked",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/code-intel/src/tree-sitter-parser.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "65208b6daa3a87b0",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
+      },
+      {
+        "id": "block-unassigned-task-1789640300915",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (E2E Real Code Writing, Verification & Plan Completion)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: packages/application/test/application.test.mjs",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "packages/application/test/application.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "ea9c168c525c58a1",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
+      },
+      {
+        "id": "block-unassigned-task-1789640386382",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (E2E Real Code Writing, Verification & Plan Completion)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: scripts/verify-all-features.mjs",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "scripts/verify-all-features.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "65c7bda1e6a34d3b",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
+      },
+      {
+        "id": "block-unassigned-task-1789640481226",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (E2E Real Code Writing, Verification & Plan Completion)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: DECISION.md",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "DECISION.md",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "ba28c4f77d394e0c",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
+      },
+      {
+        "id": "block-unassigned-task-1789641138055",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (E2E Real Code Writing, Verification & Plan Completion)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: packages/domain/test/domain.test.mjs, packages/layout/test/layout.test.mjs, packages/mcp/src/hybrid-service.mjs, packages/mcp/src/server.mjs, packages/mcp/src/service.mjs, packages/process-host/test/process-host.test.mjs, packages/storage/test/storage.test.mjs, apps/cloud/src/index.mjs, apps/daemon/test/daemon.test.mjs, apps/desktop/.build/arm64-apple-macosx/debug/contextos-desktopPackageTests.derived/runner.swift, apps/desktop/.build/arm64-apple-macosx/debug/mdflow-desktopPackageTests.derived/runner.swift, apps/desktop/Package.swift, apps/desktop/Sources/CSQLite/shim.h, apps/desktop/Sources/ContextOSDesktop/AppUpdater.swift, apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift, apps/desktop/generate_xcodeproj.rb, scripts/comprehensive-dev-eval.mjs, scripts/package-macos.mjs, scripts/plugin-smoke.mjs, scripts/practical-test.mjs, scripts/self-adopt.mjs",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "packages/domain/test/domain.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "8246148b07cffc3a",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/layout/test/layout.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "3c68effaaedbe41a",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/mcp/src/hybrid-service.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "3328513d555c5814",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/mcp/src/server.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "604eca120f3fd6dc",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/mcp/src/service.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "e71187861ae412c7",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/process-host/test/process-host.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "46ce83bf357a3a7c",
+            "role": "implementation"
+          },
+          {
+            "path": "packages/storage/test/storage.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "349b711f7a33791c",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/cloud/src/index.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "63abec8c6367db5d",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/daemon/test/daemon.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "4237c27d1b93fccf",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/.build/arm64-apple-macosx/debug/contextos-desktopPackageTests.derived/runner.swift",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "88fa73d509522c48",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/.build/arm64-apple-macosx/debug/mdflow-desktopPackageTests.derived/runner.swift",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "88fa73d509522c48",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Package.swift",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "81eabd2ed0fd7feb",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/CSQLite/shim.h",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "b052d8e561e942f9",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/AppUpdater.swift",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "8bd12c33d84efffd",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "105dd2dec0c922ac",
+            "role": "implementation"
+          },
+          {
+            "path": "apps/desktop/generate_xcodeproj.rb",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "bb778db3b07ebf47",
+            "role": "implementation"
+          },
+          {
+            "path": "scripts/comprehensive-dev-eval.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "454a00631d593d55",
+            "role": "implementation"
+          },
+          {
+            "path": "scripts/package-macos.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "b53b0541256f4df9",
+            "role": "implementation"
+          },
+          {
+            "path": "scripts/plugin-smoke.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "c9b4f89669a2f4d3",
+            "role": "implementation"
+          },
+          {
+            "path": "scripts/practical-test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "d4e0e52f949ea6f3",
+            "role": "implementation"
+          },
+          {
+            "path": "scripts/self-adopt.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "bbec63e85ff45f62",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T10:33:37.184Z",
+        "updatedAt": "2026-09-17T10:33:37.184Z"
       }
     ],
     "chains": [

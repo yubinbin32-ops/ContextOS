@@ -92,9 +92,9 @@ export class CodeTools {
       targetSymbol = selector.symbol;
     } else if (selector.method) {
       targetSymbol = selector.method;
-    } else if (selector.startLine && selector.endLine) {
-      startLine = Number(selector.startLine);
-      endLine = Number(selector.endLine);
+    } else if (selector.startLine !== undefined || selector.endLine !== undefined) {
+      startLine = selector.startLine !== undefined && selector.startLine !== null ? Number(selector.startLine) : 1;
+      endLine = selector.endLine !== undefined && selector.endLine !== null ? Number(selector.endLine) : Math.min(lines.length, startLine + 100);
     } else if (selector.fullFile === true) {
       startLine = 1;
       endLine = lines.length;
@@ -150,19 +150,21 @@ export class CodeTools {
     let newContent = '';
     const lines = content.split(/\r?\n/);
 
-    if (startLine !== null && endLine !== null) {
+    if (startLine !== null || endLine !== null) {
       // Range constrained replacement
-      const chunkStart = Math.max(0, startLine - 1);
-      const chunkEnd = Math.min(lines.length, endLine);
+      const effectiveStart = startLine !== null && startLine !== undefined ? Number(startLine) : 1;
+      const effectiveEnd = endLine !== null && endLine !== undefined ? Number(endLine) : lines.length;
+      const chunkStart = Math.max(0, effectiveStart - 1);
+      const chunkEnd = Math.min(lines.length, effectiveEnd);
       const chunk = lines.slice(chunkStart, chunkEnd).join('\n');
 
       if (!chunk.includes(targetContent)) {
         throw new Error(
-          `TargetContent not found in specified range [L${startLine}-L${endLine}] of ${filePath}`
+          `TargetContent not found in specified range [L${effectiveStart}-L${effectiveEnd}] of ${filePath}`
         );
       }
 
-      const replacedChunk = chunk.replace(targetContent, replacementContent);
+      const replacedChunk = chunk.replace(targetContent, () => replacementContent);
       newContent = [
         ...lines.slice(0, chunkStart),
         replacedChunk,
@@ -176,10 +178,10 @@ export class CodeTools {
       }
       if (occurrences > 1) {
         throw new Error(
-          `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine to disambiguate.`
+          `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
         );
       }
-      newContent = content.replace(targetContent, replacementContent);
+      newContent = content.replace(targetContent, () => replacementContent);
     }
 
     // Re-anchor: re-parse the new content to get updated locators

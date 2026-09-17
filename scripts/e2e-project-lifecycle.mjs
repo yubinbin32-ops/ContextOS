@@ -27,8 +27,10 @@ async function runE2E() {
   // 1. Session Bootstrap (os_context brief)
   console.log('>>> [Step 1] Session Bootstrap (os_context brief)');
   const brief = await service.osContext({ action: 'brief' });
-  assert(brief.includes('Active Plan: [plan-v2-rebuild]'), 'Brief must include active plan');
-  console.log('  ✓ os_context brief returned active plan and workspace summary (< 800 tokens).');
+  const activePlanMatch = brief.match(/## Active Plan: \[([^\]]+)\]/);
+  assert(activePlanMatch, 'Brief must include active plan');
+  const activePlanId = activePlanMatch[1];
+  console.log(`  ✓ os_context brief returned active plan [${activePlanId}] and workspace summary (< 800 tokens).`);
 
   // 2. Open Master Plan (plan open)
   console.log('\n>>> [Step 2] Inspect Master Plan (plan open)');

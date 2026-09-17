@@ -9,8 +9,8 @@ var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
-  for (var name in all)
-    __defProp(target, name, { get: all[name], enumerable: true });
+  for (var name2 in all)
+    __defProp(target, name2, { get: all[name2], enumerable: true });
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -86,24 +86,24 @@ var require_code = __commonJS({
     };
     exports._Code = _Code;
     exports.nil = new _Code("");
-    function _(strs, ...args) {
+    function _(strs, ...args2) {
       const code2 = [strs[0]];
-      let i = 0;
-      while (i < args.length) {
-        addCodeArg(code2, args[i]);
-        code2.push(strs[++i]);
+      let i2 = 0;
+      while (i2 < args2.length) {
+        addCodeArg(code2, args2[i2]);
+        code2.push(strs[++i2]);
       }
       return new _Code(code2);
     }
     exports._ = _;
     var plus = new _Code("+");
-    function str(strs, ...args) {
+    function str(strs, ...args2) {
       const expr = [safeStringify(strs[0])];
-      let i = 0;
-      while (i < args.length) {
+      let i2 = 0;
+      while (i2 < args2.length) {
         expr.push(plus);
-        addCodeArg(expr, args[i]);
-        expr.push(plus, safeStringify(strs[++i]));
+        addCodeArg(expr, args2[i2]);
+        expr.push(plus, safeStringify(strs[++i2]));
       }
       optimize(expr);
       return new _Code(expr);
@@ -119,17 +119,17 @@ var require_code = __commonJS({
     }
     exports.addCodeArg = addCodeArg;
     function optimize(expr) {
-      let i = 1;
-      while (i < expr.length - 1) {
-        if (expr[i] === plus) {
-          const res = mergeExprItems(expr[i - 1], expr[i + 1]);
+      let i2 = 1;
+      while (i2 < expr.length - 1) {
+        if (expr[i2] === plus) {
+          const res = mergeExprItems(expr[i2 - 1], expr[i2 + 1]);
           if (res !== void 0) {
-            expr.splice(i - 1, 3, res);
+            expr.splice(i2 - 1, 3, res);
             continue;
           }
-          expr[i++] = "+";
+          expr[i2++] = "+";
         }
-        i++;
+        i2++;
       }
     }
     function mergeExprItems(a, b) {
@@ -191,9 +191,9 @@ var require_scope = __commonJS({
     exports.ValueScope = exports.ValueScopeName = exports.Scope = exports.varKinds = exports.UsedValueState = void 0;
     var code_1 = require_code();
     var ValueError = class extends Error {
-      constructor(name) {
-        super(`CodeGen: "code" for ${name} not defined`);
-        this.value = name.value;
+      constructor(name2) {
+        super(`CodeGen: "code" for ${name2} not defined`);
+        this.value = name2.value;
       }
     };
     var UsedValueState;
@@ -260,8 +260,8 @@ var require_scope = __commonJS({
         var _a3;
         if (value.ref === void 0)
           throw new Error("CodeGen: ref must be passed in value");
-        const name = this.toName(nameOrPrefix);
-        const { prefix: prefix2 } = name;
+        const name2 = this.toName(nameOrPrefix);
+        const { prefix: prefix2 } = name2;
         const valueKey = (_a3 = value.key) !== null && _a3 !== void 0 ? _a3 : value.ref;
         let vs = this._values[prefix2];
         if (vs) {
@@ -271,12 +271,12 @@ var require_scope = __commonJS({
         } else {
           vs = this._values[prefix2] = /* @__PURE__ */ new Map();
         }
-        vs.set(valueKey, name);
+        vs.set(valueKey, name2);
         const s = this._scope[prefix2] || (this._scope[prefix2] = []);
         const itemIndex = s.length;
         s[itemIndex] = value.ref;
-        name.setValue(value, { property: prefix2, itemIndex });
-        return name;
+        name2.setValue(value, { property: prefix2, itemIndex });
+        return name2;
       }
       getValue(prefix2, keyOrRef) {
         const vs = this._values[prefix2];
@@ -285,17 +285,17 @@ var require_scope = __commonJS({
         return vs.get(keyOrRef);
       }
       scopeRefs(scopeName, values = this._values) {
-        return this._reduceValues(values, (name) => {
-          if (name.scopePath === void 0)
-            throw new Error(`CodeGen: name "${name}" has no value`);
-          return (0, code_1._)`${scopeName}${name.scopePath}`;
+        return this._reduceValues(values, (name2) => {
+          if (name2.scopePath === void 0)
+            throw new Error(`CodeGen: name "${name2}" has no value`);
+          return (0, code_1._)`${scopeName}${name2.scopePath}`;
         });
       }
       scopeCode(values = this._values, usedValues, getCode) {
-        return this._reduceValues(values, (name) => {
-          if (name.value === void 0)
-            throw new Error(`CodeGen: name "${name}" has no value`);
-          return name.value.code;
+        return this._reduceValues(values, (name2) => {
+          if (name2.value === void 0)
+            throw new Error(`CodeGen: name "${name2}" has no value`);
+          return name2.value.code;
         }, usedValues, getCode);
       }
       _reduceValues(values, valueCode, usedValues = {}, getCode) {
@@ -305,20 +305,20 @@ var require_scope = __commonJS({
           if (!vs)
             continue;
           const nameSet = usedValues[prefix2] = usedValues[prefix2] || /* @__PURE__ */ new Map();
-          vs.forEach((name) => {
-            if (nameSet.has(name))
+          vs.forEach((name2) => {
+            if (nameSet.has(name2))
               return;
-            nameSet.set(name, UsedValueState.Started);
-            let c = valueCode(name);
+            nameSet.set(name2, UsedValueState.Started);
+            let c = valueCode(name2);
             if (c) {
               const def = this.opts.es5 ? exports.varKinds.var : exports.varKinds.const;
-              code2 = (0, code_1._)`${code2}${def} ${name} = ${c};${this.opts._n}`;
-            } else if (c = getCode === null || getCode === void 0 ? void 0 : getCode(name)) {
+              code2 = (0, code_1._)`${code2}${def} ${name2} = ${c};${this.opts._n}`;
+            } else if (c = getCode === null || getCode === void 0 ? void 0 : getCode(name2)) {
               code2 = (0, code_1._)`${code2}${c}${this.opts._n}`;
             } else {
-              throw new ValueError(name);
+              throw new ValueError(name2);
             }
-            nameSet.set(name, UsedValueState.Completed);
+            nameSet.set(name2, UsedValueState.Completed);
           });
         }
         return code2;
@@ -386,7 +386,7 @@ var require_codegen = __commonJS({
       AND: new code_1._Code("&&"),
       ADD: new code_1._Code("+")
     };
-    var Node2 = class {
+    var Node3 = class {
       optimizeNodes() {
         return this;
       }
@@ -394,11 +394,11 @@ var require_codegen = __commonJS({
         return this;
       }
     };
-    var Def = class extends Node2 {
-      constructor(varKind, name, rhs) {
+    var Def = class extends Node3 {
+      constructor(varKind, name2, rhs) {
         super();
         this.varKind = varKind;
-        this.name = name;
+        this.name = name2;
         this.rhs = rhs;
       }
       render({ es5, _n }) {
@@ -417,7 +417,7 @@ var require_codegen = __commonJS({
         return this.rhs instanceof code_1._CodeOrName ? this.rhs.names : {};
       }
     };
-    var Assign = class extends Node2 {
+    var Assign = class extends Node3 {
       constructor(lhs, rhs, sideEffects) {
         super();
         this.lhs = lhs;
@@ -447,7 +447,7 @@ var require_codegen = __commonJS({
         return `${this.lhs} ${this.op}= ${this.rhs};` + _n;
       }
     };
-    var Label = class extends Node2 {
+    var Label = class extends Node3 {
       constructor(label) {
         super();
         this.label = label;
@@ -457,7 +457,7 @@ var require_codegen = __commonJS({
         return `${this.label}:` + _n;
       }
     };
-    var Break = class extends Node2 {
+    var Break = class extends Node3 {
       constructor(label) {
         super();
         this.label = label;
@@ -468,7 +468,7 @@ var require_codegen = __commonJS({
         return `break${label};` + _n;
       }
     };
-    var Throw = class extends Node2 {
+    var Throw = class extends Node3 {
       constructor(error2) {
         super();
         this.error = error2;
@@ -480,7 +480,7 @@ var require_codegen = __commonJS({
         return this.error.names;
       }
     };
-    var AnyCode = class extends Node2 {
+    var AnyCode = class extends Node3 {
       constructor(code2) {
         super();
         this.code = code2;
@@ -499,7 +499,7 @@ var require_codegen = __commonJS({
         return this.code instanceof code_1._CodeOrName ? this.code.names : {};
       }
     };
-    var ParentNode = class extends Node2 {
+    var ParentNode = class extends Node3 {
       constructor(nodes = []) {
         super();
         this.nodes = nodes;
@@ -509,27 +509,27 @@ var require_codegen = __commonJS({
       }
       optimizeNodes() {
         const { nodes } = this;
-        let i = nodes.length;
-        while (i--) {
-          const n = nodes[i].optimizeNodes();
+        let i2 = nodes.length;
+        while (i2--) {
+          const n = nodes[i2].optimizeNodes();
           if (Array.isArray(n))
-            nodes.splice(i, 1, ...n);
+            nodes.splice(i2, 1, ...n);
           else if (n)
-            nodes[i] = n;
+            nodes[i2] = n;
           else
-            nodes.splice(i, 1);
+            nodes.splice(i2, 1);
         }
         return nodes.length > 0 ? this : void 0;
       }
       optimizeNames(names, constants) {
         const { nodes } = this;
-        let i = nodes.length;
-        while (i--) {
-          const n = nodes[i];
+        let i2 = nodes.length;
+        while (i2--) {
+          const n = nodes[i2];
           if (n.optimizeNames(names, constants))
             continue;
           subtractNames(names, n.names);
-          nodes.splice(i, 1);
+          nodes.splice(i2, 1);
         }
         return nodes.length > 0 ? this : void 0;
       }
@@ -618,17 +618,17 @@ var require_codegen = __commonJS({
       }
     };
     var ForRange = class extends For {
-      constructor(varKind, name, from, to) {
+      constructor(varKind, name2, from, to) {
         super();
         this.varKind = varKind;
-        this.name = name;
+        this.name = name2;
         this.from = from;
         this.to = to;
       }
       render(opts) {
         const varKind = opts.es5 ? scope_1.varKinds.var : this.varKind;
-        const { name, from, to } = this;
-        return `for(${varKind} ${name}=${from}; ${name}<${to}; ${name}++)` + super.render(opts);
+        const { name: name2, from, to } = this;
+        return `for(${varKind} ${name2}=${from}; ${name2}<${to}; ${name2}++)` + super.render(opts);
       }
       get names() {
         const names = addExprNames(super.names, this.from);
@@ -636,11 +636,11 @@ var require_codegen = __commonJS({
       }
     };
     var ForIter = class extends For {
-      constructor(loop, varKind, name, iterable) {
+      constructor(loop, varKind, name2, iterable) {
         super();
         this.loop = loop;
         this.varKind = varKind;
-        this.name = name;
+        this.name = name2;
         this.iterable = iterable;
       }
       render(opts) {
@@ -657,10 +657,10 @@ var require_codegen = __commonJS({
       }
     };
     var Func = class extends BlockNode {
-      constructor(name, args, async) {
+      constructor(name2, args2, async) {
         super();
-        this.name = name;
-        this.args = args;
+        this.name = name2;
+        this.args = args2;
         this.async = async;
       }
       render(opts) {
@@ -746,10 +746,10 @@ var require_codegen = __commonJS({
       }
       // reserves unique name in the external scope and assigns value to it
       scopeValue(prefixOrName, value) {
-        const name = this._extScope.value(prefixOrName, value);
-        const vs = this._values[name.prefix] || (this._values[name.prefix] = /* @__PURE__ */ new Set());
-        vs.add(name);
-        return name;
+        const name2 = this._extScope.value(prefixOrName, value);
+        const vs = this._values[name2.prefix] || (this._values[name2.prefix] = /* @__PURE__ */ new Set());
+        vs.add(name2);
+        return name2;
       }
       getScopeValue(prefix2, keyOrRef) {
         return this._extScope.getValue(prefix2, keyOrRef);
@@ -763,11 +763,11 @@ var require_codegen = __commonJS({
         return this._extScope.scopeCode(this._values);
       }
       _def(varKind, nameOrPrefix, rhs, constant) {
-        const name = this._scope.toName(nameOrPrefix);
+        const name2 = this._scope.toName(nameOrPrefix);
         if (rhs !== void 0 && constant)
-          this._constants[name.str] = rhs;
-        this._leafNode(new Def(varKind, name, rhs));
-        return name;
+          this._constants[name2.str] = rhs;
+        this._leafNode(new Def(varKind, name2, rhs));
+        return name2;
       }
       // `const` declaration (`var` in es5 mode)
       const(nameOrPrefix, rhs, _constant) {
@@ -848,20 +848,20 @@ var require_codegen = __commonJS({
       }
       // `for` statement for a range of values
       forRange(nameOrPrefix, from, to, forBody, varKind = this.opts.es5 ? scope_1.varKinds.var : scope_1.varKinds.let) {
-        const name = this._scope.toName(nameOrPrefix);
-        return this._for(new ForRange(varKind, name, from, to), () => forBody(name));
+        const name2 = this._scope.toName(nameOrPrefix);
+        return this._for(new ForRange(varKind, name2, from, to), () => forBody(name2));
       }
       // `for-of` statement (in es5 mode replace with a normal for loop)
       forOf(nameOrPrefix, iterable, forBody, varKind = scope_1.varKinds.const) {
-        const name = this._scope.toName(nameOrPrefix);
+        const name2 = this._scope.toName(nameOrPrefix);
         if (this.opts.es5) {
           const arr = iterable instanceof code_1.Name ? iterable : this.var("_arr", iterable);
-          return this.forRange("_i", 0, (0, code_1._)`${arr}.length`, (i) => {
-            this.var(name, (0, code_1._)`${arr}[${i}]`);
-            forBody(name);
+          return this.forRange("_i", 0, (0, code_1._)`${arr}.length`, (i2) => {
+            this.var(name2, (0, code_1._)`${arr}[${i2}]`);
+            forBody(name2);
           });
         }
-        return this._for(new ForIter("of", varKind, name, iterable), () => forBody(name));
+        return this._for(new ForIter("of", varKind, name2, iterable), () => forBody(name2));
       }
       // `for-in` statement.
       // With option `ownProperties` replaced with a `for-of` loop for object keys
@@ -869,8 +869,8 @@ var require_codegen = __commonJS({
         if (this.opts.ownProperties) {
           return this.forOf(nameOrPrefix, (0, code_1._)`Object.keys(${obj})`, forBody);
         }
-        const name = this._scope.toName(nameOrPrefix);
-        return this._for(new ForIter("in", varKind, name, obj), () => forBody(name));
+        const name2 = this._scope.toName(nameOrPrefix);
+        return this._for(new ForIter("in", varKind, name2, obj), () => forBody(name2));
       }
       // end `for` loop
       endFor() {
@@ -916,10 +916,10 @@ var require_codegen = __commonJS({
         return this._leafNode(new Throw(error2));
       }
       // start self-balancing block
-      block(body, nodeCount) {
+      block(body2, nodeCount) {
         this._blockStarts.push(this._nodes.length);
-        if (body)
-          this.code(body).endBlock(nodeCount);
+        if (body2)
+          this.code(body2).endBlock(nodeCount);
         return this;
       }
       // end the current self-balancing block
@@ -935,8 +935,8 @@ var require_codegen = __commonJS({
         return this;
       }
       // `function` heading (or definition if funcBody is passed)
-      func(name, args = code_1.nil, async, funcBody) {
-        this._blockNode(new Func(name, args, async));
+      func(name2, args2 = code_1.nil, async, funcBody) {
+        this._blockNode(new Func(name2, args2, async));
         if (funcBody)
           this.code(funcBody).endFunc();
         return this;
@@ -1030,13 +1030,13 @@ var require_codegen = __commonJS({
     }
     exports.not = not;
     var andCode = mappend(exports.operators.AND);
-    function and(...args) {
-      return args.reduce(andCode);
+    function and(...args2) {
+      return args2.reduce(andCode);
     }
     exports.and = and;
     var orCode = mappend(exports.operators.OR);
-    function or(...args) {
-      return args.reduce(orCode);
+    function or(...args2) {
+      return args2.reduce(orCode);
     }
     exports.or = or;
     function mappend(op) {
@@ -1298,21 +1298,21 @@ var require_errors = __commonJS({
     function extendErrors({ gen, keyword, schemaValue, data, errsCount, it }) {
       if (errsCount === void 0)
         throw new Error("ajv implementation error");
-      const err = gen.name("err");
-      gen.forRange("i", errsCount, names_1.default.errors, (i) => {
-        gen.const(err, (0, codegen_1._)`${names_1.default.vErrors}[${i}]`);
-        gen.if((0, codegen_1._)`${err}.instancePath === undefined`, () => gen.assign((0, codegen_1._)`${err}.instancePath`, (0, codegen_1.strConcat)(names_1.default.instancePath, it.errorPath)));
-        gen.assign((0, codegen_1._)`${err}.schemaPath`, (0, codegen_1.str)`${it.errSchemaPath}/${keyword}`);
+      const err2 = gen.name("err");
+      gen.forRange("i", errsCount, names_1.default.errors, (i2) => {
+        gen.const(err2, (0, codegen_1._)`${names_1.default.vErrors}[${i2}]`);
+        gen.if((0, codegen_1._)`${err2}.instancePath === undefined`, () => gen.assign((0, codegen_1._)`${err2}.instancePath`, (0, codegen_1.strConcat)(names_1.default.instancePath, it.errorPath)));
+        gen.assign((0, codegen_1._)`${err2}.schemaPath`, (0, codegen_1.str)`${it.errSchemaPath}/${keyword}`);
         if (it.opts.verbose) {
-          gen.assign((0, codegen_1._)`${err}.schema`, schemaValue);
-          gen.assign((0, codegen_1._)`${err}.data`, data);
+          gen.assign((0, codegen_1._)`${err2}.schema`, schemaValue);
+          gen.assign((0, codegen_1._)`${err2}.data`, data);
         }
       });
     }
     exports.extendErrors = extendErrors;
     function addError(gen, errObj) {
-      const err = gen.const("err", errObj);
-      gen.if((0, codegen_1._)`${names_1.default.vErrors} === null`, () => gen.assign(names_1.default.vErrors, (0, codegen_1._)`[${err}]`), (0, codegen_1._)`${names_1.default.vErrors}.push(${err})`);
+      const err2 = gen.const("err", errObj);
+      gen.if((0, codegen_1._)`${names_1.default.vErrors} === null`, () => gen.assign(names_1.default.vErrors, (0, codegen_1._)`[${err2}]`), (0, codegen_1._)`${names_1.default.vErrors}.push(${err2})`);
       gen.code((0, codegen_1._)`${names_1.default.errors}++`);
     }
     function returnErrors(it, errs) {
@@ -1680,7 +1680,7 @@ var require_defaults = __commonJS({
           assignDefault(it, key, properties[key].default);
         }
       } else if (ty === "array" && Array.isArray(items)) {
-        items.forEach((sch, i) => assignDefault(it, i, sch.default));
+        items.forEach((sch, i2) => assignDefault(it, i2, sch.default));
       }
     }
     exports.assignDefaults = assignDefaults;
@@ -1759,7 +1759,7 @@ var require_code2 = __commonJS({
       return allSchemaProperties(schemaMap).filter((p) => !(0, util_1.alwaysValidSchema)(it, schemaMap[p]));
     }
     exports.schemaProperties = schemaProperties;
-    function callValidateCode({ schemaCode, data, it: { gen, topSchemaRef, schemaPath, errorPath }, it }, func, context, passSchema) {
+    function callValidateCode({ schemaCode, data, it: { gen, topSchemaRef, schemaPath, errorPath }, it }, func2, context, passSchema) {
       const dataAndSchema = passSchema ? (0, codegen_1._)`${schemaCode}, ${data}, ${topSchemaRef}${schemaPath}` : data;
       const valCxt = [
         [names_1.default.instancePath, (0, codegen_1.strConcat)(names_1.default.instancePath, errorPath)],
@@ -1769,8 +1769,8 @@ var require_code2 = __commonJS({
       ];
       if (it.opts.dynamicRef)
         valCxt.push([names_1.default.dynamicAnchors, names_1.default.dynamicAnchors]);
-      const args = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
-      return context !== codegen_1.nil ? (0, codegen_1._)`${func}.call(${context}, ${args})` : (0, codegen_1._)`${func}(${args})`;
+      const args2 = (0, codegen_1._)`${dataAndSchema}, ${gen.object(...valCxt)}`;
+      return context !== codegen_1.nil ? (0, codegen_1._)`${func2}.call(${context}, ${args2})` : (0, codegen_1._)`${func2}(${args2})`;
     }
     exports.callValidateCode = callValidateCode;
     var newRegExp = (0, codegen_1._)`new RegExp`;
@@ -1798,10 +1798,10 @@ var require_code2 = __commonJS({
       return valid;
       function validateItems(notValid) {
         const len = gen.const("len", (0, codegen_1._)`${data}.length`);
-        gen.forRange("i", 0, len, (i) => {
+        gen.forRange("i", 0, len, (i2) => {
           cxt.subschema({
             keyword,
-            dataProp: i,
+            dataProp: i2,
             dataPropType: util_1.Type.Num
           }, valid);
           gen.if((0, codegen_1.not)(valid), notValid);
@@ -1818,10 +1818,10 @@ var require_code2 = __commonJS({
         return;
       const valid = gen.let("valid", false);
       const schValid = gen.name("_valid");
-      gen.block(() => schema.forEach((_sch, i) => {
+      gen.block(() => schema.forEach((_sch, i2) => {
         const schCxt = cxt.subschema({
           keyword,
-          schemaProp: i,
+          schemaProp: i2,
           compositeRule: true
         }, schValid);
         gen.assign(valid, (0, codegen_1._)`${valid} || ${schValid}`);
@@ -2038,18 +2038,18 @@ var require_subschema = __commonJS({
 
 // node_modules/fast-deep-equal/index.js
 var require_fast_deep_equal = __commonJS({
-  "node_modules/fast-deep-equal/index.js"(exports, module) {
+  "node_modules/fast-deep-equal/index.js"(exports, module2) {
     "use strict";
-    module.exports = function equal(a, b) {
+    module2.exports = function equal(a, b) {
       if (a === b) return true;
       if (a && b && typeof a == "object" && typeof b == "object") {
         if (a.constructor !== b.constructor) return false;
-        var length, i, keys;
+        var length, i2, keys;
         if (Array.isArray(a)) {
           length = a.length;
           if (length != b.length) return false;
-          for (i = length; i-- !== 0; )
-            if (!equal(a[i], b[i])) return false;
+          for (i2 = length; i2-- !== 0; )
+            if (!equal(a[i2], b[i2])) return false;
           return true;
         }
         if (a.constructor === RegExp) return a.source === b.source && a.flags === b.flags;
@@ -2058,10 +2058,10 @@ var require_fast_deep_equal = __commonJS({
         keys = Object.keys(a);
         length = keys.length;
         if (length !== Object.keys(b).length) return false;
-        for (i = length; i-- !== 0; )
-          if (!Object.prototype.hasOwnProperty.call(b, keys[i])) return false;
-        for (i = length; i-- !== 0; ) {
-          var key = keys[i];
+        for (i2 = length; i2-- !== 0; )
+          if (!Object.prototype.hasOwnProperty.call(b, keys[i2])) return false;
+        for (i2 = length; i2-- !== 0; ) {
+          var key = keys[i2];
           if (!equal(a[key], b[key])) return false;
         }
         return true;
@@ -2073,9 +2073,9 @@ var require_fast_deep_equal = __commonJS({
 
 // node_modules/json-schema-traverse/index.js
 var require_json_schema_traverse = __commonJS({
-  "node_modules/json-schema-traverse/index.js"(exports, module) {
+  "node_modules/json-schema-traverse/index.js"(exports, module2) {
     "use strict";
-    var traverse = module.exports = function(schema, opts, cb) {
+    var traverse = module2.exports = function(schema, opts, cb) {
       if (typeof opts == "function") {
         cb = opts;
         opts = {};
@@ -2138,8 +2138,8 @@ var require_json_schema_traverse = __commonJS({
           var sch = schema[key];
           if (Array.isArray(sch)) {
             if (key in traverse.arrayKeywords) {
-              for (var i = 0; i < sch.length; i++)
-                _traverse(opts, pre, post, sch[i], jsonPtr + "/" + key + "/" + i, rootSchema, jsonPtr, key, schema, i);
+              for (var i2 = 0; i2 < sch.length; i2++)
+                _traverse(opts, pre, post, sch[i2], jsonPtr + "/" + key + "/" + i2, rootSchema, jsonPtr, key, schema, i2);
             }
           } else if (key in traverse.propsKeywords) {
             if (sch && typeof sch == "object") {
@@ -2344,15 +2344,15 @@ var require_validate = __commonJS({
       validateFunction(it, () => (0, boolSchema_1.topBoolOrEmptySchema)(it));
     }
     exports.validateFunctionCode = validateFunctionCode;
-    function validateFunction({ gen, validateName, schema, schemaEnv, opts }, body) {
+    function validateFunction({ gen, validateName, schema, schemaEnv, opts }, body2) {
       if (opts.code.es5) {
         gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${names_1.default.valCxt}`, schemaEnv.$async, () => {
           gen.code((0, codegen_1._)`"use strict"; ${funcSourceUrl(schema, opts)}`);
           destructureValCxtES5(gen, opts);
-          gen.code(body);
+          gen.code(body2);
         });
       } else {
-        gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${destructureValCxt(opts)}`, schemaEnv.$async, () => gen.code(funcSourceUrl(schema, opts)).code(body));
+        gen.func(validateName, (0, codegen_1._)`${names_1.default.data}, ${destructureValCxt(opts)}`, schemaEnv.$async, () => gen.code(funcSourceUrl(schema, opts)).code(body2));
       }
     }
     function destructureValCxt(opts) {
@@ -3082,8 +3082,8 @@ var require_compile = __commonJS({
 
 // node_modules/ajv/dist/refs/data.json
 var require_data = __commonJS({
-  "node_modules/ajv/dist/refs/data.json"(exports, module) {
-    module.exports = {
+  "node_modules/ajv/dist/refs/data.json"(exports, module2) {
+    module2.exports = {
       $id: "https://raw.githubusercontent.com/ajv-validator/ajv/master/lib/refs/data.json#",
       description: "Meta-schema for $data reference (JSON AnySchema extension proposal)",
       type: "object",
@@ -3101,7 +3101,7 @@ var require_data = __commonJS({
 
 // node_modules/fast-uri/lib/utils.js
 var require_utils = __commonJS({
-  "node_modules/fast-uri/lib/utils.js"(exports, module) {
+  "node_modules/fast-uri/lib/utils.js"(exports, module2) {
     "use strict";
     var isUUID = RegExp.prototype.test.bind(/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/iu);
     var isIPv4 = RegExp.prototype.test.bind(/^(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$/u);
@@ -3114,8 +3114,8 @@ var require_utils = __commonJS({
     var BYTE_HEX = new Array(256);
     {
       const HEX_DIGITS = "0123456789ABCDEF";
-      for (let i = 0; i < 256; i++) {
-        BYTE_HEX[i] = "%" + HEX_DIGITS[i >> 4] + HEX_DIGITS[i & 15];
+      for (let i2 = 0; i2 < 256; i2++) {
+        BYTE_HEX[i2] = "%" + HEX_DIGITS[i2 >> 4] + HEX_DIGITS[i2 & 15];
       }
     }
     function percentEncodeNonAscii(cp) {
@@ -3130,24 +3130,24 @@ var require_utils = __commonJS({
     function stringArrayToHexStripped(input) {
       let acc = "";
       let code2 = 0;
-      let i = 0;
-      for (i = 0; i < input.length; i++) {
-        code2 = input[i].charCodeAt(0);
+      let i2 = 0;
+      for (i2 = 0; i2 < input.length; i2++) {
+        code2 = input[i2].charCodeAt(0);
         if (code2 === 48) {
           continue;
         }
         if (!(code2 >= 48 && code2 <= 57 || code2 >= 65 && code2 <= 70 || code2 >= 97 && code2 <= 102)) {
           return "";
         }
-        acc += input[i];
+        acc += input[i2];
         break;
       }
-      for (i += 1; i < input.length; i++) {
-        code2 = input[i].charCodeAt(0);
+      for (i2 += 1; i2 < input.length; i2++) {
+        code2 = input[i2].charCodeAt(0);
         if (!(code2 >= 48 && code2 <= 57 || code2 >= 65 && code2 <= 70 || code2 >= 97 && code2 <= 102)) {
           return "";
         }
-        acc += input[i];
+        acc += input[i2];
       }
       return acc;
     }
@@ -3157,10 +3157,10 @@ var require_utils = __commonJS({
     var nonSimpleDomain = RegExp.prototype.test.bind(/[^!"$&'()*+,\-.;=_`a-z{}~]/u);
     function isZoneIdentifier(zone) {
       if (zone.length === 0) return false;
-      for (let i = 0; i < zone.length; i++) {
-        if (isZoneCharacter(zone[i])) continue;
-        if (zone[i] === "%" && i + 2 < zone.length && isHexPair(zone.slice(i + 1, i + 3))) {
-          i += 2;
+      for (let i2 = 0; i2 < zone.length; i2++) {
+        if (isZoneCharacter(zone[i2])) continue;
+        if (zone[i2] === "%" && i2 + 2 < zone.length && isHexPair(zone.slice(i2 + 1, i2 + 3))) {
+          i2 += 2;
           continue;
         }
         return false;
@@ -3172,9 +3172,9 @@ var require_utils = __commonJS({
       let bestLength = 0;
       let runStart = -1;
       let runLength = 0;
-      for (let i = 0; i < hextets.length; i++) {
-        if (hextets[i] === "0") {
-          if (runStart === -1) runStart = i;
+      for (let i2 = 0; i2 < hextets.length; i2++) {
+        if (hextets[i2] === "0") {
+          if (runStart === -1) runStart = i2;
           runLength++;
           if (runLength > bestLength) {
             bestLength = runLength;
@@ -3199,28 +3199,28 @@ var require_utils = __commonJS({
         if (left.length === 1 && left[0] === "") left.length = 0;
         if (right.length === 1 && right[0] === "") right.length = 0;
       }
-      const parts = left.concat(right);
+      const parts2 = left.concat(right);
       let hextetCount = 0;
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
+      for (let i2 = 0; i2 < parts2.length; i2++) {
+        const part = parts2[i2];
         if (part === "") return void 0;
         if (part.indexOf(".") !== -1) {
-          if (i !== parts.length - 1 || compression !== -1 && right.length === 0 || !isIPv4(part)) return void 0;
+          if (i2 !== parts2.length - 1 || compression !== -1 && right.length === 0 || !isIPv4(part)) return void 0;
           hextetCount += 2;
           continue;
         }
         if (!isHextet(part)) return void 0;
-        parts[i] = parseInt(part, 16).toString(16);
+        parts2[i2] = parseInt(part, 16).toString(16);
         hextetCount++;
       }
       if (compression === -1) {
         if (hextetCount !== 8) return void 0;
-        return compressIPv6ZeroRun(parts);
+        return compressIPv6ZeroRun(parts2);
       }
       if (hextetCount >= 8) return void 0;
-      const expanded = parts.slice(0, left.length);
-      for (let i = hextetCount; i < 8; i++) expanded.push("0");
-      for (let i = left.length; i < parts.length; i++) expanded.push(parts[i]);
+      const expanded = parts2.slice(0, left.length);
+      for (let i2 = hextetCount; i2 < 8; i2++) expanded.push("0");
+      for (let i2 = left.length; i2 < parts2.length; i2++) expanded.push(parts2[i2]);
       return compressIPv6ZeroRun(expanded);
     }
     function normalizeIPv6(host) {
@@ -3253,13 +3253,13 @@ var require_utils = __commonJS({
     }
     function findToken(str, token) {
       let ind = 0;
-      for (let i = 0; i < str.length; i++) {
-        if (str[i] === token) ind++;
+      for (let i2 = 0; i2 < str.length; i2++) {
+        if (str[i2] === token) ind++;
       }
       return ind;
     }
-    function removeDotSegments(path11) {
-      let input = path11;
+    function removeDotSegments(path13) {
+      let input = path13;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3346,9 +3346,9 @@ var require_utils = __commonJS({
         return input;
       }
       let output = "";
-      for (let i = 0; i < input.length; i++) {
-        if (input[i] === "%" && i + 2 < input.length) {
-          const hex = input.slice(i + 1, i + 3);
+      for (let i2 = 0; i2 < input.length; i2++) {
+        if (input[i2] === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
           if (isHexPair(hex)) {
             const normalizedHex = hex.toUpperCase();
             const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
@@ -3357,20 +3357,20 @@ var require_utils = __commonJS({
             } else {
               output += "%" + normalizedHex;
             }
-            i += 2;
+            i2 += 2;
             continue;
           }
         }
-        output += input[i];
+        output += input[i2];
       }
       return output;
     }
     function normalizePathEncoding(input) {
       let output = "";
-      for (let i = 0; i < input.length; i++) {
-        const ch = input[i];
-        if (ch === "%" && i + 2 < input.length) {
-          const hex = input.slice(i + 1, i + 3);
+      for (let i2 = 0; i2 < input.length; i2++) {
+        const ch = input[i2];
+        if (ch === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
           if (isHexPair(hex)) {
             const normalizedHex = hex.toUpperCase();
             const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
@@ -3379,23 +3379,23 @@ var require_utils = __commonJS({
             } else {
               output += "%" + normalizedHex;
             }
-            i += 2;
+            i2 += 2;
             continue;
           }
         }
         if (isPathCharacter(ch)) {
           output += ch;
         } else {
-          const code2 = input.charCodeAt(i);
+          const code2 = input.charCodeAt(i2);
           if (code2 < 128) {
             output += isEscapeSafe(code2) ? ch : BYTE_HEX[code2];
           } else if (code2 < 55296 || code2 > 57343) {
             output += percentEncodeNonAscii(code2);
-          } else if (code2 <= 56319 && i + 1 < input.length) {
-            const low = input.charCodeAt(i + 1);
+          } else if (code2 <= 56319 && i2 + 1 < input.length) {
+            const low = input.charCodeAt(i2 + 1);
             if (low >= 56320 && low <= 57343) {
               output += percentEncodeNonAscii(65536 + (code2 - 55296 << 10) + (low - 56320));
-              i++;
+              i2++;
             } else {
               output += percentEncodeNonAscii(65533);
             }
@@ -3409,13 +3409,13 @@ var require_utils = __commonJS({
     function serializePathEncoding(input, pathNoScheme = false) {
       let output = "";
       let firstSegment = pathNoScheme && input[0] !== "/";
-      for (let i = 0; i < input.length; i++) {
-        const ch = input[i];
-        if (ch === "%" && i + 2 < input.length) {
-          const hex = input.slice(i + 1, i + 3);
+      for (let i2 = 0; i2 < input.length; i2++) {
+        const ch = input[i2];
+        if (ch === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
           if (isHexPair(hex)) {
             output += "%" + hex.toUpperCase();
-            i += 2;
+            i2 += 2;
             continue;
           }
         }
@@ -3425,16 +3425,16 @@ var require_utils = __commonJS({
         if (isPathCharacter(ch) && (ch !== ":" || !firstSegment)) {
           output += ch;
         } else {
-          const code2 = input.charCodeAt(i);
+          const code2 = input.charCodeAt(i2);
           if (code2 < 128) {
             output += BYTE_HEX[code2];
           } else if (code2 < 55296 || code2 > 57343) {
             output += percentEncodeNonAscii(code2);
-          } else if (code2 <= 56319 && i + 1 < input.length) {
-            const low = input.charCodeAt(i + 1);
+          } else if (code2 <= 56319 && i2 + 1 < input.length) {
+            const low = input.charCodeAt(i2 + 1);
             if (low >= 56320 && low <= 57343) {
               output += percentEncodeNonAscii(65536 + (code2 - 55296 << 10) + (low - 56320));
-              i++;
+              i2++;
             } else {
               output += percentEncodeNonAscii(65533);
             }
@@ -3447,29 +3447,29 @@ var require_utils = __commonJS({
     }
     function encodeComponent(input, isAllowed) {
       let output = "";
-      for (let i = 0; i < input.length; i++) {
-        const ch = input[i];
-        if (ch === "%" && i + 2 < input.length) {
-          const hex = input.slice(i + 1, i + 3);
+      for (let i2 = 0; i2 < input.length; i2++) {
+        const ch = input[i2];
+        if (ch === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
           if (isHexPair(hex)) {
             output += "%" + hex.toUpperCase();
-            i += 2;
+            i2 += 2;
             continue;
           }
         }
         if (isAllowed(ch)) {
           output += ch;
         } else {
-          const code2 = input.charCodeAt(i);
+          const code2 = input.charCodeAt(i2);
           if (code2 < 128) {
             output += BYTE_HEX[code2];
           } else if (code2 < 55296 || code2 > 57343) {
             output += percentEncodeNonAscii(code2);
-          } else if (code2 <= 56319 && i + 1 < input.length) {
-            const low = input.charCodeAt(i + 1);
+          } else if (code2 <= 56319 && i2 + 1 < input.length) {
+            const low = input.charCodeAt(i2 + 1);
             if (low >= 56320 && low <= 57343) {
               output += percentEncodeNonAscii(65536 + (code2 - 55296 << 10) + (low - 56320));
-              i++;
+              i2++;
             } else {
               output += percentEncodeNonAscii(65533);
             }
@@ -3494,10 +3494,10 @@ var require_utils = __commonJS({
     }
     function normalizeQueryFragmentEncoding(input) {
       let output = "";
-      for (let i = 0; i < input.length; i++) {
-        const ch = input[i];
-        if (ch === "%" && i + 2 < input.length) {
-          const hex = input.slice(i + 1, i + 3);
+      for (let i2 = 0; i2 < input.length; i2++) {
+        const ch = input[i2];
+        if (ch === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
           if (isHexPair(hex)) {
             const normalizedHex = hex.toUpperCase();
             const decoded = String.fromCharCode(parseInt(normalizedHex, 16));
@@ -3506,23 +3506,23 @@ var require_utils = __commonJS({
             } else {
               output += "%" + normalizedHex;
             }
-            i += 2;
+            i2 += 2;
             continue;
           }
         }
         if (isQueryFragmentCharacter(ch)) {
           output += ch;
         } else {
-          const code2 = input.charCodeAt(i);
+          const code2 = input.charCodeAt(i2);
           if (code2 < 128) {
             output += isEscapeSafe(code2) ? ch : BYTE_HEX[code2];
           } else if (code2 < 55296 || code2 > 57343) {
             output += percentEncodeNonAscii(code2);
-          } else if (code2 <= 56319 && i + 1 < input.length) {
-            const low = input.charCodeAt(i + 1);
+          } else if (code2 <= 56319 && i2 + 1 < input.length) {
+            const low = input.charCodeAt(i2 + 1);
             if (low >= 56320 && low <= 57343) {
               output += percentEncodeNonAscii(65536 + (code2 - 55296 << 10) + (low - 56320));
-              i++;
+              i2++;
             } else {
               output += percentEncodeNonAscii(65533);
             }
@@ -3535,16 +3535,16 @@ var require_utils = __commonJS({
     }
     function escapePreservingEscapes(input) {
       let output = "";
-      for (let i = 0; i < input.length; i++) {
-        if (input[i] === "%" && i + 2 < input.length) {
-          const hex = input.slice(i + 1, i + 3);
+      for (let i2 = 0; i2 < input.length; i2++) {
+        if (input[i2] === "%" && i2 + 2 < input.length) {
+          const hex = input.slice(i2 + 1, i2 + 3);
           if (isHexPair(hex)) {
             output += "%" + hex.toUpperCase();
-            i += 2;
+            i2 += 2;
             continue;
           }
         }
-        output += escape(input[i]);
+        output += escape(input[i2]);
       }
       return output;
     }
@@ -3580,7 +3580,7 @@ var require_utils = __commonJS({
       }
       return uriTokens.length ? uriTokens.join("") : void 0;
     }
-    module.exports = {
+    module2.exports = {
       nonSimpleDomain,
       recomposeAuthority,
       reescapeHostDelimiters,
@@ -3603,7 +3603,7 @@ var require_utils = __commonJS({
 
 // node_modules/fast-uri/lib/schemes.js
 var require_schemes = __commonJS({
-  "node_modules/fast-uri/lib/schemes.js"(exports, module) {
+  "node_modules/fast-uri/lib/schemes.js"(exports, module2) {
     "use strict";
     var { isUUID } = require_utils();
     var URN_REG = /^([\da-z][\d\-a-z]{0,31}):((?:[\w!$'()*+,\-./:;=@]|%[\da-f]{2})+)$/iu;
@@ -3618,10 +3618,10 @@ var require_schemes = __commonJS({
         "urn:uuid"
       ]
     );
-    function isValidSchemeName(name) {
+    function isValidSchemeName(name2) {
       return supportedSchemeNames.indexOf(
         /** @type {*} */
-        name
+        name2
       ) !== -1;
     }
     function wsIsSecure(wsComponent) {
@@ -3668,8 +3668,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path11 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path11 && path11 !== "/" ? path11 : void 0;
+        const path13 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path13 && path13 !== "/" ? path13 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -3803,7 +3803,7 @@ var require_schemes = __commonJS({
         scheme.toLowerCase()
       ]) || void 0;
     }
-    module.exports = {
+    module2.exports = {
       wsIsSecure,
       SCHEMES,
       isValidSchemeName,
@@ -3814,7 +3814,7 @@ var require_schemes = __commonJS({
 
 // node_modules/fast-uri/index.js
 var require_fast_uri = __commonJS({
-  "node_modules/fast-uri/index.js"(exports, module) {
+  "node_modules/fast-uri/index.js"(exports, module2) {
     "use strict";
     var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
@@ -4211,9 +4211,9 @@ var require_fast_uri = __commonJS({
       serialize,
       parse: parse4
     };
-    module.exports = fastUri;
-    module.exports.default = fastUri;
-    module.exports.fastUri = fastUri;
+    module2.exports = fastUri;
+    module2.exports.default = fastUri;
+    module2.exports.fastUri = fastUri;
   }
 });
 
@@ -4267,7 +4267,7 @@ var require_core = __commonJS({
     var util_1 = require_util();
     var $dataRefSchema = require_data();
     var uri_1 = require_uri();
-    var defaultRegExp = (str, flags) => new RegExp(str, flags);
+    var defaultRegExp = (str, flags2) => new RegExp(str, flags2);
     defaultRegExp.code = "new RegExp";
     var META_IGNORE_OPTIONS = ["removeAdditional", "useDefaults", "coerceTypes"];
     var EXT_SCOPE_NAMES = /* @__PURE__ */ new Set([
@@ -4604,17 +4604,17 @@ var require_core = __commonJS({
         delete RULES.keywords[keyword];
         delete RULES.all[keyword];
         for (const group of RULES.rules) {
-          const i = group.rules.findIndex((rule) => rule.keyword === keyword);
-          if (i >= 0)
-            group.rules.splice(i, 1);
+          const i2 = group.rules.findIndex((rule) => rule.keyword === keyword);
+          if (i2 >= 0)
+            group.rules.splice(i2, 1);
         }
         return this;
       }
       // Add format
-      addFormat(name, format) {
+      addFormat(name2, format) {
         if (typeof format == "string")
           format = new RegExp(format);
-        this.formats[name] = format;
+        this.formats[name2] = format;
         return this;
       }
       errorsText(errors = this.errors, { separator = ", ", dataVar = "data" } = {}) {
@@ -4731,10 +4731,10 @@ var require_core = __commonJS({
           this.addSchema(optsSchemas[key], key);
     }
     function addInitialFormats() {
-      for (const name in this.opts.formats) {
-        const format = this.opts.formats[name];
+      for (const name2 in this.opts.formats) {
+        const format = this.opts.formats[name2];
         if (format)
-          this.addFormat(name, format);
+          this.addFormat(name2, format);
       }
     }
     function addInitialKeywords(defs) {
@@ -4814,9 +4814,9 @@ var require_core = __commonJS({
       (_a3 = definition.implements) === null || _a3 === void 0 ? void 0 : _a3.forEach((kwd) => this.addKeyword(kwd));
     }
     function addBeforeRule(ruleGroup, rule, before) {
-      const i = ruleGroup.rules.findIndex((_rule) => _rule.keyword === before);
-      if (i >= 0) {
-        ruleGroup.rules.splice(i, 0, rule);
+      const i2 = ruleGroup.rules.findIndex((_rule) => _rule.keyword === before);
+      if (i2 >= 0) {
+        ruleGroup.rules.splice(i2, 0, rule);
       } else {
         ruleGroup.rules.push(rule);
         this.logger.warn(`rule ${before} is not defined`);
@@ -5313,8 +5313,8 @@ var require_uniqueItems = __commonJS({
     var util_1 = require_util();
     var equal_1 = require_equal();
     var error2 = {
-      message: ({ params: { i, j } }) => (0, codegen_1.str)`must NOT have duplicate items (items ## ${j} and ${i} are identical)`,
-      params: ({ params: { i, j } }) => (0, codegen_1._)`{i: ${i}, j: ${j}}`
+      message: ({ params: { i: i2, j } }) => (0, codegen_1.str)`must NOT have duplicate items (items ## ${j} and ${i2} are identical)`,
+      params: ({ params: { i: i2, j } }) => (0, codegen_1._)`{i: ${i2}, j: ${j}}`
     };
     var def = {
       keyword: "uniqueItems",
@@ -5331,21 +5331,21 @@ var require_uniqueItems = __commonJS({
         cxt.block$data(valid, validateUniqueItems, (0, codegen_1._)`${schemaCode} === false`);
         cxt.ok(valid);
         function validateUniqueItems() {
-          const i = gen.let("i", (0, codegen_1._)`${data}.length`);
+          const i2 = gen.let("i", (0, codegen_1._)`${data}.length`);
           const j = gen.let("j");
-          cxt.setParams({ i, j });
+          cxt.setParams({ i: i2, j });
           gen.assign(valid, true);
-          gen.if((0, codegen_1._)`${i} > 1`, () => (canOptimize() ? loopN : loopN2)(i, j));
+          gen.if((0, codegen_1._)`${i2} > 1`, () => (canOptimize() ? loopN : loopN2)(i2, j));
         }
         function canOptimize() {
           return itemTypes.length > 0 && !itemTypes.some((t) => t === "object" || t === "array");
         }
-        function loopN(i, j) {
+        function loopN(i2, j) {
           const item = gen.name("item");
           const wrongType = (0, dataType_1.checkDataTypes)(itemTypes, item, it.opts.strictNumbers, dataType_1.DataType.Wrong);
           const indices = gen.const("indices", (0, codegen_1._)`{}`);
-          gen.for((0, codegen_1._)`;${i}--;`, () => {
-            gen.let(item, (0, codegen_1._)`${data}[${i}]`);
+          gen.for((0, codegen_1._)`;${i2}--;`, () => {
+            gen.let(item, (0, codegen_1._)`${data}[${i2}]`);
             gen.if(wrongType, (0, codegen_1._)`continue`);
             if (itemTypes.length > 1)
               gen.if((0, codegen_1._)`typeof ${item} == "string"`, (0, codegen_1._)`${item} += "_"`);
@@ -5353,13 +5353,13 @@ var require_uniqueItems = __commonJS({
               gen.assign(j, (0, codegen_1._)`${indices}[${item}]`);
               cxt.error();
               gen.assign(valid, false).break();
-            }).code((0, codegen_1._)`${indices}[${item}] = ${i}`);
+            }).code((0, codegen_1._)`${indices}[${item}] = ${i2}`);
           });
         }
-        function loopN2(i, j) {
+        function loopN2(i2, j) {
           const eql = (0, util_1.useFunc)(gen, equal_1.default);
           const outer = gen.name("outer");
-          gen.label(outer).for((0, codegen_1._)`;${i}--;`, () => gen.for((0, codegen_1._)`${j} = ${i}; ${j}--;`, () => gen.if((0, codegen_1._)`${eql}(${data}[${i}], ${data}[${j}])`, () => {
+          gen.label(outer).for((0, codegen_1._)`;${i2}--;`, () => gen.for((0, codegen_1._)`${j} = ${i2}; ${j}--;`, () => gen.if((0, codegen_1._)`${eql}(${data}[${i2}], ${data}[${j}])`, () => {
             cxt.error();
             gen.assign(valid, false).break(outer);
           })));
@@ -5431,16 +5431,16 @@ var require_enum = __commonJS({
           if (!Array.isArray(schema))
             throw new Error("ajv implementation error");
           const vSchema = gen.const("vSchema", schemaCode);
-          valid = (0, codegen_1.or)(...schema.map((_x, i) => equalCode(vSchema, i)));
+          valid = (0, codegen_1.or)(...schema.map((_x, i2) => equalCode(vSchema, i2)));
         }
         cxt.pass(valid);
         function loopEnum() {
           gen.assign(valid, false);
           gen.forOf("v", schemaCode, (v) => gen.if((0, codegen_1._)`${getEql()}(${data}, ${v})`, () => gen.assign(valid, true).break()));
         }
-        function equalCode(vSchema, i) {
-          const sch = schema[i];
-          return typeof sch === "object" && sch !== null ? (0, codegen_1._)`${getEql()}(${data}, ${vSchema}[${i}])` : (0, codegen_1._)`${data} === ${sch}`;
+        function equalCode(vSchema, i2) {
+          const sch = schema[i2];
+          return typeof sch === "object" && sch !== null ? (0, codegen_1._)`${getEql()}(${data}, ${vSchema}[${i2}])` : (0, codegen_1._)`${data} === ${sch}`;
         }
       }
     };
@@ -5527,8 +5527,8 @@ var require_additionalItems = __commonJS({
         cxt.ok(valid);
       }
       function validateItems(valid) {
-        gen.forRange("i", items.length, len, (i) => {
-          cxt.subschema({ keyword, dataProp: i, dataPropType: util_1.Type.Num }, valid);
+        gen.forRange("i", items.length, len, (i2) => {
+          cxt.subschema({ keyword, dataProp: i2, dataPropType: util_1.Type.Num }, valid);
           if (!it.allErrors)
             gen.if((0, codegen_1.not)(valid), () => gen.break());
         });
@@ -5571,13 +5571,13 @@ var require_items = __commonJS({
       }
       const valid = gen.name("valid");
       const len = gen.const("len", (0, codegen_1._)`${data}.length`);
-      schArr.forEach((sch, i) => {
+      schArr.forEach((sch, i2) => {
         if ((0, util_1.alwaysValidSchema)(it, sch))
           return;
-        gen.if((0, codegen_1._)`${len} > ${i}`, () => cxt.subschema({
+        gen.if((0, codegen_1._)`${len} > ${i2}`, () => cxt.subschema({
           keyword,
-          schemaProp: i,
-          dataProp: i
+          schemaProp: i2,
+          dataProp: i2
         }, valid));
         cxt.ok(valid);
       });
@@ -5714,10 +5714,10 @@ var require_contains = __commonJS({
           validateItems(schValid, () => gen.if(schValid, () => checkLimits(count)));
         }
         function validateItems(_valid, block) {
-          gen.forRange("i", 0, len, (i) => {
+          gen.forRange("i", 0, len, (i2) => {
             cxt.subschema({
               keyword: "contains",
-              dataProp: i,
+              dataProp: i2,
               dataPropType: util_1.Type.Num,
               compositeRule: true
             }, _valid);
@@ -6195,23 +6195,23 @@ var require_oneOf = __commonJS({
         gen.block(validateOneOf);
         cxt.result(valid, () => cxt.reset(), () => cxt.error(true));
         function validateOneOf() {
-          schArr.forEach((sch, i) => {
+          schArr.forEach((sch, i2) => {
             let schCxt;
             if ((0, util_1.alwaysValidSchema)(it, sch)) {
               gen.var(schValid, true);
             } else {
               schCxt = cxt.subschema({
                 keyword: "oneOf",
-                schemaProp: i,
+                schemaProp: i2,
                 compositeRule: true
               }, schValid);
             }
-            if (i > 0) {
-              gen.if((0, codegen_1._)`${schValid} && ${valid}`).assign(valid, false).assign(passing, (0, codegen_1._)`[${passing}, ${i}]`).else();
+            if (i2 > 0) {
+              gen.if((0, codegen_1._)`${schValid} && ${valid}`).assign(valid, false).assign(passing, (0, codegen_1._)`[${passing}, ${i2}]`).else();
             }
             gen.if(schValid, () => {
               gen.assign(valid, true);
-              gen.assign(passing, i);
+              gen.assign(passing, i2);
               if (schCxt)
                 cxt.mergeEvaluated(schCxt, codegen_1.Name);
             });
@@ -6237,10 +6237,10 @@ var require_allOf = __commonJS({
         if (!Array.isArray(schema))
           throw new Error("ajv implementation error");
         const valid = gen.name("valid");
-        schema.forEach((sch, i) => {
+        schema.forEach((sch, i2) => {
           if ((0, util_1.alwaysValidSchema)(it, sch))
             return;
-          const schCxt = cxt.subschema({ keyword: "allOf", schemaProp: i }, valid);
+          const schCxt = cxt.subschema({ keyword: "allOf", schemaProp: i2 }, valid);
           cxt.ok(valid);
           cxt.mergeEvaluated(schCxt);
         });
@@ -6603,8 +6603,8 @@ var require_discriminator = __commonJS({
           const oneOfMapping = {};
           const topRequired = hasRequired(parentSchema);
           let tagRequired = true;
-          for (let i = 0; i < oneOf.length; i++) {
-            let sch = oneOf[i];
+          for (let i2 = 0; i2 < oneOf.length; i2++) {
+            let sch = oneOf[i2];
             if ((sch === null || sch === void 0 ? void 0 : sch.$ref) && !(0, util_1.schemaHasRulesButRef)(sch, it.self.RULES)) {
               const ref = sch.$ref;
               sch = compile_1.resolveRef.call(it.self, it.schemaEnv.root, it.baseId, ref);
@@ -6618,7 +6618,7 @@ var require_discriminator = __commonJS({
               throw new Error(`discriminator: oneOf subschemas (or referenced schemas) must have "properties/${tagName}"`);
             }
             tagRequired = tagRequired && (topRequired || hasRequired(sch));
-            addMappings(propSch, i);
+            addMappings(propSch, i2);
           }
           if (!tagRequired)
             throw new Error(`discriminator: "${tagName}" must be required`);
@@ -6626,22 +6626,22 @@ var require_discriminator = __commonJS({
           function hasRequired({ required: required2 }) {
             return Array.isArray(required2) && required2.includes(tagName);
           }
-          function addMappings(sch, i) {
+          function addMappings(sch, i2) {
             if (sch.const) {
-              addMapping(sch.const, i);
+              addMapping(sch.const, i2);
             } else if (sch.enum) {
               for (const tagValue of sch.enum) {
-                addMapping(tagValue, i);
+                addMapping(tagValue, i2);
               }
             } else {
               throw new Error(`discriminator: "properties/${tagName}" must have "const" or "enum"`);
             }
           }
-          function addMapping(tagValue, i) {
+          function addMapping(tagValue, i2) {
             if (typeof tagValue != "string" || tagValue in oneOfMapping) {
               throw new Error(`discriminator: "${tagName}" values must be unique strings`);
             }
-            oneOfMapping[tagValue] = i;
+            oneOfMapping[tagValue] = i2;
           }
         }
       }
@@ -6652,8 +6652,8 @@ var require_discriminator = __commonJS({
 
 // node_modules/ajv/dist/refs/json-schema-draft-07.json
 var require_json_schema_draft_07 = __commonJS({
-  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module) {
-    module.exports = {
+  "node_modules/ajv/dist/refs/json-schema-draft-07.json"(exports, module2) {
+    module2.exports = {
       $schema: "http://json-schema.org/draft-07/schema#",
       $id: "http://json-schema.org/draft-07/schema#",
       title: "Core schema meta-schema",
@@ -6809,7 +6809,7 @@ var require_json_schema_draft_07 = __commonJS({
 
 // node_modules/ajv/dist/ajv.js
 var require_ajv = __commonJS({
-  "node_modules/ajv/dist/ajv.js"(exports, module) {
+  "node_modules/ajv/dist/ajv.js"(exports, module2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.MissingRefError = exports.ValidationError = exports.CodeGen = exports.Name = exports.nil = exports.stringify = exports.str = exports._ = exports.KeywordCxt = exports.Ajv = void 0;
@@ -6839,8 +6839,8 @@ var require_ajv = __commonJS({
       }
     };
     exports.Ajv = Ajv2;
-    module.exports = exports = Ajv2;
-    module.exports.Ajv = Ajv2;
+    module2.exports = exports = Ajv2;
+    module2.exports.Ajv = Ajv2;
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = Ajv2;
     var validate_1 = require_validate();
@@ -7154,7 +7154,7 @@ var require_limit = __commonJS({
 
 // node_modules/ajv-formats/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/ajv-formats/dist/index.js"(exports, module) {
+  "node_modules/ajv-formats/dist/index.js"(exports, module2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var formats_1 = require_formats();
@@ -7174,29 +7174,29 @@ var require_dist = __commonJS({
         (0, limit_1.default)(ajv);
       return ajv;
     };
-    formatsPlugin.get = (name, mode = "full") => {
+    formatsPlugin.get = (name2, mode = "full") => {
       const formats = mode === "fast" ? formats_1.fastFormats : formats_1.fullFormats;
-      const f = formats[name];
+      const f = formats[name2];
       if (!f)
-        throw new Error(`Unknown format "${name}"`);
+        throw new Error(`Unknown format "${name2}"`);
       return f;
     };
-    function addFormats(ajv, list, fs10, exportName) {
+    function addFormats(ajv, list, fs13, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs10[f]);
+        ajv.addFormat(f, fs13[f]);
     }
-    module.exports = exports = formatsPlugin;
+    module2.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = formatsPlugin;
   }
 });
 
 // packages/mcp/src/v2-server.mjs
-import fs9 from "node:fs";
-import path10 from "node:path";
+import fs12 from "node:fs";
+import path12 from "node:path";
 
 // node_modules/zod/v3/helpers/util.js
 var util;
@@ -7390,14 +7390,14 @@ var ZodError = class _ZodError extends Error {
           fieldErrors._errors.push(mapper(issue2));
         } else {
           let curr = fieldErrors;
-          let i = 0;
-          while (i < issue2.path.length) {
-            const el = issue2.path[i];
-            const terminal = i === issue2.path.length - 1;
+          let i2 = 0;
+          while (i2 < issue2.path.length) {
+            const el = issue2.path[i2];
+            const terminal = i2 === issue2.path.length - 1;
             if (el === "_errors") {
               if (terminal)
                 curr._errors.push(mapper(issue2));
-              i++;
+              i2++;
               continue;
             }
             if (!Object.prototype.hasOwnProperty.call(curr, el)) {
@@ -7416,7 +7416,7 @@ var ZodError = class _ZodError extends Error {
             if (terminal) {
               curr._errors.push(mapper(issue2));
             }
-            i++;
+            i2++;
           }
         }
       }
@@ -7572,8 +7572,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path11, errorMaps, issueData } = params;
-  const fullPath = [...path11, ...issueData.path || []];
+  const { data, path: path13, errorMaps, issueData } = params;
+  const fullPath = [...path13, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7688,11 +7688,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path11, key) {
+  constructor(parent, value, path13, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path11;
+    this._path = path13;
     this._key = key;
   }
   get path() {
@@ -7831,8 +7831,8 @@ var ZodType = class {
         } : {
           issues: ctx.common.issues
         };
-      } catch (err) {
-        if (err?.message?.toLowerCase()?.includes("encountered")) {
+      } catch (err2) {
+        if (err2?.message?.toLowerCase()?.includes("encountered")) {
           this["~standard"].async = true;
         }
         ctx.common = {
@@ -8049,24 +8049,24 @@ var base64Regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=)
 var base64urlRegex = /^([0-9a-zA-Z-_]{4})*(([0-9a-zA-Z-_]{2}(==)?)|([0-9a-zA-Z-_]{3}(=)?))?$/;
 var dateRegexSource = `((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))`;
 var dateRegex = new RegExp(`^${dateRegexSource}$`);
-function timeRegexSource(args) {
+function timeRegexSource(args2) {
   let secondsRegexSource = `[0-5]\\d`;
-  if (args.precision) {
-    secondsRegexSource = `${secondsRegexSource}\\.\\d{${args.precision}}`;
-  } else if (args.precision == null) {
+  if (args2.precision) {
+    secondsRegexSource = `${secondsRegexSource}\\.\\d{${args2.precision}}`;
+  } else if (args2.precision == null) {
     secondsRegexSource = `${secondsRegexSource}(\\.\\d+)?`;
   }
-  const secondsQuantifier = args.precision ? "+" : "?";
+  const secondsQuantifier = args2.precision ? "+" : "?";
   return `([01]\\d|2[0-3]):[0-5]\\d(:${secondsRegexSource})${secondsQuantifier}`;
 }
-function timeRegex(args) {
-  return new RegExp(`^${timeRegexSource(args)}$`);
+function timeRegex(args2) {
+  return new RegExp(`^${timeRegexSource(args2)}$`);
 }
-function datetimeRegex(args) {
-  let regex = `${dateRegexSource}T${timeRegexSource(args)}`;
+function datetimeRegex(args2) {
+  let regex = `${dateRegexSource}T${timeRegexSource(args2)}`;
   const opts = [];
-  opts.push(args.local ? `Z?` : `Z`);
-  if (args.offset)
+  opts.push(args2.local ? `Z?` : `Z`);
+  if (args2.offset)
     opts.push(`([+-]\\d{2}:?\\d{2})`);
   regex = `${regex}(${opts.join("|")})`;
   return new RegExp(`^${regex}$`);
@@ -9389,14 +9389,14 @@ var ZodArray = class _ZodArray extends ZodType {
       }
     }
     if (ctx.common.async) {
-      return Promise.all([...ctx.data].map((item, i) => {
-        return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+      return Promise.all([...ctx.data].map((item, i2) => {
+        return def.type._parseAsync(new ParseInputLazyPath(ctx, item, ctx.path, i2));
       })).then((result2) => {
         return ParseStatus.mergeArray(status, result2);
       });
     }
-    const result = [...ctx.data].map((item, i) => {
-      return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i));
+    const result = [...ctx.data].map((item, i2) => {
+      return def.type._parseSync(new ParseInputLazyPath(ctx, item, ctx.path, i2));
     });
     return ParseStatus.mergeArray(status, result);
   }
@@ -10328,7 +10328,7 @@ var ZodSet = class _ZodSet extends ZodType {
       }
       return { status: status.value, value: parsedSet };
     }
-    const elements = [...ctx.data.values()].map((item, i) => valueType._parse(new ParseInputLazyPath(ctx, item, ctx.path, i)));
+    const elements = [...ctx.data.values()].map((item, i2) => valueType._parse(new ParseInputLazyPath(ctx, item, ctx.path, i2)));
     if (ctx.common.async) {
       return Promise.all(elements).then((elements2) => finalizeSet(elements2));
     } else {
@@ -10378,9 +10378,9 @@ var ZodFunction = class _ZodFunction extends ZodType {
       });
       return INVALID;
     }
-    function makeArgsIssue(args, error2) {
+    function makeArgsIssue(args2, error2) {
       return makeIssue({
-        data: args,
+        data: args2,
         path: ctx.path,
         errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap(), en_default].filter((x) => !!x),
         issueData: {
@@ -10404,10 +10404,10 @@ var ZodFunction = class _ZodFunction extends ZodType {
     const fn = ctx.data;
     if (this._def.returns instanceof ZodPromise) {
       const me = this;
-      return OK(async function(...args) {
+      return OK(async function(...args2) {
         const error2 = new ZodError([]);
-        const parsedArgs = await me._def.args.parseAsync(args, params).catch((e) => {
-          error2.addIssue(makeArgsIssue(args, e));
+        const parsedArgs = await me._def.args.parseAsync(args2, params).catch((e) => {
+          error2.addIssue(makeArgsIssue(args2, e));
           throw error2;
         });
         const result = await Reflect.apply(fn, this, parsedArgs);
@@ -10419,10 +10419,10 @@ var ZodFunction = class _ZodFunction extends ZodType {
       });
     } else {
       const me = this;
-      return OK(function(...args) {
-        const parsedArgs = me._def.args.safeParse(args, params);
+      return OK(function(...args2) {
+        const parsedArgs = me._def.args.safeParse(args2, params);
         if (!parsedArgs.success) {
-          throw new ZodError([makeArgsIssue(args, parsedArgs.error)]);
+          throw new ZodError([makeArgsIssue(args2, parsedArgs.error)]);
         }
         const result = Reflect.apply(fn, this, parsedArgs.data);
         const parsedReturns = me._def.returns.safeParse(result, params);
@@ -10451,17 +10451,17 @@ var ZodFunction = class _ZodFunction extends ZodType {
       returns: returnType
     });
   }
-  implement(func) {
-    const validatedFunc = this.parse(func);
+  implement(func2) {
+    const validatedFunc = this.parse(func2);
     return validatedFunc;
   }
-  strictImplement(func) {
-    const validatedFunc = this.parse(func);
+  strictImplement(func2) {
+    const validatedFunc = this.parse(func2);
     return validatedFunc;
   }
-  static create(args, returns, params) {
+  static create(args2, returns, params) {
     return new _ZodFunction({
-      args: args ? args : ZodTuple.create([]).rest(ZodUnknown.create()),
+      args: args2 ? args2 : ZodTuple.create([]).rest(ZodUnknown.create()),
       returns: returns || ZodUnknown.create(),
       typeName: ZodFirstPartyTypeKind.ZodFunction,
       ...processCreateParams(params)
@@ -11217,9 +11217,9 @@ function nullish(input) {
   return input === null || input === void 0;
 }
 function cleanRegex(source) {
-  const start = source.startsWith("^") ? 1 : 0;
+  const start2 = source.startsWith("^") ? 1 : 0;
   const end = source.endsWith("$") ? source.length - 1 : source.length;
-  return source.slice(start, end);
+  return source.slice(start2, end);
 }
 function floatSafeRemainder2(val, step) {
   const ratio = val / step;
@@ -11274,18 +11274,18 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path11) {
-  if (!path11)
+function getElementAtPath(obj, path13) {
+  if (!path13)
     return obj;
-  return path11.reduce((acc, key) => acc?.[key], obj);
+  return path13.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
   const promises = keys.map((key) => promisesObj[key]);
   return Promise.all(promises).then((results) => {
     const resolvedObj = {};
-    for (let i = 0; i < keys.length; i++) {
-      resolvedObj[keys[i]] = results[i];
+    for (let i2 = 0; i2 < keys.length; i2++) {
+      resolvedObj[keys[i2]] = results[i2];
     }
     return resolvedObj;
   });
@@ -11293,7 +11293,7 @@ function promiseAllObject(promisesObj) {
 function randomString(length = 10) {
   const chars = "abcdefghijklmnopqrstuvwxyz";
   let str = "";
-  for (let i = 0; i < length; i++) {
+  for (let i2 = 0; i2 < length; i2++) {
     str += chars[Math.floor(Math.random() * chars.length)];
   }
   return str;
@@ -11600,12 +11600,12 @@ function merge(a, b) {
   });
   return clone(a, def);
 }
-function partial(Class2, schema, mask, name = "partial") {
+function partial(Class2, schema, mask, name2 = "partial") {
   const currDef = schema._zod.def;
   const checks = currDef.checks;
   const hasChecks = checks && checks.length > 0;
   if (hasChecks) {
-    throw new Error(`.${name}() cannot be used on object schemas containing refinements`);
+    throw new Error(`.${name2}() cannot be used on object schemas containing refinements`);
   }
   const def = mergeDefs(schema._zod.def, {
     get shape() {
@@ -11672,8 +11672,8 @@ function required(Class2, schema, mask) {
 function aborted(x, startIndex = 0) {
   if (x.aborted === true)
     return true;
-  for (let i = startIndex; i < x.issues.length; i++) {
-    if (x.issues[i]?.continue !== true) {
+  for (let i2 = startIndex; i2 < x.issues.length; i2++) {
+    if (x.issues[i2]?.continue !== true) {
       return true;
     }
   }
@@ -11682,28 +11682,28 @@ function aborted(x, startIndex = 0) {
 function explicitlyAborted(x, startIndex = 0) {
   if (x.aborted === true)
     return true;
-  for (let i = startIndex; i < x.issues.length; i++) {
-    if (x.issues[i]?.continue === false) {
+  for (let i2 = startIndex; i2 < x.issues.length; i2++) {
+    if (x.issues[i2]?.continue === false) {
       return true;
     }
   }
   return false;
 }
-function prefixIssues(path11, issues) {
+function prefixIssues(path13, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path11);
+    iss.path.unshift(path13);
     return iss;
   });
 }
 function unwrapMessage(message) {
   return typeof message === "string" ? message : message?.message;
 }
-function attachSchema(issues, start, inst) {
+function attachSchema(issues, start2, inst) {
   var _a3;
-  for (let i = start; i < issues.length; i++) {
-    (_a3 = issues[i]).schema ?? (_a3.schema = inst);
+  for (let i2 = start2; i2 < issues.length; i2++) {
+    (_a3 = issues[i2]).schema ?? (_a3.schema = inst);
   }
 }
 function finalizeIssue(iss, ctx, config2) {
@@ -11740,10 +11740,10 @@ function codePointLength(str) {
   if (!highSurrogate.test(str))
     return units;
   let count = units;
-  for (let i = 0; i < units - 1; i++) {
-    if ((str.charCodeAt(i) & 64512) === 55296 && (str.charCodeAt(i + 1) & 64512) === 56320) {
+  for (let i2 = 0; i2 < units - 1; i2++) {
+    if ((str.charCodeAt(i2) & 64512) === 55296 && (str.charCodeAt(i2 + 1) & 64512) === 56320) {
       count--;
-      i++;
+      i2++;
     }
   }
   return count;
@@ -11776,8 +11776,8 @@ function parsedType(data) {
   }
   return t;
 }
-function issue(...args) {
-  const [iss, input, inst] = args;
+function issue(...args2) {
+  const [iss, input, inst] = args2;
   if (typeof iss === "string") {
     return {
       message: iss,
@@ -11796,15 +11796,15 @@ function cleanEnum(obj) {
 function base64ToUint8Array(base642) {
   const binaryString = atob(base642);
   const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  for (let i2 = 0; i2 < binaryString.length; i2++) {
+    bytes[i2] = binaryString.charCodeAt(i2);
   }
   return bytes;
 }
 function uint8ArrayToBase64(bytes) {
   let binaryString = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binaryString += String.fromCharCode(bytes[i]);
+  for (let i2 = 0; i2 < bytes.length; i2++) {
+    binaryString += String.fromCharCode(bytes[i2]);
   }
   return btoa(binaryString);
 }
@@ -11822,8 +11822,8 @@ function hexToUint8Array(hex) {
     throw new Error("Invalid hex string length");
   }
   const bytes = new Uint8Array(cleanHex.length / 2);
-  for (let i = 0; i < cleanHex.length; i += 2) {
-    bytes[i / 2] = Number.parseInt(cleanHex.slice(i, i + 2), 16);
+  for (let i2 = 0; i2 < cleanHex.length; i2 += 2) {
+    bytes[i2 / 2] = Number.parseInt(cleanHex.slice(i2, i2 + 2), 16);
   }
   return bytes;
 }
@@ -11895,10 +11895,10 @@ function defineLazyInternal(inst, key, compute) {
           Object.defineProperty(this, key, { configurable: true, writable: true, value });
         broke = broke || outer;
         return value;
-      } catch (err) {
+      } catch (err2) {
         delete this[key];
         broke = broke || outer;
-        throw err;
+        throw err2;
       }
     },
     set(value) {
@@ -11956,7 +11956,7 @@ function newError(Definition) {
   return new Definition();
 }
 // @__NO_SIDE_EFFECTS__
-function $constructor(name, initializer3, proto, params) {
+function $constructor(name2, initializer3, proto, params) {
   const zodProto = {};
   function Internals(def) {
     this.def = def;
@@ -11966,7 +11966,7 @@ function $constructor(name, initializer3, proto, params) {
   Internals.prototype = zodProto;
   const protoMembers = proto;
   const initialized = protoMembers && /* @__PURE__ */ new WeakSet();
-  function init(inst, def) {
+  function init2(inst, def) {
     if (!inst._zod) {
       _zodDesc.value = new Internals(def);
       try {
@@ -11975,10 +11975,10 @@ function $constructor(name, initializer3, proto, params) {
         _zodDesc.value = void 0;
       }
     }
-    if (inst._zod.traits.has(name)) {
+    if (inst._zod.traits.has(name2)) {
       return;
     }
-    inst._zod.traits.add(name);
+    inst._zod.traits.add(name2);
     initializer3(inst, def);
     if (initialized) {
       const own2 = Object.getPrototypeOf(inst);
@@ -12004,10 +12004,10 @@ function $constructor(name, initializer3, proto, params) {
   const Parent = params?.Parent ?? Object;
   class Definition extends Parent {
   }
-  Object.defineProperty(Definition, "name", { value: name });
+  Object.defineProperty(Definition, "name", { value: name2 });
   function _(def) {
     const inst = params?.Parent ? newError(Definition) : this;
-    init(inst, def);
+    init2(inst, def);
     const deferred = inst._zod.deferred;
     if (deferred) {
       for (const fn of deferred) {
@@ -12020,15 +12020,15 @@ function $constructor(name, initializer3, proto, params) {
       pp(inst);
     return inst;
   }
-  Object.defineProperty(_, "init", { value: init });
+  Object.defineProperty(_, "init", { value: init2 });
   Object.defineProperty(_, Symbol.hasInstance, {
     value: (inst) => {
       if (params?.Parent && inst instanceof params.Parent)
         return true;
-      return inst?._zod?.traits?.has(name);
+      return inst?._zod?.traits?.has(name2);
     }
   });
-  Object.defineProperty(_, "name", { value: name });
+  Object.defineProperty(_, "name", { value: name2 });
   return _;
 }
 var $ZodAsyncError = class extends Error {
@@ -12037,8 +12037,8 @@ var $ZodAsyncError = class extends Error {
   }
 };
 var $ZodEncodeError = class extends Error {
-  constructor(name) {
-    super(`Encountered unidirectional transform during encode: ${name}`);
+  constructor(name2) {
+    super(`Encountered unidirectional transform during encode: ${name2}`);
     this.name = "ZodEncodeError";
   }
 };
@@ -12122,28 +12122,28 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path11 = []) => {
+  const processError = (error3, path13 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path13, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path13, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path13, ...issue2.path]);
       } else {
-        const fullpath = [...path11, ...issue2.path];
+        const fullpath = [...path13, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
           let curr = fieldErrors;
-          let i = 0;
-          while (i < fullpath.length) {
-            const el = fullpath[i];
-            const terminal = i === fullpath.length - 1;
+          let i2 = 0;
+          while (i2 < fullpath.length) {
+            const el = fullpath[i2];
+            const terminal = i2 === fullpath.length - 1;
             if (el === "_errors") {
               if (terminal)
                 curr._errors.push(mapper(issue2));
-              i++;
+              i2++;
               continue;
             }
             if (!Object.prototype.hasOwnProperty.call(curr, el)) {
@@ -12159,7 +12159,7 @@ function formatError(error2, mapper = (issue2) => issue2.message) {
               node2._errors.push(mapper(issue2));
             }
             curr = node2;
-            i++;
+            i2++;
           }
         }
       }
@@ -12309,20 +12309,20 @@ function anchor(source) {
   return new RegExp(`^${source}$`);
 }
 var date = /* @__PURE__ */ anchor(dateSource);
-function timeSource(args) {
+function timeSource(args2) {
   const hhmm = `(?:[01]\\d|2[0-3]):[0-5]\\d`;
-  const regex = typeof args.precision === "number" ? args.precision === -1 ? `${hhmm}` : args.precision === 0 ? `${hhmm}:[0-5]\\d` : `${hhmm}:[0-5]\\d\\.\\d{${args.precision}}` : args.seconds ? `${hhmm}:[0-5]\\d(?:\\.\\d+)?` : `${hhmm}(?::[0-5]\\d(?:\\.\\d+)?)?`;
+  const regex = typeof args2.precision === "number" ? args2.precision === -1 ? `${hhmm}` : args2.precision === 0 ? `${hhmm}:[0-5]\\d` : `${hhmm}:[0-5]\\d\\.\\d{${args2.precision}}` : args2.seconds ? `${hhmm}:[0-5]\\d(?:\\.\\d+)?` : `${hhmm}(?::[0-5]\\d(?:\\.\\d+)?)?`;
   return regex;
 }
-function time(args) {
-  return new RegExp(`^${timeSource(args)}$`);
+function time(args2) {
+  return new RegExp(`^${timeSource(args2)}$`);
 }
-function datetime(args) {
+function datetime(args2) {
   const opts = ["Z"];
-  if (args.offset)
+  if (args2.offset)
     opts.push(`([+-](?:[01]\\d|2[0-3]):[0-5]\\d)`);
-  const qualified = `${timeSource({ precision: args.precision, seconds: true })}(?:${opts.join("|")})`;
-  const timeRegex2 = args.local ? `${qualified}|${timeSource({ precision: args.precision })}` : qualified;
+  const qualified = `${timeSource({ precision: args2.precision, seconds: true })}(?:${opts.join("|")})`;
+  const timeRegex2 = args2.local ? `${qualified}|${timeSource({ precision: args2.precision })}` : qualified;
   return new RegExp(`^${dateSource}T(?:${timeRegex2})$`);
 }
 var string = (params) => {
@@ -12729,10 +12729,10 @@ var $ZodCheckOverwrite = /* @__PURE__ */ $constructor("$ZodCheckOverwrite", (ins
 
 // node_modules/zod/v4/core/doc.js
 var Doc = class {
-  constructor(args = [], closed = {}) {
+  constructor(args2 = [], closed = {}) {
     this.content = [];
     this.indent = 0;
-    this.args = args;
+    this.args = args2;
     this.closed = closed;
   }
   indented(fn) {
@@ -13122,10 +13122,10 @@ var $ZodCIDRv4 = /* @__PURE__ */ $constructor("$ZodCIDRv4", (inst, def) => {
   $ZodStringFormat.init(inst, def);
 });
 function isValidCIDRv6(value) {
-  const parts = value.split("/");
-  if (parts.length !== 2)
+  const parts2 = value.split("/");
+  if (parts2.length !== 2)
     return false;
-  const [address, prefix2] = parts;
+  const [address, prefix2] = parts2;
   if (!prefix2)
     return false;
   const prefixNum = Number(prefix2);
@@ -13350,16 +13350,16 @@ var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
     }
     payload.value = memo2 ? memo2.alloc(inst, payload, Array(input.length), ctx) : Array(input.length);
     const proms = [];
-    for (let i = 0; i < input.length; i++) {
-      const item = input[i];
+    for (let i2 = 0; i2 < input.length; i2++) {
+      const item = input[i2];
       const result = def.element._zod.run({
         value: item,
         issues: []
       }, ctx);
       if (result instanceof Promise) {
-        proms.push(result.then((result2) => handleArrayResult(result2, payload, i)));
+        proms.push(result.then((result2) => handleArrayResult(result2, payload, i2)));
       } else {
-        handleArrayResult(result, payload, i);
+        handleArrayResult(result, payload, i2);
       }
     }
     if (proms.length) {
@@ -13741,10 +13741,10 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
     }
     return propValues;
   });
-  def.options.forEach((option, i) => {
+  def.options.forEach((option, i2) => {
     const propShape = propShapes.get(option._zod.def);
     if (propShape && !Object.prototype.hasOwnProperty.call(propShape, def.discriminator)) {
-      throw new Error(`Invalid discriminated union option at index "${i}"`);
+      throw new Error(`Invalid discriminated union option at index "${i2}"`);
     }
   });
   const disc = cached(() => {
@@ -15553,15 +15553,15 @@ function foldObjects(members2) {
     for (const key in object3.properties) {
       if (Object.prototype.hasOwnProperty.call(properties, key))
         continue;
-      const parts = [];
+      const parts2 = [];
       for (const other of objects) {
         const part = other.properties?.[key] ?? undeclaredConstraint(other);
         if (part === null || part === void 0)
           continue;
-        if (!parts.some((seen) => JSON.stringify(seen) === JSON.stringify(part)))
-          parts.push(part);
+        if (!parts2.some((seen) => JSON.stringify(seen) === JSON.stringify(part)))
+          parts2.push(part);
       }
-      const merged = parts.length === 1 ? parts[0] : foldObjects(parts) ?? { allOf: parts };
+      const merged = parts2.length === 1 ? parts2[0] : foldObjects(parts2) ?? { allOf: parts2 };
       assignProp(properties, key, merged);
     }
     for (const key of object3.required ?? [])
@@ -16123,9 +16123,9 @@ var objectProcessor = (schema, ctx, _json, params) => {
 var unionProcessor = (schema, ctx, json, params) => {
   const def = schema._zod.def;
   const isExclusive = def.inclusive === false;
-  const options = def.options.map((x, i) => process2(x, ctx, {
+  const options = def.options.map((x, i2) => process2(x, ctx, {
     ...params,
-    path: [...params.path, isExclusive ? "oneOf" : "anyOf", i]
+    path: [...params.path, isExclusive ? "oneOf" : "anyOf", i2]
   }));
   if (isExclusive) {
     json.oneOf = options;
@@ -16157,9 +16157,9 @@ var tupleProcessor = (schema, ctx, _json, params) => {
   json.type = "array";
   const prefixPath = ctx.target === "draft-2020-12" ? "prefixItems" : "items";
   const restPath = ctx.target === "draft-2020-12" ? "items" : ctx.target === "openapi-3.0" ? "items" : "additionalItems";
-  const prefixItems = def.items.map((x, i) => process2(x, ctx, {
+  const prefixItems = def.items.map((x, i2) => process2(x, ctx, {
     ...params,
-    path: [...params.path, prefixPath, i]
+    path: [...params.path, prefixPath, i2]
   }));
   const rest = def.rest ? process2(def.rest, ctx, {
     ...params,
@@ -16231,7 +16231,7 @@ function stringifyKeyNames(bySchema, json, visited) {
     if (!Array.isArray(branches))
       continue;
     const mapped = branches.map((branch) => stringifyKeyNames(bySchema, branch, visited));
-    if (mapped.some((branch, i) => branch !== branches[i]))
+    if (mapped.some((branch, i2) => branch !== branches[i2]))
       json = { ...json, [keyword]: mapped };
   }
   const types2 = Array.isArray(json.type) ? json.type : [json.type];
@@ -16543,8 +16543,8 @@ var ZodMiniType = /* @__PURE__ */ $constructor("ZodMiniType", (inst, def) => {
     reg.add(this, meta2);
     return this;
   },
-  apply(fn, ...args) {
-    return args.length === 0 ? fn(this) : fn(this, ...args);
+  apply(fn, ...args2) {
+    return args2.length === 0 ? fn(this) : fn(this, ...args2);
   }
 });
 var ZodMiniObject = /* @__PURE__ */ $constructor("ZodMiniObject", (inst, def) => {
@@ -16646,11 +16646,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path11) {
-  if (path11.length === 0) {
+function getDotPath(path13) {
+  if (path13.length === 0) {
     return "object root";
   }
-  return path11.reduce((acc, seg, index) => {
+  return path13.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -16663,11 +16663,11 @@ function getDotPath(path11) {
 function getParseErrorMessage(error2) {
   if (error2 && typeof error2 === "object") {
     if ("issues" in error2 && Array.isArray(error2.issues) && error2.issues.length > 0) {
-      return error2.issues.map((i) => {
-        if (!i.path?.length) {
-          return i.message;
+      return error2.issues.map((i2) => {
+        if (!i2.path?.length) {
+          return i2.message;
         }
-        return `${i.message} at ${getDotPath(i.path)}`;
+        return `${i2.message} at ${getDotPath(i2.path)}`;
       }).join("\n");
     }
     if ("message" in error2 && typeof error2.message === "string") {
@@ -16875,11 +16875,11 @@ var ZodType2 = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
     globalRegistry.add(cl, { description });
     return cl;
   },
-  meta(...args) {
-    if (args.length === 0)
+  meta(...args2) {
+    if (args2.length === 0)
       return globalRegistry.get(this);
     const cl = this.clone();
-    globalRegistry.add(cl, args[0]);
+    globalRegistry.add(cl, args2[0]);
     return cl;
   },
   isOptional() {
@@ -16888,8 +16888,8 @@ var ZodType2 = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   isNullable() {
     return this.safeParse(null).success;
   },
-  apply(fn, ...args) {
-    return args.length === 0 ? fn(this) : fn(this, ...args);
+  apply(fn, ...args2) {
+    return args2.length === 0 ? fn(this) : fn(this, ...args2);
   },
   // Overrides core's `~standard` to add `jsonSchema`. Must stay a prototype entry: redefining it per instance demotes instances to dictionary mode.
   get "~standard"() {
@@ -16968,29 +16968,29 @@ var _ZodString = /* @__PURE__ */ $constructor("_ZodString", (inst, def) => {
   inst.minLength = bag.minimum ?? null;
   inst.maxLength = bag.maximum ?? null;
 }, {
-  regex(...args) {
-    return this.check(_regex(...args));
+  regex(...args2) {
+    return this.check(_regex(...args2));
   },
-  includes(...args) {
-    return this.check(_includes(...args));
+  includes(...args2) {
+    return this.check(_includes(...args2));
   },
-  startsWith(...args) {
-    return this.check(_startsWith(...args));
+  startsWith(...args2) {
+    return this.check(_startsWith(...args2));
   },
-  endsWith(...args) {
-    return this.check(_endsWith(...args));
+  endsWith(...args2) {
+    return this.check(_endsWith(...args2));
   },
-  min(...args) {
-    return this.check(_minLength(...args));
+  min(...args2) {
+    return this.check(_minLength(...args2));
   },
-  max(...args) {
-    return this.check(_maxLength(...args));
+  max(...args2) {
+    return this.check(_maxLength(...args2));
   },
-  length(...args) {
-    return this.check(_length(...args));
+  length(...args2) {
+    return this.check(_length(...args2));
   },
-  nonempty(...args) {
-    return this.check(_minLength(1, ...args));
+  nonempty(...args2) {
+    return this.check(_minLength(1, ...args2));
   },
   lowercase(params) {
     return this.check(_lowercase(params));
@@ -17001,8 +17001,8 @@ var _ZodString = /* @__PURE__ */ $constructor("_ZodString", (inst, def) => {
   trim() {
     return this.check(_trim());
   },
-  normalize(...args) {
-    return this.check(_normalize(...args));
+  normalize(...args2) {
+    return this.check(_normalize(...args2));
   },
   toLowerCase() {
     return this.check(_toLowerCase());
@@ -17369,14 +17369,14 @@ var ZodObject2 = /* @__PURE__ */ $constructor("ZodObject", (inst, def) => {
   omit(mask) {
     return util_exports.omit(this, mask);
   },
-  partial(...args) {
-    return util_exports.partial(ZodOptional2, this, args[0]);
+  partial(...args2) {
+    return util_exports.partial(ZodOptional2, this, args2[0]);
   },
-  exactPartial(...args) {
-    return util_exports.partial(ZodExactOptional, this, args[0], "exactPartial");
+  exactPartial(...args2) {
+    return util_exports.partial(ZodExactOptional, this, args2[0], "exactPartial");
   },
-  required(...args) {
-    return util_exports.required(ZodNonOptional, this, args[0]);
+  required(...args2) {
+    return util_exports.required(ZodNonOptional, this, args2[0]);
   }
 });
 function object2(shape, params) {
@@ -17664,11 +17664,11 @@ var ZodPipe = /* @__PURE__ */ $constructor("ZodPipe", (inst, def) => {
   inst.in = def.in;
   inst.out = def.out;
 });
-function pipe(in_, out) {
+function pipe(in_, out2) {
   return new ZodPipe({
     type: "pipe",
     in: in_,
-    out
+    out: out2
     // ...util.normalizeParams(params),
   });
 }
@@ -19314,11 +19314,11 @@ var getRefs = (options) => {
     flags: { hasReferencedOpenAiAnyType: false },
     currentPath,
     propertyPath: void 0,
-    seen: new Map(Object.entries(_options.definitions).map(([name, def]) => [
+    seen: new Map(Object.entries(_options.definitions).map(([name2, def]) => [
       def._def,
       {
         def: def._def,
-        path: [..._options.basePath, _options.definitionPath, name],
+        path: [..._options.basePath, _options.definitionPath, name2],
         // Resolution of references will be forced even though seen, so it's ok that the schema is undefined here for now.
         jsonSchema: void 0
       }
@@ -19344,12 +19344,12 @@ function setResponseValueAndErrors(res, key, value, errorMessage, refs) {
 
 // node_modules/zod-to-json-schema/dist/esm/getRelativePath.js
 var getRelativePath = (pathA, pathB) => {
-  let i = 0;
-  for (; i < pathA.length && i < pathB.length; i++) {
-    if (pathA[i] !== pathB[i])
+  let i2 = 0;
+  for (; i2 < pathA.length && i2 < pathB.length; i2++) {
+    if (pathA[i2] !== pathB[i2])
       break;
   }
-  return [(pathA.length - i).toString(), ...pathB.slice(i)].join("/");
+  return [(pathA.length - i2).toString(), ...pathB.slice(i2)].join("/");
 };
 
 // node_modules/zod-to-json-schema/dist/esm/parsers/any.js
@@ -19460,7 +19460,7 @@ function parseDateDef(def, refs, overrideDateStrategy) {
   const strategy = overrideDateStrategy ?? refs.dateStrategy;
   if (Array.isArray(strategy)) {
     return {
-      anyOf: strategy.map((item, i) => parseDateDef(def, refs, item))
+      anyOf: strategy.map((item, i2) => parseDateDef(def, refs, item))
     };
   }
   switch (strategy) {
@@ -19782,11 +19782,11 @@ function escapeLiteralCheckValue(literal2, refs) {
 var ALPHA_NUMERIC = new Set("ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvxyz0123456789");
 function escapeNonAlphaNumeric(source) {
   let result = "";
-  for (let i = 0; i < source.length; i++) {
-    if (!ALPHA_NUMERIC.has(source[i])) {
+  for (let i2 = 0; i2 < source.length; i2++) {
+    if (!ALPHA_NUMERIC.has(source[i2])) {
       result += "\\";
     }
-    result += source[i];
+    result += source[i2];
   }
   return result;
 }
@@ -19850,66 +19850,66 @@ function stringifyRegExpWithFlags(regex, refs) {
   if (!refs.applyRegexFlags || !regex.flags) {
     return regex.source;
   }
-  const flags = {
+  const flags2 = {
     i: regex.flags.includes("i"),
     m: regex.flags.includes("m"),
     s: regex.flags.includes("s")
     // `.` matches newlines
   };
-  const source = flags.i ? regex.source.toLowerCase() : regex.source;
+  const source = flags2.i ? regex.source.toLowerCase() : regex.source;
   let pattern = "";
   let isEscaped = false;
   let inCharGroup = false;
   let inCharRange = false;
-  for (let i = 0; i < source.length; i++) {
+  for (let i2 = 0; i2 < source.length; i2++) {
     if (isEscaped) {
-      pattern += source[i];
+      pattern += source[i2];
       isEscaped = false;
       continue;
     }
-    if (flags.i) {
+    if (flags2.i) {
       if (inCharGroup) {
-        if (source[i].match(/[a-z]/)) {
+        if (source[i2].match(/[a-z]/)) {
           if (inCharRange) {
-            pattern += source[i];
-            pattern += `${source[i - 2]}-${source[i]}`.toUpperCase();
+            pattern += source[i2];
+            pattern += `${source[i2 - 2]}-${source[i2]}`.toUpperCase();
             inCharRange = false;
-          } else if (source[i + 1] === "-" && source[i + 2]?.match(/[a-z]/)) {
-            pattern += source[i];
+          } else if (source[i2 + 1] === "-" && source[i2 + 2]?.match(/[a-z]/)) {
+            pattern += source[i2];
             inCharRange = true;
           } else {
-            pattern += `${source[i]}${source[i].toUpperCase()}`;
+            pattern += `${source[i2]}${source[i2].toUpperCase()}`;
           }
           continue;
         }
-      } else if (source[i].match(/[a-z]/)) {
-        pattern += `[${source[i]}${source[i].toUpperCase()}]`;
+      } else if (source[i2].match(/[a-z]/)) {
+        pattern += `[${source[i2]}${source[i2].toUpperCase()}]`;
         continue;
       }
     }
-    if (flags.m) {
-      if (source[i] === "^") {
+    if (flags2.m) {
+      if (source[i2] === "^") {
         pattern += `(^|(?<=[\r
 ]))`;
         continue;
-      } else if (source[i] === "$") {
+      } else if (source[i2] === "$") {
         pattern += `($|(?=[\r
 ]))`;
         continue;
       }
     }
-    if (flags.s && source[i] === ".") {
-      pattern += inCharGroup ? `${source[i]}\r
-` : `[${source[i]}\r
+    if (flags2.s && source[i2] === ".") {
+      pattern += inCharGroup ? `${source[i2]}\r
+` : `[${source[i2]}\r
 ]`;
       continue;
     }
-    pattern += source[i];
-    if (source[i] === "\\") {
+    pattern += source[i2];
+    if (source[i2] === "\\") {
       isEscaped = true;
-    } else if (inCharGroup && source[i] === "]") {
+    } else if (inCharGroup && source[i2] === "]") {
       inCharGroup = false;
-    } else if (!inCharGroup && source[i] === "[") {
+    } else if (!inCharGroup && source[i2] === "[") {
       inCharGroup = true;
     }
   }
@@ -20074,7 +20074,7 @@ function parseUnionDef(def, refs) {
       }
     }, []);
     if (types2.length === options.length) {
-      const uniqueTypes = types2.filter((x, i, a) => a.indexOf(x) === i);
+      const uniqueTypes = types2.filter((x, i2, a) => a.indexOf(x) === i2);
       return {
         type: uniqueTypes.length > 1 ? uniqueTypes : uniqueTypes[0],
         enum: options.reduce((acc, x) => {
@@ -20094,9 +20094,9 @@ function parseUnionDef(def, refs) {
   return asAnyOf(def, refs);
 }
 var asAnyOf = (def, refs) => {
-  const anyOf = (def.options instanceof Map ? Array.from(def.options.values()) : def.options).map((x, i) => parseDef(x._def, {
+  const anyOf = (def.options instanceof Map ? Array.from(def.options.values()) : def.options).map((x, i2) => parseDef(x._def, {
     ...refs,
-    currentPath: [...refs.currentPath, "anyOf", `${i}`]
+    currentPath: [...refs.currentPath, "anyOf", `${i2}`]
   })).filter((x) => !!x && (!refs.strictUnions || typeof x === "object" && Object.keys(x).length > 0));
   return anyOf.length ? { anyOf } : void 0;
 };
@@ -20322,9 +20322,9 @@ function parseTupleDef(def, refs) {
     return {
       type: "array",
       minItems: def.items.length,
-      items: def.items.map((x, i) => parseDef(x._def, {
+      items: def.items.map((x, i2) => parseDef(x._def, {
         ...refs,
-        currentPath: [...refs.currentPath, "items", `${i}`]
+        currentPath: [...refs.currentPath, "items", `${i2}`]
       })).reduce((acc, x) => x === void 0 ? acc : [...acc, x], []),
       additionalItems: parseDef(def.rest._def, {
         ...refs,
@@ -20336,9 +20336,9 @@ function parseTupleDef(def, refs) {
       type: "array",
       minItems: def.items.length,
       maxItems: def.items.length,
-      items: def.items.map((x, i) => parseDef(x._def, {
+      items: def.items.map((x, i2) => parseDef(x._def, {
         ...refs,
-        currentPath: [...refs.currentPath, "items", `${i}`]
+        currentPath: [...refs.currentPath, "items", `${i2}`]
       })).reduce((acc, x) => x === void 0 ? acc : [...acc, x], [])
     };
   }
@@ -20496,17 +20496,17 @@ var addMeta = (def, refs, jsonSchema) => {
 // node_modules/zod-to-json-schema/dist/esm/zodToJsonSchema.js
 var zodToJsonSchema = (schema, options) => {
   const refs = getRefs(options);
-  let definitions = typeof options === "object" && options.definitions ? Object.entries(options.definitions).reduce((acc, [name2, schema2]) => ({
+  let definitions = typeof options === "object" && options.definitions ? Object.entries(options.definitions).reduce((acc, [name3, schema2]) => ({
     ...acc,
-    [name2]: parseDef(schema2._def, {
+    [name3]: parseDef(schema2._def, {
       ...refs,
-      currentPath: [...refs.basePath, refs.definitionPath, name2]
+      currentPath: [...refs.basePath, refs.definitionPath, name3]
     }, true) ?? parseAnyDef(refs)
   }), {}) : void 0;
-  const name = typeof options === "string" ? options : options?.nameStrategy === "title" ? void 0 : options?.name;
-  const main = parseDef(schema._def, name === void 0 ? refs : {
+  const name2 = typeof options === "string" ? options : options?.nameStrategy === "title" ? void 0 : options?.name;
+  const main = parseDef(schema._def, name2 === void 0 ? refs : {
     ...refs,
-    currentPath: [...refs.basePath, refs.definitionPath, name]
+    currentPath: [...refs.basePath, refs.definitionPath, name2]
   }, false) ?? parseAnyDef(refs);
   const title = typeof options === "object" && options.name !== void 0 && options.nameStrategy === "title" ? options.name : void 0;
   if (title !== void 0) {
@@ -20530,18 +20530,18 @@ var zodToJsonSchema = (schema, options) => {
       };
     }
   }
-  const combined = name === void 0 ? definitions ? {
+  const combined = name2 === void 0 ? definitions ? {
     ...main,
     [refs.definitionPath]: definitions
   } : main : {
     $ref: [
       ...refs.$refStrategy === "relative" ? [] : refs.basePath,
       refs.definitionPath,
-      name
+      name2
     ].join("/"),
     [refs.definitionPath]: {
       ...definitions,
-      [name]: main
+      [name2]: main
     }
   };
   if (refs.target === "jsonSchema7") {
@@ -20746,25 +20746,25 @@ var Protocol = class {
     });
   }
   _resetTimeout(messageId) {
-    const info = this._timeoutInfo.get(messageId);
-    if (!info)
+    const info2 = this._timeoutInfo.get(messageId);
+    if (!info2)
       return false;
-    const totalElapsed = Date.now() - info.startTime;
-    if (info.maxTotalTimeout && totalElapsed >= info.maxTotalTimeout) {
+    const totalElapsed = Date.now() - info2.startTime;
+    if (info2.maxTotalTimeout && totalElapsed >= info2.maxTotalTimeout) {
       this._timeoutInfo.delete(messageId);
       throw McpError.fromError(ErrorCode.RequestTimeout, "Maximum total timeout exceeded", {
-        maxTotalTimeout: info.maxTotalTimeout,
+        maxTotalTimeout: info2.maxTotalTimeout,
         totalElapsed
       });
     }
-    clearTimeout(info.timeoutId);
-    info.timeoutId = setTimeout(info.onTimeout, info.timeout);
+    clearTimeout(info2.timeoutId);
+    info2.timeoutId = setTimeout(info2.onTimeout, info2.timeout);
     return true;
   }
   _cleanupTimeout(messageId) {
-    const info = this._timeoutInfo.get(messageId);
-    if (info) {
-      clearTimeout(info.timeoutId);
+    const info2 = this._timeoutInfo.get(messageId);
+    if (info2) {
+      clearTimeout(info2.timeoutId);
       this._timeoutInfo.delete(messageId);
     }
   }
@@ -20809,8 +20809,8 @@ var Protocol = class {
     this._progressHandlers.clear();
     this._taskProgressTokens.clear();
     this._pendingDebouncedNotifications.clear();
-    for (const info of this._timeoutInfo.values()) {
-      clearTimeout(info.timeoutId);
+    for (const info2 of this._timeoutInfo.values()) {
+      clearTimeout(info2.timeoutId);
     }
     this._timeoutInfo.clear();
     for (const controller of this._requestHandlerAbortControllers.values()) {
@@ -22254,34 +22254,34 @@ var McpZodTypeKind;
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/shared/toolNameValidation.js
 var TOOL_NAME_REGEX = /^[A-Za-z0-9._-]{1,128}$/;
-function validateToolName(name) {
+function validateToolName(name2) {
   const warnings = [];
-  if (name.length === 0) {
+  if (name2.length === 0) {
     return {
       isValid: false,
       warnings: ["Tool name cannot be empty"]
     };
   }
-  if (name.length > 128) {
+  if (name2.length > 128) {
     return {
       isValid: false,
-      warnings: [`Tool name exceeds maximum length of 128 characters (current: ${name.length})`]
+      warnings: [`Tool name exceeds maximum length of 128 characters (current: ${name2.length})`]
     };
   }
-  if (name.includes(" ")) {
+  if (name2.includes(" ")) {
     warnings.push("Tool name contains spaces, which may cause parsing issues");
   }
-  if (name.includes(",")) {
+  if (name2.includes(",")) {
     warnings.push("Tool name contains commas, which may cause parsing issues");
   }
-  if (name.startsWith("-") || name.endsWith("-")) {
+  if (name2.startsWith("-") || name2.endsWith("-")) {
     warnings.push("Tool name starts or ends with a dash, which may cause parsing issues in some contexts");
   }
-  if (name.startsWith(".") || name.endsWith(".")) {
+  if (name2.startsWith(".") || name2.endsWith(".")) {
     warnings.push("Tool name starts or ends with a dot, which may cause parsing issues in some contexts");
   }
-  if (!TOOL_NAME_REGEX.test(name)) {
-    const invalidChars = name.split("").filter((char) => !/[A-Za-z0-9._-]/.test(char)).filter((char, index, arr) => arr.indexOf(char) === index);
+  if (!TOOL_NAME_REGEX.test(name2)) {
+    const invalidChars = name2.split("").filter((char) => !/[A-Za-z0-9._-]/.test(char)).filter((char, index, arr) => arr.indexOf(char) === index);
     warnings.push(`Tool name contains invalid characters: ${invalidChars.map((c) => `"${c}"`).join(", ")}`, "Allowed characters are: A-Z, a-z, 0-9, underscore (_), dash (-), and dot (.)");
     return {
       isValid: false,
@@ -22293,9 +22293,9 @@ function validateToolName(name) {
     warnings
   };
 }
-function issueToolNameWarning(name, warnings) {
+function issueToolNameWarning(name2, warnings) {
   if (warnings.length > 0) {
-    console.warn(`Tool name validation warning for "${name}":`);
+    console.warn(`Tool name validation warning for "${name2}":`);
     for (const warning of warnings) {
       console.warn(`  - ${warning}`);
     }
@@ -22304,9 +22304,9 @@ function issueToolNameWarning(name, warnings) {
     console.warn("See SEP: Specify Format for Tool Names (https://github.com/modelcontextprotocol/modelcontextprotocol/issues/986) for more details.");
   }
 }
-function validateAndWarnToolName(name) {
-  const result = validateToolName(name);
-  issueToolNameWarning(name, result.warnings);
+function validateAndWarnToolName(name2) {
+  const result = validateToolName(name2);
+  issueToolNameWarning(name2, result.warnings);
   return result.isValid;
 }
 
@@ -22315,13 +22315,13 @@ var ExperimentalMcpServerTasks = class {
   constructor(_mcpServer) {
     this._mcpServer = _mcpServer;
   }
-  registerToolTask(name, config2, handler) {
+  registerToolTask(name2, config2, handler) {
     const execution = { taskSupport: "required", ...config2.execution };
     if (execution.taskSupport === "forbidden") {
-      throw new Error(`Cannot register task-based tool '${name}' with taskSupport 'forbidden'. Use registerTool() instead.`);
+      throw new Error(`Cannot register task-based tool '${name2}' with taskSupport 'forbidden'. Use registerTool() instead.`);
     }
     const mcpServerInternal = this._mcpServer;
-    return mcpServerInternal._createRegisteredTool(name, config2.title, config2.description, config2.inputSchema, config2.outputSchema, config2.annotations, execution, config2._meta, handler);
+    return mcpServerInternal._createRegisteredTool(name2, config2.title, config2.description, config2.inputSchema, config2.outputSchema, config2.annotations, execution, config2._meta, handler);
   }
 };
 
@@ -22379,9 +22379,9 @@ var McpServer = class {
       }
     });
     this.server.setRequestHandler(ListToolsRequestSchema, () => ({
-      tools: Object.entries(this._registeredTools).filter(([, tool]) => tool.enabled).map(([name, tool]) => {
+      tools: Object.entries(this._registeredTools).filter(([, tool]) => tool.enabled).map(([name2, tool]) => {
         const toolDefinition = {
-          name,
+          name: name2,
           title: tool.title,
           description: tool.description,
           inputSchema: (() => {
@@ -22428,8 +22428,8 @@ var McpServer = class {
         if (taskSupport === "optional" && !isTaskRequest && isTaskHandler) {
           return await this.handleAutomaticTaskPolling(tool, request, extra);
         }
-        const args = await this.validateToolInput(tool, request.params.arguments, request.params.name);
-        const result = await this.executeToolHandler(tool, args, extra);
+        const args2 = await this.validateToolInput(tool, request.params.arguments, request.params.name);
+        const result = await this.executeToolHandler(tool, args2, extra);
         if (isTaskRequest) {
           return result;
         }
@@ -22466,13 +22466,13 @@ var McpServer = class {
   /**
    * Validates tool input arguments against the tool's input schema.
    */
-  async validateToolInput(tool, args, toolName) {
+  async validateToolInput(tool, args2, toolName) {
     if (!tool.inputSchema) {
       return void 0;
     }
     const inputObj = normalizeObjectSchema(tool.inputSchema);
     const schemaToParse = inputObj ?? tool.inputSchema;
-    const parseResult = await safeParseAsync2(schemaToParse, args);
+    const parseResult = await safeParseAsync2(schemaToParse, args2);
     if (!parseResult.success) {
       const error2 = "error" in parseResult ? parseResult.error : "Unknown error";
       const errorMessage = getParseErrorMessage(error2);
@@ -22507,7 +22507,7 @@ var McpServer = class {
   /**
    * Executes a tool handler (either regular or task-based).
    */
-  async executeToolHandler(tool, args, extra) {
+  async executeToolHandler(tool, args2, extra) {
     const handler = tool.handler;
     const isTaskHandler = "createTask" in handler;
     if (isTaskHandler) {
@@ -22517,7 +22517,7 @@ var McpServer = class {
       const taskExtra = { ...extra, taskStore: extra.taskStore };
       if (tool.inputSchema) {
         const typedHandler = handler;
-        return await Promise.resolve(typedHandler.createTask(args, taskExtra));
+        return await Promise.resolve(typedHandler.createTask(args2, taskExtra));
       } else {
         const typedHandler = handler;
         return await Promise.resolve(typedHandler.createTask(taskExtra));
@@ -22525,7 +22525,7 @@ var McpServer = class {
     }
     if (tool.inputSchema) {
       const typedHandler = handler;
-      return await Promise.resolve(typedHandler(args, extra));
+      return await Promise.resolve(typedHandler(args2, extra));
     } else {
       const typedHandler = handler;
       return await Promise.resolve(typedHandler(extra));
@@ -22538,10 +22538,10 @@ var McpServer = class {
     if (!extra.taskStore) {
       throw new Error("No task store provided for task-capable tool.");
     }
-    const args = await this.validateToolInput(tool, request.params.arguments, request.params.name);
+    const args2 = await this.validateToolInput(tool, request.params.arguments, request.params.name);
     const handler = tool.handler;
     const taskExtra = { ...extra, taskStore: extra.taskStore };
-    const createTaskResult = args ? await Promise.resolve(handler.createTask(args, taskExtra)) : (
+    const createTaskResult = args2 ? await Promise.resolve(handler.createTask(args2, taskExtra)) : (
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await Promise.resolve(handler.createTask(taskExtra))
     );
@@ -22653,8 +22653,8 @@ var McpServer = class {
       return { resources: [...resources, ...templateResources] };
     });
     this.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
-      const resourceTemplates = Object.entries(this._registeredResourceTemplates).map(([name, template]) => ({
-        name,
+      const resourceTemplates = Object.entries(this._registeredResourceTemplates).map(([name2, template]) => ({
+        name: name2,
         uriTemplate: template.resourceTemplate.uriTemplate.toString(),
         ...template.metadata
       }));
@@ -22691,9 +22691,9 @@ var McpServer = class {
       }
     });
     this.server.setRequestHandler(ListPromptsRequestSchema, () => ({
-      prompts: Object.entries(this._registeredPrompts).filter(([, prompt]) => prompt.enabled).map(([name, prompt]) => {
+      prompts: Object.entries(this._registeredPrompts).filter(([, prompt]) => prompt.enabled).map(([name2, prompt]) => {
         return {
-          name,
+          name: name2,
           title: prompt.title,
           description: prompt.description,
           arguments: prompt.argsSchema ? promptArgumentsFromSchema(prompt.argsSchema) : void 0
@@ -22716,9 +22716,9 @@ var McpServer = class {
           const errorMessage = getParseErrorMessage(error2);
           throw new McpError(ErrorCode.InvalidParams, `Invalid arguments for prompt ${request.params.name}: ${errorMessage}`);
         }
-        const args = parseResult.data;
+        const args2 = parseResult.data;
         const cb = prompt.callback;
-        return await Promise.resolve(cb(args, extra));
+        return await Promise.resolve(cb(args2, extra));
       } else {
         const cb = prompt.callback;
         return await Promise.resolve(cb(extra));
@@ -22726,54 +22726,54 @@ var McpServer = class {
     });
     this._promptHandlersInitialized = true;
   }
-  resource(name, uriOrTemplate, ...rest) {
-    let metadata;
+  resource(name2, uriOrTemplate, ...rest) {
+    let metadata2;
     if (typeof rest[0] === "object") {
-      metadata = rest.shift();
+      metadata2 = rest.shift();
     }
     const readCallback = rest[0];
     if (typeof uriOrTemplate === "string") {
       if (this._registeredResources[uriOrTemplate]) {
         throw new Error(`Resource ${uriOrTemplate} is already registered`);
       }
-      const registeredResource = this._createRegisteredResource(name, void 0, uriOrTemplate, metadata, readCallback);
+      const registeredResource = this._createRegisteredResource(name2, void 0, uriOrTemplate, metadata2, readCallback);
       this.setResourceRequestHandlers();
       this.sendResourceListChanged();
       return registeredResource;
     } else {
-      if (this._registeredResourceTemplates[name]) {
-        throw new Error(`Resource template ${name} is already registered`);
+      if (this._registeredResourceTemplates[name2]) {
+        throw new Error(`Resource template ${name2} is already registered`);
       }
-      const registeredResourceTemplate = this._createRegisteredResourceTemplate(name, void 0, uriOrTemplate, metadata, readCallback);
+      const registeredResourceTemplate = this._createRegisteredResourceTemplate(name2, void 0, uriOrTemplate, metadata2, readCallback);
       this.setResourceRequestHandlers();
       this.sendResourceListChanged();
       return registeredResourceTemplate;
     }
   }
-  registerResource(name, uriOrTemplate, config2, readCallback) {
+  registerResource(name2, uriOrTemplate, config2, readCallback) {
     if (typeof uriOrTemplate === "string") {
       if (this._registeredResources[uriOrTemplate]) {
         throw new Error(`Resource ${uriOrTemplate} is already registered`);
       }
-      const registeredResource = this._createRegisteredResource(name, config2.title, uriOrTemplate, config2, readCallback);
+      const registeredResource = this._createRegisteredResource(name2, config2.title, uriOrTemplate, config2, readCallback);
       this.setResourceRequestHandlers();
       this.sendResourceListChanged();
       return registeredResource;
     } else {
-      if (this._registeredResourceTemplates[name]) {
-        throw new Error(`Resource template ${name} is already registered`);
+      if (this._registeredResourceTemplates[name2]) {
+        throw new Error(`Resource template ${name2} is already registered`);
       }
-      const registeredResourceTemplate = this._createRegisteredResourceTemplate(name, config2.title, uriOrTemplate, config2, readCallback);
+      const registeredResourceTemplate = this._createRegisteredResourceTemplate(name2, config2.title, uriOrTemplate, config2, readCallback);
       this.setResourceRequestHandlers();
       this.sendResourceListChanged();
       return registeredResourceTemplate;
     }
   }
-  _createRegisteredResource(name, title, uri, metadata, readCallback) {
+  _createRegisteredResource(name2, title, uri, metadata2, readCallback) {
     const registeredResource = {
-      name,
+      name: name2,
       title,
-      metadata,
+      metadata: metadata2,
       readCallback,
       enabled: true,
       disable: () => registeredResource.update({ enabled: false }),
@@ -22801,19 +22801,19 @@ var McpServer = class {
     this._registeredResources[uri] = registeredResource;
     return registeredResource;
   }
-  _createRegisteredResourceTemplate(name, title, template, metadata, readCallback) {
+  _createRegisteredResourceTemplate(name2, title, template, metadata2, readCallback) {
     const registeredResourceTemplate = {
       resourceTemplate: template,
       title,
-      metadata,
+      metadata: metadata2,
       readCallback,
       enabled: true,
       disable: () => registeredResourceTemplate.update({ enabled: false }),
       enable: () => registeredResourceTemplate.update({ enabled: true }),
       remove: () => registeredResourceTemplate.update({ name: null }),
       update: (updates) => {
-        if (typeof updates.name !== "undefined" && updates.name !== name) {
-          delete this._registeredResourceTemplates[name];
+        if (typeof updates.name !== "undefined" && updates.name !== name2) {
+          delete this._registeredResourceTemplates[name2];
           if (updates.name)
             this._registeredResourceTemplates[updates.name] = registeredResourceTemplate;
         }
@@ -22830,7 +22830,7 @@ var McpServer = class {
         this.sendResourceListChanged();
       }
     };
-    this._registeredResourceTemplates[name] = registeredResourceTemplate;
+    this._registeredResourceTemplates[name2] = registeredResourceTemplate;
     const variableNames = template.uriTemplate.variableNames;
     const hasCompleter = Array.isArray(variableNames) && variableNames.some((v) => !!template.completeCallback(v));
     if (hasCompleter) {
@@ -22838,7 +22838,7 @@ var McpServer = class {
     }
     return registeredResourceTemplate;
   }
-  _createRegisteredPrompt(name, title, description, argsSchema, callback) {
+  _createRegisteredPrompt(name2, title, description, argsSchema, callback) {
     const registeredPrompt = {
       title,
       description,
@@ -22849,8 +22849,8 @@ var McpServer = class {
       enable: () => registeredPrompt.update({ enabled: true }),
       remove: () => registeredPrompt.update({ name: null }),
       update: (updates) => {
-        if (typeof updates.name !== "undefined" && updates.name !== name) {
-          delete this._registeredPrompts[name];
+        if (typeof updates.name !== "undefined" && updates.name !== name2) {
+          delete this._registeredPrompts[name2];
           if (updates.name)
             this._registeredPrompts[updates.name] = registeredPrompt;
         }
@@ -22867,7 +22867,7 @@ var McpServer = class {
         this.sendPromptListChanged();
       }
     };
-    this._registeredPrompts[name] = registeredPrompt;
+    this._registeredPrompts[name2] = registeredPrompt;
     if (argsSchema) {
       const hasCompletable = Object.values(argsSchema).some((field) => {
         const inner = field instanceof ZodOptional2 ? field._def?.innerType : field;
@@ -22879,8 +22879,8 @@ var McpServer = class {
     }
     return registeredPrompt;
   }
-  _createRegisteredTool(name, title, description, inputSchema, outputSchema, annotations, execution, _meta, handler) {
-    validateAndWarnToolName(name);
+  _createRegisteredTool(name2, title, description, inputSchema, outputSchema, annotations, execution, _meta, handler) {
+    validateAndWarnToolName(name2);
     const registeredTool = {
       title,
       description,
@@ -22895,11 +22895,11 @@ var McpServer = class {
       enable: () => registeredTool.update({ enabled: true }),
       remove: () => registeredTool.update({ name: null }),
       update: (updates) => {
-        if (typeof updates.name !== "undefined" && updates.name !== name) {
+        if (typeof updates.name !== "undefined" && updates.name !== name2) {
           if (typeof updates.name === "string") {
             validateAndWarnToolName(updates.name);
           }
-          delete this._registeredTools[name];
+          delete this._registeredTools[name2];
           if (updates.name)
             this._registeredTools[updates.name] = registeredTool;
         }
@@ -22922,7 +22922,7 @@ var McpServer = class {
         this.sendToolListChanged();
       }
     };
-    this._registeredTools[name] = registeredTool;
+    this._registeredTools[name2] = registeredTool;
     this.setToolRequestHandlers();
     this.sendToolListChanged();
     return registeredTool;
@@ -22930,9 +22930,9 @@ var McpServer = class {
   /**
    * tool() implementation. Parses arguments passed to overrides defined above.
    */
-  tool(name, ...rest) {
-    if (this._registeredTools[name]) {
-      throw new Error(`Tool ${name} is already registered`);
+  tool(name2, ...rest) {
+    if (this._registeredTools[name2]) {
+      throw new Error(`Tool ${name2} is already registered`);
     }
     let description;
     let inputSchema;
@@ -22950,27 +22950,27 @@ var McpServer = class {
         }
       } else if (typeof firstArg === "object" && firstArg !== null) {
         if (Object.values(firstArg).some((v) => typeof v === "object" && v !== null)) {
-          throw new Error(`Tool ${name} expected a Zod schema or ToolAnnotations, but received an unrecognized object`);
+          throw new Error(`Tool ${name2} expected a Zod schema or ToolAnnotations, but received an unrecognized object`);
         }
         annotations = rest.shift();
       }
     }
     const callback = rest[0];
-    return this._createRegisteredTool(name, void 0, description, inputSchema, outputSchema, annotations, { taskSupport: "forbidden" }, void 0, callback);
+    return this._createRegisteredTool(name2, void 0, description, inputSchema, outputSchema, annotations, { taskSupport: "forbidden" }, void 0, callback);
   }
   /**
    * Registers a tool with a config object and callback.
    */
-  registerTool(name, config2, cb) {
-    if (this._registeredTools[name]) {
-      throw new Error(`Tool ${name} is already registered`);
+  registerTool(name2, config2, cb) {
+    if (this._registeredTools[name2]) {
+      throw new Error(`Tool ${name2} is already registered`);
     }
     const { title, description, inputSchema, outputSchema, annotations, _meta } = config2;
-    return this._createRegisteredTool(name, title, description, inputSchema, outputSchema, annotations, { taskSupport: "forbidden" }, _meta, cb);
+    return this._createRegisteredTool(name2, title, description, inputSchema, outputSchema, annotations, { taskSupport: "forbidden" }, _meta, cb);
   }
-  prompt(name, ...rest) {
-    if (this._registeredPrompts[name]) {
-      throw new Error(`Prompt ${name} is already registered`);
+  prompt(name2, ...rest) {
+    if (this._registeredPrompts[name2]) {
+      throw new Error(`Prompt ${name2} is already registered`);
     }
     let description;
     if (typeof rest[0] === "string") {
@@ -22981,7 +22981,7 @@ var McpServer = class {
       argsSchema = rest.shift();
     }
     const cb = rest[0];
-    const registeredPrompt = this._createRegisteredPrompt(name, void 0, description, argsSchema, cb);
+    const registeredPrompt = this._createRegisteredPrompt(name2, void 0, description, argsSchema, cb);
     this.setPromptRequestHandlers();
     this.sendPromptListChanged();
     return registeredPrompt;
@@ -22989,12 +22989,12 @@ var McpServer = class {
   /**
    * Registers a prompt with a config object and callback.
    */
-  registerPrompt(name, config2, cb) {
-    if (this._registeredPrompts[name]) {
-      throw new Error(`Prompt ${name} is already registered`);
+  registerPrompt(name2, config2, cb) {
+    if (this._registeredPrompts[name2]) {
+      throw new Error(`Prompt ${name2} is already registered`);
     }
     const { title, description, argsSchema } = config2;
-    const registeredPrompt = this._createRegisteredPrompt(name, title, description, argsSchema, cb);
+    const registeredPrompt = this._createRegisteredPrompt(name2, title, description, argsSchema, cb);
     this.setPromptRequestHandlers();
     this.sendPromptListChanged();
     return registeredPrompt;
@@ -23079,11 +23079,11 @@ function promptArgumentsFromSchema(schema) {
   const shape = getObjectShape(schema);
   if (!shape)
     return [];
-  return Object.entries(shape).map(([name, field]) => {
+  return Object.entries(shape).map(([name2, field]) => {
     const description = getSchemaDescription(field);
     const isOptional = isSchemaOptional(field);
     return {
-      name,
+      name: name2,
       description,
       required: !isOptional
     };
@@ -23225,8 +23225,8 @@ var StdioServerTransport = class {
 };
 
 // packages/mcp/src/v2-service.mjs
-import path8 from "node:path";
-import fs7 from "node:fs";
+import path10 from "node:path";
+import fs10 from "node:fs";
 
 // packages/storage/src/schema.mjs
 var V2_SQL_SCHEMA = `
@@ -23367,12 +23367,12 @@ CREATE TABLE IF NOT EXISTS sync_state (
 // packages/storage/src/database.mjs
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
-import fs from "node:fs";
+import fs2 from "node:fs";
 var V2Database = class {
   constructor(filePath = ":memory:") {
     this.filePath = filePath;
     if (filePath !== ":memory:") {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs2.mkdirSync(path.dirname(filePath), { recursive: true });
     }
     this.db = new DatabaseSync(filePath);
     this.init();
@@ -23388,9 +23388,9 @@ var V2Database = class {
       const result = fn(this);
       this.db.exec("COMMIT;");
       return result;
-    } catch (err) {
+    } catch (err2) {
       this.db.exec("ROLLBACK;");
-      throw err;
+      throw err2;
     }
   }
   close() {
@@ -23638,10 +23638,10 @@ var V2Database = class {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const refs = block.artifactRefs || block.artifact_refs || [];
-    for (let i = 0; i < refs.length; i++) {
-      const ref = refs[i];
+    for (let i2 = 0; i2 < refs.length; i2++) {
+      const ref = refs[i2];
       insertRef.run(
-        `${block.id}-ref-${i}`,
+        `${block.id}-ref-${i2}`,
         block.id,
         ref.path,
         ref.symbol || null,
@@ -23844,7 +23844,7 @@ var V2Database = class {
 
 // packages/storage/src/sync-engine.mjs
 import crypto from "node:crypto";
-import fs2 from "node:fs";
+import fs3 from "node:fs";
 import path2 from "node:path";
 function calculateSha256(text) {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
@@ -23878,11 +23878,11 @@ var SyncEngine = class {
     const jsonText = JSON.stringify(graph, null, 2) + "\n";
     const sha256 = calculateSha256(jsonText);
     const targetDir = path2.join(projectRoot, ".contextos");
-    fs2.mkdirSync(targetDir, { recursive: true });
+    fs3.mkdirSync(targetDir, { recursive: true });
     const targetFile = path2.join(targetDir, "graph.json");
     const tempFile = path2.join(targetDir, `graph.json.tmp.${Date.now()}`);
-    fs2.writeFileSync(tempFile, jsonText, "utf8");
-    fs2.renameSync(tempFile, targetFile);
+    fs3.writeFileSync(tempFile, jsonText, "utf8");
+    fs3.renameSync(tempFile, targetFile);
     this.db.setGraphRevision(projectId, newRevision);
     this.db.setSyncState("last_exported_hash", sha256);
     return {
@@ -23895,8 +23895,8 @@ var SyncEngine = class {
     let graph;
     try {
       graph = JSON.parse(jsonText);
-    } catch (err) {
-      throw new Error(`Invalid JSON syntax in graph: ${err.message}`);
+    } catch (err2) {
+      throw new Error(`Invalid JSON syntax in graph: ${err2.message}`);
     }
     const projectId = graph.projectId || graph.project?.id || graph.id || "contextos";
     const graphRevision = graph.graphRevision || graph.project?.graphRevision || 0;
@@ -23954,10 +23954,10 @@ var SyncEngine = class {
   }
   reconcileExternalChange(projectId, projectRoot) {
     const targetFile = path2.join(projectRoot, ".contextos", "graph.json");
-    if (!fs2.existsSync(targetFile)) {
+    if (!fs3.existsSync(targetFile)) {
       return { changed: false, reason: "File does not exist" };
     }
-    const jsonText = fs2.readFileSync(targetFile, "utf8");
+    const jsonText = fs3.readFileSync(targetFile, "utf8");
     const currentSha256 = calculateSha256(jsonText);
     const lastHash = this.db.getSyncState("last_exported_hash");
     if (currentSha256 === lastHash) {
@@ -24231,7 +24231,8 @@ var Task = class {
     this.baseline = {
       gitHead: baseline.gitHead || null,
       dirtyHash: baseline.dirtyHash || null,
-      indexRevision: baseline.indexRevision || 0
+      indexRevision: baseline.indexRevision || 0,
+      fileSnapshots: baseline.fileSnapshots ? { ...baseline.fileSnapshots } : {}
     };
     this.notes = Array.isArray(notes) ? [...notes] : [];
     this.checks = Array.isArray(checks) ? [...checks] : [];
@@ -24361,8 +24362,8 @@ var DecisionDocument = class {
     const lines = markdown.split(/\r?\n/);
     const sections = [];
     let currentSection = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
       const match = line.match(/^##\s+\[([a-zA-Z0-9_-]+)\]\s+(.*)$/);
       if (match) {
         if (currentSection) {
@@ -24372,7 +24373,7 @@ var DecisionDocument = class {
         currentSection = {
           id: match[1],
           title: match[2].trim(),
-          startLine: i + 1,
+          startLine: i2 + 1,
           lines: [],
           content: ""
         };
@@ -24561,9 +24562,15 @@ var PlanService = class {
   }
 };
 
+// packages/application/src/task-service.mjs
+import fs6 from "node:fs";
+import path6 from "node:path";
+import crypto4 from "node:crypto";
+import { execSync } from "node:child_process";
+
 // packages/code-intel/src/language-registry.mjs
-import crypto2 from "node:crypto";
-import path3 from "node:path";
+import crypto3 from "node:crypto";
+import path4 from "node:path";
 import { execFileSync } from "node:child_process";
 
 // node_modules/@babel/parser/lib/index.js
@@ -24582,8 +24589,8 @@ var SourceLocation = class {
   end;
   filename;
   identifierName;
-  constructor(start, end) {
-    this.start = start;
+  constructor(start2, end) {
+    this.start = start2;
     this.end = end;
   }
 };
@@ -24749,10 +24756,10 @@ var StandardErrors = {
   MissingSemicolon: "Missing semicolon.",
   MissingPlugin: ({
     missingPlugin
-  }) => `This experimental syntax requires enabling the parser plugin: ${missingPlugin.map((name) => JSON.stringify(name)).join(", ")}.`,
+  }) => `This experimental syntax requires enabling the parser plugin: ${missingPlugin.map((name2) => JSON.stringify(name2)).join(", ")}.`,
   MissingOneOfPlugins: ({
     missingPlugin
-  }) => `This experimental syntax requires enabling one of the following parser plugin(s): ${missingPlugin.map((name) => JSON.stringify(name)).join(", ")}.`,
+  }) => `This experimental syntax requires enabling one of the following parser plugin(s): ${missingPlugin.map((name2) => JSON.stringify(name2)).join(", ")}.`,
   MissingUnicodeEscape: "Expecting Unicode escape sequence \\uXXXX.",
   MixingCoalesceWithLogical: "Nullish coalescing operator(??) requires parens when mixing with logical operators.",
   ModuleAttributeInvalidValue: "Only string literals are allowed as module attribute values.",
@@ -25028,10 +25035,10 @@ function getOptions(opts) {
 }
 function toESTreeLocation(node2) {
   const {
-    start,
+    start: start2,
     end
   } = node2.loc;
-  node2.loc.start = new Position(start.line, start.column);
+  node2.loc.start = new Position(start2.line, start2.column);
   node2.loc.end = new Position(end.line, end.column);
   return node2;
 }
@@ -25048,17 +25055,17 @@ var estree = (superClass) => class ESTreeParserMixin extends superClass {
   }
   parseRegExpLiteral({
     pattern,
-    flags
+    flags: flags2
   }) {
     let regex = null;
     try {
-      regex = new RegExp(pattern, flags);
+      regex = new RegExp(pattern, flags2);
     } catch (_) {
     }
     const node2 = this.estreeParseLiteral(regex);
     node2.regex = {
       pattern,
-      flags
+      flags: flags2
     };
     return node2;
   }
@@ -25109,7 +25116,7 @@ var estree = (superClass) => class ESTreeParserMixin extends superClass {
   }
   cloneEstreeStringLiteral(node2) {
     const {
-      start,
+      start: start2,
       end,
       loc,
       range,
@@ -25118,7 +25125,7 @@ var estree = (superClass) => class ESTreeParserMixin extends superClass {
     } = node2;
     const cloned = Object.create(node2.constructor.prototype);
     cloned.type = "Literal";
-    cloned.start = start;
+    cloned.start = start2;
     cloned.end = end;
     cloned.loc = loc;
     cloned.range = range;
@@ -25154,9 +25161,9 @@ var estree = (superClass) => class ESTreeParserMixin extends superClass {
     return this.convertPrivateNameToPrivateIdentifier(node2);
   }
   convertPrivateNameToPrivateIdentifier(node2) {
-    const name = super.getPrivateNameSV(node2);
+    const name2 = super.getPrivateNameSV(node2);
     delete node2.id;
-    node2.name = name;
+    node2.name = name2;
     return this.castNodeTo(node2, "PrivateIdentifier");
   }
   isPrivateName(node2) {
@@ -25213,8 +25220,8 @@ var estree = (superClass) => class ESTreeParserMixin extends superClass {
     if (key.type === "Literal") return key.value === "constructor";
     return super.nameIsConstructor(key);
   }
-  parseClassProperty(...args) {
-    const propertyNode = super.parseClassProperty(...args);
+  parseClassProperty(...args2) {
+    const propertyNode = super.parseClassProperty(...args2);
     if (propertyNode.abstract && this.hasPlugin("typescript")) {
       delete propertyNode.abstract;
       this.castNodeTo(propertyNode, "TSAbstractPropertyDefinition");
@@ -25223,8 +25230,8 @@ var estree = (superClass) => class ESTreeParserMixin extends superClass {
     }
     return propertyNode;
   }
-  parseClassPrivateProperty(...args) {
-    const propertyNode = super.parseClassPrivateProperty(...args);
+  parseClassPrivateProperty(...args2) {
+    const propertyNode = super.parseClassPrivateProperty(...args2);
     if (propertyNode.abstract && this.hasPlugin("typescript")) {
       this.castNodeTo(propertyNode, "TSAbstractPropertyDefinition");
     } else {
@@ -25429,14 +25436,14 @@ var ExportedTokenType = class {
   }
 };
 var keywords$1 = /* @__PURE__ */ new Map();
-function createKeyword(name, options = {}) {
-  options.keyword = name;
-  const token = createToken(name, options);
-  keywords$1.set(name, token);
+function createKeyword(name2, options = {}) {
+  options.keyword = name2;
+  const token = createToken(name2, options);
+  keywords$1.set(name2, token);
   return token;
 }
-function createBinop(name, binop) {
-  return createToken(name, {
+function createBinop(name2, binop) {
+  return createToken(name2, {
     beforeExpr,
     binop
   });
@@ -25448,20 +25455,20 @@ var tokenBinops = [];
 var tokenBeforeExprs = [];
 var tokenStartsExprs = [];
 var tokenPrefixes = [];
-function createToken(name, options = {}) {
+function createToken(name2, options = {}) {
   ++tokenTypeCounter;
-  tokenLabels.push(name);
+  tokenLabels.push(name2);
   tokenBinops.push(options.binop ?? -1);
   tokenBeforeExprs.push(options.beforeExpr ?? false);
   tokenStartsExprs.push(options.startsExpr ?? false);
   tokenPrefixes.push(options.prefix ?? false);
-  tokenTypes.push(new ExportedTokenType(name, options));
+  tokenTypes.push(new ExportedTokenType(name2, options));
   return tokenTypeCounter;
 }
-function createKeywordLike(name, options = {}) {
+function createKeywordLike(name2, options = {}) {
   ++tokenTypeCounter;
-  keywords$1.set(name, tokenTypeCounter);
-  tokenLabels.push(name);
+  keywords$1.set(name2, tokenTypeCounter);
+  tokenLabels.push(name2);
   tokenBinops.push(options.binop ?? -1);
   tokenBeforeExprs.push(options.beforeExpr ?? false);
   tokenStartsExprs.push(options.startsExpr ?? false);
@@ -25928,10 +25935,10 @@ var supplementaryIdentifierStartCodes = [2368, 25, 1388, 2, 3817, 43, 20677, 24,
 var supplementaryIdentifierCodes = [3834, 1, 3173, 7, 633, 9, 51450, 0, 3, 0, 8, 1, 6, 0];
 function isInSupplementarySet(code2, set) {
   let pos = 65536;
-  for (let i = 0, length = set.length; i < length; i += 2) {
-    pos += set[i];
+  for (let i2 = 0, length = set.length; i2 < length; i2 += 2) {
+    pos += set[i2];
     if (pos > code2) return false;
-    pos += set[i + 1];
+    pos += set[i2 + 1];
     if (pos >= code2) return true;
   }
   return false;
@@ -25992,8 +25999,8 @@ var Scope = class {
   flags = 0;
   names = /* @__PURE__ */ new Map();
   firstLexicalName = "";
-  constructor(flags) {
-    this.flags = flags;
+  constructor(flags2) {
+    this.flags = flags2;
   }
 };
 var ScopeHandler = class {
@@ -26024,18 +26031,18 @@ var ScopeHandler = class {
     return (this.currentThisScopeFlags() & 64) > 0;
   }
   get inClassAndNotInNonArrowFunction() {
-    const flags = this.currentThisScopeFlags();
-    return (flags & 64) > 0 && (flags & 2) === 0;
+    const flags2 = this.currentThisScopeFlags();
+    return (flags2 & 64) > 0 && (flags2 & 2) === 0;
   }
   get inStaticBlock() {
-    for (let i = this.scopeStack.length - 1; ; i--) {
+    for (let i2 = this.scopeStack.length - 1; ; i2--) {
       const {
-        flags
-      } = this.scopeStack[i];
-      if (flags & 128) {
+        flags: flags2
+      } = this.scopeStack[i2];
+      if (flags2 & 128) {
         return true;
       }
-      if (flags & (3715 | 64)) {
+      if (flags2 & (3715 | 64)) {
         return false;
       }
     }
@@ -26049,11 +26056,11 @@ var ScopeHandler = class {
   get treatFunctionsAsVar() {
     return this.treatFunctionsAsVarInScope(this.currentScope());
   }
-  createScope(flags) {
-    return new Scope(flags);
+  createScope(flags2) {
+    return new Scope(flags2);
   }
-  enter(flags) {
-    this.scopeStack.push(this.createScope(flags));
+  enter(flags2) {
+    this.scopeStack.push(this.createScope(flags2));
   }
   exit() {
     const scope = this.scopeStack.pop();
@@ -26062,88 +26069,88 @@ var ScopeHandler = class {
   treatFunctionsAsVarInScope(scope) {
     return !!(scope.flags & (2 | 128) || !this.parser.inModule && scope.flags & 1);
   }
-  declareName(name, bindingType, loc) {
+  declareName(name2, bindingType, loc) {
     let scope = this.currentScope();
     if (bindingType & 8 || bindingType & 16) {
-      this.checkRedeclarationInScope(scope, name, bindingType, loc);
-      let type = scope.names.get(name) || 0;
+      this.checkRedeclarationInScope(scope, name2, bindingType, loc);
+      let type = scope.names.get(name2) || 0;
       if (bindingType & 16) {
         type = type | 4;
       } else {
         if (!scope.firstLexicalName) {
-          scope.firstLexicalName = name;
+          scope.firstLexicalName = name2;
         }
         type = type | 2;
       }
-      scope.names.set(name, type);
+      scope.names.set(name2, type);
       if (bindingType & 8) {
-        this.maybeExportDefined(scope, name);
+        this.maybeExportDefined(scope, name2);
       }
     } else if (bindingType & 4) {
-      for (let i = this.scopeStack.length - 1; i >= 0; --i) {
-        scope = this.scopeStack[i];
-        this.checkRedeclarationInScope(scope, name, bindingType, loc);
-        scope.names.set(name, (scope.names.get(name) || 0) | 1);
-        this.maybeExportDefined(scope, name);
+      for (let i2 = this.scopeStack.length - 1; i2 >= 0; --i2) {
+        scope = this.scopeStack[i2];
+        this.checkRedeclarationInScope(scope, name2, bindingType, loc);
+        scope.names.set(name2, (scope.names.get(name2) || 0) | 1);
+        this.maybeExportDefined(scope, name2);
         if (scope.flags & 3715) break;
       }
     }
     if (this.parser.inModule && scope.flags & 1) {
-      this.undefinedExports.delete(name);
+      this.undefinedExports.delete(name2);
     }
   }
-  maybeExportDefined(scope, name) {
+  maybeExportDefined(scope, name2) {
     if (this.parser.inModule && scope.flags & 1) {
-      this.undefinedExports.delete(name);
+      this.undefinedExports.delete(name2);
     }
   }
-  checkRedeclarationInScope(scope, name, bindingType, loc) {
-    if (this.isRedeclaredInScope(scope, name, bindingType)) {
+  checkRedeclarationInScope(scope, name2, bindingType, loc) {
+    if (this.isRedeclaredInScope(scope, name2, bindingType)) {
       this.parser.raise(Errors.VarRedeclaration, loc, {
-        identifierName: name
+        identifierName: name2
       });
     }
   }
-  isRedeclaredInScope(scope, name, bindingType) {
+  isRedeclaredInScope(scope, name2, bindingType) {
     if (!(bindingType & 1)) return false;
     if (bindingType & 8) {
-      return scope.names.has(name);
+      return scope.names.has(name2);
     }
-    const type = scope.names.get(name) || 0;
+    const type = scope.names.get(name2) || 0;
     if (bindingType & 16) {
       return (type & 2) > 0 || !this.treatFunctionsAsVarInScope(scope) && (type & 1) > 0;
     }
-    return (type & 2) > 0 && !(scope.flags & 8 && scope.firstLexicalName === name) || !this.treatFunctionsAsVarInScope(scope) && (type & 4) > 0;
+    return (type & 2) > 0 && !(scope.flags & 8 && scope.firstLexicalName === name2) || !this.treatFunctionsAsVarInScope(scope) && (type & 4) > 0;
   }
   checkLocalExport(id) {
     const {
-      name
+      name: name2
     } = id;
     const topLevelScope = this.scopeStack[0];
-    if (!topLevelScope.names.has(name)) {
-      this.undefinedExports.set(name, id.start);
+    if (!topLevelScope.names.has(name2)) {
+      this.undefinedExports.set(name2, id.start);
     }
   }
   currentScope() {
     return this.scopeStack[this.scopeStack.length - 1];
   }
   currentVarScopeFlags() {
-    for (let i = this.scopeStack.length - 1; ; i--) {
+    for (let i2 = this.scopeStack.length - 1; ; i2--) {
       const {
-        flags
-      } = this.scopeStack[i];
-      if (flags & 3715) {
-        return flags;
+        flags: flags2
+      } = this.scopeStack[i2];
+      if (flags2 & 3715) {
+        return flags2;
       }
     }
   }
   currentThisScopeFlags() {
-    for (let i = this.scopeStack.length - 1; ; i--) {
+    for (let i2 = this.scopeStack.length - 1; ; i2--) {
       const {
-        flags
-      } = this.scopeStack[i];
-      if (flags & (3715 | 64) && !(flags & 4)) {
-        return flags;
+        flags: flags2
+      } = this.scopeStack[i2];
+      if (flags2 & (3715 | 64) && !(flags2 & 4)) {
+        return flags2;
       }
     }
   }
@@ -26152,23 +26159,23 @@ var FlowScope = class extends Scope {
   declareFunctions = /* @__PURE__ */ new Set();
 };
 var FlowScopeHandler = class extends ScopeHandler {
-  createScope(flags) {
-    return new FlowScope(flags);
+  createScope(flags2) {
+    return new FlowScope(flags2);
   }
-  declareName(name, bindingType, loc) {
+  declareName(name2, bindingType, loc) {
     const scope = this.currentScope();
     if (bindingType & 2048) {
-      this.checkRedeclarationInScope(scope, name, bindingType, loc);
-      this.maybeExportDefined(scope, name);
-      scope.declareFunctions.add(name);
+      this.checkRedeclarationInScope(scope, name2, bindingType, loc);
+      this.maybeExportDefined(scope, name2);
+      scope.declareFunctions.add(name2);
       return;
     }
-    super.declareName(name, bindingType, loc);
+    super.declareName(name2, bindingType, loc);
   }
-  isRedeclaredInScope(scope, name, bindingType) {
-    if (super.isRedeclaredInScope(scope, name, bindingType)) return true;
-    if (bindingType & 2048 && !scope.declareFunctions.has(name)) {
-      const type = scope.names.get(name);
+  isRedeclaredInScope(scope, name2, bindingType) {
+    if (super.isRedeclaredInScope(scope, name2, bindingType)) return true;
+    if (bindingType & 2048 && !scope.declareFunctions.has(name2)) {
+      const type = scope.names.get(name2);
       return (type & 4) > 0 || (type & 2) > 0;
     }
     return false;
@@ -26286,8 +26293,8 @@ var exportSuggestions = {
 function partition(list, test) {
   const list1 = [];
   const list2 = [];
-  for (let i = 0; i < list.length; i++) {
-    (test(list[i], i, list) ? list1 : list2).push(list[i]);
+  for (let i2 = 0; i2 < list.length; i2++) {
+    (test(list[i2], i2, list) ? list1 : list2).push(list[i2]);
   }
   return [list1, list2];
 }
@@ -26435,7 +26442,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
       node2.id = this.parseIdentifier();
     }
     const bodyNode = this.startNode();
-    const body = bodyNode.body = [];
+    const body2 = bodyNode.body = [];
     this.expect(2);
     while (!this.match(4)) {
       const bodyNode2 = this.startNode();
@@ -26444,10 +26451,10 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
         if (!this.isContextual(126) && !this.match(83)) {
           this.raise(FlowErrors.InvalidNonTypeImportInDeclareModule, this.state.lastTokStartLoc);
         }
-        body.push(super.parseImport(bodyNode2));
+        body2.push(super.parseImport(bodyNode2));
       } else {
         this.expectContextual(121, FlowErrors.UnsupportedStatementInDeclareModule);
-        body.push(this.flowParseDeclare(bodyNode2, true));
+        body2.push(this.flowParseDeclare(bodyNode2, true));
       }
     }
     this.scope.exit();
@@ -26455,7 +26462,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
     node2.body = this.finishNode(bodyNode, "BlockStatement");
     let kind = null;
     let hasModuleExport = false;
-    body.forEach((bodyElement) => {
+    body2.forEach((bodyElement) => {
       if (isEsModuleType(bodyElement)) {
         if (kind === "CommonJS") {
           this.raise(FlowErrors.AmbiguousDeclareModuleKind, bodyElement);
@@ -26602,8 +26609,8 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
   }
   flowParseRestrictedIdentifier(liberal, declaration) {
     const node2 = this.startNode();
-    const name = this.flowParseRestrictedIdentifierName(liberal, declaration);
-    return this.createIdentifier(node2, name);
+    const name2 = this.flowParseRestrictedIdentifierName(liberal, declaration);
+    return this.createIdentifier(node2, name2);
   }
   flowParseTypeAlias(node2) {
     node2.id = this.flowParseRestrictedIdentifier(false, true);
@@ -26927,9 +26934,9 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
     if (allowSpread) {
       nodeStart.inexact = inexact;
     }
-    const out = this.finishNode(nodeStart, "ObjectTypeAnnotation");
+    const out2 = this.finishNode(nodeStart, "ObjectTypeAnnotation");
     this.state.inType = oldInType;
-    return out;
+    return out2;
   }
   flowParseObjectTypeProperty(node2, isStatic, protoStartLoc, variance, kind, allowSpread, allowInexact) {
     if (this.eat(17)) {
@@ -27047,7 +27054,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
     return this.finishNode(node2, "TupleTypeAnnotation");
   }
   flowParseFunctionTypeParam(first) {
-    let name = null;
+    let name2 = null;
     let optional2 = false;
     let typeAnnotation;
     const node2 = this.startNode();
@@ -27057,7 +27064,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
       if (isThis && !first) {
         this.raise(FlowErrors.ThisParamMustBeFirst, node2);
       }
-      name = this.parseIdentifier(isThis);
+      name2 = this.parseIdentifier(isThis);
       if (this.eat(13)) {
         optional2 = true;
         if (isThis) {
@@ -27068,7 +27075,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
     } else {
       typeAnnotation = this.flowParseType();
     }
-    node2.name = name;
+    node2.name = name2;
     node2.optional = optional2;
     node2.typeAnnotation = typeAnnotation;
     return this.finishNode(node2, "FunctionTypeParam");
@@ -27348,11 +27355,11 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
   }
   flowParseTypeAnnotatableIdentifier() {
     const node2 = this.startNode();
-    const name = this.parseIdentifierName();
+    const name2 = this.parseIdentifierName();
     if (this.match(10)) {
       node2.typeAnnotation = this.flowParseTypeAnnotation();
     }
-    return this.createIdentifier(node2, name);
+    return this.createIdentifier(node2, name2);
   }
   typeCastToParameter(node2) {
     node2.expression.typeAnnotation = node2.typeAnnotation;
@@ -27392,7 +27399,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
     }
     return super.parseFunctionBodyAndFinish(node2, type, isMethod);
   }
-  parseStatementLike(flags) {
+  parseStatementLike(flags2) {
     if (this.state.strict && this.isContextual(125)) {
       const lookahead = this.lookahead();
       if (tokenIsKeywordOrIdentifier(lookahead.type)) {
@@ -27405,7 +27412,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
       this.next();
       return this.flowParseEnumDeclaration(node2);
     }
-    const stmt = super.parseStatementLike(flags);
+    const stmt = super.parseStatementLike(flags2);
     if (this.flowPragma === void 0 && !this.isValidDirective(stmt)) {
       this.flowPragma = null;
     }
@@ -27480,8 +27487,8 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
       if (invalid.length > 0) {
         this.state = state;
         this.state.noArrowAt = noArrowAt;
-        for (let i = 0; i < invalid.length; i++) {
-          noArrowAt.push(invalid[i].start);
+        for (let i2 = 0; i2 < invalid.length; i2++) {
+          noArrowAt.push(invalid[i2].start);
         }
         ({
           consequent,
@@ -27712,8 +27719,8 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
     super.toAssignableListItem(exprList, index, isLHS);
   }
   toReferencedList(exprList, isParenthesizedExpr) {
-    for (let i = 0; i < exprList.length; i++) {
-      const expr = exprList[i];
+    for (let i2 = 0; i2 < exprList.length; i2++) {
+      const expr = exprList[i2];
       if (expr?.type === "TypeCastExpression" && !expr.extra?.parenthesized && (exprList.length > 1 || !isParenthesizedExpr)) {
         this.raise(FlowErrors.TypeCastInPattern, expr.typeAnnotation);
       }
@@ -27994,16 +28001,16 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
     if (jsx2?.error || this.match(43)) {
       state = state || this.state.clone();
       let typeParameters;
-      const arrow = this.tryParse((abort) => {
+      const arrow = this.tryParse((abort2) => {
         typeParameters = this.flowParseTypeParameterDeclaration();
         const arrowExpression2 = this.forwardNoArrowParamsConversionAt(typeParameters, () => {
           const result = super.parseMaybeAssign(refExpressionErrors, isParenItem);
           this.resetStartLocationFromNode(result, typeParameters);
           return result;
         });
-        if (arrowExpression2.extra?.parenthesized) abort();
+        if (arrowExpression2.extra?.parenthesized) abort2();
         const expr = this.maybeUnwrapTypeCastExpression(arrowExpression2);
-        if (expr.type !== "ArrowFunctionExpression") abort();
+        if (expr.type !== "ArrowFunctionExpression") abort2();
         expr.typeParameters = typeParameters;
         this.resetStartLocationFromNode(expr, typeParameters);
         return arrowExpression2;
@@ -28064,9 +28071,9 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
     if (isArrowFunction && this.state.noArrowParamsConversionAt.includes(this.offsetToSourcePos(node2.start))) {
       return;
     }
-    for (let i = 0; i < node2.params.length; i++) {
-      if (this.isThisParam(node2.params[i]) && i > 0) {
-        this.raise(FlowErrors.ThisParamMustBeFirst, node2.params[i]);
+    for (let i2 = 0; i2 < node2.params.length; i2++) {
+      if (this.isThisParam(node2.params[i2]) && i2 > 0) {
+        this.raise(FlowErrors.ThisParamMustBeFirst, node2.params[i2]);
       }
     }
     super.checkParams(node2, allowDuplicates, isArrowFunction, strictModeChanged);
@@ -28083,7 +28090,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
       base = this.finishNode(node2, "CallExpression");
     } else if (base.type === "Identifier" && base.name === "async" && this.match(43)) {
       const state = this.state.clone();
-      const arrow = this.tryParse((abort) => this.parseAsyncArrowWithTypeParameters(startLoc) || abort(), state);
+      const arrow = this.tryParse((abort2) => this.parseAsyncArrowWithTypeParameters(startLoc) || abort2(), state);
       if (!arrow.error && !arrow.aborted) return arrow.node;
       const result = this.tryParse(() => super.parseSubscripts(base, startLoc, noCalls), state);
       if (result.node && !result.error) return result.node;
@@ -28272,13 +28279,13 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
   flowEnumMemberRaw() {
     const loc = this.state.startLoc;
     const id = this.parseIdentifier(true);
-    const init = this.eat(25) ? this.flowEnumMemberInit() : {
+    const init2 = this.eat(25) ? this.flowEnumMemberInit() : {
       type: "none",
       loc
     };
     return {
       id,
-      init
+      init: init2
     };
   }
   flowEnumCheckExplicitTypeMismatch(loc, context, expectedType) {
@@ -28312,7 +28319,7 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
       const memberNode = this.startNode();
       const {
         id,
-        init
+        init: init2
       } = this.flowEnumMemberRaw();
       const memberName = id.name;
       if (memberName === "") {
@@ -28338,35 +28345,35 @@ var flow = (superClass) => class FlowParserMixin extends superClass {
         memberName
       };
       memberNode.id = id;
-      switch (init.type) {
+      switch (init2.type) {
         case "boolean": {
-          this.flowEnumCheckExplicitTypeMismatch(init.loc, context, "boolean");
-          memberNode.init = init.value;
+          this.flowEnumCheckExplicitTypeMismatch(init2.loc, context, "boolean");
+          memberNode.init = init2.value;
           members2.booleanMembers.push(this.finishNode(memberNode, "EnumBooleanMember"));
           break;
         }
         case "number": {
-          this.flowEnumCheckExplicitTypeMismatch(init.loc, context, "number");
-          memberNode.init = init.value;
+          this.flowEnumCheckExplicitTypeMismatch(init2.loc, context, "number");
+          memberNode.init = init2.value;
           members2.numberMembers.push(this.finishNode(memberNode, "EnumNumberMember"));
           break;
         }
         case "string": {
-          this.flowEnumCheckExplicitTypeMismatch(init.loc, context, "string");
-          memberNode.init = init.value;
+          this.flowEnumCheckExplicitTypeMismatch(init2.loc, context, "string");
+          memberNode.init = init2.value;
           members2.stringMembers.push(this.finishNode(memberNode, "EnumStringMember"));
           break;
         }
         case "invalid": {
-          throw this.flowEnumErrorInvalidMemberInitializer(init.loc, context);
+          throw this.flowEnumErrorInvalidMemberInitializer(init2.loc, context);
         }
         case "none": {
           switch (explicitType) {
             case "boolean":
-              this.flowEnumErrorBooleanMemberNotInitialized(init.loc, context);
+              this.flowEnumErrorBooleanMemberNotInitialized(init2.loc, context);
               break;
             case "number":
-              this.flowEnumErrorNumberMemberNotInitialized(init.loc, context);
+              this.flowEnumErrorNumberMemberNotInitialized(init2.loc, context);
               break;
             default:
               members2.defaultedMembers.push(this.finishNode(memberNode, "EnumDefaultedMember"));
@@ -28829,9 +28836,9 @@ function isNewLine(code2) {
       return false;
   }
 }
-function hasNewLine(input, start, end) {
-  for (let i = start; i < end; i++) {
-    if (isNewLine(input.charCodeAt(i))) {
+function hasNewLine(input, start2, end) {
+  for (let i2 = start2; i2 < end; i2++) {
+    if (isNewLine(input.charCodeAt(i2))) {
       return true;
     }
   }
@@ -28900,7 +28907,7 @@ function getQualifiedJSXName(object3) {
 }
 var jsx = (superClass) => class JSXParserMixin extends superClass {
   jsxReadToken() {
-    let out = "";
+    let out2 = "";
     let chunkStart = this.state.pos;
     for (; ; ) {
       if (this.state.pos >= this.length) {
@@ -28919,12 +28926,12 @@ var jsx = (superClass) => class JSXParserMixin extends superClass {
             }
             return;
           }
-          out += this.input.slice(chunkStart, this.state.pos);
-          this.finishToken(137, out);
+          out2 += this.input.slice(chunkStart, this.state.pos);
+          this.finishToken(137, out2);
           return;
         case 38:
-          out += this.input.slice(chunkStart, this.state.pos);
-          out += this.jsxReadEntity();
+          out2 += this.input.slice(chunkStart, this.state.pos);
+          out2 += this.jsxReadEntity();
           chunkStart = this.state.pos;
           break;
         case 62:
@@ -28935,8 +28942,8 @@ var jsx = (superClass) => class JSXParserMixin extends superClass {
           });
         default:
           if (isNewLine(ch)) {
-            out += this.input.slice(chunkStart, this.state.pos);
-            out += this.jsxReadNewLine(true);
+            out2 += this.input.slice(chunkStart, this.state.pos);
+            out2 += this.jsxReadNewLine(true);
             chunkStart = this.state.pos;
           } else {
             ++this.state.pos;
@@ -28946,20 +28953,20 @@ var jsx = (superClass) => class JSXParserMixin extends superClass {
   }
   jsxReadNewLine(normalizeCRLF) {
     const ch = this.input.charCodeAt(this.state.pos);
-    let out;
+    let out2;
     ++this.state.pos;
     if (ch === 13 && this.input.charCodeAt(this.state.pos) === 10) {
       ++this.state.pos;
-      out = normalizeCRLF ? "\n" : "\r\n";
+      out2 = normalizeCRLF ? "\n" : "\r\n";
     } else {
-      out = String.fromCharCode(ch);
+      out2 = String.fromCharCode(ch);
     }
     ++this.state.curLine;
     this.state.lineStart = this.state.pos;
-    return out;
+    return out2;
   }
   jsxReadString(quote) {
-    let out = "";
+    let out2 = "";
     let chunkStart = ++this.state.pos;
     for (; ; ) {
       if (this.state.pos >= this.length) {
@@ -28968,19 +28975,19 @@ var jsx = (superClass) => class JSXParserMixin extends superClass {
       const ch = this.input.charCodeAt(this.state.pos);
       if (ch === quote) break;
       if (ch === 38) {
-        out += this.input.slice(chunkStart, this.state.pos);
-        out += this.jsxReadEntity();
+        out2 += this.input.slice(chunkStart, this.state.pos);
+        out2 += this.jsxReadEntity();
         chunkStart = this.state.pos;
       } else if (isNewLine(ch)) {
-        out += this.input.slice(chunkStart, this.state.pos);
-        out += this.jsxReadNewLine(false);
+        out2 += this.input.slice(chunkStart, this.state.pos);
+        out2 += this.jsxReadNewLine(false);
         chunkStart = this.state.pos;
       } else {
         ++this.state.pos;
       }
     }
-    out += this.input.slice(chunkStart, this.state.pos++);
-    this.finishToken(130, out);
+    out2 += this.input.slice(chunkStart, this.state.pos++);
+    this.finishToken(130, out2);
   }
   jsxReadEntity() {
     const startPos = ++this.state.pos;
@@ -29016,11 +29023,11 @@ var jsx = (superClass) => class JSXParserMixin extends superClass {
   }
   jsxReadWord() {
     let ch;
-    const start = this.state.pos;
+    const start2 = this.state.pos;
     do {
       ch = this.input.charCodeAt(++this.state.pos);
     } while (isIdentifierChar(ch) || ch === 45);
-    this.finishToken(136, this.input.slice(start, this.state.pos));
+    this.finishToken(136, this.input.slice(start2, this.state.pos));
   }
   jsxParseIdentifier() {
     const node2 = this.startNode();
@@ -29036,10 +29043,10 @@ var jsx = (superClass) => class JSXParserMixin extends superClass {
   }
   jsxParseNamespacedName() {
     const startLoc = this.state.startLoc;
-    const name = this.jsxParseIdentifier();
-    if (!this.eat(10)) return name;
+    const name2 = this.jsxParseIdentifier();
+    if (!this.eat(10)) return name2;
     const node2 = this.startNodeAt(startLoc);
-    node2.namespace = name;
+    node2.namespace = name2;
     node2.name = this.jsxParseIdentifier();
     return this.finishNode(node2, "JSXNamespacedName");
   }
@@ -29276,8 +29283,8 @@ var jsx = (superClass) => class JSXParserMixin extends superClass {
     } else if (type === 138) {
       context.push(types.j_oTag);
     } else if (type === 139) {
-      const out = context[context.length - 1];
-      if (out === types.j_oTag && prevType === 52 || out === types.j_cTag) {
+      const out2 = context[context.length - 1];
+      if (out2 === types.j_oTag && prevType === 52 || out2 === types.j_cTag) {
         context.pop();
         this.state.canStartJSXElement = context[context.length - 1] === types.j_expr;
       } else {
@@ -29298,57 +29305,57 @@ var TypeScriptScopeHandler = class extends ScopeHandler {
     return scopeStack.length >= 2 && scopeStack[scopeStack.length - 1].flags === 0 && (scopeStack[scopeStack.length - 2].flags & 2048) > 0;
   }
   importsStack = [];
-  createScope(flags) {
+  createScope(flags2) {
     this.importsStack.push(/* @__PURE__ */ new Set());
-    return new TypeScriptScope(flags);
+    return new TypeScriptScope(flags2);
   }
-  enter(flags) {
-    if (flags & (1024 | 2048)) {
+  enter(flags2) {
+    if (flags2 & (1024 | 2048)) {
       this.importsStack.push(/* @__PURE__ */ new Set());
     }
-    super.enter(flags);
+    super.enter(flags2);
   }
   exit() {
-    const flags = super.exit();
-    if (flags & (1024 | 2048)) {
+    const flags2 = super.exit();
+    if (flags2 & (1024 | 2048)) {
       this.importsStack.pop();
     }
-    return flags;
+    return flags2;
   }
-  hasImport(name, allowShadow) {
+  hasImport(name2, allowShadow) {
     const len = this.importsStack.length;
-    if (this.importsStack[len - 1].has(name)) {
+    if (this.importsStack[len - 1].has(name2)) {
       return true;
     }
     if (!allowShadow && len > 1) {
-      for (let i = 0; i < len - 1; i++) {
-        if (this.importsStack[i].has(name)) return true;
+      for (let i2 = 0; i2 < len - 1; i2++) {
+        if (this.importsStack[i2].has(name2)) return true;
       }
     }
     return false;
   }
-  declareName(name, bindingType, loc) {
+  declareName(name2, bindingType, loc) {
     if (bindingType & 4096) {
-      if (this.hasImport(name, true)) {
+      if (this.hasImport(name2, true)) {
         this.parser.raise(Errors.VarRedeclaration, loc, {
-          identifierName: name
+          identifierName: name2
         });
       }
-      this.importsStack[this.importsStack.length - 1].add(name);
+      this.importsStack[this.importsStack.length - 1].add(name2);
       return;
     }
     const scope = this.currentScope();
-    let type = scope.tsNames.get(name) || 0;
+    let type = scope.tsNames.get(name2) || 0;
     if (bindingType & 1024) {
-      this.maybeExportDefined(scope, name);
-      scope.tsNames.set(name, type | 16);
+      this.maybeExportDefined(scope, name2);
+      scope.tsNames.set(name2, type | 16);
       return;
     }
-    super.declareName(name, bindingType, loc);
+    super.declareName(name2, bindingType, loc);
     if (bindingType & 2) {
       if (!(bindingType & 1)) {
-        this.checkRedeclarationInScope(scope, name, bindingType, loc);
-        this.maybeExportDefined(scope, name);
+        this.checkRedeclarationInScope(scope, name2, bindingType, loc);
+        this.maybeExportDefined(scope, name2);
       }
       type = type | 1;
     }
@@ -29361,10 +29368,10 @@ var TypeScriptScopeHandler = class extends ScopeHandler {
     if (bindingType & 128) {
       type = type | 8;
     }
-    if (type) scope.tsNames.set(name, type);
+    if (type) scope.tsNames.set(name2, type);
   }
-  isRedeclaredInScope(scope, name, bindingType) {
-    const type = scope.tsNames.get(name);
+  isRedeclaredInScope(scope, name2, bindingType) {
+    const type = scope.tsNames.get(name2);
     if ((type & 2) > 0) {
       if (bindingType & 256) {
         const isConst = (bindingType & 512) > 0;
@@ -29374,7 +29381,7 @@ var TypeScriptScopeHandler = class extends ScopeHandler {
       return true;
     }
     if (bindingType & 128 && (type & 8) > 0) {
-      if (scope.names.get(name) & 2) {
+      if (scope.names.get(name2) & 2) {
         return !!(bindingType & 1);
       } else {
         return false;
@@ -29383,17 +29390,17 @@ var TypeScriptScopeHandler = class extends ScopeHandler {
     if (bindingType & 2 && (type & 1) > 0) {
       return true;
     }
-    return super.isRedeclaredInScope(scope, name, bindingType);
+    return super.isRedeclaredInScope(scope, name2, bindingType);
   }
   checkLocalExport(id) {
     const {
-      name
+      name: name2
     } = id;
-    if (this.hasImport(name)) return;
+    if (this.hasImport(name2)) return;
     const len = this.scopeStack.length;
-    for (let i = len - 1; i >= 0; i--) {
-      const scope = this.scopeStack[i];
-      const type = scope.tsNames.get(name);
+    for (let i2 = len - 1; i2 >= 0; i2--) {
+      const scope = this.scopeStack[i2];
+      const type = scope.tsNames.get(name2);
       if ((type & 1) > 0 || (type & 16) > 0) {
         return;
       }
@@ -29427,8 +29434,8 @@ var BaseParser = class {
       return true;
     }
   }
-  getPluginOption(plugin, name) {
-    return this.plugins.get(plugin)?.[name];
+  getPluginOption(plugin, name2) {
+    return this.plugins.get(plugin)?.[name2];
   }
 };
 function setTrailingComments(node2, comments) {
@@ -29454,9 +29461,9 @@ function setInnerComments(node2, comments) {
 }
 function adjustInnerComments(node2, elements, commentWS) {
   let lastElement = null;
-  let i = elements.length;
-  while (lastElement === null && i > 0) {
-    lastElement = elements[--i];
+  let i2 = elements.length;
+  while (lastElement === null && i2 > 0) {
+    lastElement = elements[--i2];
   }
   if (lastElement === null || lastElement.start > commentWS.start) {
     setInnerComments(node2, commentWS.comments);
@@ -29482,20 +29489,20 @@ var CommentsParser = class extends BaseParser {
     } = this.state;
     const commentStackLength = commentStack.length;
     if (commentStackLength === 0) return;
-    let i = commentStackLength - 1;
-    const lastCommentWS = commentStack[i];
+    let i2 = commentStackLength - 1;
+    const lastCommentWS = commentStack[i2];
     if (lastCommentWS.start === node2.end) {
       lastCommentWS.leadingNode = node2;
-      i--;
+      i2--;
     }
     const nodeStart = node2.start;
-    for (; i >= 0; i--) {
-      const commentWS = commentStack[i];
+    for (; i2 >= 0; i2--) {
+      const commentWS = commentStack[i2];
       const commentEnd = commentWS.end;
       if (commentEnd > nodeStart) {
         commentWS.containingNode = node2;
         this.finalizeComment(commentWS);
-        commentStack.splice(i, 1);
+        commentStack.splice(i2, 1);
       } else {
         if (commentEnd === nodeStart) {
           commentWS.trailingNode = node2;
@@ -29568,8 +29575,8 @@ var CommentsParser = class extends BaseParser {
     const {
       commentStack
     } = this.state;
-    for (let i = commentStack.length - 1; i >= 0; i--) {
-      this.finalizeComment(commentStack[i]);
+    for (let i2 = commentStack.length - 1; i2 >= 0; i2--) {
+      this.finalizeComment(commentStack[i2]);
     }
     this.state.commentStack = [];
   }
@@ -29586,22 +29593,22 @@ var CommentsParser = class extends BaseParser {
       commentWS.leadingNode = null;
     }
   }
-  takeSurroundingComments(node2, start, end) {
+  takeSurroundingComments(node2, start2, end) {
     const {
       commentStack
     } = this.state;
     const commentStackLength = commentStack.length;
     if (commentStackLength === 0) return;
-    let i = commentStackLength - 1;
-    for (; i >= 0; i--) {
-      const commentWS = commentStack[i];
+    let i2 = commentStackLength - 1;
+    for (; i2 >= 0; i2--) {
+      const commentWS = commentStack[i2];
       const commentEnd = commentWS.end;
       const commentStart = commentWS.start;
       if (commentStart === end) {
         commentWS.leadingNode = node2;
-      } else if (commentEnd === start) {
+      } else if (commentEnd === start2) {
         commentWS.trailingNode = node2;
-      } else if (commentEnd < start) {
+      } else if (commentEnd < start2) {
         break;
       }
     }
@@ -29790,7 +29797,7 @@ function readStringContents(type, input, pos, lineStart, curLine, errors) {
   const initialPos = pos;
   const initialLineStart = lineStart;
   const initialCurLine = curLine;
-  let out = "";
+  let out2 = "";
   let firstInvalidLoc = null;
   let chunkStart = pos;
   const {
@@ -29799,16 +29806,16 @@ function readStringContents(type, input, pos, lineStart, curLine, errors) {
   for (; ; ) {
     if (pos >= length) {
       errors.unterminated(initialPos, initialLineStart, initialCurLine);
-      out += input.slice(chunkStart, pos);
+      out2 += input.slice(chunkStart, pos);
       break;
     }
     const ch = input.charCodeAt(pos);
     if (isStringEnd(type, ch, input, pos)) {
-      out += input.slice(chunkStart, pos);
+      out2 += input.slice(chunkStart, pos);
       break;
     }
     if (ch === 92) {
-      out += input.slice(chunkStart, pos);
+      out2 += input.slice(chunkStart, pos);
       const res = readEscapedChar(input, pos, lineStart, curLine, type === "template", errors);
       if (res.ch === null && !firstInvalidLoc) {
         firstInvalidLoc = {
@@ -29817,7 +29824,7 @@ function readStringContents(type, input, pos, lineStart, curLine, errors) {
           curLine
         };
       } else {
-        out += res.ch;
+        out2 += res.ch;
       }
       ({
         pos,
@@ -29831,7 +29838,7 @@ function readStringContents(type, input, pos, lineStart, curLine, errors) {
       lineStart = pos;
     } else if (ch === 10 || ch === 13) {
       if (type === "template") {
-        out += input.slice(chunkStart, pos) + "\n";
+        out2 += input.slice(chunkStart, pos) + "\n";
         ++pos;
         if (ch === 13 && input.charCodeAt(pos) === 10) {
           ++pos;
@@ -29847,7 +29854,7 @@ function readStringContents(type, input, pos, lineStart, curLine, errors) {
   }
   return {
     pos,
-    str: out,
+    str: out2,
     firstInvalidLoc,
     lineStart,
     curLine
@@ -29959,12 +29966,12 @@ function readHexChar(input, pos, lineStart, curLine, len, forceLen, throwOnInval
   };
 }
 function readInt(input, pos, lineStart, curLine, radix, len, forceLen, allowNumSeparator, errors, bailOnError) {
-  const start = pos;
+  const start2 = pos;
   const forbiddenSiblings = radix === 16 ? forbiddenNumericSeparatorSiblings.hex : forbiddenNumericSeparatorSiblings.decBinOct;
   const isAllowedSibling = radix === 16 ? isAllowedNumericSeparatorSibling.hex : radix === 10 ? isAllowedNumericSeparatorSibling.dec : radix === 8 ? isAllowedNumericSeparatorSibling.oct : isAllowedNumericSeparatorSibling.bin;
   let invalid = false;
   let total = 0;
-  for (let i = 0, e = len == null ? Infinity : len; i < e; ++i) {
+  for (let i2 = 0, e = len == null ? Infinity : len; i2 < e; ++i2) {
     const code2 = input.charCodeAt(pos);
     let val;
     if (code2 === 95 && allowNumSeparator !== "bail") {
@@ -30013,7 +30020,7 @@ function readInt(input, pos, lineStart, curLine, radix, len, forceLen, allowNumS
     ++pos;
     total = total * radix + val;
   }
-  if (pos === start || len != null && pos - start !== len || invalid) {
+  if (pos === start2 || len != null && pos - start2 !== len || invalid) {
     return {
       n: null,
       pos
@@ -30203,13 +30210,13 @@ var Tokenizer = class extends CommentsParser {
   skipBlockComment(commentEnd) {
     let startLoc;
     if (!this.isLookahead) startLoc = this.state.curPosition();
-    const start = this.state.pos;
-    const end = this.input.indexOf(commentEnd, start + 2);
+    const start2 = this.state.pos;
+    const end = this.input.indexOf(commentEnd, start2 + 2);
     if (end === -1) {
       throw this.raise(Errors.UnterminatedComment, this.state.curPosition());
     }
     this.state.pos = end + commentEnd.length;
-    lineBreakG.lastIndex = start + 2;
+    lineBreakG.lastIndex = start2 + 2;
     while (lineBreakG.test(this.input) && lineBreakG.lastIndex <= end) {
       ++this.state.curLine;
       this.state.lineStart = lineBreakG.lastIndex;
@@ -30217,8 +30224,8 @@ var Tokenizer = class extends CommentsParser {
     if (this.isLookahead) return;
     const comment = {
       type: "CommentBlock",
-      value: this.input.slice(start + 2, end),
-      start: this.sourceToOffsetPos(start),
+      value: this.input.slice(start2 + 2, end),
+      start: this.sourceToOffsetPos(start2),
       end: this.sourceToOffsetPos(end + commentEnd.length),
       loc: new SourceLocation(startLoc, this.state.curPosition())
     };
@@ -30226,7 +30233,7 @@ var Tokenizer = class extends CommentsParser {
     return comment;
   }
   skipLineComment(startSkip) {
-    const start = this.state.pos;
+    const start2 = this.state.pos;
     let startLoc;
     if (!this.isLookahead) startLoc = this.state.curPosition();
     let ch = this.input.charCodeAt(this.state.pos += startSkip);
@@ -30237,11 +30244,11 @@ var Tokenizer = class extends CommentsParser {
     }
     if (this.isLookahead) return;
     const end = this.state.pos;
-    const value = this.input.slice(start + startSkip, end);
+    const value = this.input.slice(start2 + startSkip, end);
     const comment = {
       type: "CommentLine",
       value,
-      start: this.sourceToOffsetPos(start),
+      start: this.sourceToOffsetPos(start2),
       end: this.sourceToOffsetPos(end),
       loc: new SourceLocation(startLoc, this.state.curPosition())
     };
@@ -30403,12 +30410,12 @@ var Tokenizer = class extends CommentsParser {
     if (this.state.pos !== 0 || this.length < 2) return false;
     let ch = this.input.charCodeAt(this.state.pos + 1);
     if (ch !== 33) return false;
-    const start = this.state.pos;
+    const start2 = this.state.pos;
     this.state.pos += 1;
     while (!isNewLine(ch) && ++this.state.pos < this.length) {
       ch = this.input.charCodeAt(this.state.pos);
     }
-    const value = this.input.slice(start + 2, this.state.pos);
+    const value = this.input.slice(start2 + 2, this.state.pos);
     this.finishToken(24, value);
     return true;
   }
@@ -30696,7 +30703,7 @@ var Tokenizer = class extends CommentsParser {
   }
   readRegexp() {
     const startLoc = this.state.startLoc;
-    const start = this.state.start + 1;
+    const start2 = this.state.start + 1;
     let escaped, inClass;
     let {
       pos
@@ -30722,10 +30729,10 @@ var Tokenizer = class extends CommentsParser {
         escaped = ch === 92;
       }
     }
-    const content = this.input.slice(start, pos);
+    const content = this.input.slice(start2, pos);
     ++pos;
     let mods = "";
-    const nextPos = () => createPositionWithColumnOffset(startLoc, pos + 2 - start);
+    const nextPos = () => createPositionWithColumnOffset(startLoc, pos + 2 - start2);
     while (pos < this.length) {
       const cp = this.codePointAtPos(pos);
       const char = String.fromCharCode(cp);
@@ -30765,7 +30772,7 @@ var Tokenizer = class extends CommentsParser {
     return n;
   }
   readRadixNumber(radix) {
-    const start = this.state.pos;
+    const start2 = this.state.pos;
     const startLoc = this.state.curPosition();
     let isBigInt = false;
     this.state.pos += 2;
@@ -30784,14 +30791,14 @@ var Tokenizer = class extends CommentsParser {
       throw this.raise(Errors.NumberIdentifier, this.state.curPosition());
     }
     if (isBigInt) {
-      const str = this.input.slice(start, this.state.pos).replace(/[_n]/g, "");
+      const str = this.input.slice(start2, this.state.pos).replace(/[_n]/g, "");
       this.finishToken(132, str);
       return;
     }
     this.finishToken(131, val);
   }
   readNumber(startsWithDot) {
-    const start = this.state.pos;
+    const start2 = this.state.pos;
     const startLoc = this.state.curPosition();
     let isFloat = false;
     let isBigInt = false;
@@ -30799,9 +30806,9 @@ var Tokenizer = class extends CommentsParser {
     if (!startsWithDot && this.readInt(10) === null) {
       this.raise(Errors.InvalidNumber, this.state.curPosition());
     }
-    const hasLeadingZero = this.state.pos - start >= 2 && this.input.charCodeAt(start) === 48;
+    const hasLeadingZero = this.state.pos - start2 >= 2 && this.input.charCodeAt(start2) === 48;
     if (hasLeadingZero) {
-      const integer2 = this.input.slice(start, this.state.pos);
+      const integer2 = this.input.slice(start2, this.state.pos);
       this.recordStrictModeErrors(Errors.StrictOctalLiteral, startLoc);
       if (!this.state.strict) {
         const underscorePos = integer2.indexOf("_");
@@ -30829,7 +30836,7 @@ var Tokenizer = class extends CommentsParser {
       isFloat = true;
       next = this.input.charCodeAt(this.state.pos);
     }
-    const str = this.input.slice(start, this.state.pos).replaceAll("_", "");
+    const str = this.input.slice(start2, this.state.pos).replaceAll("_", "");
     if (next === 110) {
       if (isFloat || hasLeadingZero) {
         this.raise(Errors.InvalidBigIntLiteral, startLoc);
@@ -30907,7 +30914,7 @@ var Tokenizer = class extends CommentsParser {
   readWord1(firstCode) {
     this.state.containsEsc = false;
     let word = "";
-    const start = this.state.pos;
+    const start2 = this.state.pos;
     let chunkStart = this.state.pos;
     if (firstCode !== void 0) {
       this.state.pos += firstCode <= 65535 ? 1 : 2;
@@ -30920,7 +30927,7 @@ var Tokenizer = class extends CommentsParser {
         this.state.containsEsc = true;
         word += this.input.slice(chunkStart, this.state.pos);
         const escStart = this.state.curPosition();
-        const identifierCheck = this.state.pos === start ? isIdentifierStart : isIdentifierChar;
+        const identifierCheck = this.state.pos === start2 ? isIdentifierStart : isIdentifierChar;
         if (this.input.charCodeAt(++this.state.pos) !== 117) {
           this.raise(Errors.MissingUnicodeEscape, this.state.curPosition());
           chunkStart = this.state.pos - 1;
@@ -30972,10 +30979,10 @@ var Tokenizer = class extends CommentsParser {
     const loc = at instanceof Position ? at : this.optionFlags & 256 ? at.loc.start : this.getLoc(at.start);
     const pos = at instanceof Position ? loc.index : at.start;
     const errors = this.state.errors;
-    for (let i = errors.length - 1; i >= 0; i--) {
-      const error2 = errors[i];
+    for (let i2 = errors.length - 1; i2 >= 0; i2--) {
+      const error2 = errors[i2];
       if (error2.pos === pos) {
-        return errors[i] = toParseError(loc, pos, details);
+        return errors[i2] = toParseError(loc, pos, details);
       }
       if (error2.pos < pos) break;
     }
@@ -30997,7 +31004,7 @@ var Tokenizer = class extends CommentsParser {
     });
   }
   expectOnePlugin(pluginNames) {
-    if (!pluginNames.some((name) => this.hasPlugin(name))) {
+    if (!pluginNames.some((name2) => this.hasPlugin(name2))) {
       throw this.raise(Errors.MissingOneOfPlugins, this.state.startLoc, {
         missingPlugin: pluginNames
       });
@@ -31061,56 +31068,56 @@ var ClassScopeHandler = class {
   exit() {
     const oldClassScope = this.stack.pop();
     const current = this.current();
-    for (const [name, loc] of Array.from(oldClassScope.undefinedPrivateNames)) {
+    for (const [name2, loc] of Array.from(oldClassScope.undefinedPrivateNames)) {
       if (current) {
-        if (!current.undefinedPrivateNames.has(name)) {
-          current.undefinedPrivateNames.set(name, loc);
+        if (!current.undefinedPrivateNames.has(name2)) {
+          current.undefinedPrivateNames.set(name2, loc);
         }
       } else {
         this.parser.raise(Errors.InvalidPrivateFieldResolution, loc, {
-          identifierName: name
+          identifierName: name2
         });
       }
     }
   }
-  declarePrivateName(name, elementType, loc) {
+  declarePrivateName(name2, elementType, loc) {
     const {
       privateNames,
       loneAccessors,
       undefinedPrivateNames
     } = this.current();
-    let redefined = privateNames.has(name);
+    let redefined = privateNames.has(name2);
     if (elementType & 3) {
-      const accessor = redefined && loneAccessors.get(name);
+      const accessor = redefined && loneAccessors.get(name2);
       if (accessor) {
         const oldStatic = accessor & 4;
         const newStatic = elementType & 4;
         const oldKind = accessor & 3;
         const newKind = elementType & 3;
         redefined = oldKind === newKind || oldStatic !== newStatic;
-        if (!redefined) loneAccessors.delete(name);
+        if (!redefined) loneAccessors.delete(name2);
       } else if (!redefined) {
-        loneAccessors.set(name, elementType);
+        loneAccessors.set(name2, elementType);
       }
     }
     if (redefined) {
       this.parser.raise(Errors.PrivateNameRedeclaration, loc, {
-        identifierName: name
+        identifierName: name2
       });
     }
-    privateNames.add(name);
-    undefinedPrivateNames.delete(name);
+    privateNames.add(name2);
+    undefinedPrivateNames.delete(name2);
   }
-  usePrivateName(name, loc) {
+  usePrivateName(name2, loc) {
     let classScope;
     for (classScope of this.stack) {
-      if (classScope.privateNames.has(name)) return;
+      if (classScope.privateNames.has(name2)) return;
     }
     if (classScope) {
-      classScope.undefinedPrivateNames.set(name, loc);
+      classScope.undefinedPrivateNames.set(name2, loc);
     } else {
       this.parser.raise(Errors.InvalidPrivateFieldResolution, loc, {
-        identifierName: name
+        identifierName: name2
       });
     }
   }
@@ -31157,15 +31164,15 @@ var ExpressionScopeHandler = class {
     const {
       stack
     } = this;
-    let i = stack.length - 1;
-    let scope = stack[i];
+    let i2 = stack.length - 1;
+    let scope = stack[i2];
     while (!scope.isCertainlyParameterDeclaration()) {
       if (scope.canBeArrowParameterDeclaration()) {
         scope.recordDeclarationError(toParseError, loc);
       } else {
         return;
       }
-      scope = stack[--i];
+      scope = stack[--i2];
     }
     this.parser.raise(toParseError, loc);
   }
@@ -31187,13 +31194,13 @@ var ExpressionScopeHandler = class {
     const {
       stack
     } = this;
-    let i = stack.length - 1;
-    let scope = stack[i];
+    let i2 = stack.length - 1;
+    let scope = stack[i2];
     while (scope.canBeArrowParameterDeclaration()) {
       if (scope.type === 2) {
         scope.recordDeclarationError(Errors.AwaitBindingIdentifier, at);
       }
-      scope = stack[--i];
+      scope = stack[--i2];
     }
   }
   validateAsPattern() {
@@ -31204,11 +31211,11 @@ var ExpressionScopeHandler = class {
     if (!currentScope.canBeArrowParameterDeclaration()) return;
     currentScope.iterateErrors((toParseError, key) => {
       this.parser.raise(toParseError, key);
-      let i = stack.length - 2;
-      let scope = stack[i];
+      let i2 = stack.length - 2;
+      let scope = stack[i2];
       while (scope.canBeArrowParameterDeclaration()) {
         scope.clearDeclarationError(key);
-        scope = stack[--i];
+        scope = stack[--i2];
       }
     });
   }
@@ -31227,8 +31234,8 @@ function newExpressionScope() {
 }
 var ProductionParameterHandler = class {
   stacks = [];
-  enter(flags) {
-    this.stacks.push(flags);
+  enter(flags2) {
+    this.stacks.push(flags2);
   }
   exit() {
     this.stacks.pop();
@@ -31277,16 +31284,16 @@ var UtilParser = class extends Tokenizer {
   isContextual(token) {
     return this.state.type === token && !this.state.containsEsc;
   }
-  isUnparsedContextual(nameStart, name) {
-    if (this.input.startsWith(name, nameStart)) {
-      const nextCh = this.input.charCodeAt(nameStart + name.length);
+  isUnparsedContextual(nameStart, name2) {
+    if (this.input.startsWith(name2, nameStart)) {
+      const nextCh = this.input.charCodeAt(nameStart + name2.length);
       return !(isIdentifierChar(nextCh) || (nextCh & 64512) === 55296);
     }
     return false;
   }
-  isLookaheadContextual(name) {
+  isLookaheadContextual(name2) {
     const next = this.nextTokenStart();
-    return this.isUnparsedContextual(next, name);
+    return this.isUnparsedContextual(next, name2);
   }
   eatContextual(token) {
     if (this.isContextual(token)) {
@@ -31607,26 +31614,26 @@ var NodeUtils = class extends UtilParser {
   cloneIdentifier(node2) {
     const {
       type,
-      start,
+      start: start2,
       end,
       loc,
       range,
-      name
+      name: name2
     } = node2;
     const cloned = Object.create(NodePrototype);
     cloned.type = type;
-    cloned.start = start;
+    cloned.start = start2;
     cloned.end = end;
     cloned.loc = loc;
     cloned.range = range;
-    cloned.name = name;
+    cloned.name = name2;
     if (node2.extra) cloned.extra = node2.extra;
     return cloned;
   }
   cloneStringLiteral(node2) {
     const {
       type,
-      start,
+      start: start2,
       end,
       loc,
       range,
@@ -31634,7 +31641,7 @@ var NodeUtils = class extends UtilParser {
     } = node2;
     const cloned = Object.create(NodePrototype);
     cloned.type = type;
-    cloned.start = start;
+    cloned.start = start2;
     cloned.end = end;
     cloned.loc = loc;
     cloned.range = range;
@@ -31671,9 +31678,9 @@ var LValParser = class extends NodeUtils {
         break;
       case "ObjectExpression":
         this.castNodeTo(node2, "ObjectPattern");
-        for (let i = 0, length = node2.properties.length, last = length - 1; i < length; i++) {
-          const prop = node2.properties[i];
-          const isLast = i === last;
+        for (let i2 = 0, length = node2.properties.length, last = length - 1; i2 < length; i2++) {
+          const prop = node2.properties[i2];
+          const isLast = i2 === last;
           this.toAssignableObjectExpressionProp(prop, isLast, isLHS);
           if (isLast && prop.type === "RestElement" && node2.extra?.trailingCommaLoc) {
             this.raise(Errors.RestTrailingComma, node2.extra.trailingCommaLoc);
@@ -31731,12 +31738,12 @@ var LValParser = class extends NodeUtils {
   }
   toAssignableList(exprList, trailingCommaLoc, isLHS) {
     const end = exprList.length - 1;
-    for (let i = 0; i <= end; i++) {
-      const elt = exprList[i];
+    for (let i2 = 0; i2 <= end; i2++) {
+      const elt = exprList[i2];
       if (!elt) continue;
-      this.toAssignableListItem(exprList, i, isLHS);
+      this.toAssignableListItem(exprList, i2, isLHS);
       if (elt.type === "RestElement") {
-        if (i < end) {
+        if (i2 < end) {
           this.raise(Errors.RestTrailingComma, elt);
         } else if (trailingCommaLoc) {
           this.raise(Errors.RestTrailingComma, trailingCommaLoc);
@@ -31766,8 +31773,8 @@ var LValParser = class extends NodeUtils {
         return true;
       case "ObjectExpression": {
         const last = node2.properties.length - 1;
-        return node2.properties.every((prop, i) => {
-          return prop.type !== "ObjectMethod" && (i === last || prop.type !== "SpreadElement") && this.isAssignable(prop);
+        return node2.properties.every((prop, i2) => {
+          return prop.type !== "ObjectMethod" && (i2 === last || prop.type !== "SpreadElement") && this.isAssignable(prop);
         });
       }
       case "ObjectProperty":
@@ -31821,8 +31828,8 @@ var LValParser = class extends NodeUtils {
     }
     return this.parseIdentifier();
   }
-  parseBindingList(close, closeCharCode, flags) {
-    const allowEmpty = flags & 1;
+  parseBindingList(close, closeCharCode, flags2) {
+    const allowEmpty = flags2 & 1;
     const elts = [];
     let first = true;
     while (!this.eat(close)) {
@@ -31837,7 +31844,7 @@ var LValParser = class extends NodeUtils {
         break;
       } else if (this.match(17)) {
         let rest = this.parseRestBinding();
-        if (flags & 2) {
+        if (flags2 & 2) {
           rest = this.parseFunctionParamType(rest);
         }
         elts.push(rest);
@@ -31847,7 +31854,7 @@ var LValParser = class extends NodeUtils {
         }
       } else {
         const decorators = [];
-        if (flags & 2) {
+        if (flags2 & 2) {
           if (this.match(22) && this.hasPlugin("decorators")) {
             this.raise(Errors.UnsupportedParameterDecorator, this.state.startLoc);
           }
@@ -31855,7 +31862,7 @@ var LValParser = class extends NodeUtils {
             decorators.push(this.parseDecorator());
           }
         }
-        elts.push(this.parseBindingElement(flags, decorators));
+        elts.push(this.parseBindingElement(flags2, decorators));
       }
     }
     return elts;
@@ -31890,12 +31897,12 @@ var LValParser = class extends NodeUtils {
     prop.method = false;
     return this.parseObjPropValue(prop, startLoc, false, false, true, false);
   }
-  parseBindingElement(flags, decorators) {
+  parseBindingElement(flags2, decorators) {
     const {
       startLoc
     } = this.state;
     const left = this.parseMaybeDefault();
-    if (flags & 2) {
+    if (flags2 & 2) {
       this.parseFunctionParamType(left);
     }
     if (decorators.length) {
@@ -31967,13 +31974,13 @@ var LValParser = class extends NodeUtils {
     if (type === "Identifier") {
       this.checkIdentifier(expression, binding, strictModeChanged);
       const {
-        name
+        name: name2
       } = expression;
       if (checkClashes) {
-        if (checkClashes.has(name)) {
+        if (checkClashes.has(name2)) {
           this.raise(Errors.ParamDupe, expression);
         } else {
-          checkClashes.add(name);
+          checkClashes.add(name2);
         }
       }
       return;
@@ -32063,8 +32070,8 @@ var ExpressionParser = class extends LValParser {
       return sawProto;
     }
     const key = prop.key;
-    const name = key.type === "Identifier" ? key.name : key.value;
-    if (name === "__proto__") {
+    const name2 = key.type === "Identifier" ? key.name : key.value;
+    if (name2 === "__proto__") {
       if (sawProto) {
         if (refExpressionErrors) {
           if (refExpressionErrors.doubleProtoLoc === null) {
@@ -32292,17 +32299,17 @@ var ExpressionParser = class extends LValParser {
     const {
       startLoc
     } = this.state;
-    const body = this.parseMaybeAssign();
-    const requiredParentheses = UnparenthesizedPipeBodyDescriptions.has(body.type);
-    if (requiredParentheses && !body.extra?.parenthesized) {
+    const body2 = this.parseMaybeAssign();
+    const requiredParentheses = UnparenthesizedPipeBodyDescriptions.has(body2.type);
+    if (requiredParentheses && !body2.extra?.parenthesized) {
       this.raise(Errors.PipeUnparenthesizedBody, startLoc, {
-        type: body.type
+        type: body2.type
       });
     }
     if (!this.topicReferenceWasUsedInCurrentContext()) {
       this.raise(Errors.PipeTopicUnused, startLoc);
     }
-    return body;
+    return body2;
   }
   checkExponentialAfterUnary(node2) {
     if (this.match(53)) {
@@ -32819,9 +32826,9 @@ var ExpressionParser = class extends LValParser {
   parsePrivateName() {
     const node2 = this.startNode();
     const id = this.startNodeAt(createPositionWithColumnOffset(this.state.startLoc, 1));
-    const name = this.state.value;
+    const name2 = this.state.value;
     this.next();
-    node2.id = this.createIdentifier(id, name);
+    node2.id = this.createIdentifier(id, name2);
     return this.finishNode(node2, "PrivateName");
   }
   parseFunctionOrFunctionSent() {
@@ -33015,9 +33022,9 @@ var ExpressionParser = class extends LValParser {
   parseNew(node2) {
     this.parseNewCallee(node2);
     if (this.eat(6)) {
-      const args = this.parseExprList(7);
-      this.toReferencedList(args);
-      node2.arguments = args;
+      const args2 = this.parseExprList(7);
+      this.toReferencedList(args2);
+      node2.arguments = args2;
     } else {
       node2.arguments = [];
     }
@@ -33037,12 +33044,12 @@ var ExpressionParser = class extends LValParser {
   }
   parseTemplateElement(isTagged) {
     const {
-      start,
+      start: start2,
       startLoc,
       end,
       value
     } = this.state;
-    const elemStart = start + 1;
+    const elemStart = start2 + 1;
     const elem = this.startNodeAt(createPositionWithColumnOffset(startLoc, 1));
     if (value === null) {
       if (!isTagged) {
@@ -33305,11 +33312,11 @@ var ExpressionParser = class extends LValParser {
   }
   parseArrowExpression(node2, params, isAsync2, trailingCommaLoc) {
     this.scope.enter(514 | 4);
-    let flags = functionFlags(isAsync2, false);
+    let flags2 = functionFlags(isAsync2, false);
     if (!this.match(2)) {
-      flags |= this.prodParam.currentFlags() & (8 | 16);
+      flags2 |= this.prodParam.currentFlags() & (8 | 16);
     }
-    this.prodParam.enter(flags);
+    this.prodParam.enter(flags2);
     this.initFunction(node2, isAsync2);
     if (params) {
       this.setArrowFunctionParameters(node2, params, trailingCommaLoc);
@@ -33358,8 +33365,8 @@ var ExpressionParser = class extends LValParser {
     return node2.type === "Identifier";
   }
   isSimpleParamList(params) {
-    for (let i = 0, len = params.length; i < len; i++) {
-      if (!this.isSimpleParameter(params[i])) return false;
+    for (let i2 = 0, len = params.length; i2 < len; i2++) {
+      if (!this.isSimpleParameter(params[i2])) return false;
     }
     return true;
   }
@@ -33419,31 +33426,31 @@ var ExpressionParser = class extends LValParser {
   }
   parseIdentifier(liberal) {
     const node2 = this.startNode();
-    const name = this.parseIdentifierName(liberal);
-    return this.createIdentifier(node2, name);
+    const name2 = this.parseIdentifierName(liberal);
+    return this.createIdentifier(node2, name2);
   }
-  createIdentifier(node2, name) {
-    node2.name = name;
+  createIdentifier(node2, name2) {
+    node2.name = name2;
     if (this.optionFlags & 256) {
-      node2.loc.identifierName = name;
+      node2.loc.identifierName = name2;
     }
     return this.finishNode(node2, "Identifier");
   }
-  createIdentifierAt(node2, name, endLoc) {
-    node2.name = name;
+  createIdentifierAt(node2, name2, endLoc) {
+    node2.name = name2;
     if (this.optionFlags & 256) {
-      node2.loc.identifierName = name;
+      node2.loc.identifierName = name2;
     }
     return this.finishNodeAt(node2, "Identifier", endLoc);
   }
   parseIdentifierName(liberal) {
-    let name;
+    let name2;
     const {
-      start,
+      start: start2,
       type
     } = this.state;
     if (tokenIsKeywordOrIdentifier(type)) {
-      name = this.state.value;
+      name2 = this.state.value;
     } else {
       this.unexpected();
     }
@@ -33453,10 +33460,10 @@ var ExpressionParser = class extends LValParser {
         this.replaceToken(128);
       }
     } else {
-      this.checkReservedWord(name, this.sourceToOffsetPos(start), tokenIsKeyword2, false);
+      this.checkReservedWord(name2, this.sourceToOffsetPos(start2), tokenIsKeyword2, false);
     }
     this.next();
-    return name;
+    return name2;
   }
   checkReservedWord(word, startLoc, checkKeywords, isBinding) {
     if (word.length > 10) {
@@ -33561,18 +33568,18 @@ var ExpressionParser = class extends LValParser {
   }
   parseImportCall(node2) {
     this.next();
-    const args = this.parseCallExpressionArguments();
-    if (args.length === 0 || args.length > 2) {
+    const args2 = this.parseCallExpressionArguments();
+    if (args2.length === 0 || args2.length > 2) {
       this.raise(Errors.ImportCallArity, node2, node2);
     } else {
-      for (const arg of args) {
+      for (const arg of args2) {
         if (arg.type === "SpreadElement") {
           this.raise(Errors.ImportCallSpreadArgument, arg, node2);
         }
       }
     }
-    node2.source = args[0];
-    node2.options = args[1] ?? null;
+    node2.source = args2[0];
+    node2.options = args2[1] ?? null;
     return this.finishNode(node2, "ImportExpression");
   }
   withTopicBindingContext(callback) {
@@ -33588,10 +33595,10 @@ var ExpressionParser = class extends LValParser {
     }
   }
   allowInAnd(callback) {
-    const flags = this.prodParam.currentFlags();
-    const prodParamToSet = (8 | 16) & ~flags;
+    const flags2 = this.prodParam.currentFlags();
+    const prodParamToSet = (8 | 16) & ~flags2;
     if (prodParamToSet) {
-      this.prodParam.enter(flags | 8 | 16);
+      this.prodParam.enter(flags2 | 8 | 16);
       try {
         return callback();
       } finally {
@@ -33601,11 +33608,11 @@ var ExpressionParser = class extends LValParser {
     return callback();
   }
   disallowInAnd(callback) {
-    const flags = this.prodParam.currentFlags();
-    const prodParamToClear = 8 & flags;
-    const prodParamToSet = 16 & ~flags;
+    const flags2 = this.prodParam.currentFlags();
+    const prodParamToClear = 8 & flags2;
+    const prodParamToSet = 16 & ~flags2;
     if (prodParamToClear || prodParamToSet) {
-      this.prodParam.enter(flags & -9 | 16);
+      this.prodParam.enter(flags2 & -9 | 16);
       try {
         return callback();
       } finally {
@@ -33689,8 +33696,8 @@ var switchLabel = {
 var loneSurrogate = /[\uD800-\uDFFF]/u;
 var keywordRelationalOperator = /in(?:stanceof)?/y;
 function createExportedTokens(tokens) {
-  for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
+  for (let i2 = 0; i2 < tokens.length; i2++) {
+    const token = tokens[i2];
     const {
       type
     } = token;
@@ -33840,31 +33847,31 @@ var StatementParser = class extends ExpressionParser {
     return this.parseStatementLike(2 | 4 | (!this.options.annexB || this.state.strict ? 0 : 8));
   }
   parseStatementOrSloppyAnnexBFunctionDeclaration(allowLabeledFunction = false) {
-    let flags = 0;
+    let flags2 = 0;
     if (this.options.annexB && !this.state.strict) {
-      flags |= 4;
+      flags2 |= 4;
       if (allowLabeledFunction) {
-        flags |= 8;
+        flags2 |= 8;
       }
     }
-    return this.parseStatementLike(flags);
+    return this.parseStatementLike(flags2);
   }
   parseStatement() {
     return this.parseStatementLike(0);
   }
-  parseStatementLike(flags) {
+  parseStatementLike(flags2) {
     let decorators = null;
     if (this.match(22)) {
       decorators = this.parseDecorators(true);
     }
-    return this.parseStatementContent(flags, decorators);
+    return this.parseStatementContent(flags2, decorators);
   }
-  parseStatementContent(flags, decorators) {
+  parseStatementContent(flags2, decorators) {
     const startType = this.state.type;
     const node2 = this.startNode();
-    const allowDeclaration = !!(flags & 2);
-    const allowFunctionDeclaration = !!(flags & 4);
-    const topLevel = flags & 1;
+    const allowDeclaration = !!(flags2 & 2);
+    const allowFunctionDeclaration = !!(flags2 & 4);
+    const topLevel = flags2 & 1;
     switch (startType) {
       case 56:
         return this.parseBreakContinueStatement(node2, true);
@@ -33981,7 +33988,7 @@ var StatementParser = class extends ExpressionParser {
     const maybeName = this.state.value;
     const expr = this.parseExpression();
     if (tokenIsIdentifier(startType) && expr.type === "Identifier" && this.eat(10)) {
-      return this.parseLabeledStatement(node2, maybeName, expr, flags);
+      return this.parseLabeledStatement(node2, maybeName, expr, flags2);
     } else {
       return this.parseExpressionStatement(node2, expr);
     }
@@ -34083,9 +34090,9 @@ var StatementParser = class extends ExpressionParser {
     return this.finishNode(node2, isBreak ? "BreakStatement" : "ContinueStatement");
   }
   verifyBreakContinue(node2, isBreak) {
-    let i;
-    for (i = 0; i < this.state.labels.length; ++i) {
-      const lab = this.state.labels[i];
+    let i2;
+    for (i2 = 0; i2 < this.state.labels.length; ++i2) {
+      const lab = this.state.labels[i2];
       if (node2.label == null || lab.name === node2.label.name) {
         if (lab.kind != null && (isBreak || lab.kind === 1)) {
           break;
@@ -34093,7 +34100,7 @@ var StatementParser = class extends ExpressionParser {
         if (node2.label && isBreak) break;
       }
     }
-    if (i === this.state.labels.length) {
+    if (i2 === this.state.labels.length) {
       const type = isBreak ? "BreakStatement" : "ContinueStatement";
       this.raise(Errors.IllegalBreakContinue, node2, {
         type
@@ -34156,47 +34163,47 @@ var StatementParser = class extends ExpressionParser {
         }
         this.next();
         this.parseVar(initNode, true, kind);
-        const init2 = this.finishNode(initNode, "VariableDeclaration");
+        const init3 = this.finishNode(initNode, "VariableDeclaration");
         const isForIn = this.match(54);
         if (isForIn && starsWithUsingDeclaration) {
-          this.raise(Errors.ForInUsing, init2);
+          this.raise(Errors.ForInUsing, init3);
         }
-        if ((isForIn || this.isContextual(98)) && init2.declarations.length === 1) {
-          return this.parseForX(node2, init2, awaitAt);
+        if ((isForIn || this.isContextual(98)) && init3.declarations.length === 1) {
+          return this.parseForX(node2, init3, awaitAt);
         }
         if (awaitAt !== null) {
           this.unexpected(awaitAt);
         }
-        return this.parseFor(node2, init2);
+        return this.parseFor(node2, init3);
       }
     }
     const startsWithAsync = this.isContextual(91);
     const refExpressionErrors = new ExpressionErrors();
-    const init = this.parseExpression(true, refExpressionErrors);
+    const init2 = this.parseExpression(true, refExpressionErrors);
     const isForOf = this.isContextual(98);
     if (isForOf) {
       if (startsWithLet) {
-        this.raise(Errors.ForOfLet, init);
+        this.raise(Errors.ForOfLet, init2);
       }
-      if (awaitAt === null && startsWithAsync && init.type === "Identifier") {
-        this.raise(Errors.ForOfAsync, init);
+      if (awaitAt === null && startsWithAsync && init2.type === "Identifier") {
+        this.raise(Errors.ForOfAsync, init2);
       }
     }
     if (isForOf || this.match(54)) {
       this.checkDestructuringPrivate(refExpressionErrors);
-      this.toAssignable(init, true);
+      this.toAssignable(init2, true);
       const type = isForOf ? "ForOfStatement" : "ForInStatement";
-      this.checkLVal(init, {
+      this.checkLVal(init2, {
         type
       });
-      return this.parseForX(node2, init, awaitAt);
+      return this.parseForX(node2, init2, awaitAt);
     } else {
       this.checkExpressionErrors(refExpressionErrors, true);
     }
     if (awaitAt !== null) {
       this.unexpected(awaitAt);
     }
-    return this.parseFor(node2, init);
+    return this.parseFor(node2, init2);
   }
   parseFunctionStatement(node2, isAsync2, isHangingDeclaration) {
     this.next();
@@ -34330,7 +34337,7 @@ var StatementParser = class extends ExpressionParser {
     this.next();
     return this.finishNode(node2, "EmptyStatement");
   }
-  parseLabeledStatement(node2, maybeName, expr, flags) {
+  parseLabeledStatement(node2, maybeName, expr, flags2) {
     for (const label of this.state.labels) {
       if (label.name === maybeName) {
         this.raise(Errors.LabelRedeclaration, expr, {
@@ -34339,8 +34346,8 @@ var StatementParser = class extends ExpressionParser {
       }
     }
     const kind = tokenIsLoop(this.state.type) ? 1 : this.match(67) ? 2 : null;
-    for (let i = this.state.labels.length - 1; i >= 0; i--) {
-      const label = this.state.labels[i];
+    for (let i2 = this.state.labels.length - 1; i2 >= 0; i2--) {
+      const label = this.state.labels[i2];
       if (label.statementStart === node2.start) {
         label.statementStart = this.sourceToOffsetPos(this.state.start);
         label.kind = kind;
@@ -34353,7 +34360,7 @@ var StatementParser = class extends ExpressionParser {
       kind,
       statementStart: this.sourceToOffsetPos(this.state.start)
     });
-    node2.body = flags & 8 ? this.parseStatementOrSloppyAnnexBFunctionDeclaration(true) : this.parseStatement();
+    node2.body = flags2 & 8 ? this.parseStatementOrSloppyAnnexBFunctionDeclaration(true) : this.parseStatement();
     this.state.labels.pop();
     node2.label = expr;
     return this.finishNode(node2, "LabeledStatement");
@@ -34382,11 +34389,11 @@ var StatementParser = class extends ExpressionParser {
     return stmt.type === "ExpressionStatement" && stmt.expression.type === "StringLiteral" && !stmt.expression.extra.parenthesized;
   }
   parseBlockBody(node2, allowDirectives, topLevel, end, afterBlockParse) {
-    const body = node2.body = [];
+    const body2 = node2.body = [];
     const directives = node2.directives = [];
-    this.parseBlockOrModuleBlockBody(body, allowDirectives ? directives : void 0, topLevel, end, afterBlockParse);
+    this.parseBlockOrModuleBlockBody(body2, allowDirectives ? directives : void 0, topLevel, end, afterBlockParse);
   }
-  parseBlockOrModuleBlockBody(body, directives, topLevel, end, afterBlockParse) {
+  parseBlockOrModuleBlockBody(body2, directives, topLevel, end, afterBlockParse) {
     const oldStrict = this.state.strict;
     let hasStrictModeDirective = false;
     let parsedNonDirective = false;
@@ -34405,7 +34412,7 @@ var StatementParser = class extends ExpressionParser {
         parsedNonDirective = true;
         this.state.strictErrors.clear();
       }
-      body.push(stmt);
+      body2.push(stmt);
     }
     afterBlockParse?.call(this, hasStrictModeDirective);
     if (!oldStrict) {
@@ -34413,8 +34420,8 @@ var StatementParser = class extends ExpressionParser {
     }
     this.next();
   }
-  parseFor(node2, init) {
-    node2.init = init;
+  parseFor(node2, init2) {
+    node2.init = init2;
     this.semicolon(false);
     node2.test = this.match(9) ? null : this.parseExpression();
     this.semicolon(false);
@@ -34425,7 +34432,7 @@ var StatementParser = class extends ExpressionParser {
     this.state.labels.pop();
     return this.finishNode(node2, "ForStatement");
   }
-  parseForX(node2, init, awaitAt) {
+  parseForX(node2, init2, awaitAt) {
     const isForIn = this.match(54);
     this.next();
     if (isForIn) {
@@ -34433,19 +34440,19 @@ var StatementParser = class extends ExpressionParser {
     } else {
       node2.await = awaitAt !== null;
     }
-    if (init.type === "VariableDeclaration" && init.declarations[0].init != null && (!isForIn || !this.options.annexB || this.state.strict || init.kind !== "var" || init.declarations[0].id.type !== "Identifier")) {
-      this.raise(Errors.ForInOfLoopInitializer, init, {
+    if (init2.type === "VariableDeclaration" && init2.declarations[0].init != null && (!isForIn || !this.options.annexB || this.state.strict || init2.kind !== "var" || init2.declarations[0].id.type !== "Identifier")) {
+      this.raise(Errors.ForInOfLoopInitializer, init2, {
         type: isForIn ? "ForInStatement" : "ForOfStatement"
       });
     }
-    if (init.type === "AssignmentPattern") {
-      this.raise(Errors.InvalidLhs, init, {
+    if (init2.type === "AssignmentPattern") {
+      this.raise(Errors.InvalidLhs, init2, {
         ancestor: {
           type: "ForStatement"
         }
       });
     }
-    node2.left = init;
+    node2.left = init2;
     node2.right = isForIn ? this.parseExpression() : this.parseMaybeAssignAllowIn();
     this.expect(7);
     node2.body = this.parseStatement();
@@ -34495,11 +34502,11 @@ var StatementParser = class extends ExpressionParser {
   parseAsyncFunctionExpression(node2) {
     return this.parseFunction(node2, 8);
   }
-  parseFunction(node2, flags = 0) {
-    const hangingDeclaration = flags & 2;
-    const isDeclaration = !!(flags & 1);
-    const requireId = isDeclaration && !(flags & 4);
-    const isAsync2 = !!(flags & 8);
+  parseFunction(node2, flags2 = 0) {
+    const hangingDeclaration = flags2 & 2;
+    const isDeclaration = !!(flags2 & 1);
+    const requireId = isDeclaration && !(flags2 & 4);
+    const isAsync2 = !!(flags2 & 8);
     this.initFunction(node2, isAsync2);
     if (this.match(51)) {
       if (hangingDeclaration) {
@@ -34762,8 +34769,8 @@ var StatementParser = class extends ExpressionParser {
     const oldLabels = this.state.labels;
     this.state.labels = [];
     this.prodParam.enter(0);
-    const body = member.body = [];
-    this.parseBlockOrModuleBlockBody(body, void 0, false, 4);
+    const body2 = member.body = [];
+    this.parseBlockOrModuleBlockBody(body2, void 0, false, 4);
     this.prodParam.exit();
     this.scope.exit();
     this.state.labels = oldLabels;
@@ -35788,10 +35795,10 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
     this.next();
     return this.finishNode(node2, "ObjectExpression");
   }
-  tsParseEntityName(flags) {
+  tsParseEntityName(flags2) {
     let entity;
-    if (flags & 1 && this.match(74)) {
-      if (flags & 2) {
+    if (flags2 & 1 && this.match(74)) {
+      if (flags2 & 2) {
         entity = this.parseIdentifier(true);
       } else {
         const node2 = this.startNode();
@@ -35799,12 +35806,12 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
         entity = this.finishNode(node2, "ThisExpression");
       }
     } else {
-      entity = this.parseIdentifier(!!(flags & 1));
+      entity = this.parseIdentifier(!!(flags2 & 1));
     }
     while (this.eat(12)) {
       const node2 = this.startNodeAtNode(entity);
       node2.left = entity;
-      node2.right = this.parseIdentifier(!!(flags & 1));
+      node2.right = this.parseIdentifier(!!(flags2 & 1));
       entity = this.finishNode(node2, "TSQualifiedName");
     }
     return entity;
@@ -36590,9 +36597,9 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
     if (this.eat(77)) {
       node2.extends = this.tsParseHeritageClause("extends");
     }
-    const body = this.startNode();
-    body.body = this.tsInType(this.tsParseObjectTypeMembers.bind(this));
-    node2.body = this.finishNode(body, "TSInterfaceBody");
+    const body2 = this.startNode();
+    body2.body = this.tsInType(this.tsParseObjectTypeMembers.bind(this));
+    node2.body = this.finishNode(body2, "TSInterfaceBody");
     return this.finishNode(node2, "TSInterfaceDeclaration");
   }
   tsParseTypeAliasDeclaration(node2) {
@@ -36791,7 +36798,7 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
     return res;
   }
   tsTryParseAndCatch(f) {
-    const result = this.tryParse((abort) => f() || abort());
+    const result = this.tryParse((abort2) => f() || abort2());
     if (result.aborted || !result.node) return;
     if (result.error) this.state = result.failState;
     return result.node;
@@ -36940,19 +36947,19 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
     if (this.tsIsDeclarationStart()) return false;
     return super.isExportDefaultSpecifier();
   }
-  parseBindingElement(flags, decorators) {
+  parseBindingElement(flags2, decorators) {
     const startLoc = decorators.length ? null : this.state.startLoc;
     const modified = {};
     this.tsParseModifiers(BindingElementModifiers, void 0, modified);
     const accessibility = modified.accessibility;
     const override = modified.override;
     const readonly2 = modified.readonly;
-    if (!(flags & 4) && (accessibility || readonly2 || override)) {
+    if (!(flags2 & 4) && (accessibility || readonly2 || override)) {
       this.raise(TSErrors.UnexpectedParameterModifier, startLoc || decorators[0]);
     }
     const startLoc2 = this.state.startLoc;
     const left = this.parseMaybeDefault(startLoc2);
-    if (flags & 2) {
+    if (flags2 & 2) {
       this.parseFunctionParamType(left);
     }
     const elt = this.parseMaybeDefault(startLoc2, left);
@@ -37287,28 +37294,28 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
     for (const declarator of declaration.declarations) {
       const {
         id,
-        init,
+        init: init2,
         definite
       } = declarator;
       if (definite) {
-        if (init) {
+        if (init2) {
           this.raise(TSErrors.DeclaratorDefiniteAssertionWithInitializer, id);
         } else if (!id.typeAnnotation) {
           this.raise(TSErrors.DeclaratorDefiniteAssertionRequiresTypeAnnotation, id);
         }
       }
-      if (isAmbientContext && init) {
+      if (isAmbientContext && init2) {
         if (kind === "var" || kind === "let" || !!id.typeAnnotation) {
-          this.raise(TSErrors.InitializerNotAllowedInAmbientContext, init);
-        } else if (!isValidAmbientConstInitializer(init, this.hasPlugin("estree"))) {
-          this.raise(TSErrors.ConstInitializerMustBeStringOrNumericLiteralOrLiteralEnumReference, init);
+          this.raise(TSErrors.InitializerNotAllowedInAmbientContext, init2);
+        } else if (!isValidAmbientConstInitializer(init2, this.hasPlugin("estree"))) {
+          this.raise(TSErrors.ConstInitializerMustBeStringOrNumericLiteralOrLiteralEnumReference, init2);
         }
       }
     }
     return declaration;
   }
-  parseStatementContent(flags, decorators) {
-    const allowDeclaration = !!(flags & 2);
+  parseStatementContent(flags2, decorators) {
+    const allowDeclaration = !!(flags2 & 2);
     if (!this.state.containsEsc) {
       switch (this.state.type) {
         case 71: {
@@ -37395,7 +37402,7 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
         }
       }
     }
-    return super.parseStatementContent(flags, decorators);
+    return super.parseStatementContent(flags2, decorators);
   }
   parseAccessModifier() {
     return this.tsParseModifier(AccessModifiers);
@@ -37698,11 +37705,11 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
     }
     if (!state || state === this.state) state = this.state.clone();
     let typeParameters;
-    const arrow = this.tryParse((abort) => {
+    const arrow = this.tryParse((abort2) => {
       typeParameters = this.tsParseTypeParameters(this.tsParseConstModifier);
       const expr = super.parseMaybeAssign(refExpressionErrors, isParenItem);
       if (expr.type !== "ArrowFunctionExpression" || expr.extra?.parenthesized) {
-        abort();
+        abort2();
       }
       if (typeParameters?.params.length !== 0) {
         this.resetStartLocationFromNode(expr, typeParameters);
@@ -37755,9 +37762,9 @@ var typescript = (superClass) => class TypeScriptParserMixin extends superClass 
   }
   parseArrow(node2) {
     if (this.match(10)) {
-      const result = this.tryParse((abort) => {
+      const result = this.tryParse((abort2) => {
         const returnType = this.tsParseTypeOrTypePredicateAnnotation(10);
-        if (this.canInsertSemicolon() || !this.match(15)) abort();
+        if (this.canInsertSemicolon() || !this.match(15)) abort2();
         return returnType;
       });
       if (result.aborted) return;
@@ -38549,8 +38556,8 @@ var v8intrinsic = (superClass) => class V8IntrinsicMixin extends superClass {
       const node2 = this.startNode();
       this.next();
       if (tokenIsIdentifier(this.state.type)) {
-        const name = this.parseIdentifierName();
-        const identifier = this.createIdentifier(node2, name);
+        const name2 = this.parseIdentifierName();
+        const identifier = this.createIdentifier(node2, name2);
         this.castNodeTo(identifier, "V8IntrinsicIdentifier");
         if (this.match(6)) {
           return identifier;
@@ -38757,14 +38764,14 @@ function getParser(options, input) {
   const pluginsMap = /* @__PURE__ */ new Map();
   if (options?.plugins) {
     for (const plugin of options.plugins) {
-      let name, opts;
+      let name2, opts;
       if (typeof plugin === "string") {
-        name = plugin;
+        name2 = plugin;
       } else {
-        [name, opts] = plugin;
+        [name2, opts] = plugin;
       }
-      if (!pluginsMap.has(name)) {
-        pluginsMap.set(name, opts || {});
+      if (!pluginsMap.has(name2)) {
+        pluginsMap.set(name2, opts || {});
       }
     }
     validatePlugins(pluginsMap);
@@ -38775,9 +38782,9 @@ function getParser(options, input) {
 var parserClassCache = /* @__PURE__ */ new Map();
 function getParserClass(pluginsMap) {
   const pluginList = [];
-  for (const name of mixinPluginNames) {
-    if (pluginsMap.has(name)) {
-      pluginList.push(name);
+  for (const name2 of mixinPluginNames) {
+    if (pluginsMap.has(name2)) {
+      pluginList.push(name2);
     }
   }
   const key = pluginList.join("|");
@@ -38792,22 +38799,5228 @@ function getParserClass(pluginsMap) {
   return cls;
 }
 
-// packages/code-intel/src/language-registry.mjs
+// packages/code-intel/src/tree-sitter-parser.mjs
+import fs4 from "node:fs";
+import path3 from "node:path";
+import crypto2 from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+
+// node_modules/web-tree-sitter/web-tree-sitter.js
+var __defProp2 = Object.defineProperty;
+var __name = (target, value) => __defProp2(target, "name", { value, configurable: true });
+var Edit = class {
+  static {
+    __name(this, "Edit");
+  }
+  /** The start position of the change. */
+  startPosition;
+  /** The end position of the change before the edit. */
+  oldEndPosition;
+  /** The end position of the change after the edit. */
+  newEndPosition;
+  /** The start index of the change. */
+  startIndex;
+  /** The end index of the change before the edit. */
+  oldEndIndex;
+  /** The end index of the change after the edit. */
+  newEndIndex;
+  constructor({
+    startIndex,
+    oldEndIndex,
+    newEndIndex,
+    startPosition,
+    oldEndPosition,
+    newEndPosition
+  }) {
+    this.startIndex = startIndex >>> 0;
+    this.oldEndIndex = oldEndIndex >>> 0;
+    this.newEndIndex = newEndIndex >>> 0;
+    this.startPosition = startPosition;
+    this.oldEndPosition = oldEndPosition;
+    this.newEndPosition = newEndPosition;
+  }
+  /**
+   * Edit a point and index to keep it in-sync with source code that has been edited.
+   *
+   * This function updates a single point's byte offset and row/column position
+   * based on an edit operation. This is useful for editing points without
+   * requiring a tree or node instance.
+   */
+  editPoint(point, index) {
+    let newIndex = index;
+    const newPoint = { ...point };
+    if (index >= this.oldEndIndex) {
+      newIndex = this.newEndIndex + (index - this.oldEndIndex);
+      const originalRow = point.row;
+      newPoint.row = this.newEndPosition.row + (point.row - this.oldEndPosition.row);
+      newPoint.column = originalRow === this.oldEndPosition.row ? this.newEndPosition.column + (point.column - this.oldEndPosition.column) : point.column;
+    } else if (index > this.startIndex) {
+      newIndex = this.newEndIndex;
+      newPoint.row = this.newEndPosition.row;
+      newPoint.column = this.newEndPosition.column;
+    }
+    return { point: newPoint, index: newIndex };
+  }
+  /**
+   * Edit a range to keep it in-sync with source code that has been edited.
+   *
+   * This function updates a range's start and end positions based on an edit
+   * operation. This is useful for editing ranges without requiring a tree
+   * or node instance.
+   */
+  editRange(range) {
+    const newRange = {
+      startIndex: range.startIndex,
+      startPosition: { ...range.startPosition },
+      endIndex: range.endIndex,
+      endPosition: { ...range.endPosition }
+    };
+    if (range.endIndex >= this.oldEndIndex) {
+      if (range.endIndex !== Number.MAX_SAFE_INTEGER) {
+        newRange.endIndex = this.newEndIndex + (range.endIndex - this.oldEndIndex);
+        newRange.endPosition = {
+          row: this.newEndPosition.row + (range.endPosition.row - this.oldEndPosition.row),
+          column: range.endPosition.row === this.oldEndPosition.row ? this.newEndPosition.column + (range.endPosition.column - this.oldEndPosition.column) : range.endPosition.column
+        };
+        if (newRange.endIndex < this.newEndIndex) {
+          newRange.endIndex = Number.MAX_SAFE_INTEGER;
+          newRange.endPosition = { row: Number.MAX_SAFE_INTEGER, column: Number.MAX_SAFE_INTEGER };
+        }
+      }
+    } else if (range.endIndex > this.startIndex) {
+      newRange.endIndex = this.startIndex;
+      newRange.endPosition = { ...this.startPosition };
+    }
+    if (range.startIndex >= this.oldEndIndex) {
+      newRange.startIndex = this.newEndIndex + (range.startIndex - this.oldEndIndex);
+      newRange.startPosition = {
+        row: this.newEndPosition.row + (range.startPosition.row - this.oldEndPosition.row),
+        column: range.startPosition.row === this.oldEndPosition.row ? this.newEndPosition.column + (range.startPosition.column - this.oldEndPosition.column) : range.startPosition.column
+      };
+      if (newRange.startIndex < this.newEndIndex) {
+        newRange.startIndex = Number.MAX_SAFE_INTEGER;
+        newRange.startPosition = { row: Number.MAX_SAFE_INTEGER, column: Number.MAX_SAFE_INTEGER };
+      }
+    } else if (range.startIndex > this.startIndex) {
+      newRange.startIndex = this.startIndex;
+      newRange.startPosition = { ...this.startPosition };
+    }
+    return newRange;
+  }
+};
+var SIZE_OF_SHORT = 2;
+var SIZE_OF_INT = 4;
+var SIZE_OF_CURSOR = 4 * SIZE_OF_INT;
+var SIZE_OF_NODE = 5 * SIZE_OF_INT;
+var SIZE_OF_POINT = 2 * SIZE_OF_INT;
+var SIZE_OF_RANGE = 2 * SIZE_OF_INT + 2 * SIZE_OF_POINT;
+var ZERO_POINT = { row: 0, column: 0 };
+var INTERNAL = /* @__PURE__ */ Symbol("INTERNAL");
+function assertInternal(x) {
+  if (x !== INTERNAL) throw new Error("Illegal constructor");
+}
+__name(assertInternal, "assertInternal");
+function isPoint(point) {
+  return !!point && typeof point.row === "number" && typeof point.column === "number";
+}
+__name(isPoint, "isPoint");
+function setModule(module2) {
+  C = module2;
+}
+__name(setModule, "setModule");
+var C;
+function newFinalizer(handler) {
+  try {
+    return new FinalizationRegistry(handler);
+  } catch (e) {
+    console.error("Unsupported FinalizationRegistry:", e);
+    return;
+  }
+}
+__name(newFinalizer, "newFinalizer");
+var finalizer = newFinalizer((address) => {
+  C._ts_lookahead_iterator_delete(address);
+});
+var LookaheadIterator = class {
+  static {
+    __name(this, "LookaheadIterator");
+  }
+  /** @internal */
+  [0] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  language;
+  /** @internal */
+  positioned = false;
+  /** @internal */
+  constructor(internal, address, language) {
+    assertInternal(internal);
+    this[0] = address;
+    this.language = language;
+    finalizer?.register(this, address, this);
+  }
+  /**
+   * Get the current symbol of the lookahead iterator.
+   *
+   * Returns `null` if the iterator is not positioned on a symbol:
+   *
+   * - Before the first iteration step
+   * - After the iterator is exhausted
+   * - After a {@link reset} or {@link resetState} call
+   */
+  get currentTypeId() {
+    return this.positioned ? C._ts_lookahead_iterator_current_symbol(this[0]) : null;
+  }
+  /**
+   * Get the current symbol name of the lookahead iterator.
+   *
+   * Returns `null` if the iterator is not positioned on a symbol.
+   */
+  get currentType() {
+    const id = this.currentTypeId;
+    if (id === null) return null;
+    return this.language.types[id] ?? C.UTF8ToString(C._ts_language_symbol_name(this.language[0], id));
+  }
+  /** Delete the lookahead iterator, freeing its resources. */
+  delete() {
+    finalizer?.unregister(this);
+    C._ts_lookahead_iterator_delete(this[0]);
+    this[0] = 0;
+  }
+  /**
+   * Reset the lookahead iterator.
+   *
+   * This returns `true` if the language was set successfully and `false`
+   * otherwise.
+   */
+  reset(language, stateId) {
+    if (C._ts_lookahead_iterator_reset(this[0], language[0], stateId)) {
+      this.language = language;
+      this.positioned = false;
+      return true;
+    }
+    return false;
+  }
+  /**
+   * Reset the lookahead iterator to another state.
+   *
+   * This returns `true` if the iterator was reset to the given state and
+   * `false` otherwise.
+   */
+  resetState(stateId) {
+    if (!C._ts_lookahead_iterator_reset_state(this[0], stateId)) return false;
+    this.positioned = false;
+    return true;
+  }
+  /**
+   * Returns an iterator that iterates over the symbols of the lookahead iterator.
+   *
+   * The iterator will yield the current symbol name as a string for each step
+   * until there are no more symbols to iterate over.
+   */
+  [Symbol.iterator]() {
+    return {
+      next: /* @__PURE__ */ __name(() => {
+        this.positioned = Boolean(C._ts_lookahead_iterator_next(this[0]));
+        const value = this.currentType;
+        return value === null ? { done: true, value: "" } : { done: false, value };
+      }, "next")
+    };
+  }
+};
+function getText(tree, startIndex, endIndex, startPosition) {
+  const length = endIndex - startIndex;
+  let result = tree.textCallback(startIndex, startPosition);
+  if (result) {
+    startIndex += result.length;
+    while (startIndex < endIndex) {
+      const string3 = tree.textCallback(startIndex, startPosition);
+      if (string3 && string3.length > 0) {
+        startIndex += string3.length;
+        result += string3;
+      } else {
+        break;
+      }
+    }
+    if (startIndex > endIndex) {
+      result = result.slice(0, length);
+    }
+  }
+  return result ?? "";
+}
+__name(getText, "getText");
+var finalizer2 = newFinalizer((address) => {
+  C._ts_tree_delete(address);
+});
+var Tree = class _Tree {
+  static {
+    __name(this, "Tree");
+  }
+  /** @internal */
+  [0] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  textCallback;
+  /** The language that was used to parse the syntax tree. */
+  language;
+  /** @internal */
+  constructor(internal, address, language, textCallback) {
+    assertInternal(internal);
+    this[0] = address;
+    this.language = language;
+    this.textCallback = textCallback;
+    finalizer2?.register(this, address, this);
+  }
+  /** Create a shallow copy of the syntax tree. This is very fast. */
+  copy() {
+    const address = C._ts_tree_copy(this[0]);
+    return new _Tree(INTERNAL, address, this.language, this.textCallback);
+  }
+  /** Delete the syntax tree, freeing its resources. */
+  delete() {
+    finalizer2?.unregister(this);
+    C._ts_tree_delete(this[0]);
+    this[0] = 0;
+  }
+  /** Get the root node of the syntax tree. */
+  get rootNode() {
+    C._ts_tree_root_node_wasm(this[0]);
+    return unmarshalNode(this);
+  }
+  /**
+   * Get the root node of the syntax tree, but with its position shifted
+   * forward by the given offset.
+   */
+  rootNodeWithOffset(offsetBytes, offsetExtent) {
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    C.setValue(address, offsetBytes, "i32");
+    marshalPoint(address + SIZE_OF_INT, offsetExtent);
+    C._ts_tree_root_node_with_offset_wasm(this[0]);
+    return unmarshalNode(this);
+  }
+  /**
+   * Edit the syntax tree to keep it in sync with source code that has been
+   * edited.
+   *
+   * You must describe the edit both in terms of byte offsets and in terms of
+   * row/column coordinates.
+   */
+  edit(edit) {
+    marshalEdit(edit);
+    C._ts_tree_edit_wasm(this[0]);
+  }
+  /** Create a new {@link TreeCursor} starting from the root of the tree. */
+  walk() {
+    return this.rootNode.walk();
+  }
+  /**
+   * Compare this old edited syntax tree to a new syntax tree representing
+   * the same document, returning a sequence of ranges whose syntactic
+   * structure has changed.
+   *
+   * For this to work correctly, this syntax tree must have been edited such
+   * that its ranges match up to the new tree. Generally, you'll want to
+   * call this method right after calling one of the [`Parser::parse`]
+   * functions. Call it on the old tree that was passed to parse, and
+   * pass the new tree that was returned from `parse`.
+   */
+  getChangedRanges(other) {
+    if (!(other instanceof _Tree)) {
+      throw new TypeError("Argument must be a Tree");
+    }
+    C._ts_tree_get_changed_ranges_wasm(this[0], other[0]);
+    const count = C.getValue(TRANSFER_BUFFER, "i32");
+    const buffer = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i2 = 0; i2 < count; i2++) {
+        result[i2] = unmarshalRange(address);
+        address += SIZE_OF_RANGE;
+      }
+      C._free(buffer);
+    }
+    return result;
+  }
+  /** Get the included ranges that were used to parse the syntax tree. */
+  getIncludedRanges() {
+    C._ts_tree_included_ranges_wasm(this[0]);
+    const count = C.getValue(TRANSFER_BUFFER, "i32");
+    const buffer = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i2 = 0; i2 < count; i2++) {
+        result[i2] = unmarshalRange(address);
+        address += SIZE_OF_RANGE;
+      }
+      C._free(buffer);
+    }
+    return result;
+  }
+};
+var finalizer3 = newFinalizer((address) => {
+  C._ts_tree_cursor_delete_wasm(address);
+});
+var TreeCursor = class _TreeCursor {
+  static {
+    __name(this, "TreeCursor");
+  }
+  /** @internal */
+  // @ts-expect-error: never read
+  [0] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  // @ts-expect-error: never read
+  [1] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  // @ts-expect-error: never read
+  [2] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  // @ts-expect-error: never read
+  [3] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  tree;
+  /** @internal */
+  constructor(internal, tree) {
+    assertInternal(internal);
+    this.tree = tree;
+    unmarshalTreeCursor(this);
+    finalizer3?.register(this, this.tree[0], this);
+  }
+  /** Creates a deep copy of the tree cursor. This allocates new memory. */
+  copy() {
+    const copy = new _TreeCursor(INTERNAL, this.tree);
+    C._ts_tree_cursor_copy_wasm(this.tree[0]);
+    unmarshalTreeCursor(copy);
+    return copy;
+  }
+  /** Delete the tree cursor, freeing its resources. */
+  delete() {
+    finalizer3?.unregister(this);
+    marshalTreeCursor(this);
+    C._ts_tree_cursor_delete_wasm(this.tree[0]);
+    this[0] = this[1] = this[2] = 0;
+  }
+  /** Get the tree cursor's current {@link Node}. */
+  get currentNode() {
+    marshalTreeCursor(this);
+    C._ts_tree_cursor_current_node_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /**
+   * Get the numerical field id of this tree cursor's current node.
+   *
+   * See also {@link TreeCursor#currentFieldName}.
+   */
+  get currentFieldId() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_field_id_wasm(this.tree[0]);
+  }
+  /** Get the field name of this tree cursor's current node. */
+  get currentFieldName() {
+    return this.tree.language.fields[this.currentFieldId];
+  }
+  /**
+   * Get the depth of the cursor's current node relative to the original
+   * node that the cursor was constructed with.
+   */
+  get currentDepth() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_depth_wasm(this.tree[0]);
+  }
+  /**
+   * Get the index of the cursor's current node out of all of the
+   * descendants of the original node that the cursor was constructed with.
+   */
+  get currentDescendantIndex() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_descendant_index_wasm(this.tree[0]);
+  }
+  /** Get the type of the cursor's current node. */
+  get nodeType() {
+    return this.tree.language.types[this.nodeTypeId] || "ERROR";
+  }
+  /** Get the type id of the cursor's current node. */
+  get nodeTypeId() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_node_type_id_wasm(this.tree[0]);
+  }
+  /** Get the state id of the cursor's current node. */
+  get nodeStateId() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_node_state_id_wasm(this.tree[0]);
+  }
+  /** Get the id of the cursor's current node. */
+  get nodeId() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_node_id_wasm(this.tree[0]);
+  }
+  /**
+   * Check if the cursor's current node is *named*.
+   *
+   * Named nodes correspond to named rules in the grammar, whereas
+   * *anonymous* nodes correspond to string literals in the grammar.
+   */
+  get nodeIsNamed() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_node_is_named_wasm(this.tree[0]) === 1;
+  }
+  /**
+   * Check if the cursor's current node is *missing*.
+   *
+   * Missing nodes are inserted by the parser in order to recover from
+   * certain kinds of syntax errors.
+   */
+  get nodeIsMissing() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_node_is_missing_wasm(this.tree[0]) === 1;
+  }
+  /** Get the string content of the cursor's current node. */
+  get nodeText() {
+    marshalTreeCursor(this);
+    const startIndex = C._ts_tree_cursor_start_index_wasm(this.tree[0]);
+    const endIndex = C._ts_tree_cursor_end_index_wasm(this.tree[0]);
+    C._ts_tree_cursor_start_position_wasm(this.tree[0]);
+    const startPosition = unmarshalPoint(TRANSFER_BUFFER);
+    return getText(this.tree, startIndex, endIndex, startPosition);
+  }
+  /** Get the start position of the cursor's current node. */
+  get startPosition() {
+    marshalTreeCursor(this);
+    C._ts_tree_cursor_start_position_wasm(this.tree[0]);
+    return unmarshalPoint(TRANSFER_BUFFER);
+  }
+  /** Get the end position of the cursor's current node. */
+  get endPosition() {
+    marshalTreeCursor(this);
+    C._ts_tree_cursor_end_position_wasm(this.tree[0]);
+    return unmarshalPoint(TRANSFER_BUFFER);
+  }
+  /** Get the start index of the cursor's current node. */
+  get startIndex() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_start_index_wasm(this.tree[0]);
+  }
+  /** Get the end index of the cursor's current node. */
+  get endIndex() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_end_index_wasm(this.tree[0]);
+  }
+  /**
+   * Move this cursor to the first child of its current node.
+   *
+   * This returns `true` if the cursor successfully moved, and returns
+   * `false` if there were no children.
+   */
+  gotoFirstChild() {
+    marshalTreeCursor(this);
+    const result = C._ts_tree_cursor_goto_first_child_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+  /**
+   * Move this cursor to the last child of its current node.
+   *
+   * This returns `true` if the cursor successfully moved, and returns
+   * `false` if there were no children.
+   *
+   * Note that this function may be slower than
+   * {@link TreeCursor#gotoFirstChild} because it needs to
+   * iterate through all the children to compute the child's position.
+   */
+  gotoLastChild() {
+    marshalTreeCursor(this);
+    const result = C._ts_tree_cursor_goto_last_child_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+  /**
+   * Move this cursor to the parent of its current node.
+   *
+   * This returns `true` if the cursor successfully moved, and returns
+   * `false` if there was no parent node (the cursor was already on the
+   * root node).
+   *
+   * Note that the node the cursor was constructed with is considered the root
+   * of the cursor, and the cursor cannot walk outside this node.
+   */
+  gotoParent() {
+    marshalTreeCursor(this);
+    const result = C._ts_tree_cursor_goto_parent_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+  /**
+   * Move this cursor to the next sibling of its current node.
+   *
+   * This returns `true` if the cursor successfully moved, and returns
+   * `false` if there was no next sibling node.
+   *
+   * Note that the node the cursor was constructed with is considered the root
+   * of the cursor, and the cursor cannot walk outside this node.
+   */
+  gotoNextSibling() {
+    marshalTreeCursor(this);
+    const result = C._ts_tree_cursor_goto_next_sibling_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+  /**
+   * Move this cursor to the previous sibling of its current node.
+   *
+   * This returns `true` if the cursor successfully moved, and returns
+   * `false` if there was no previous sibling node.
+   *
+   * Note that this function may be slower than
+   * {@link TreeCursor#gotoNextSibling} due to how node
+   * positions are stored. In the worst case, this will need to iterate
+   * through all the children up to the previous sibling node to recalculate
+   * its position. Also note that the node the cursor was constructed with is
+   * considered the root of the cursor, and the cursor cannot walk outside this node.
+   */
+  gotoPreviousSibling() {
+    marshalTreeCursor(this);
+    const result = C._ts_tree_cursor_goto_previous_sibling_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+  /**
+   * Move the cursor to the node that is the nth descendant of
+   * the original node that the cursor was constructed with, where
+   * zero represents the original node itself.
+   */
+  gotoDescendant(goalDescendantIndex) {
+    marshalTreeCursor(this);
+    C._ts_tree_cursor_goto_descendant_wasm(this.tree[0], goalDescendantIndex);
+    unmarshalTreeCursor(this);
+  }
+  /**
+   * Move this cursor to the first child of its current node that contains or
+   * starts after the given byte offset.
+   *
+   * This returns `true` if the cursor successfully moved to a child node, and returns
+   * `false` if no such child was found.
+   */
+  gotoFirstChildForIndex(goalIndex) {
+    marshalTreeCursor(this);
+    C.setValue(TRANSFER_BUFFER + SIZE_OF_CURSOR, goalIndex, "i32");
+    const result = C._ts_tree_cursor_goto_first_child_for_index_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+  /**
+   * Move this cursor to the first child of its current node that contains or
+   * starts after the given byte offset.
+   *
+   * This returns the index of the child node if one was found, and returns
+   * `null` if no such child was found.
+   */
+  gotoFirstChildForPosition(goalPosition) {
+    marshalTreeCursor(this);
+    marshalPoint(TRANSFER_BUFFER + SIZE_OF_CURSOR, goalPosition);
+    const result = C._ts_tree_cursor_goto_first_child_for_position_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+  /**
+   * Re-initialize this tree cursor to start at the original node that the
+   * cursor was constructed with.
+   */
+  reset(node2) {
+    marshalNode(node2);
+    marshalTreeCursor(this, TRANSFER_BUFFER + SIZE_OF_NODE);
+    C._ts_tree_cursor_reset_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+  }
+  /**
+   * Re-initialize a tree cursor to the same position as another cursor.
+   *
+   * Unlike {@link TreeCursor#reset}, this will not lose parent
+   * information and allows reusing already created cursors.
+   */
+  resetTo(cursor) {
+    marshalTreeCursor(this, TRANSFER_BUFFER);
+    marshalTreeCursor(cursor, TRANSFER_BUFFER + SIZE_OF_CURSOR);
+    C._ts_tree_cursor_reset_to_wasm(this.tree[0], cursor.tree[0]);
+    unmarshalTreeCursor(this);
+  }
+};
+var Node2 = class {
+  static {
+    __name(this, "Node");
+  }
+  /** @internal */
+  // @ts-expect-error: never read
+  [0] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  _children;
+  /** @internal */
+  _namedChildren;
+  /** @internal */
+  constructor(internal, {
+    id,
+    tree,
+    startIndex,
+    startPosition,
+    other
+  }) {
+    assertInternal(internal);
+    this[0] = other;
+    this.id = id;
+    this.tree = tree;
+    this.startIndex = startIndex;
+    this.startPosition = startPosition;
+  }
+  /**
+   * The numeric id for this node that is unique.
+   *
+   * Within a given syntax tree, no two nodes have the same id. However:
+   *
+   * * If a new tree is created based on an older tree, and a node from the old tree is reused in
+   *   the process, then that node will have the same id in both trees.
+   *
+   * * A node not marked as having changes does not guarantee it was reused.
+   *
+   * * If a node is marked as having changed in the old tree, it will not be reused.
+   */
+  id;
+  /** The byte index where this node starts. */
+  startIndex;
+  /** The position where this node starts. */
+  startPosition;
+  /** The tree that this node belongs to. */
+  tree;
+  /** Get this node's type as a numerical id. */
+  get typeId() {
+    marshalNode(this);
+    return C._ts_node_symbol_wasm(this.tree[0]);
+  }
+  /**
+   * Get the node's type as a numerical id as it appears in the grammar,
+   * ignoring aliases.
+   */
+  get grammarId() {
+    marshalNode(this);
+    return C._ts_node_grammar_symbol_wasm(this.tree[0]);
+  }
+  /** Get this node's type as a string. */
+  get type() {
+    return this.tree.language.types[this.typeId] || "ERROR";
+  }
+  /**
+   * Get this node's symbol name as it appears in the grammar, ignoring
+   * aliases as a string.
+   */
+  get grammarType() {
+    return this.tree.language.types[this.grammarId] || "ERROR";
+  }
+  /**
+   * Check if this node is *named*.
+   *
+   * Named nodes correspond to named rules in the grammar, whereas
+   * *anonymous* nodes correspond to string literals in the grammar.
+   */
+  get isNamed() {
+    marshalNode(this);
+    return C._ts_node_is_named_wasm(this.tree[0]) === 1;
+  }
+  /**
+   * Check if this node is *extra*.
+   *
+   * Extra nodes represent things like comments, which are not required
+   * by the grammar, but can appear anywhere.
+   */
+  get isExtra() {
+    marshalNode(this);
+    return C._ts_node_is_extra_wasm(this.tree[0]) === 1;
+  }
+  /**
+   * Check if this node represents a syntax error.
+   *
+   * Syntax errors represent parts of the code that could not be incorporated
+   * into a valid syntax tree.
+   */
+  get isError() {
+    marshalNode(this);
+    return C._ts_node_is_error_wasm(this.tree[0]) === 1;
+  }
+  /**
+   * Check if this node is *missing*.
+   *
+   * Missing nodes are inserted by the parser in order to recover from
+   * certain kinds of syntax errors.
+   */
+  get isMissing() {
+    marshalNode(this);
+    return C._ts_node_is_missing_wasm(this.tree[0]) === 1;
+  }
+  /** Check if this node has been edited. */
+  get hasChanges() {
+    marshalNode(this);
+    return C._ts_node_has_changes_wasm(this.tree[0]) === 1;
+  }
+  /**
+   * Check if this node represents a syntax error or contains any syntax
+   * errors anywhere within it.
+   */
+  get hasError() {
+    marshalNode(this);
+    return C._ts_node_has_error_wasm(this.tree[0]) === 1;
+  }
+  /** Get the byte index where this node ends. */
+  get endIndex() {
+    marshalNode(this);
+    return C._ts_node_end_index_wasm(this.tree[0]);
+  }
+  /** Get the position where this node ends. */
+  get endPosition() {
+    marshalNode(this);
+    C._ts_node_end_point_wasm(this.tree[0]);
+    return unmarshalPoint(TRANSFER_BUFFER);
+  }
+  /** Get the string content of this node. */
+  get text() {
+    return getText(this.tree, this.startIndex, this.endIndex, this.startPosition);
+  }
+  /** Get this node's parse state. */
+  get parseState() {
+    marshalNode(this);
+    return C._ts_node_parse_state_wasm(this.tree[0]);
+  }
+  /** Get the parse state after this node. */
+  get nextParseState() {
+    marshalNode(this);
+    return C._ts_node_next_parse_state_wasm(this.tree[0]);
+  }
+  /** Check if this node is equal to another node. */
+  equals(other) {
+    return this.tree === other.tree && this.id === other.id;
+  }
+  /**
+   * Get the node's child at the given index, where zero represents the first child.
+   *
+   * This method is fairly fast, but its cost is technically log(n), so if
+   * you might be iterating over a long list of children, you should use
+   * {@link Node#children} instead.
+   */
+  child(index) {
+    marshalNode(this);
+    C._ts_node_child_wasm(this.tree[0], index);
+    return unmarshalNode(this.tree);
+  }
+  /**
+   * Get this node's *named* child at the given index.
+   *
+   * See also {@link Node#isNamed}.
+   * This method is fairly fast, but its cost is technically log(n), so if
+   * you might be iterating over a long list of children, you should use
+   * {@link Node#namedChildren} instead.
+   */
+  namedChild(index) {
+    marshalNode(this);
+    C._ts_node_named_child_wasm(this.tree[0], index);
+    return unmarshalNode(this.tree);
+  }
+  /**
+   * Get this node's child with the given numerical field id.
+   *
+   * See also {@link Node#childForFieldName}. You can
+   * convert a field name to an id using {@link Language#fieldIdForName}.
+   */
+  childForFieldId(fieldId) {
+    marshalNode(this);
+    C._ts_node_child_by_field_id_wasm(this.tree[0], fieldId);
+    return unmarshalNode(this.tree);
+  }
+  /**
+   * Get the first child with the given field name.
+   *
+   * If multiple children may have the same field name, access them using
+   * {@link Node#childrenForFieldName}.
+   */
+  childForFieldName(fieldName) {
+    const fieldId = this.tree.language.fields.indexOf(fieldName);
+    if (fieldId !== -1) return this.childForFieldId(fieldId);
+    return null;
+  }
+  /** Get the field name of this node's child at the given index. */
+  fieldNameForChild(index) {
+    marshalNode(this);
+    const address = C._ts_node_field_name_for_child_wasm(this.tree[0], index);
+    if (!address) return null;
+    return C.AsciiToString(address);
+  }
+  /** Get the field name of this node's named child at the given index. */
+  fieldNameForNamedChild(index) {
+    marshalNode(this);
+    const address = C._ts_node_field_name_for_named_child_wasm(this.tree[0], index);
+    if (!address) return null;
+    return C.AsciiToString(address);
+  }
+  /**
+   * Get an array of this node's children with a given field name.
+   *
+   * See also {@link Node#children}.
+   */
+  childrenForFieldName(fieldName) {
+    const fieldId = this.tree.language.fields.indexOf(fieldName);
+    if (fieldId !== -1 && fieldId !== 0) return this.childrenForFieldId(fieldId);
+    return [];
+  }
+  /**
+    * Get an array of this node's children with a given field id.
+    *
+    * See also {@link Node#childrenForFieldName}.
+    */
+  childrenForFieldId(fieldId) {
+    marshalNode(this);
+    C._ts_node_children_by_field_id_wasm(this.tree[0], fieldId);
+    const count = C.getValue(TRANSFER_BUFFER, "i32");
+    const buffer = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i2 = 0; i2 < count; i2++) {
+        result[i2] = unmarshalNode(this.tree, address);
+        address += SIZE_OF_NODE;
+      }
+      C._free(buffer);
+    }
+    return result;
+  }
+  /** Get the node's first child that contains or starts after the given byte offset. */
+  firstChildForIndex(index) {
+    marshalNode(this);
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    C.setValue(address, index, "i32");
+    C._ts_node_first_child_for_byte_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /** Get the node's first named child that contains or starts after the given byte offset. */
+  firstNamedChildForIndex(index) {
+    marshalNode(this);
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    C.setValue(address, index, "i32");
+    C._ts_node_first_named_child_for_byte_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /** Get this node's number of children. */
+  get childCount() {
+    marshalNode(this);
+    return C._ts_node_child_count_wasm(this.tree[0]);
+  }
+  /**
+   * Get this node's number of *named* children.
+   *
+   * See also {@link Node#isNamed}.
+   */
+  get namedChildCount() {
+    marshalNode(this);
+    return C._ts_node_named_child_count_wasm(this.tree[0]);
+  }
+  /** Get this node's first child. */
+  get firstChild() {
+    return this.child(0);
+  }
+  /**
+   * Get this node's first named child.
+   *
+   * See also {@link Node#isNamed}.
+   */
+  get firstNamedChild() {
+    return this.namedChild(0);
+  }
+  /** Get this node's last child. */
+  get lastChild() {
+    return this.child(this.childCount - 1);
+  }
+  /**
+   * Get this node's last named child.
+   *
+   * See also {@link Node#isNamed}.
+   */
+  get lastNamedChild() {
+    return this.namedChild(this.namedChildCount - 1);
+  }
+  /**
+   * Iterate over this node's children.
+   *
+   * If you're walking the tree recursively, you may want to use the
+   * {@link TreeCursor} APIs directly instead.
+   */
+  get children() {
+    if (!this._children) {
+      marshalNode(this);
+      C._ts_node_children_wasm(this.tree[0]);
+      const count = C.getValue(TRANSFER_BUFFER, "i32");
+      const buffer = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+      this._children = new Array(count);
+      if (count > 0) {
+        let address = buffer;
+        for (let i2 = 0; i2 < count; i2++) {
+          this._children[i2] = unmarshalNode(this.tree, address);
+          address += SIZE_OF_NODE;
+        }
+        C._free(buffer);
+      }
+    }
+    return this._children;
+  }
+  /**
+   * Iterate over this node's named children.
+   *
+   * See also {@link Node#children}.
+   */
+  get namedChildren() {
+    if (!this._namedChildren) {
+      marshalNode(this);
+      C._ts_node_named_children_wasm(this.tree[0]);
+      const count = C.getValue(TRANSFER_BUFFER, "i32");
+      const buffer = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+      this._namedChildren = new Array(count);
+      if (count > 0) {
+        let address = buffer;
+        for (let i2 = 0; i2 < count; i2++) {
+          this._namedChildren[i2] = unmarshalNode(this.tree, address);
+          address += SIZE_OF_NODE;
+        }
+        C._free(buffer);
+      }
+    }
+    return this._namedChildren;
+  }
+  /**
+   * Get the descendants of this node that are the given type, or in the given types array.
+   *
+   * The types array should contain node type strings, which can be retrieved from {@link Language#types}.
+   *
+   * Additionally, a `startPosition` and `endPosition` can be passed in to restrict the search to a byte range.
+   */
+  descendantsOfType(types2, startPosition = ZERO_POINT, endPosition = ZERO_POINT) {
+    if (!Array.isArray(types2)) types2 = [types2];
+    const symbols = [];
+    const typesBySymbol = this.tree.language.types;
+    for (const node_type of types2) {
+      if (node_type == "ERROR") {
+        symbols.push(65535);
+      }
+    }
+    for (let i2 = 0, n = typesBySymbol.length; i2 < n; i2++) {
+      if (types2.includes(typesBySymbol[i2])) {
+        symbols.push(i2);
+      }
+    }
+    const symbolsAddress = C._malloc(SIZE_OF_INT * symbols.length);
+    for (let i2 = 0, n = symbols.length; i2 < n; i2++) {
+      C.setValue(symbolsAddress + i2 * SIZE_OF_INT, symbols[i2], "i32");
+    }
+    marshalNode(this);
+    C._ts_node_descendants_of_type_wasm(
+      this.tree[0],
+      symbolsAddress,
+      symbols.length,
+      startPosition.row,
+      startPosition.column,
+      endPosition.row,
+      endPosition.column
+    );
+    const descendantCount = C.getValue(TRANSFER_BUFFER, "i32");
+    const descendantAddress = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const result = new Array(descendantCount);
+    if (descendantCount > 0) {
+      let address = descendantAddress;
+      for (let i2 = 0; i2 < descendantCount; i2++) {
+        result[i2] = unmarshalNode(this.tree, address);
+        address += SIZE_OF_NODE;
+      }
+    }
+    C._free(descendantAddress);
+    C._free(symbolsAddress);
+    return result;
+  }
+  /** Get this node's next sibling. */
+  get nextSibling() {
+    marshalNode(this);
+    C._ts_node_next_sibling_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /** Get this node's previous sibling. */
+  get previousSibling() {
+    marshalNode(this);
+    C._ts_node_prev_sibling_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /**
+   * Get this node's next *named* sibling.
+   *
+   * See also {@link Node#isNamed}.
+   */
+  get nextNamedSibling() {
+    marshalNode(this);
+    C._ts_node_next_named_sibling_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /**
+   * Get this node's previous *named* sibling.
+   *
+   * See also {@link Node#isNamed}.
+   */
+  get previousNamedSibling() {
+    marshalNode(this);
+    C._ts_node_prev_named_sibling_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /** Get the node's number of descendants, including one for the node itself. */
+  get descendantCount() {
+    marshalNode(this);
+    return C._ts_node_descendant_count_wasm(this.tree[0]);
+  }
+  /**
+   * Get this node's immediate parent.
+   * Prefer {@link Node#childWithDescendant} for iterating over this node's ancestors.
+   */
+  get parent() {
+    marshalNode(this);
+    C._ts_node_parent_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /**
+   * Get the node that contains `descendant`.
+   *
+   * Note that this can return `descendant` itself.
+   */
+  childWithDescendant(descendant) {
+    marshalNode(this);
+    marshalNode(descendant, 1);
+    C._ts_node_child_with_descendant_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /** Get the smallest node within this node that spans the given byte range. */
+  descendantForIndex(start2, end = start2) {
+    if (typeof start2 !== "number" || typeof end !== "number") {
+      throw new Error("Arguments must be numbers");
+    }
+    marshalNode(this);
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    C.setValue(address, start2, "i32");
+    C.setValue(address + SIZE_OF_INT, end, "i32");
+    C._ts_node_descendant_for_index_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /** Get the smallest named node within this node that spans the given byte range. */
+  namedDescendantForIndex(start2, end = start2) {
+    if (typeof start2 !== "number" || typeof end !== "number") {
+      throw new Error("Arguments must be numbers");
+    }
+    marshalNode(this);
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    C.setValue(address, start2, "i32");
+    C.setValue(address + SIZE_OF_INT, end, "i32");
+    C._ts_node_named_descendant_for_index_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /** Get the smallest node within this node that spans the given point range. */
+  descendantForPosition(start2, end = start2) {
+    if (!isPoint(start2) || !isPoint(end)) {
+      throw new Error("Arguments must be {row, column} objects");
+    }
+    marshalNode(this);
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    marshalPoint(address, start2);
+    marshalPoint(address + SIZE_OF_POINT, end);
+    C._ts_node_descendant_for_position_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /** Get the smallest named node within this node that spans the given point range. */
+  namedDescendantForPosition(start2, end = start2) {
+    if (!isPoint(start2) || !isPoint(end)) {
+      throw new Error("Arguments must be {row, column} objects");
+    }
+    marshalNode(this);
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    marshalPoint(address, start2);
+    marshalPoint(address + SIZE_OF_POINT, end);
+    C._ts_node_named_descendant_for_position_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+  /**
+   * Create a new {@link TreeCursor} starting from this node.
+   *
+   * Note that the given node is considered the root of the cursor,
+   * and the cursor cannot walk outside this node.
+   */
+  walk() {
+    marshalNode(this);
+    C._ts_tree_cursor_new_wasm(this.tree[0]);
+    return new TreeCursor(INTERNAL, this.tree);
+  }
+  /**
+   * Edit this node to keep it in-sync with source code that has been edited.
+   *
+   * This function is only rarely needed. When you edit a syntax tree with
+   * the {@link Tree#edit} method, all of the nodes that you retrieve from
+   * the tree afterward will already reflect the edit. You only need to
+   * use {@link Node#edit} when you have a specific {@link Node} instance that
+   * you want to keep and continue to use after an edit.
+   */
+  edit(edit) {
+    if (this.startIndex >= edit.oldEndIndex) {
+      this.startIndex = edit.newEndIndex + (this.startIndex - edit.oldEndIndex);
+      let subbedPointRow;
+      let subbedPointColumn;
+      if (this.startPosition.row > edit.oldEndPosition.row) {
+        subbedPointRow = this.startPosition.row - edit.oldEndPosition.row;
+        subbedPointColumn = this.startPosition.column;
+      } else {
+        subbedPointRow = 0;
+        subbedPointColumn = this.startPosition.column;
+        if (this.startPosition.column >= edit.oldEndPosition.column) {
+          subbedPointColumn = this.startPosition.column - edit.oldEndPosition.column;
+        }
+      }
+      if (subbedPointRow > 0) {
+        this.startPosition.row += subbedPointRow;
+        this.startPosition.column = subbedPointColumn;
+      } else {
+        this.startPosition.column += subbedPointColumn;
+      }
+    } else if (this.startIndex > edit.startIndex) {
+      this.startIndex = edit.newEndIndex;
+      this.startPosition.row = edit.newEndPosition.row;
+      this.startPosition.column = edit.newEndPosition.column;
+    }
+  }
+  /** Get the S-expression representation of this node. */
+  toString() {
+    marshalNode(this);
+    const address = C._ts_node_to_string_wasm(this.tree[0]);
+    const result = C.AsciiToString(address);
+    C._free(address);
+    return result;
+  }
+};
+function unmarshalCaptures(query, tree, address, patternIndex, result) {
+  for (let i2 = 0, n = result.length; i2 < n; i2++) {
+    const captureIndex = C.getValue(address, "i32");
+    address += SIZE_OF_INT;
+    const node2 = unmarshalNode(tree, address);
+    address += SIZE_OF_NODE;
+    result[i2] = { patternIndex, name: query.captureNames[captureIndex], node: node2 };
+  }
+  return address;
+}
+__name(unmarshalCaptures, "unmarshalCaptures");
+function marshalNode(node2, index = 0) {
+  let address = TRANSFER_BUFFER + index * SIZE_OF_NODE;
+  C.setValue(address, node2.id, "i32");
+  address += SIZE_OF_INT;
+  C.setValue(address, node2.startIndex, "i32");
+  address += SIZE_OF_INT;
+  C.setValue(address, node2.startPosition.row, "i32");
+  address += SIZE_OF_INT;
+  C.setValue(address, node2.startPosition.column, "i32");
+  address += SIZE_OF_INT;
+  C.setValue(address, node2[0], "i32");
+}
+__name(marshalNode, "marshalNode");
+function unmarshalNode(tree, address = TRANSFER_BUFFER) {
+  const id = C.getValue(address, "i32");
+  address += SIZE_OF_INT;
+  if (id === 0) return null;
+  const index = C.getValue(address, "i32");
+  address += SIZE_OF_INT;
+  const row = C.getValue(address, "i32");
+  address += SIZE_OF_INT;
+  const column = C.getValue(address, "i32");
+  address += SIZE_OF_INT;
+  const other = C.getValue(address, "i32");
+  const result = new Node2(INTERNAL, {
+    id,
+    tree,
+    startIndex: index,
+    startPosition: { row, column },
+    other
+  });
+  return result;
+}
+__name(unmarshalNode, "unmarshalNode");
+function marshalTreeCursor(cursor, address = TRANSFER_BUFFER) {
+  C.setValue(address + 0 * SIZE_OF_INT, cursor[0], "i32");
+  C.setValue(address + 1 * SIZE_OF_INT, cursor[1], "i32");
+  C.setValue(address + 2 * SIZE_OF_INT, cursor[2], "i32");
+  C.setValue(address + 3 * SIZE_OF_INT, cursor[3], "i32");
+}
+__name(marshalTreeCursor, "marshalTreeCursor");
+function unmarshalTreeCursor(cursor) {
+  cursor[0] = C.getValue(TRANSFER_BUFFER + 0 * SIZE_OF_INT, "i32");
+  cursor[1] = C.getValue(TRANSFER_BUFFER + 1 * SIZE_OF_INT, "i32");
+  cursor[2] = C.getValue(TRANSFER_BUFFER + 2 * SIZE_OF_INT, "i32");
+  cursor[3] = C.getValue(TRANSFER_BUFFER + 3 * SIZE_OF_INT, "i32");
+}
+__name(unmarshalTreeCursor, "unmarshalTreeCursor");
+function marshalPoint(address, point) {
+  C.setValue(address, point.row, "i32");
+  C.setValue(address + SIZE_OF_INT, point.column, "i32");
+}
+__name(marshalPoint, "marshalPoint");
+function unmarshalPoint(address) {
+  const result = {
+    row: C.getValue(address, "i32") >>> 0,
+    column: C.getValue(address + SIZE_OF_INT, "i32") >>> 0
+  };
+  return result;
+}
+__name(unmarshalPoint, "unmarshalPoint");
+function marshalRange(address, range) {
+  marshalPoint(address, range.startPosition);
+  address += SIZE_OF_POINT;
+  marshalPoint(address, range.endPosition);
+  address += SIZE_OF_POINT;
+  C.setValue(address, range.startIndex, "i32");
+  address += SIZE_OF_INT;
+  C.setValue(address, range.endIndex, "i32");
+  address += SIZE_OF_INT;
+}
+__name(marshalRange, "marshalRange");
+function unmarshalRange(address) {
+  const result = {};
+  result.startPosition = unmarshalPoint(address);
+  address += SIZE_OF_POINT;
+  result.endPosition = unmarshalPoint(address);
+  address += SIZE_OF_POINT;
+  result.startIndex = C.getValue(address, "i32") >>> 0;
+  address += SIZE_OF_INT;
+  result.endIndex = C.getValue(address, "i32") >>> 0;
+  return result;
+}
+__name(unmarshalRange, "unmarshalRange");
+function marshalEdit(edit, address = TRANSFER_BUFFER) {
+  marshalPoint(address, edit.startPosition);
+  address += SIZE_OF_POINT;
+  marshalPoint(address, edit.oldEndPosition);
+  address += SIZE_OF_POINT;
+  marshalPoint(address, edit.newEndPosition);
+  address += SIZE_OF_POINT;
+  C.setValue(address, edit.startIndex, "i32");
+  address += SIZE_OF_INT;
+  C.setValue(address, edit.oldEndIndex, "i32");
+  address += SIZE_OF_INT;
+  C.setValue(address, edit.newEndIndex, "i32");
+  address += SIZE_OF_INT;
+}
+__name(marshalEdit, "marshalEdit");
+function unmarshalLanguageMetadata(address) {
+  const major_version = C.getValue(address, "i32");
+  const minor_version = C.getValue(address += SIZE_OF_INT, "i32");
+  const patch_version = C.getValue(address += SIZE_OF_INT, "i32");
+  return { major_version, minor_version, patch_version };
+}
+__name(unmarshalLanguageMetadata, "unmarshalLanguageMetadata");
+var LANGUAGE_FUNCTION_REGEX = /^tree_sitter_\w+$/;
+var Language = class _Language {
+  static {
+    __name(this, "Language");
+  }
+  /** @internal */
+  [0] = 0;
+  // Internal handle for Wasm
+  /**
+   * A list of all node types in the language. The index of each type in this
+   * array is its node type id.
+   */
+  types;
+  /**
+   * A list of all field names in the language. The index of each field name in
+   * this array is its field id.
+   */
+  fields;
+  /** @internal */
+  constructor(internal, address) {
+    assertInternal(internal);
+    this[0] = address;
+    this.types = new Array(C._ts_language_symbol_count(this[0]));
+    for (let i2 = 0, n = this.types.length; i2 < n; i2++) {
+      if (C._ts_language_symbol_type(this[0], i2) < 2) {
+        this.types[i2] = C.UTF8ToString(C._ts_language_symbol_name(this[0], i2));
+      }
+    }
+    this.fields = new Array(C._ts_language_field_count(this[0]) + 1);
+    for (let i2 = 0, n = this.fields.length; i2 < n; i2++) {
+      const fieldName = C._ts_language_field_name_for_id(this[0], i2);
+      if (fieldName !== 0) {
+        this.fields[i2] = C.UTF8ToString(fieldName);
+      } else {
+        this.fields[i2] = null;
+      }
+    }
+  }
+  /**
+   * Gets the name of the language.
+   */
+  get name() {
+    const ptr = C._ts_language_name(this[0]);
+    if (ptr === 0) return null;
+    return C.UTF8ToString(ptr);
+  }
+  /**
+   * Gets the ABI version of the language.
+   */
+  get abiVersion() {
+    return C._ts_language_abi_version(this[0]);
+  }
+  /**
+  * Get the metadata for this language. This information is generated by the
+  * CLI, and relies on the language author providing the correct metadata in
+  * the language's `tree-sitter.json` file.
+  */
+  get metadata() {
+    C._ts_language_metadata_wasm(this[0]);
+    const length = C.getValue(TRANSFER_BUFFER, "i32");
+    if (length === 0) return null;
+    return unmarshalLanguageMetadata(TRANSFER_BUFFER + SIZE_OF_INT);
+  }
+  /**
+   * Gets the number of fields in the language.
+   */
+  get fieldCount() {
+    return this.fields.length - 1;
+  }
+  /**
+   * Gets the number of states in the language.
+   */
+  get stateCount() {
+    return C._ts_language_state_count(this[0]);
+  }
+  /**
+   * Get the field id for a field name.
+   */
+  fieldIdForName(fieldName) {
+    const result = this.fields.indexOf(fieldName);
+    return result !== -1 ? result : null;
+  }
+  /**
+   * Get the field name for a field id.
+   */
+  fieldNameForId(fieldId) {
+    return this.fields[fieldId] ?? null;
+  }
+  /**
+   * Get the node type id for a node type name.
+   */
+  idForNodeType(type, named) {
+    const typeLength = C.lengthBytesUTF8(type);
+    const typeAddress = C._malloc(typeLength + 1);
+    C.stringToUTF8(type, typeAddress, typeLength + 1);
+    const result = C._ts_language_symbol_for_name(this[0], typeAddress, typeLength, named ? 1 : 0);
+    C._free(typeAddress);
+    return result || null;
+  }
+  /**
+   * Gets the number of node types in the language.
+   */
+  get nodeTypeCount() {
+    return C._ts_language_symbol_count(this[0]);
+  }
+  /**
+   * Get the node type name for a node type id.
+   */
+  nodeTypeForId(typeId) {
+    const name2 = C._ts_language_symbol_name(this[0], typeId);
+    return name2 ? C.UTF8ToString(name2) : null;
+  }
+  /**
+   * Check if a node type is named.
+   *
+   * @see {@link https://tree-sitter.github.io/tree-sitter/using-parsers/2-basic-parsing.html#named-vs-anonymous-nodes}
+   */
+  nodeTypeIsNamed(typeId) {
+    return C._ts_language_type_is_named_wasm(this[0], typeId) ? true : false;
+  }
+  /**
+   * Check if a node type is visible.
+   */
+  nodeTypeIsVisible(typeId) {
+    return C._ts_language_type_is_visible_wasm(this[0], typeId) ? true : false;
+  }
+  /**
+   * Get the supertypes ids of this language.
+   *
+   * @see {@link https://tree-sitter.github.io/tree-sitter/using-parsers/6-static-node-types.html?highlight=supertype#supertype-nodes}
+   */
+  get supertypes() {
+    C._ts_language_supertypes_wasm(this[0]);
+    const count = C.getValue(TRANSFER_BUFFER, "i32");
+    const buffer = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i2 = 0; i2 < count; i2++) {
+        result[i2] = C.getValue(address, "i16");
+        address += SIZE_OF_SHORT;
+      }
+    }
+    return result;
+  }
+  /**
+   * Get the subtype ids for a given supertype node id.
+   */
+  subtypes(supertype) {
+    C._ts_language_subtypes_wasm(this[0], supertype);
+    const count = C.getValue(TRANSFER_BUFFER, "i32");
+    const buffer = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i2 = 0; i2 < count; i2++) {
+        result[i2] = C.getValue(address, "i16");
+        address += SIZE_OF_SHORT;
+      }
+    }
+    return result;
+  }
+  /**
+   * Get the next state id for a given state id and node type id.
+   */
+  nextState(stateId, typeId) {
+    return C._ts_language_next_state(this[0], stateId, typeId);
+  }
+  /**
+   * Create a new lookahead iterator for this language and parse state.
+   *
+   * This returns `null` if state is invalid for this language.
+   *
+   * Iterating {@link LookaheadIterator} will yield valid symbols in the given
+   * parse state. A newly created iterator is not positioned on a symbol, so
+   * {@link LookaheadIterator#currentType} returns `null` until the first
+   * iteration step.
+   *
+   * Lookahead iterators can be useful for generating suggestions and improving
+   * syntax error diagnostics. To get symbols valid in an `ERROR` node, use the
+   * lookahead iterator on its first leaf node state. For `MISSING` nodes, a
+   * lookahead iterator created on the previous non-extra leaf node may be
+   * appropriate.
+   */
+  lookaheadIterator(stateId) {
+    const address = C._ts_lookahead_iterator_new(this[0], stateId);
+    if (address) return new LookaheadIterator(INTERNAL, address, this);
+    return null;
+  }
+  /**
+   * Load a language from a WebAssembly module.
+   * The module can be provided as a path to a file, a `URL` to a file, or as a
+   * buffer.
+   */
+  static async load(input) {
+    let binary2;
+    if (input instanceof Uint8Array) {
+      binary2 = input;
+    } else if (globalThis.process?.versions.node) {
+      const fs22 = await import("fs/promises");
+      binary2 = await fs22.readFile(input);
+    } else {
+      const response = await fetch(input);
+      if (!response.ok) {
+        const body2 = await response.text();
+        throw new Error(`Language.load failed with status ${response.status}.
+
+${body2}`);
+      }
+      const retryResp = response.clone();
+      try {
+        binary2 = await WebAssembly.compileStreaming(response);
+      } catch (reason) {
+        console.error("wasm streaming compile failed:", reason);
+        console.error("falling back to ArrayBuffer instantiation");
+        binary2 = new Uint8Array(await retryResp.arrayBuffer());
+      }
+    }
+    const mod = await C.loadWebAssemblyModule(binary2, { loadAsync: true });
+    return _Language.loadFromWasmExports(mod, { sync: false });
+  }
+  static loadFromWasmExports(mod, { sync }) {
+    const symbolNames = Object.keys(mod);
+    const functionName = symbolNames.find((key) => LANGUAGE_FUNCTION_REGEX.test(key) && !key.includes("external_scanner_"));
+    if (!functionName) {
+      console.log(`Couldn't find language function in Wasm file. Symbols:
+${JSON.stringify(symbolNames, null, 2)}`);
+      throw new Error(`Language.${sync ? "loadSync" : "load"} failed: no language function found in Wasm file`);
+    }
+    const languageAddress = mod[functionName]();
+    return new _Language(INTERNAL, languageAddress);
+  }
+  /**
+   * Load a language synchronously from a pre-compiled WebAssembly module.
+   * Use this when the host environment provides a `WebAssembly.Module` directly.
+   */
+  static loadSync(wasmModule) {
+    const mod = C.loadWebAssemblyModule(wasmModule, { loadAsync: false });
+    return _Language.loadFromWasmExports(mod, { sync: true });
+  }
+};
+async function Module2(moduleArg = {}) {
+  var moduleRtn;
+  var Module = moduleArg;
+  var ENVIRONMENT_IS_WEB = typeof window == "object";
+  var ENVIRONMENT_IS_WORKER = typeof WorkerGlobalScope != "undefined";
+  var ENVIRONMENT_IS_NODE = typeof process == "object" && process.versions?.node && process.type != "renderer";
+  if (ENVIRONMENT_IS_NODE) {
+    const { createRequire: createRequire2 } = await import("module");
+    var require = createRequire2(import.meta.url);
+  }
+  Module.currentQueryProgressCallback = null;
+  Module.currentProgressCallback = null;
+  Module.currentLogCallback = null;
+  Module.currentParseCallback = null;
+  var arguments_ = [];
+  var thisProgram = "./this.program";
+  var quit_ = /* @__PURE__ */ __name((status, toThrow) => {
+    throw toThrow;
+  }, "quit_");
+  var _scriptName = import.meta.url;
+  var scriptDirectory = "";
+  function locateFile(path13) {
+    if (Module["locateFile"]) {
+      return Module["locateFile"](path13, scriptDirectory);
+    }
+    return scriptDirectory + path13;
+  }
+  __name(locateFile, "locateFile");
+  var readAsync, readBinary;
+  if (ENVIRONMENT_IS_NODE) {
+    var fs = require("fs");
+    if (_scriptName.startsWith("file:")) {
+      scriptDirectory = require("path").dirname(require("url").fileURLToPath(_scriptName)) + "/";
+    }
+    readBinary = /* @__PURE__ */ __name((filename) => {
+      filename = isFileURI(filename) ? new URL(filename) : filename;
+      var ret = fs.readFileSync(filename);
+      return ret;
+    }, "readBinary");
+    readAsync = /* @__PURE__ */ __name(async (filename, binary2 = true) => {
+      filename = isFileURI(filename) ? new URL(filename) : filename;
+      var ret = fs.readFileSync(filename, binary2 ? void 0 : "utf8");
+      return ret;
+    }, "readAsync");
+    if (process.argv.length > 1) {
+      thisProgram = process.argv[1].replace(/\\/g, "/");
+    }
+    arguments_ = process.argv.slice(2);
+    quit_ = /* @__PURE__ */ __name((status, toThrow) => {
+      process.exitCode = status;
+      throw toThrow;
+    }, "quit_");
+  } else if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
+    try {
+      scriptDirectory = new URL(".", _scriptName).href;
+    } catch {
+    }
+    {
+      if (ENVIRONMENT_IS_WORKER) {
+        readBinary = /* @__PURE__ */ __name((url) => {
+          var xhr = new XMLHttpRequest();
+          xhr.open("GET", url, false);
+          xhr.responseType = "arraybuffer";
+          xhr.send(null);
+          return new Uint8Array(
+            /** @type{!ArrayBuffer} */
+            xhr.response
+          );
+        }, "readBinary");
+      }
+      readAsync = /* @__PURE__ */ __name(async (url) => {
+        if (isFileURI(url)) {
+          return new Promise((resolve, reject) => {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.responseType = "arraybuffer";
+            xhr.onload = () => {
+              if (xhr.status == 200 || xhr.status == 0 && xhr.response) {
+                resolve(xhr.response);
+                return;
+              }
+              reject(xhr.status);
+            };
+            xhr.onerror = reject;
+            xhr.send(null);
+          });
+        }
+        var response = await fetch(url, {
+          credentials: "same-origin"
+        });
+        if (response.ok) {
+          return response.arrayBuffer();
+        }
+        throw new Error(response.status + " : " + response.url);
+      }, "readAsync");
+    }
+  } else {
+  }
+  var out = console.log.bind(console);
+  var err = console.error.bind(console);
+  var dynamicLibraries = [];
+  var wasmBinary;
+  var ABORT = false;
+  var EXITSTATUS;
+  var isFileURI = /* @__PURE__ */ __name((filename) => filename.startsWith("file://"), "isFileURI");
+  var readyPromiseResolve, readyPromiseReject;
+  var wasmMemory;
+  var HEAP8, HEAPU8, HEAP16, HEAPU16, HEAP32, HEAPU32, HEAPF32, HEAPF64;
+  var HEAP64, HEAPU64;
+  var HEAP_DATA_VIEW;
+  var runtimeInitialized = false;
+  function updateMemoryViews() {
+    var b = wasmMemory.buffer;
+    Module["HEAP8"] = HEAP8 = new Int8Array(b);
+    Module["HEAP16"] = HEAP16 = new Int16Array(b);
+    Module["HEAPU8"] = HEAPU8 = new Uint8Array(b);
+    Module["HEAPU16"] = HEAPU16 = new Uint16Array(b);
+    Module["HEAP32"] = HEAP32 = new Int32Array(b);
+    Module["HEAPU32"] = HEAPU32 = new Uint32Array(b);
+    Module["HEAPF32"] = HEAPF32 = new Float32Array(b);
+    Module["HEAPF64"] = HEAPF64 = new Float64Array(b);
+    Module["HEAP64"] = HEAP64 = new BigInt64Array(b);
+    Module["HEAPU64"] = HEAPU64 = new BigUint64Array(b);
+    Module["HEAP_DATA_VIEW"] = HEAP_DATA_VIEW = new DataView(b);
+    LE_HEAP_UPDATE();
+  }
+  __name(updateMemoryViews, "updateMemoryViews");
+  function initMemory() {
+    if (Module["wasmMemory"]) {
+      wasmMemory = Module["wasmMemory"];
+    } else {
+      var INITIAL_MEMORY = Module["INITIAL_MEMORY"] || 33554432;
+      wasmMemory = new WebAssembly.Memory({
+        "initial": INITIAL_MEMORY / 65536,
+        // In theory we should not need to emit the maximum if we want "unlimited"
+        // or 4GB of memory, but VMs error on that atm, see
+        // https://github.com/emscripten-core/emscripten/issues/14130
+        // And in the pthreads case we definitely need to emit a maximum. So
+        // always emit one.
+        "maximum": 32768
+      });
+    }
+    updateMemoryViews();
+  }
+  __name(initMemory, "initMemory");
+  var __RELOC_FUNCS__ = [];
+  function preRun() {
+    if (Module["preRun"]) {
+      if (typeof Module["preRun"] == "function") Module["preRun"] = [Module["preRun"]];
+      while (Module["preRun"].length) {
+        addOnPreRun(Module["preRun"].shift());
+      }
+    }
+    callRuntimeCallbacks(onPreRuns);
+  }
+  __name(preRun, "preRun");
+  function initRuntime() {
+    runtimeInitialized = true;
+    callRuntimeCallbacks(__RELOC_FUNCS__);
+    wasmExports["__wasm_call_ctors"]();
+    callRuntimeCallbacks(onPostCtors);
+  }
+  __name(initRuntime, "initRuntime");
+  function preMain() {
+  }
+  __name(preMain, "preMain");
+  function postRun() {
+    if (Module["postRun"]) {
+      if (typeof Module["postRun"] == "function") Module["postRun"] = [Module["postRun"]];
+      while (Module["postRun"].length) {
+        addOnPostRun(Module["postRun"].shift());
+      }
+    }
+    callRuntimeCallbacks(onPostRuns);
+  }
+  __name(postRun, "postRun");
+  function abort(what) {
+    Module["onAbort"]?.(what);
+    what = "Aborted(" + what + ")";
+    err(what);
+    ABORT = true;
+    what += ". Build with -sASSERTIONS for more info.";
+    var e = new WebAssembly.RuntimeError(what);
+    readyPromiseReject?.(e);
+    throw e;
+  }
+  __name(abort, "abort");
+  var wasmBinaryFile;
+  function findWasmBinary() {
+    if (Module["locateFile"]) {
+      return locateFile("web-tree-sitter.wasm");
+    }
+    return new URL("web-tree-sitter.wasm", import.meta.url).href;
+  }
+  __name(findWasmBinary, "findWasmBinary");
+  function getBinarySync(file) {
+    if (file == wasmBinaryFile && wasmBinary) {
+      return new Uint8Array(wasmBinary);
+    }
+    if (readBinary) {
+      return readBinary(file);
+    }
+    throw "both async and sync fetching of the wasm failed";
+  }
+  __name(getBinarySync, "getBinarySync");
+  async function getWasmBinary(binaryFile) {
+    if (!wasmBinary) {
+      try {
+        var response = await readAsync(binaryFile);
+        return new Uint8Array(response);
+      } catch {
+      }
+    }
+    return getBinarySync(binaryFile);
+  }
+  __name(getWasmBinary, "getWasmBinary");
+  async function instantiateArrayBuffer(binaryFile, imports) {
+    try {
+      var binary2 = await getWasmBinary(binaryFile);
+      var instance2 = await WebAssembly.instantiate(binary2, imports);
+      return instance2;
+    } catch (reason) {
+      err(`failed to asynchronously prepare wasm: ${reason}`);
+      abort(reason);
+    }
+  }
+  __name(instantiateArrayBuffer, "instantiateArrayBuffer");
+  async function instantiateAsync(binary2, binaryFile, imports) {
+    if (!binary2 && !isFileURI(binaryFile) && !ENVIRONMENT_IS_NODE) {
+      try {
+        var response = fetch(binaryFile, {
+          credentials: "same-origin"
+        });
+        var instantiationResult = await WebAssembly.instantiateStreaming(response, imports);
+        return instantiationResult;
+      } catch (reason) {
+        err(`wasm streaming compile failed: ${reason}`);
+        err("falling back to ArrayBuffer instantiation");
+      }
+    }
+    return instantiateArrayBuffer(binaryFile, imports);
+  }
+  __name(instantiateAsync, "instantiateAsync");
+  function getWasmImports() {
+    return {
+      "env": wasmImports,
+      "wasi_snapshot_preview1": wasmImports,
+      "GOT.mem": new Proxy(wasmImports, GOTHandler),
+      "GOT.func": new Proxy(wasmImports, GOTHandler)
+    };
+  }
+  __name(getWasmImports, "getWasmImports");
+  async function createWasm() {
+    function receiveInstance(instance2, module2) {
+      wasmExports = instance2.exports;
+      wasmExports = relocateExports(wasmExports, 1024);
+      var metadata2 = getDylinkMetadata(module2);
+      if (metadata2.neededDynlibs) {
+        dynamicLibraries = metadata2.neededDynlibs.concat(dynamicLibraries);
+      }
+      mergeLibSymbols(wasmExports, "main");
+      LDSO.init();
+      loadDylibs();
+      __RELOC_FUNCS__.push(wasmExports["__wasm_apply_data_relocs"]);
+      assignWasmExports(wasmExports);
+      return wasmExports;
+    }
+    __name(receiveInstance, "receiveInstance");
+    function receiveInstantiationResult(result2) {
+      return receiveInstance(result2["instance"], result2["module"]);
+    }
+    __name(receiveInstantiationResult, "receiveInstantiationResult");
+    var info2 = getWasmImports();
+    if (Module["instantiateWasm"]) {
+      return new Promise((resolve, reject) => {
+        Module["instantiateWasm"](info2, (mod, inst) => {
+          resolve(receiveInstance(mod, inst));
+        });
+      });
+    }
+    wasmBinaryFile ??= findWasmBinary();
+    var result = await instantiateAsync(wasmBinary, wasmBinaryFile, info2);
+    var exports = receiveInstantiationResult(result);
+    return exports;
+  }
+  __name(createWasm, "createWasm");
+  class ExitStatus {
+    static {
+      __name(this, "ExitStatus");
+    }
+    name = "ExitStatus";
+    constructor(status) {
+      this.message = `Program terminated with exit(${status})`;
+      this.status = status;
+    }
+  }
+  var GOT = {};
+  var currentModuleWeakSymbols = /* @__PURE__ */ new Set([]);
+  var GOTHandler = {
+    get(obj, symName) {
+      var rtn = GOT[symName];
+      if (!rtn) {
+        rtn = GOT[symName] = new WebAssembly.Global({
+          "value": "i32",
+          "mutable": true
+        });
+      }
+      if (!currentModuleWeakSymbols.has(symName)) {
+        rtn.required = true;
+      }
+      return rtn;
+    }
+  };
+  var LE_ATOMICS_NATIVE_BYTE_ORDER = [];
+  var LE_HEAP_LOAD_F32 = /* @__PURE__ */ __name((byteOffset) => HEAP_DATA_VIEW.getFloat32(byteOffset, true), "LE_HEAP_LOAD_F32");
+  var LE_HEAP_LOAD_F64 = /* @__PURE__ */ __name((byteOffset) => HEAP_DATA_VIEW.getFloat64(byteOffset, true), "LE_HEAP_LOAD_F64");
+  var LE_HEAP_LOAD_I16 = /* @__PURE__ */ __name((byteOffset) => HEAP_DATA_VIEW.getInt16(byteOffset, true), "LE_HEAP_LOAD_I16");
+  var LE_HEAP_LOAD_I32 = /* @__PURE__ */ __name((byteOffset) => HEAP_DATA_VIEW.getInt32(byteOffset, true), "LE_HEAP_LOAD_I32");
+  var LE_HEAP_LOAD_I64 = /* @__PURE__ */ __name((byteOffset) => HEAP_DATA_VIEW.getBigInt64(byteOffset, true), "LE_HEAP_LOAD_I64");
+  var LE_HEAP_LOAD_U32 = /* @__PURE__ */ __name((byteOffset) => HEAP_DATA_VIEW.getUint32(byteOffset, true), "LE_HEAP_LOAD_U32");
+  var LE_HEAP_STORE_F32 = /* @__PURE__ */ __name((byteOffset, value) => HEAP_DATA_VIEW.setFloat32(byteOffset, value, true), "LE_HEAP_STORE_F32");
+  var LE_HEAP_STORE_F64 = /* @__PURE__ */ __name((byteOffset, value) => HEAP_DATA_VIEW.setFloat64(byteOffset, value, true), "LE_HEAP_STORE_F64");
+  var LE_HEAP_STORE_I16 = /* @__PURE__ */ __name((byteOffset, value) => HEAP_DATA_VIEW.setInt16(byteOffset, value, true), "LE_HEAP_STORE_I16");
+  var LE_HEAP_STORE_I32 = /* @__PURE__ */ __name((byteOffset, value) => HEAP_DATA_VIEW.setInt32(byteOffset, value, true), "LE_HEAP_STORE_I32");
+  var LE_HEAP_STORE_I64 = /* @__PURE__ */ __name((byteOffset, value) => HEAP_DATA_VIEW.setBigInt64(byteOffset, value, true), "LE_HEAP_STORE_I64");
+  var LE_HEAP_STORE_U32 = /* @__PURE__ */ __name((byteOffset, value) => HEAP_DATA_VIEW.setUint32(byteOffset, value, true), "LE_HEAP_STORE_U32");
+  var callRuntimeCallbacks = /* @__PURE__ */ __name((callbacks) => {
+    while (callbacks.length > 0) {
+      callbacks.shift()(Module);
+    }
+  }, "callRuntimeCallbacks");
+  var onPostRuns = [];
+  var addOnPostRun = /* @__PURE__ */ __name((cb) => onPostRuns.push(cb), "addOnPostRun");
+  var onPreRuns = [];
+  var addOnPreRun = /* @__PURE__ */ __name((cb) => onPreRuns.push(cb), "addOnPreRun");
+  var UTF8Decoder = typeof TextDecoder != "undefined" ? new TextDecoder() : void 0;
+  var findStringEnd = /* @__PURE__ */ __name((heapOrArray, idx, maxBytesToRead, ignoreNul) => {
+    var maxIdx = idx + maxBytesToRead;
+    if (ignoreNul) return maxIdx;
+    while (heapOrArray[idx] && !(idx >= maxIdx)) ++idx;
+    return idx;
+  }, "findStringEnd");
+  var UTF8ArrayToString = /* @__PURE__ */ __name((heapOrArray, idx = 0, maxBytesToRead, ignoreNul) => {
+    var endPtr = findStringEnd(heapOrArray, idx, maxBytesToRead, ignoreNul);
+    if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
+      return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
+    }
+    var str = "";
+    while (idx < endPtr) {
+      var u0 = heapOrArray[idx++];
+      if (!(u0 & 128)) {
+        str += String.fromCharCode(u0);
+        continue;
+      }
+      var u1 = heapOrArray[idx++] & 63;
+      if ((u0 & 224) == 192) {
+        str += String.fromCharCode((u0 & 31) << 6 | u1);
+        continue;
+      }
+      var u2 = heapOrArray[idx++] & 63;
+      if ((u0 & 240) == 224) {
+        u0 = (u0 & 15) << 12 | u1 << 6 | u2;
+      } else {
+        u0 = (u0 & 7) << 18 | u1 << 12 | u2 << 6 | heapOrArray[idx++] & 63;
+      }
+      if (u0 < 65536) {
+        str += String.fromCharCode(u0);
+      } else {
+        var ch = u0 - 65536;
+        str += String.fromCharCode(55296 | ch >> 10, 56320 | ch & 1023);
+      }
+    }
+    return str;
+  }, "UTF8ArrayToString");
+  var getDylinkMetadata = /* @__PURE__ */ __name((binary2) => {
+    var offset = 0;
+    var end = 0;
+    function getU8() {
+      return binary2[offset++];
+    }
+    __name(getU8, "getU8");
+    function getLEB() {
+      var ret = 0;
+      var mul = 1;
+      while (1) {
+        var byte = binary2[offset++];
+        ret += (byte & 127) * mul;
+        mul *= 128;
+        if (!(byte & 128)) break;
+      }
+      return ret;
+    }
+    __name(getLEB, "getLEB");
+    function getString() {
+      var len = getLEB();
+      offset += len;
+      return UTF8ArrayToString(binary2, offset - len, len);
+    }
+    __name(getString, "getString");
+    function getStringList() {
+      var count2 = getLEB();
+      var rtn = [];
+      while (count2--) rtn.push(getString());
+      return rtn;
+    }
+    __name(getStringList, "getStringList");
+    function failIf(condition, message) {
+      if (condition) throw new Error(message);
+    }
+    __name(failIf, "failIf");
+    if (binary2 instanceof WebAssembly.Module) {
+      var dylinkSection = WebAssembly.Module.customSections(binary2, "dylink.0");
+      failIf(dylinkSection.length === 0, "need dylink section");
+      binary2 = new Uint8Array(dylinkSection[0]);
+      end = binary2.length;
+    } else {
+      var int32View = new Uint32Array(new Uint8Array(binary2.subarray(0, 24)).buffer);
+      var magicNumberFound = int32View[0] == 1836278016 || int32View[0] == 6386541;
+      failIf(!magicNumberFound, "need to see wasm magic number");
+      failIf(binary2[8] !== 0, "need the dylink section to be first");
+      offset = 9;
+      var section_size = getLEB();
+      end = offset + section_size;
+      var name2 = getString();
+      failIf(name2 !== "dylink.0");
+    }
+    var customSection = {
+      neededDynlibs: [],
+      tlsExports: /* @__PURE__ */ new Set(),
+      weakImports: /* @__PURE__ */ new Set(),
+      runtimePaths: []
+    };
+    var WASM_DYLINK_MEM_INFO = 1;
+    var WASM_DYLINK_NEEDED = 2;
+    var WASM_DYLINK_EXPORT_INFO = 3;
+    var WASM_DYLINK_IMPORT_INFO = 4;
+    var WASM_DYLINK_RUNTIME_PATH = 5;
+    var WASM_SYMBOL_TLS = 256;
+    var WASM_SYMBOL_BINDING_MASK = 3;
+    var WASM_SYMBOL_BINDING_WEAK = 1;
+    while (offset < end) {
+      var subsectionType = getU8();
+      var subsectionSize = getLEB();
+      if (subsectionType === WASM_DYLINK_MEM_INFO) {
+        customSection.memorySize = getLEB();
+        customSection.memoryAlign = getLEB();
+        customSection.tableSize = getLEB();
+        customSection.tableAlign = getLEB();
+      } else if (subsectionType === WASM_DYLINK_NEEDED) {
+        customSection.neededDynlibs = getStringList();
+      } else if (subsectionType === WASM_DYLINK_EXPORT_INFO) {
+        var count = getLEB();
+        while (count--) {
+          var symname = getString();
+          var flags2 = getLEB();
+          if (flags2 & WASM_SYMBOL_TLS) {
+            customSection.tlsExports.add(symname);
+          }
+        }
+      } else if (subsectionType === WASM_DYLINK_IMPORT_INFO) {
+        var count = getLEB();
+        while (count--) {
+          var modname = getString();
+          var symname = getString();
+          var flags2 = getLEB();
+          if ((flags2 & WASM_SYMBOL_BINDING_MASK) == WASM_SYMBOL_BINDING_WEAK) {
+            customSection.weakImports.add(symname);
+          }
+        }
+      } else if (subsectionType === WASM_DYLINK_RUNTIME_PATH) {
+        customSection.runtimePaths = getStringList();
+      } else {
+        offset += subsectionSize;
+      }
+    }
+    return customSection;
+  }, "getDylinkMetadata");
+  function getValue(ptr, type = "i8") {
+    if (type.endsWith("*")) type = "*";
+    switch (type) {
+      case "i1":
+        return HEAP8[ptr];
+      case "i8":
+        return HEAP8[ptr];
+      case "i16":
+        return LE_HEAP_LOAD_I16((ptr >> 1) * 2);
+      case "i32":
+        return LE_HEAP_LOAD_I32((ptr >> 2) * 4);
+      case "i64":
+        return LE_HEAP_LOAD_I64((ptr >> 3) * 8);
+      case "float":
+        return LE_HEAP_LOAD_F32((ptr >> 2) * 4);
+      case "double":
+        return LE_HEAP_LOAD_F64((ptr >> 3) * 8);
+      case "*":
+        return LE_HEAP_LOAD_U32((ptr >> 2) * 4);
+      default:
+        abort(`invalid type for getValue: ${type}`);
+    }
+  }
+  __name(getValue, "getValue");
+  var newDSO = /* @__PURE__ */ __name((name2, handle2, syms) => {
+    var dso = {
+      refcount: Infinity,
+      name: name2,
+      exports: syms,
+      global: true
+    };
+    LDSO.loadedLibsByName[name2] = dso;
+    if (handle2 != void 0) {
+      LDSO.loadedLibsByHandle[handle2] = dso;
+    }
+    return dso;
+  }, "newDSO");
+  var LDSO = {
+    loadedLibsByName: {},
+    loadedLibsByHandle: {},
+    init() {
+      newDSO("__main__", 0, wasmImports);
+    }
+  };
+  var ___heap_base = 82240;
+  var alignMemory = /* @__PURE__ */ __name((size, alignment) => Math.ceil(size / alignment) * alignment, "alignMemory");
+  var getMemory = /* @__PURE__ */ __name((size) => {
+    if (runtimeInitialized) {
+      return _calloc(size, 1);
+    }
+    var ret = ___heap_base;
+    var end = ret + alignMemory(size, 16);
+    ___heap_base = end;
+    GOT["__heap_base"].value = end;
+    return ret;
+  }, "getMemory");
+  var isInternalSym = /* @__PURE__ */ __name((symName) => ["__cpp_exception", "__c_longjmp", "__wasm_apply_data_relocs", "__dso_handle", "__tls_size", "__tls_align", "__set_stack_limits", "_emscripten_tls_init", "__wasm_init_tls", "__wasm_call_ctors", "__start_em_asm", "__stop_em_asm", "__start_em_js", "__stop_em_js"].includes(symName) || symName.startsWith("__em_js__"), "isInternalSym");
+  var uleb128EncodeWithLen = /* @__PURE__ */ __name((arr) => {
+    const n = arr.length;
+    return [n % 128 | 128, n >> 7, ...arr];
+  }, "uleb128EncodeWithLen");
+  var wasmTypeCodes = {
+    "i": 127,
+    // i32
+    "p": 127,
+    // i32
+    "j": 126,
+    // i64
+    "f": 125,
+    // f32
+    "d": 124,
+    // f64
+    "e": 111
+  };
+  var generateTypePack = /* @__PURE__ */ __name((types2) => uleb128EncodeWithLen(Array.from(types2, (type) => {
+    var code2 = wasmTypeCodes[type];
+    return code2;
+  })), "generateTypePack");
+  var convertJsFunctionToWasm = /* @__PURE__ */ __name((func2, sig) => {
+    var bytes = Uint8Array.of(
+      0,
+      97,
+      115,
+      109,
+      // magic ("\0asm")
+      1,
+      0,
+      0,
+      0,
+      // version: 1
+      1,
+      ...uleb128EncodeWithLen([
+        1,
+        // count: 1
+        96,
+        // param types
+        ...generateTypePack(sig.slice(1)),
+        // return types (for now only supporting [] if `void` and single [T] otherwise)
+        ...generateTypePack(sig[0] === "v" ? "" : sig[0])
+      ]),
+      // The rest of the module is static
+      2,
+      7,
+      // import section
+      // (import "e" "f" (func 0 (type 0)))
+      1,
+      1,
+      101,
+      1,
+      102,
+      0,
+      0,
+      7,
+      5,
+      // export section
+      // (export "f" (func 0 (type 0)))
+      1,
+      1,
+      102,
+      0,
+      0
+    );
+    var module2 = new WebAssembly.Module(bytes);
+    var instance2 = new WebAssembly.Instance(module2, {
+      "e": {
+        "f": func2
+      }
+    });
+    var wrappedFunc = instance2.exports["f"];
+    return wrappedFunc;
+  }, "convertJsFunctionToWasm");
+  var wasmTableMirror = [];
+  var wasmTable = new WebAssembly.Table({
+    "initial": 31,
+    "element": "anyfunc"
+  });
+  var getWasmTableEntry = /* @__PURE__ */ __name((funcPtr) => {
+    var func2 = wasmTableMirror[funcPtr];
+    if (!func2) {
+      wasmTableMirror[funcPtr] = func2 = wasmTable.get(funcPtr);
+    }
+    return func2;
+  }, "getWasmTableEntry");
+  var updateTableMap = /* @__PURE__ */ __name((offset, count) => {
+    if (functionsInTableMap) {
+      for (var i2 = offset; i2 < offset + count; i2++) {
+        var item = getWasmTableEntry(i2);
+        if (item) {
+          functionsInTableMap.set(item, i2);
+        }
+      }
+    }
+  }, "updateTableMap");
+  var functionsInTableMap;
+  var getFunctionAddress = /* @__PURE__ */ __name((func2) => {
+    if (!functionsInTableMap) {
+      functionsInTableMap = /* @__PURE__ */ new WeakMap();
+      updateTableMap(0, wasmTable.length);
+    }
+    return functionsInTableMap.get(func2) || 0;
+  }, "getFunctionAddress");
+  var freeTableIndexes = [];
+  var getEmptyTableSlot = /* @__PURE__ */ __name(() => {
+    if (freeTableIndexes.length) {
+      return freeTableIndexes.pop();
+    }
+    return wasmTable["grow"](1);
+  }, "getEmptyTableSlot");
+  var setWasmTableEntry = /* @__PURE__ */ __name((idx, func2) => {
+    wasmTable.set(idx, func2);
+    wasmTableMirror[idx] = wasmTable.get(idx);
+  }, "setWasmTableEntry");
+  var addFunction = /* @__PURE__ */ __name((func2, sig) => {
+    var rtn = getFunctionAddress(func2);
+    if (rtn) {
+      return rtn;
+    }
+    var ret = getEmptyTableSlot();
+    try {
+      setWasmTableEntry(ret, func2);
+    } catch (err2) {
+      if (!(err2 instanceof TypeError)) {
+        throw err2;
+      }
+      var wrapped = convertJsFunctionToWasm(func2, sig);
+      setWasmTableEntry(ret, wrapped);
+    }
+    functionsInTableMap.set(func2, ret);
+    return ret;
+  }, "addFunction");
+  var updateGOT = /* @__PURE__ */ __name((exports, replace) => {
+    for (var symName in exports) {
+      if (isInternalSym(symName)) {
+        continue;
+      }
+      var value = exports[symName];
+      GOT[symName] ||= new WebAssembly.Global({
+        "value": "i32",
+        "mutable": true
+      });
+      if (replace || GOT[symName].value == 0) {
+        if (typeof value == "function") {
+          GOT[symName].value = addFunction(value);
+        } else if (typeof value == "number") {
+          GOT[symName].value = value;
+        } else {
+          err(`unhandled export type for '${symName}': ${typeof value}`);
+        }
+      }
+    }
+  }, "updateGOT");
+  var relocateExports = /* @__PURE__ */ __name((exports, memoryBase2, replace) => {
+    var relocated = {};
+    for (var e in exports) {
+      var value = exports[e];
+      if (typeof value == "object") {
+        value = value.value;
+      }
+      if (typeof value == "number") {
+        value += memoryBase2;
+      }
+      relocated[e] = value;
+    }
+    updateGOT(relocated, replace);
+    return relocated;
+  }, "relocateExports");
+  var isSymbolDefined = /* @__PURE__ */ __name((symName) => {
+    var existing = wasmImports[symName];
+    if (!existing || existing.stub) {
+      return false;
+    }
+    return true;
+  }, "isSymbolDefined");
+  var dynCall = /* @__PURE__ */ __name((sig, ptr, args2 = [], promising = false) => {
+    var func2 = getWasmTableEntry(ptr);
+    var rtn = func2(...args2);
+    function convert(rtn2) {
+      return rtn2;
+    }
+    __name(convert, "convert");
+    return convert(rtn);
+  }, "dynCall");
+  var stackSave = /* @__PURE__ */ __name(() => _emscripten_stack_get_current(), "stackSave");
+  var stackRestore = /* @__PURE__ */ __name((val) => __emscripten_stack_restore(val), "stackRestore");
+  var createInvokeFunction = /* @__PURE__ */ __name((sig) => (ptr, ...args2) => {
+    var sp = stackSave();
+    try {
+      return dynCall(sig, ptr, args2);
+    } catch (e) {
+      stackRestore(sp);
+      if (e !== e + 0) throw e;
+      _setThrew(1, 0);
+      if (sig[0] == "j") return 0n;
+    }
+  }, "createInvokeFunction");
+  var resolveGlobalSymbol = /* @__PURE__ */ __name((symName, direct = false) => {
+    var sym;
+    if (isSymbolDefined(symName)) {
+      sym = wasmImports[symName];
+    } else if (symName.startsWith("invoke_")) {
+      sym = wasmImports[symName] = createInvokeFunction(symName.split("_")[1]);
+    }
+    return {
+      sym,
+      name: symName
+    };
+  }, "resolveGlobalSymbol");
+  var onPostCtors = [];
+  var addOnPostCtor = /* @__PURE__ */ __name((cb) => onPostCtors.push(cb), "addOnPostCtor");
+  var UTF8ToString = /* @__PURE__ */ __name((ptr, maxBytesToRead, ignoreNul) => ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead, ignoreNul) : "", "UTF8ToString");
+  var loadWebAssemblyModule = /* @__PURE__ */ __name((binary, flags, libName, localScope, handle) => {
+    var metadata = getDylinkMetadata(binary);
+    function loadModule() {
+      var memAlign = Math.pow(2, metadata.memoryAlign);
+      var memoryBase = metadata.memorySize ? alignMemory(getMemory(metadata.memorySize + memAlign), memAlign) : 0;
+      var tableBase = metadata.tableSize ? wasmTable.length : 0;
+      if (handle) {
+        HEAP8[handle + 8] = 1;
+        LE_HEAP_STORE_U32((handle + 12 >> 2) * 4, memoryBase);
+        LE_HEAP_STORE_I32((handle + 16 >> 2) * 4, metadata.memorySize);
+        LE_HEAP_STORE_U32((handle + 20 >> 2) * 4, tableBase);
+        LE_HEAP_STORE_I32((handle + 24 >> 2) * 4, metadata.tableSize);
+      }
+      if (metadata.tableSize) {
+        wasmTable.grow(metadata.tableSize);
+      }
+      var moduleExports;
+      function resolveSymbol(sym) {
+        var resolved = resolveGlobalSymbol(sym).sym;
+        if (!resolved && localScope) {
+          resolved = localScope[sym];
+        }
+        if (!resolved) {
+          resolved = moduleExports[sym];
+        }
+        return resolved;
+      }
+      __name(resolveSymbol, "resolveSymbol");
+      var proxyHandler = {
+        get(stubs, prop) {
+          switch (prop) {
+            case "__memory_base":
+              return memoryBase;
+            case "__table_base":
+              return tableBase;
+          }
+          if (prop in wasmImports && !wasmImports[prop].stub) {
+            var res = wasmImports[prop];
+            return res;
+          }
+          if (!(prop in stubs)) {
+            var resolved;
+            stubs[prop] = (...args2) => {
+              resolved ||= resolveSymbol(prop);
+              return resolved(...args2);
+            };
+          }
+          return stubs[prop];
+        }
+      };
+      var proxy = new Proxy({}, proxyHandler);
+      currentModuleWeakSymbols = metadata.weakImports;
+      var info = {
+        "GOT.mem": new Proxy({}, GOTHandler),
+        "GOT.func": new Proxy({}, GOTHandler),
+        "env": proxy,
+        "wasi_snapshot_preview1": proxy
+      };
+      function postInstantiation(module, instance) {
+        updateTableMap(tableBase, metadata.tableSize);
+        moduleExports = relocateExports(instance.exports, memoryBase);
+        if (!flags.allowUndefined) {
+          reportUndefinedSymbols();
+        }
+        function addEmAsm(addr, body) {
+          var args = [];
+          var arity = 0;
+          for (; arity < 16; arity++) {
+            if (body.indexOf("$" + arity) != -1) {
+              args.push("$" + arity);
+            } else {
+              break;
+            }
+          }
+          args = args.join(",");
+          var func = `(${args}) => { ${body} };`;
+          ASM_CONSTS[start] = eval(func);
+        }
+        __name(addEmAsm, "addEmAsm");
+        if ("__start_em_asm" in moduleExports) {
+          var start = moduleExports["__start_em_asm"];
+          var stop = moduleExports["__stop_em_asm"];
+          while (start < stop) {
+            var jsString = UTF8ToString(start);
+            addEmAsm(start, jsString);
+            start = HEAPU8.indexOf(0, start) + 1;
+          }
+        }
+        function addEmJs(name, cSig, body) {
+          var jsArgs = [];
+          cSig = cSig.slice(1, -1);
+          if (cSig != "void") {
+            cSig = cSig.split(",");
+            for (var i in cSig) {
+              var jsArg = cSig[i].split(" ").pop();
+              jsArgs.push(jsArg.replace("*", ""));
+            }
+          }
+          var func = `(${jsArgs}) => ${body};`;
+          moduleExports[name] = eval(func);
+        }
+        __name(addEmJs, "addEmJs");
+        for (var name in moduleExports) {
+          if (name.startsWith("__em_js__")) {
+            var start = moduleExports[name];
+            var jsString = UTF8ToString(start);
+            var parts = jsString.split("<::>");
+            addEmJs(name.replace("__em_js__", ""), parts[0], parts[1]);
+            delete moduleExports[name];
+          }
+        }
+        var applyRelocs = moduleExports["__wasm_apply_data_relocs"];
+        if (applyRelocs) {
+          if (runtimeInitialized) {
+            applyRelocs();
+          } else {
+            __RELOC_FUNCS__.push(applyRelocs);
+          }
+        }
+        var init = moduleExports["__wasm_call_ctors"];
+        if (init) {
+          if (runtimeInitialized) {
+            init();
+          } else {
+            addOnPostCtor(init);
+          }
+        }
+        return moduleExports;
+      }
+      __name(postInstantiation, "postInstantiation");
+      if (flags.loadAsync) {
+        return (async () => {
+          var instance2;
+          if (binary instanceof WebAssembly.Module) {
+            instance2 = new WebAssembly.Instance(binary, info);
+          } else {
+            ({ module: binary, instance: instance2 } = await WebAssembly.instantiate(binary, info));
+          }
+          return postInstantiation(binary, instance2);
+        })();
+      }
+      var module = binary instanceof WebAssembly.Module ? binary : new WebAssembly.Module(binary);
+      var instance = new WebAssembly.Instance(module, info);
+      return postInstantiation(module, instance);
+    }
+    __name(loadModule, "loadModule");
+    flags = {
+      ...flags,
+      rpath: {
+        parentLibPath: libName,
+        paths: metadata.runtimePaths
+      }
+    };
+    if (flags.loadAsync) {
+      return metadata.neededDynlibs.reduce((chain, dynNeeded) => chain.then(() => loadDynamicLibrary(dynNeeded, flags, localScope)), Promise.resolve()).then(loadModule);
+    }
+    metadata.neededDynlibs.forEach((needed) => loadDynamicLibrary(needed, flags, localScope));
+    return loadModule();
+  }, "loadWebAssemblyModule");
+  var mergeLibSymbols = /* @__PURE__ */ __name((exports, libName2) => {
+    for (var [sym, exp] of Object.entries(exports)) {
+      const setImport = /* @__PURE__ */ __name((target) => {
+        if (!isSymbolDefined(target)) {
+          wasmImports[target] = exp;
+        }
+      }, "setImport");
+      setImport(sym);
+      const main_alias = "__main_argc_argv";
+      if (sym == "main") {
+        setImport(main_alias);
+      }
+      if (sym == main_alias) {
+        setImport("main");
+      }
+    }
+  }, "mergeLibSymbols");
+  var asyncLoad = /* @__PURE__ */ __name(async (url) => {
+    var arrayBuffer = await readAsync(url);
+    return new Uint8Array(arrayBuffer);
+  }, "asyncLoad");
+  function loadDynamicLibrary(libName2, flags2 = {
+    global: true,
+    nodelete: true
+  }, localScope2, handle2) {
+    var dso = LDSO.loadedLibsByName[libName2];
+    if (dso) {
+      if (!flags2.global) {
+        if (localScope2) {
+          Object.assign(localScope2, dso.exports);
+        }
+      } else if (!dso.global) {
+        dso.global = true;
+        mergeLibSymbols(dso.exports, libName2);
+      }
+      if (flags2.nodelete && dso.refcount !== Infinity) {
+        dso.refcount = Infinity;
+      }
+      dso.refcount++;
+      if (handle2) {
+        LDSO.loadedLibsByHandle[handle2] = dso;
+      }
+      return flags2.loadAsync ? Promise.resolve(true) : true;
+    }
+    dso = newDSO(libName2, handle2, "loading");
+    dso.refcount = flags2.nodelete ? Infinity : 1;
+    dso.global = flags2.global;
+    function loadLibData() {
+      if (handle2) {
+        var data = LE_HEAP_LOAD_U32((handle2 + 28 >> 2) * 4);
+        var dataSize = LE_HEAP_LOAD_U32((handle2 + 32 >> 2) * 4);
+        if (data && dataSize) {
+          var libData = HEAP8.slice(data, data + dataSize);
+          return flags2.loadAsync ? Promise.resolve(libData) : libData;
+        }
+      }
+      var libFile = locateFile(libName2);
+      if (flags2.loadAsync) {
+        return asyncLoad(libFile);
+      }
+      if (!readBinary) {
+        throw new Error(`${libFile}: file not found, and synchronous loading of external files is not available`);
+      }
+      return readBinary(libFile);
+    }
+    __name(loadLibData, "loadLibData");
+    function getExports() {
+      if (flags2.loadAsync) {
+        return loadLibData().then((libData) => loadWebAssemblyModule(libData, flags2, libName2, localScope2, handle2));
+      }
+      return loadWebAssemblyModule(loadLibData(), flags2, libName2, localScope2, handle2);
+    }
+    __name(getExports, "getExports");
+    function moduleLoaded(exports) {
+      if (dso.global) {
+        mergeLibSymbols(exports, libName2);
+      } else if (localScope2) {
+        Object.assign(localScope2, exports);
+      }
+      dso.exports = exports;
+    }
+    __name(moduleLoaded, "moduleLoaded");
+    if (flags2.loadAsync) {
+      return getExports().then((exports) => {
+        moduleLoaded(exports);
+        return true;
+      });
+    }
+    moduleLoaded(getExports());
+    return true;
+  }
+  __name(loadDynamicLibrary, "loadDynamicLibrary");
+  var reportUndefinedSymbols = /* @__PURE__ */ __name(() => {
+    for (var [symName, entry] of Object.entries(GOT)) {
+      if (entry.value == 0) {
+        var value = resolveGlobalSymbol(symName, true).sym;
+        if (!value && !entry.required) {
+          continue;
+        }
+        if (typeof value == "function") {
+          entry.value = addFunction(value, value.sig);
+        } else if (typeof value == "number") {
+          entry.value = value;
+        } else {
+          throw new Error(`bad export type for '${symName}': ${typeof value}`);
+        }
+      }
+    }
+  }, "reportUndefinedSymbols");
+  var runDependencies = 0;
+  var dependenciesFulfilled = null;
+  var removeRunDependency = /* @__PURE__ */ __name((id) => {
+    runDependencies--;
+    Module["monitorRunDependencies"]?.(runDependencies);
+    if (runDependencies == 0) {
+      if (dependenciesFulfilled) {
+        var callback = dependenciesFulfilled;
+        dependenciesFulfilled = null;
+        callback();
+      }
+    }
+  }, "removeRunDependency");
+  var addRunDependency = /* @__PURE__ */ __name((id) => {
+    runDependencies++;
+    Module["monitorRunDependencies"]?.(runDependencies);
+  }, "addRunDependency");
+  var loadDylibs = /* @__PURE__ */ __name(async () => {
+    if (!dynamicLibraries.length) {
+      reportUndefinedSymbols();
+      return;
+    }
+    addRunDependency("loadDylibs");
+    for (var lib of dynamicLibraries) {
+      await loadDynamicLibrary(lib, {
+        loadAsync: true,
+        global: true,
+        nodelete: true,
+        allowUndefined: true
+      });
+    }
+    reportUndefinedSymbols();
+    removeRunDependency("loadDylibs");
+  }, "loadDylibs");
+  var noExitRuntime = true;
+  function setValue(ptr, value, type = "i8") {
+    if (type.endsWith("*")) type = "*";
+    switch (type) {
+      case "i1":
+        HEAP8[ptr] = value;
+        break;
+      case "i8":
+        HEAP8[ptr] = value;
+        break;
+      case "i16":
+        LE_HEAP_STORE_I16((ptr >> 1) * 2, value);
+        break;
+      case "i32":
+        LE_HEAP_STORE_I32((ptr >> 2) * 4, value);
+        break;
+      case "i64":
+        LE_HEAP_STORE_I64((ptr >> 3) * 8, BigInt(value));
+        break;
+      case "float":
+        LE_HEAP_STORE_F32((ptr >> 2) * 4, value);
+        break;
+      case "double":
+        LE_HEAP_STORE_F64((ptr >> 3) * 8, value);
+        break;
+      case "*":
+        LE_HEAP_STORE_U32((ptr >> 2) * 4, value);
+        break;
+      default:
+        abort(`invalid type for setValue: ${type}`);
+    }
+  }
+  __name(setValue, "setValue");
+  var ___memory_base = new WebAssembly.Global({
+    "value": "i32",
+    "mutable": false
+  }, 1024);
+  var ___stack_high = 82240;
+  var ___stack_low = 16704;
+  var ___stack_pointer = new WebAssembly.Global({
+    "value": "i32",
+    "mutable": true
+  }, 82240);
+  var ___table_base = new WebAssembly.Global({
+    "value": "i32",
+    "mutable": false
+  }, 1);
+  var __abort_js = /* @__PURE__ */ __name(() => abort(""), "__abort_js");
+  __abort_js.sig = "v";
+  var getHeapMax = /* @__PURE__ */ __name(() => (
+    // Stay one Wasm page short of 4GB: while e.g. Chrome is able to allocate
+    // full 4GB Wasm memories, the size will wrap back to 0 bytes in Wasm side
+    // for any code that deals with heap sizes, which would require special
+    // casing all heap size related code to treat 0 specially.
+    2147483648
+  ), "getHeapMax");
+  var growMemory = /* @__PURE__ */ __name((size) => {
+    var oldHeapSize = wasmMemory.buffer.byteLength;
+    var pages = (size - oldHeapSize + 65535) / 65536 | 0;
+    try {
+      wasmMemory.grow(pages);
+      updateMemoryViews();
+      return 1;
+    } catch (e) {
+    }
+  }, "growMemory");
+  var _emscripten_resize_heap = /* @__PURE__ */ __name((requestedSize) => {
+    var oldSize = HEAPU8.length;
+    requestedSize >>>= 0;
+    var maxHeapSize = getHeapMax();
+    if (requestedSize > maxHeapSize) {
+      return false;
+    }
+    for (var cutDown = 1; cutDown <= 4; cutDown *= 2) {
+      var overGrownHeapSize = oldSize * (1 + 0.2 / cutDown);
+      overGrownHeapSize = Math.min(overGrownHeapSize, requestedSize + 100663296);
+      var newSize = Math.min(maxHeapSize, alignMemory(Math.max(requestedSize, overGrownHeapSize), 65536));
+      var replacement = growMemory(newSize);
+      if (replacement) {
+        return true;
+      }
+    }
+    return false;
+  }, "_emscripten_resize_heap");
+  _emscripten_resize_heap.sig = "ip";
+  var _fd_close = /* @__PURE__ */ __name((fd) => 52, "_fd_close");
+  _fd_close.sig = "ii";
+  var INT53_MAX = 9007199254740992;
+  var INT53_MIN = -9007199254740992;
+  var bigintToI53Checked = /* @__PURE__ */ __name((num) => num < INT53_MIN || num > INT53_MAX ? NaN : Number(num), "bigintToI53Checked");
+  function _fd_seek(fd, offset, whence, newOffset) {
+    offset = bigintToI53Checked(offset);
+    return 70;
+  }
+  __name(_fd_seek, "_fd_seek");
+  _fd_seek.sig = "iijip";
+  var printCharBuffers = [null, [], []];
+  var printChar = /* @__PURE__ */ __name((stream, curr) => {
+    var buffer = printCharBuffers[stream];
+    if (curr === 0 || curr === 10) {
+      (stream === 1 ? out : err)(UTF8ArrayToString(buffer));
+      buffer.length = 0;
+    } else {
+      buffer.push(curr);
+    }
+  }, "printChar");
+  var _fd_write = /* @__PURE__ */ __name((fd, iov, iovcnt, pnum) => {
+    var num = 0;
+    for (var i2 = 0; i2 < iovcnt; i2++) {
+      var ptr = LE_HEAP_LOAD_U32((iov >> 2) * 4);
+      var len = LE_HEAP_LOAD_U32((iov + 4 >> 2) * 4);
+      iov += 8;
+      for (var j = 0; j < len; j++) {
+        printChar(fd, HEAPU8[ptr + j]);
+      }
+      num += len;
+    }
+    LE_HEAP_STORE_U32((pnum >> 2) * 4, num);
+    return 0;
+  }, "_fd_write");
+  _fd_write.sig = "iippp";
+  function _tree_sitter_log_callback(isLexMessage, messageAddress) {
+    if (Module.currentLogCallback) {
+      const message = UTF8ToString(messageAddress);
+      Module.currentLogCallback(message, isLexMessage !== 0);
+    }
+  }
+  __name(_tree_sitter_log_callback, "_tree_sitter_log_callback");
+  function _tree_sitter_parse_callback(inputBufferAddress, index, row, column, lengthAddress) {
+    const INPUT_BUFFER_SIZE = 10 * 1024;
+    const string3 = Module.currentParseCallback(index, {
+      row,
+      column
+    });
+    if (typeof string3 === "string") {
+      setValue(lengthAddress, string3.length, "i32");
+      stringToUTF16(string3, inputBufferAddress, INPUT_BUFFER_SIZE);
+    } else {
+      setValue(lengthAddress, 0, "i32");
+    }
+  }
+  __name(_tree_sitter_parse_callback, "_tree_sitter_parse_callback");
+  function _tree_sitter_progress_callback(currentOffset, hasError) {
+    if (Module.currentProgressCallback) {
+      return Module.currentProgressCallback({
+        currentOffset,
+        hasError
+      });
+    }
+    return false;
+  }
+  __name(_tree_sitter_progress_callback, "_tree_sitter_progress_callback");
+  function _tree_sitter_query_progress_callback(currentOffset) {
+    if (Module.currentQueryProgressCallback) {
+      return Module.currentQueryProgressCallback({
+        currentOffset
+      });
+    }
+    return false;
+  }
+  __name(_tree_sitter_query_progress_callback, "_tree_sitter_query_progress_callback");
+  var runtimeKeepaliveCounter = 0;
+  var keepRuntimeAlive = /* @__PURE__ */ __name(() => noExitRuntime || runtimeKeepaliveCounter > 0, "keepRuntimeAlive");
+  var _proc_exit = /* @__PURE__ */ __name((code2) => {
+    EXITSTATUS = code2;
+    if (!keepRuntimeAlive()) {
+      Module["onExit"]?.(code2);
+      ABORT = true;
+    }
+    quit_(code2, new ExitStatus(code2));
+  }, "_proc_exit");
+  _proc_exit.sig = "vi";
+  var exitJS = /* @__PURE__ */ __name((status, implicit) => {
+    EXITSTATUS = status;
+    _proc_exit(status);
+  }, "exitJS");
+  var handleException = /* @__PURE__ */ __name((e) => {
+    if (e instanceof ExitStatus || e == "unwind") {
+      return EXITSTATUS;
+    }
+    quit_(1, e);
+  }, "handleException");
+  var lengthBytesUTF8 = /* @__PURE__ */ __name((str) => {
+    var len = 0;
+    for (var i2 = 0; i2 < str.length; ++i2) {
+      var c = str.charCodeAt(i2);
+      if (c <= 127) {
+        len++;
+      } else if (c <= 2047) {
+        len += 2;
+      } else if (c >= 55296 && c <= 57343) {
+        len += 4;
+        ++i2;
+      } else {
+        len += 3;
+      }
+    }
+    return len;
+  }, "lengthBytesUTF8");
+  var stringToUTF8Array = /* @__PURE__ */ __name((str, heap, outIdx, maxBytesToWrite) => {
+    if (!(maxBytesToWrite > 0)) return 0;
+    var startIdx = outIdx;
+    var endIdx = outIdx + maxBytesToWrite - 1;
+    for (var i2 = 0; i2 < str.length; ++i2) {
+      var u = str.codePointAt(i2);
+      if (u <= 127) {
+        if (outIdx >= endIdx) break;
+        heap[outIdx++] = u;
+      } else if (u <= 2047) {
+        if (outIdx + 1 >= endIdx) break;
+        heap[outIdx++] = 192 | u >> 6;
+        heap[outIdx++] = 128 | u & 63;
+      } else if (u <= 65535) {
+        if (outIdx + 2 >= endIdx) break;
+        heap[outIdx++] = 224 | u >> 12;
+        heap[outIdx++] = 128 | u >> 6 & 63;
+        heap[outIdx++] = 128 | u & 63;
+      } else {
+        if (outIdx + 3 >= endIdx) break;
+        heap[outIdx++] = 240 | u >> 18;
+        heap[outIdx++] = 128 | u >> 12 & 63;
+        heap[outIdx++] = 128 | u >> 6 & 63;
+        heap[outIdx++] = 128 | u & 63;
+        i2++;
+      }
+    }
+    heap[outIdx] = 0;
+    return outIdx - startIdx;
+  }, "stringToUTF8Array");
+  var stringToUTF8 = /* @__PURE__ */ __name((str, outPtr, maxBytesToWrite) => stringToUTF8Array(str, HEAPU8, outPtr, maxBytesToWrite), "stringToUTF8");
+  var stackAlloc = /* @__PURE__ */ __name((sz) => __emscripten_stack_alloc(sz), "stackAlloc");
+  var stringToUTF8OnStack = /* @__PURE__ */ __name((str) => {
+    var size = lengthBytesUTF8(str) + 1;
+    var ret = stackAlloc(size);
+    stringToUTF8(str, ret, size);
+    return ret;
+  }, "stringToUTF8OnStack");
+  var AsciiToString = /* @__PURE__ */ __name((ptr) => {
+    var str = "";
+    while (1) {
+      var ch = HEAPU8[ptr++];
+      if (!ch) return str;
+      str += String.fromCharCode(ch);
+    }
+  }, "AsciiToString");
+  var stringToUTF16 = /* @__PURE__ */ __name((str, outPtr, maxBytesToWrite) => {
+    maxBytesToWrite ??= 2147483647;
+    if (maxBytesToWrite < 2) return 0;
+    maxBytesToWrite -= 2;
+    var startPtr = outPtr;
+    var numCharsToWrite = maxBytesToWrite < str.length * 2 ? maxBytesToWrite / 2 : str.length;
+    for (var i2 = 0; i2 < numCharsToWrite; ++i2) {
+      var codeUnit = str.charCodeAt(i2);
+      LE_HEAP_STORE_I16((outPtr >> 1) * 2, codeUnit);
+      outPtr += 2;
+    }
+    LE_HEAP_STORE_I16((outPtr >> 1) * 2, 0);
+    return outPtr - startPtr;
+  }, "stringToUTF16");
+  LE_ATOMICS_NATIVE_BYTE_ORDER = new Int8Array(new Int16Array([1]).buffer)[0] === 1 ? [
+    /* little endian */
+    ((x) => x),
+    ((x) => x),
+    void 0,
+    ((x) => x)
+  ] : [
+    /* big endian */
+    ((x) => x),
+    ((x) => ((x & 65280) << 8 | (x & 255) << 24) >> 16),
+    void 0,
+    ((x) => x >> 24 & 255 | x >> 8 & 65280 | (x & 65280) << 8 | (x & 255) << 24)
+  ];
+  function LE_HEAP_UPDATE() {
+    HEAPU16.unsigned = ((x) => x & 65535);
+    HEAPU32.unsigned = ((x) => x >>> 0);
+  }
+  __name(LE_HEAP_UPDATE, "LE_HEAP_UPDATE");
+  {
+    initMemory();
+    if (Module["noExitRuntime"]) noExitRuntime = Module["noExitRuntime"];
+    if (Module["print"]) out = Module["print"];
+    if (Module["printErr"]) err = Module["printErr"];
+    if (Module["dynamicLibraries"]) dynamicLibraries = Module["dynamicLibraries"];
+    if (Module["wasmBinary"]) wasmBinary = Module["wasmBinary"];
+    if (Module["arguments"]) arguments_ = Module["arguments"];
+    if (Module["thisProgram"]) thisProgram = Module["thisProgram"];
+    if (Module["preInit"]) {
+      if (typeof Module["preInit"] == "function") Module["preInit"] = [Module["preInit"]];
+      while (Module["preInit"].length > 0) {
+        Module["preInit"].shift()();
+      }
+    }
+  }
+  Module["setValue"] = setValue;
+  Module["getValue"] = getValue;
+  Module["UTF8ToString"] = UTF8ToString;
+  Module["stringToUTF8"] = stringToUTF8;
+  Module["lengthBytesUTF8"] = lengthBytesUTF8;
+  Module["AsciiToString"] = AsciiToString;
+  Module["stringToUTF16"] = stringToUTF16;
+  Module["loadWebAssemblyModule"] = loadWebAssemblyModule;
+  Module["LE_HEAP_STORE_I64"] = LE_HEAP_STORE_I64;
+  var ASM_CONSTS = {};
+  var _malloc, _calloc, _realloc, _free, _ts_range_edit, _memcmp, _ts_language_symbol_count, _ts_language_state_count, _ts_language_abi_version, _ts_language_name, _ts_language_field_count, _ts_language_next_state, _ts_language_symbol_name, _ts_language_symbol_for_name, _strncmp, _ts_language_symbol_type, _ts_language_field_name_for_id, _ts_lookahead_iterator_new, _ts_lookahead_iterator_delete, _ts_lookahead_iterator_reset_state, _ts_lookahead_iterator_reset, _ts_lookahead_iterator_next, _ts_lookahead_iterator_current_symbol, _ts_point_edit, _ts_parser_delete, _ts_parser_reset, _ts_parser_set_language, _ts_parser_set_included_ranges, _ts_query_new, _ts_query_delete, _iswspace, _iswalnum, _ts_query_copy, _ts_query_pattern_count, _ts_query_capture_count, _ts_query_string_count, _ts_query_capture_name_for_id, _ts_query_capture_quantifier_for_id, _ts_query_string_value_for_id, _ts_query_predicates_for_pattern, _ts_query_start_byte_for_pattern, _ts_query_end_byte_for_pattern, _ts_query_is_pattern_rooted, _ts_query_is_pattern_non_local, _ts_query_is_pattern_guaranteed_at_step, _ts_query_disable_capture, _ts_query_disable_pattern, _ts_tree_copy, _ts_tree_delete, _ts_init, _ts_parser_new_wasm, _ts_parser_enable_logger_wasm, _ts_parser_parse_wasm, _ts_parser_included_ranges_wasm, _ts_language_type_is_named_wasm, _ts_language_type_is_visible_wasm, _ts_language_metadata_wasm, _ts_language_supertypes_wasm, _ts_language_subtypes_wasm, _ts_tree_root_node_wasm, _ts_tree_root_node_with_offset_wasm, _ts_tree_edit_wasm, _ts_tree_included_ranges_wasm, _ts_tree_get_changed_ranges_wasm, _ts_tree_cursor_new_wasm, _ts_tree_cursor_copy_wasm, _ts_tree_cursor_delete_wasm, _ts_tree_cursor_reset_wasm, _ts_tree_cursor_reset_to_wasm, _ts_tree_cursor_goto_first_child_wasm, _ts_tree_cursor_goto_last_child_wasm, _ts_tree_cursor_goto_first_child_for_index_wasm, _ts_tree_cursor_goto_first_child_for_position_wasm, _ts_tree_cursor_goto_next_sibling_wasm, _ts_tree_cursor_goto_previous_sibling_wasm, _ts_tree_cursor_goto_descendant_wasm, _ts_tree_cursor_goto_parent_wasm, _ts_tree_cursor_current_node_type_id_wasm, _ts_tree_cursor_current_node_state_id_wasm, _ts_tree_cursor_current_node_is_named_wasm, _ts_tree_cursor_current_node_is_missing_wasm, _ts_tree_cursor_current_node_id_wasm, _ts_tree_cursor_start_position_wasm, _ts_tree_cursor_end_position_wasm, _ts_tree_cursor_start_index_wasm, _ts_tree_cursor_end_index_wasm, _ts_tree_cursor_current_field_id_wasm, _ts_tree_cursor_current_depth_wasm, _ts_tree_cursor_current_descendant_index_wasm, _ts_tree_cursor_current_node_wasm, _ts_node_symbol_wasm, _ts_node_field_name_for_child_wasm, _ts_node_field_name_for_named_child_wasm, _ts_node_children_by_field_id_wasm, _ts_node_first_child_for_byte_wasm, _ts_node_first_named_child_for_byte_wasm, _ts_node_grammar_symbol_wasm, _ts_node_child_count_wasm, _ts_node_named_child_count_wasm, _ts_node_child_wasm, _ts_node_named_child_wasm, _ts_node_child_by_field_id_wasm, _ts_node_next_sibling_wasm, _ts_node_prev_sibling_wasm, _ts_node_next_named_sibling_wasm, _ts_node_prev_named_sibling_wasm, _ts_node_descendant_count_wasm, _ts_node_parent_wasm, _ts_node_child_with_descendant_wasm, _ts_node_descendant_for_index_wasm, _ts_node_named_descendant_for_index_wasm, _ts_node_descendant_for_position_wasm, _ts_node_named_descendant_for_position_wasm, _ts_node_start_point_wasm, _ts_node_end_point_wasm, _ts_node_start_index_wasm, _ts_node_end_index_wasm, _ts_node_to_string_wasm, _ts_node_children_wasm, _ts_node_named_children_wasm, _ts_node_descendants_of_type_wasm, _ts_node_is_named_wasm, _ts_node_has_changes_wasm, _ts_node_has_error_wasm, _ts_node_is_error_wasm, _ts_node_is_missing_wasm, _ts_node_is_extra_wasm, _ts_node_parse_state_wasm, _ts_node_next_parse_state_wasm, _ts_query_matches_wasm, _ts_query_captures_wasm, _memset, _memcpy, _memmove, _iswalpha, _iswblank, _iswdigit, _iswlower, _iswpunct, _iswupper, _iswxdigit, _memchr, _strlen, _strcmp, _strncat, _strncpy, _towlower, _towupper, _setThrew, __emscripten_stack_restore, __emscripten_stack_alloc, _emscripten_stack_get_current, ___wasm_apply_data_relocs;
+  function assignWasmExports(wasmExports2) {
+    Module["_malloc"] = _malloc = wasmExports2["malloc"];
+    Module["_calloc"] = _calloc = wasmExports2["calloc"];
+    Module["_realloc"] = _realloc = wasmExports2["realloc"];
+    Module["_free"] = _free = wasmExports2["free"];
+    Module["_ts_range_edit"] = _ts_range_edit = wasmExports2["ts_range_edit"];
+    Module["_memcmp"] = _memcmp = wasmExports2["memcmp"];
+    Module["_ts_language_symbol_count"] = _ts_language_symbol_count = wasmExports2["ts_language_symbol_count"];
+    Module["_ts_language_state_count"] = _ts_language_state_count = wasmExports2["ts_language_state_count"];
+    Module["_ts_language_abi_version"] = _ts_language_abi_version = wasmExports2["ts_language_abi_version"];
+    Module["_ts_language_name"] = _ts_language_name = wasmExports2["ts_language_name"];
+    Module["_ts_language_field_count"] = _ts_language_field_count = wasmExports2["ts_language_field_count"];
+    Module["_ts_language_next_state"] = _ts_language_next_state = wasmExports2["ts_language_next_state"];
+    Module["_ts_language_symbol_name"] = _ts_language_symbol_name = wasmExports2["ts_language_symbol_name"];
+    Module["_ts_language_symbol_for_name"] = _ts_language_symbol_for_name = wasmExports2["ts_language_symbol_for_name"];
+    Module["_strncmp"] = _strncmp = wasmExports2["strncmp"];
+    Module["_ts_language_symbol_type"] = _ts_language_symbol_type = wasmExports2["ts_language_symbol_type"];
+    Module["_ts_language_field_name_for_id"] = _ts_language_field_name_for_id = wasmExports2["ts_language_field_name_for_id"];
+    Module["_ts_lookahead_iterator_new"] = _ts_lookahead_iterator_new = wasmExports2["ts_lookahead_iterator_new"];
+    Module["_ts_lookahead_iterator_delete"] = _ts_lookahead_iterator_delete = wasmExports2["ts_lookahead_iterator_delete"];
+    Module["_ts_lookahead_iterator_reset_state"] = _ts_lookahead_iterator_reset_state = wasmExports2["ts_lookahead_iterator_reset_state"];
+    Module["_ts_lookahead_iterator_reset"] = _ts_lookahead_iterator_reset = wasmExports2["ts_lookahead_iterator_reset"];
+    Module["_ts_lookahead_iterator_next"] = _ts_lookahead_iterator_next = wasmExports2["ts_lookahead_iterator_next"];
+    Module["_ts_lookahead_iterator_current_symbol"] = _ts_lookahead_iterator_current_symbol = wasmExports2["ts_lookahead_iterator_current_symbol"];
+    Module["_ts_point_edit"] = _ts_point_edit = wasmExports2["ts_point_edit"];
+    Module["_ts_parser_delete"] = _ts_parser_delete = wasmExports2["ts_parser_delete"];
+    Module["_ts_parser_reset"] = _ts_parser_reset = wasmExports2["ts_parser_reset"];
+    Module["_ts_parser_set_language"] = _ts_parser_set_language = wasmExports2["ts_parser_set_language"];
+    Module["_ts_parser_set_included_ranges"] = _ts_parser_set_included_ranges = wasmExports2["ts_parser_set_included_ranges"];
+    Module["_ts_query_new"] = _ts_query_new = wasmExports2["ts_query_new"];
+    Module["_ts_query_delete"] = _ts_query_delete = wasmExports2["ts_query_delete"];
+    Module["_iswspace"] = _iswspace = wasmExports2["iswspace"];
+    Module["_iswalnum"] = _iswalnum = wasmExports2["iswalnum"];
+    Module["_ts_query_copy"] = _ts_query_copy = wasmExports2["ts_query_copy"];
+    Module["_ts_query_pattern_count"] = _ts_query_pattern_count = wasmExports2["ts_query_pattern_count"];
+    Module["_ts_query_capture_count"] = _ts_query_capture_count = wasmExports2["ts_query_capture_count"];
+    Module["_ts_query_string_count"] = _ts_query_string_count = wasmExports2["ts_query_string_count"];
+    Module["_ts_query_capture_name_for_id"] = _ts_query_capture_name_for_id = wasmExports2["ts_query_capture_name_for_id"];
+    Module["_ts_query_capture_quantifier_for_id"] = _ts_query_capture_quantifier_for_id = wasmExports2["ts_query_capture_quantifier_for_id"];
+    Module["_ts_query_string_value_for_id"] = _ts_query_string_value_for_id = wasmExports2["ts_query_string_value_for_id"];
+    Module["_ts_query_predicates_for_pattern"] = _ts_query_predicates_for_pattern = wasmExports2["ts_query_predicates_for_pattern"];
+    Module["_ts_query_start_byte_for_pattern"] = _ts_query_start_byte_for_pattern = wasmExports2["ts_query_start_byte_for_pattern"];
+    Module["_ts_query_end_byte_for_pattern"] = _ts_query_end_byte_for_pattern = wasmExports2["ts_query_end_byte_for_pattern"];
+    Module["_ts_query_is_pattern_rooted"] = _ts_query_is_pattern_rooted = wasmExports2["ts_query_is_pattern_rooted"];
+    Module["_ts_query_is_pattern_non_local"] = _ts_query_is_pattern_non_local = wasmExports2["ts_query_is_pattern_non_local"];
+    Module["_ts_query_is_pattern_guaranteed_at_step"] = _ts_query_is_pattern_guaranteed_at_step = wasmExports2["ts_query_is_pattern_guaranteed_at_step"];
+    Module["_ts_query_disable_capture"] = _ts_query_disable_capture = wasmExports2["ts_query_disable_capture"];
+    Module["_ts_query_disable_pattern"] = _ts_query_disable_pattern = wasmExports2["ts_query_disable_pattern"];
+    Module["_ts_tree_copy"] = _ts_tree_copy = wasmExports2["ts_tree_copy"];
+    Module["_ts_tree_delete"] = _ts_tree_delete = wasmExports2["ts_tree_delete"];
+    Module["_ts_init"] = _ts_init = wasmExports2["ts_init"];
+    Module["_ts_parser_new_wasm"] = _ts_parser_new_wasm = wasmExports2["ts_parser_new_wasm"];
+    Module["_ts_parser_enable_logger_wasm"] = _ts_parser_enable_logger_wasm = wasmExports2["ts_parser_enable_logger_wasm"];
+    Module["_ts_parser_parse_wasm"] = _ts_parser_parse_wasm = wasmExports2["ts_parser_parse_wasm"];
+    Module["_ts_parser_included_ranges_wasm"] = _ts_parser_included_ranges_wasm = wasmExports2["ts_parser_included_ranges_wasm"];
+    Module["_ts_language_type_is_named_wasm"] = _ts_language_type_is_named_wasm = wasmExports2["ts_language_type_is_named_wasm"];
+    Module["_ts_language_type_is_visible_wasm"] = _ts_language_type_is_visible_wasm = wasmExports2["ts_language_type_is_visible_wasm"];
+    Module["_ts_language_metadata_wasm"] = _ts_language_metadata_wasm = wasmExports2["ts_language_metadata_wasm"];
+    Module["_ts_language_supertypes_wasm"] = _ts_language_supertypes_wasm = wasmExports2["ts_language_supertypes_wasm"];
+    Module["_ts_language_subtypes_wasm"] = _ts_language_subtypes_wasm = wasmExports2["ts_language_subtypes_wasm"];
+    Module["_ts_tree_root_node_wasm"] = _ts_tree_root_node_wasm = wasmExports2["ts_tree_root_node_wasm"];
+    Module["_ts_tree_root_node_with_offset_wasm"] = _ts_tree_root_node_with_offset_wasm = wasmExports2["ts_tree_root_node_with_offset_wasm"];
+    Module["_ts_tree_edit_wasm"] = _ts_tree_edit_wasm = wasmExports2["ts_tree_edit_wasm"];
+    Module["_ts_tree_included_ranges_wasm"] = _ts_tree_included_ranges_wasm = wasmExports2["ts_tree_included_ranges_wasm"];
+    Module["_ts_tree_get_changed_ranges_wasm"] = _ts_tree_get_changed_ranges_wasm = wasmExports2["ts_tree_get_changed_ranges_wasm"];
+    Module["_ts_tree_cursor_new_wasm"] = _ts_tree_cursor_new_wasm = wasmExports2["ts_tree_cursor_new_wasm"];
+    Module["_ts_tree_cursor_copy_wasm"] = _ts_tree_cursor_copy_wasm = wasmExports2["ts_tree_cursor_copy_wasm"];
+    Module["_ts_tree_cursor_delete_wasm"] = _ts_tree_cursor_delete_wasm = wasmExports2["ts_tree_cursor_delete_wasm"];
+    Module["_ts_tree_cursor_reset_wasm"] = _ts_tree_cursor_reset_wasm = wasmExports2["ts_tree_cursor_reset_wasm"];
+    Module["_ts_tree_cursor_reset_to_wasm"] = _ts_tree_cursor_reset_to_wasm = wasmExports2["ts_tree_cursor_reset_to_wasm"];
+    Module["_ts_tree_cursor_goto_first_child_wasm"] = _ts_tree_cursor_goto_first_child_wasm = wasmExports2["ts_tree_cursor_goto_first_child_wasm"];
+    Module["_ts_tree_cursor_goto_last_child_wasm"] = _ts_tree_cursor_goto_last_child_wasm = wasmExports2["ts_tree_cursor_goto_last_child_wasm"];
+    Module["_ts_tree_cursor_goto_first_child_for_index_wasm"] = _ts_tree_cursor_goto_first_child_for_index_wasm = wasmExports2["ts_tree_cursor_goto_first_child_for_index_wasm"];
+    Module["_ts_tree_cursor_goto_first_child_for_position_wasm"] = _ts_tree_cursor_goto_first_child_for_position_wasm = wasmExports2["ts_tree_cursor_goto_first_child_for_position_wasm"];
+    Module["_ts_tree_cursor_goto_next_sibling_wasm"] = _ts_tree_cursor_goto_next_sibling_wasm = wasmExports2["ts_tree_cursor_goto_next_sibling_wasm"];
+    Module["_ts_tree_cursor_goto_previous_sibling_wasm"] = _ts_tree_cursor_goto_previous_sibling_wasm = wasmExports2["ts_tree_cursor_goto_previous_sibling_wasm"];
+    Module["_ts_tree_cursor_goto_descendant_wasm"] = _ts_tree_cursor_goto_descendant_wasm = wasmExports2["ts_tree_cursor_goto_descendant_wasm"];
+    Module["_ts_tree_cursor_goto_parent_wasm"] = _ts_tree_cursor_goto_parent_wasm = wasmExports2["ts_tree_cursor_goto_parent_wasm"];
+    Module["_ts_tree_cursor_current_node_type_id_wasm"] = _ts_tree_cursor_current_node_type_id_wasm = wasmExports2["ts_tree_cursor_current_node_type_id_wasm"];
+    Module["_ts_tree_cursor_current_node_state_id_wasm"] = _ts_tree_cursor_current_node_state_id_wasm = wasmExports2["ts_tree_cursor_current_node_state_id_wasm"];
+    Module["_ts_tree_cursor_current_node_is_named_wasm"] = _ts_tree_cursor_current_node_is_named_wasm = wasmExports2["ts_tree_cursor_current_node_is_named_wasm"];
+    Module["_ts_tree_cursor_current_node_is_missing_wasm"] = _ts_tree_cursor_current_node_is_missing_wasm = wasmExports2["ts_tree_cursor_current_node_is_missing_wasm"];
+    Module["_ts_tree_cursor_current_node_id_wasm"] = _ts_tree_cursor_current_node_id_wasm = wasmExports2["ts_tree_cursor_current_node_id_wasm"];
+    Module["_ts_tree_cursor_start_position_wasm"] = _ts_tree_cursor_start_position_wasm = wasmExports2["ts_tree_cursor_start_position_wasm"];
+    Module["_ts_tree_cursor_end_position_wasm"] = _ts_tree_cursor_end_position_wasm = wasmExports2["ts_tree_cursor_end_position_wasm"];
+    Module["_ts_tree_cursor_start_index_wasm"] = _ts_tree_cursor_start_index_wasm = wasmExports2["ts_tree_cursor_start_index_wasm"];
+    Module["_ts_tree_cursor_end_index_wasm"] = _ts_tree_cursor_end_index_wasm = wasmExports2["ts_tree_cursor_end_index_wasm"];
+    Module["_ts_tree_cursor_current_field_id_wasm"] = _ts_tree_cursor_current_field_id_wasm = wasmExports2["ts_tree_cursor_current_field_id_wasm"];
+    Module["_ts_tree_cursor_current_depth_wasm"] = _ts_tree_cursor_current_depth_wasm = wasmExports2["ts_tree_cursor_current_depth_wasm"];
+    Module["_ts_tree_cursor_current_descendant_index_wasm"] = _ts_tree_cursor_current_descendant_index_wasm = wasmExports2["ts_tree_cursor_current_descendant_index_wasm"];
+    Module["_ts_tree_cursor_current_node_wasm"] = _ts_tree_cursor_current_node_wasm = wasmExports2["ts_tree_cursor_current_node_wasm"];
+    Module["_ts_node_symbol_wasm"] = _ts_node_symbol_wasm = wasmExports2["ts_node_symbol_wasm"];
+    Module["_ts_node_field_name_for_child_wasm"] = _ts_node_field_name_for_child_wasm = wasmExports2["ts_node_field_name_for_child_wasm"];
+    Module["_ts_node_field_name_for_named_child_wasm"] = _ts_node_field_name_for_named_child_wasm = wasmExports2["ts_node_field_name_for_named_child_wasm"];
+    Module["_ts_node_children_by_field_id_wasm"] = _ts_node_children_by_field_id_wasm = wasmExports2["ts_node_children_by_field_id_wasm"];
+    Module["_ts_node_first_child_for_byte_wasm"] = _ts_node_first_child_for_byte_wasm = wasmExports2["ts_node_first_child_for_byte_wasm"];
+    Module["_ts_node_first_named_child_for_byte_wasm"] = _ts_node_first_named_child_for_byte_wasm = wasmExports2["ts_node_first_named_child_for_byte_wasm"];
+    Module["_ts_node_grammar_symbol_wasm"] = _ts_node_grammar_symbol_wasm = wasmExports2["ts_node_grammar_symbol_wasm"];
+    Module["_ts_node_child_count_wasm"] = _ts_node_child_count_wasm = wasmExports2["ts_node_child_count_wasm"];
+    Module["_ts_node_named_child_count_wasm"] = _ts_node_named_child_count_wasm = wasmExports2["ts_node_named_child_count_wasm"];
+    Module["_ts_node_child_wasm"] = _ts_node_child_wasm = wasmExports2["ts_node_child_wasm"];
+    Module["_ts_node_named_child_wasm"] = _ts_node_named_child_wasm = wasmExports2["ts_node_named_child_wasm"];
+    Module["_ts_node_child_by_field_id_wasm"] = _ts_node_child_by_field_id_wasm = wasmExports2["ts_node_child_by_field_id_wasm"];
+    Module["_ts_node_next_sibling_wasm"] = _ts_node_next_sibling_wasm = wasmExports2["ts_node_next_sibling_wasm"];
+    Module["_ts_node_prev_sibling_wasm"] = _ts_node_prev_sibling_wasm = wasmExports2["ts_node_prev_sibling_wasm"];
+    Module["_ts_node_next_named_sibling_wasm"] = _ts_node_next_named_sibling_wasm = wasmExports2["ts_node_next_named_sibling_wasm"];
+    Module["_ts_node_prev_named_sibling_wasm"] = _ts_node_prev_named_sibling_wasm = wasmExports2["ts_node_prev_named_sibling_wasm"];
+    Module["_ts_node_descendant_count_wasm"] = _ts_node_descendant_count_wasm = wasmExports2["ts_node_descendant_count_wasm"];
+    Module["_ts_node_parent_wasm"] = _ts_node_parent_wasm = wasmExports2["ts_node_parent_wasm"];
+    Module["_ts_node_child_with_descendant_wasm"] = _ts_node_child_with_descendant_wasm = wasmExports2["ts_node_child_with_descendant_wasm"];
+    Module["_ts_node_descendant_for_index_wasm"] = _ts_node_descendant_for_index_wasm = wasmExports2["ts_node_descendant_for_index_wasm"];
+    Module["_ts_node_named_descendant_for_index_wasm"] = _ts_node_named_descendant_for_index_wasm = wasmExports2["ts_node_named_descendant_for_index_wasm"];
+    Module["_ts_node_descendant_for_position_wasm"] = _ts_node_descendant_for_position_wasm = wasmExports2["ts_node_descendant_for_position_wasm"];
+    Module["_ts_node_named_descendant_for_position_wasm"] = _ts_node_named_descendant_for_position_wasm = wasmExports2["ts_node_named_descendant_for_position_wasm"];
+    Module["_ts_node_start_point_wasm"] = _ts_node_start_point_wasm = wasmExports2["ts_node_start_point_wasm"];
+    Module["_ts_node_end_point_wasm"] = _ts_node_end_point_wasm = wasmExports2["ts_node_end_point_wasm"];
+    Module["_ts_node_start_index_wasm"] = _ts_node_start_index_wasm = wasmExports2["ts_node_start_index_wasm"];
+    Module["_ts_node_end_index_wasm"] = _ts_node_end_index_wasm = wasmExports2["ts_node_end_index_wasm"];
+    Module["_ts_node_to_string_wasm"] = _ts_node_to_string_wasm = wasmExports2["ts_node_to_string_wasm"];
+    Module["_ts_node_children_wasm"] = _ts_node_children_wasm = wasmExports2["ts_node_children_wasm"];
+    Module["_ts_node_named_children_wasm"] = _ts_node_named_children_wasm = wasmExports2["ts_node_named_children_wasm"];
+    Module["_ts_node_descendants_of_type_wasm"] = _ts_node_descendants_of_type_wasm = wasmExports2["ts_node_descendants_of_type_wasm"];
+    Module["_ts_node_is_named_wasm"] = _ts_node_is_named_wasm = wasmExports2["ts_node_is_named_wasm"];
+    Module["_ts_node_has_changes_wasm"] = _ts_node_has_changes_wasm = wasmExports2["ts_node_has_changes_wasm"];
+    Module["_ts_node_has_error_wasm"] = _ts_node_has_error_wasm = wasmExports2["ts_node_has_error_wasm"];
+    Module["_ts_node_is_error_wasm"] = _ts_node_is_error_wasm = wasmExports2["ts_node_is_error_wasm"];
+    Module["_ts_node_is_missing_wasm"] = _ts_node_is_missing_wasm = wasmExports2["ts_node_is_missing_wasm"];
+    Module["_ts_node_is_extra_wasm"] = _ts_node_is_extra_wasm = wasmExports2["ts_node_is_extra_wasm"];
+    Module["_ts_node_parse_state_wasm"] = _ts_node_parse_state_wasm = wasmExports2["ts_node_parse_state_wasm"];
+    Module["_ts_node_next_parse_state_wasm"] = _ts_node_next_parse_state_wasm = wasmExports2["ts_node_next_parse_state_wasm"];
+    Module["_ts_query_matches_wasm"] = _ts_query_matches_wasm = wasmExports2["ts_query_matches_wasm"];
+    Module["_ts_query_captures_wasm"] = _ts_query_captures_wasm = wasmExports2["ts_query_captures_wasm"];
+    Module["_memset"] = _memset = wasmExports2["memset"];
+    Module["_memcpy"] = _memcpy = wasmExports2["memcpy"];
+    Module["_memmove"] = _memmove = wasmExports2["memmove"];
+    Module["_iswalpha"] = _iswalpha = wasmExports2["iswalpha"];
+    Module["_iswblank"] = _iswblank = wasmExports2["iswblank"];
+    Module["_iswdigit"] = _iswdigit = wasmExports2["iswdigit"];
+    Module["_iswlower"] = _iswlower = wasmExports2["iswlower"];
+    Module["_iswpunct"] = _iswpunct = wasmExports2["iswpunct"];
+    Module["_iswupper"] = _iswupper = wasmExports2["iswupper"];
+    Module["_iswxdigit"] = _iswxdigit = wasmExports2["iswxdigit"];
+    Module["_memchr"] = _memchr = wasmExports2["memchr"];
+    Module["_strlen"] = _strlen = wasmExports2["strlen"];
+    Module["_strcmp"] = _strcmp = wasmExports2["strcmp"];
+    Module["_strncat"] = _strncat = wasmExports2["strncat"];
+    Module["_strncpy"] = _strncpy = wasmExports2["strncpy"];
+    Module["_towlower"] = _towlower = wasmExports2["towlower"];
+    Module["_towupper"] = _towupper = wasmExports2["towupper"];
+    _setThrew = wasmExports2["setThrew"];
+    __emscripten_stack_restore = wasmExports2["_emscripten_stack_restore"];
+    __emscripten_stack_alloc = wasmExports2["_emscripten_stack_alloc"];
+    _emscripten_stack_get_current = wasmExports2["emscripten_stack_get_current"];
+    ___wasm_apply_data_relocs = wasmExports2["__wasm_apply_data_relocs"];
+  }
+  __name(assignWasmExports, "assignWasmExports");
+  var wasmImports = {
+    /** @export */
+    __heap_base: ___heap_base,
+    /** @export */
+    __indirect_function_table: wasmTable,
+    /** @export */
+    __memory_base: ___memory_base,
+    /** @export */
+    __stack_high: ___stack_high,
+    /** @export */
+    __stack_low: ___stack_low,
+    /** @export */
+    __stack_pointer: ___stack_pointer,
+    /** @export */
+    __table_base: ___table_base,
+    /** @export */
+    _abort_js: __abort_js,
+    /** @export */
+    emscripten_resize_heap: _emscripten_resize_heap,
+    /** @export */
+    fd_close: _fd_close,
+    /** @export */
+    fd_seek: _fd_seek,
+    /** @export */
+    fd_write: _fd_write,
+    /** @export */
+    memory: wasmMemory,
+    /** @export */
+    tree_sitter_log_callback: _tree_sitter_log_callback,
+    /** @export */
+    tree_sitter_parse_callback: _tree_sitter_parse_callback,
+    /** @export */
+    tree_sitter_progress_callback: _tree_sitter_progress_callback,
+    /** @export */
+    tree_sitter_query_progress_callback: _tree_sitter_query_progress_callback
+  };
+  function callMain(args2 = []) {
+    var entryFunction = resolveGlobalSymbol("main").sym;
+    if (!entryFunction) return;
+    args2.unshift(thisProgram);
+    var argc = args2.length;
+    var argv = stackAlloc((argc + 1) * 4);
+    var argv_ptr = argv;
+    args2.forEach((arg) => {
+      LE_HEAP_STORE_U32((argv_ptr >> 2) * 4, stringToUTF8OnStack(arg));
+      argv_ptr += 4;
+    });
+    LE_HEAP_STORE_U32((argv_ptr >> 2) * 4, 0);
+    try {
+      var ret = entryFunction(argc, argv);
+      exitJS(
+        ret,
+        /* implicit = */
+        true
+      );
+      return ret;
+    } catch (e) {
+      return handleException(e);
+    }
+  }
+  __name(callMain, "callMain");
+  function run(args2 = arguments_) {
+    if (runDependencies > 0) {
+      dependenciesFulfilled = run;
+      return;
+    }
+    preRun();
+    if (runDependencies > 0) {
+      dependenciesFulfilled = run;
+      return;
+    }
+    function doRun() {
+      Module["calledRun"] = true;
+      if (ABORT) return;
+      initRuntime();
+      preMain();
+      readyPromiseResolve?.(Module);
+      Module["onRuntimeInitialized"]?.();
+      var noInitialRun = Module["noInitialRun"] || false;
+      if (!noInitialRun) callMain(args2);
+      postRun();
+    }
+    __name(doRun, "doRun");
+    if (Module["setStatus"]) {
+      Module["setStatus"]("Running...");
+      setTimeout(() => {
+        setTimeout(() => Module["setStatus"](""), 1);
+        doRun();
+      }, 1);
+    } else {
+      doRun();
+    }
+  }
+  __name(run, "run");
+  var wasmExports;
+  wasmExports = await createWasm();
+  run();
+  if (runtimeInitialized) {
+    moduleRtn = Module;
+  } else {
+    moduleRtn = new Promise((resolve, reject) => {
+      readyPromiseResolve = resolve;
+      readyPromiseReject = reject;
+    });
+  }
+  return moduleRtn;
+}
+__name(Module2, "Module");
+var web_tree_sitter_default = Module2;
+var Module3 = null;
+async function initializeBinding(moduleOptions) {
+  return Module3 ??= await web_tree_sitter_default(moduleOptions);
+}
+__name(initializeBinding, "initializeBinding");
+function checkModule() {
+  return !!Module3;
+}
+__name(checkModule, "checkModule");
+var TRANSFER_BUFFER;
+var LANGUAGE_VERSION;
+var MIN_COMPATIBLE_VERSION;
+var finalizer4 = newFinalizer((addresses) => {
+  C._ts_parser_delete(addresses[0]);
+  C._free(addresses[1]);
+});
+var Parser2 = class {
+  static {
+    __name(this, "Parser");
+  }
+  /** @internal */
+  [0] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  [1] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  logCallback = null;
+  /** The parser's current language. */
+  language = null;
+  /**
+   * This must always be called before creating a Parser.
+   *
+   * You can optionally pass in options to configure the Wasm module, the most common
+   * one being `locateFile` to help the module find the `.wasm` file.
+   */
+  static async init(moduleOptions) {
+    setModule(await initializeBinding(moduleOptions));
+    TRANSFER_BUFFER = C._ts_init();
+    LANGUAGE_VERSION = C.getValue(TRANSFER_BUFFER, "i32");
+    MIN_COMPATIBLE_VERSION = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+  }
+  /**
+   * Create a new parser.
+   */
+  constructor() {
+    this.initialize();
+    finalizer4?.register(this, [this[0], this[1]], this);
+  }
+  /** @internal */
+  initialize() {
+    if (!checkModule()) {
+      throw new Error("cannot construct a Parser before calling `init()`");
+    }
+    C._ts_parser_new_wasm();
+    this[0] = C.getValue(TRANSFER_BUFFER, "i32");
+    this[1] = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+  }
+  /** Delete the parser, freeing its resources. */
+  delete() {
+    finalizer4?.unregister(this);
+    C._ts_parser_delete(this[0]);
+    C._free(this[1]);
+    this[0] = 0;
+    this[1] = 0;
+  }
+  /**
+   * Set the language that the parser should use for parsing.
+   *
+   * If the language was not successfully assigned, an error will be thrown.
+   * This happens if the language was generated with an incompatible
+   * version of the Tree-sitter CLI. Check the language's version using
+   * {@link Language#version} and compare it to this library's
+   * {@link LANGUAGE_VERSION} and {@link MIN_COMPATIBLE_VERSION} constants.
+   */
+  setLanguage(language) {
+    let address;
+    if (!language) {
+      address = 0;
+      this.language = null;
+    } else if (language.constructor === Language) {
+      address = language[0];
+      const version2 = C._ts_language_abi_version(address);
+      if (version2 < MIN_COMPATIBLE_VERSION || LANGUAGE_VERSION < version2) {
+        throw new Error(
+          `Incompatible language version ${version2}. Compatibility range ${MIN_COMPATIBLE_VERSION} through ${LANGUAGE_VERSION}.`
+        );
+      }
+      this.language = language;
+    } else {
+      throw new Error("Argument must be a Language");
+    }
+    C._ts_parser_set_language(this[0], address);
+    return this;
+  }
+  /**
+   * Parse a slice of UTF8 text.
+   *
+   * @param {string | ParseCallback} callback - The UTF8-encoded text to parse or a callback function.
+   *
+   * @param {Tree | null} [oldTree] - A previous syntax tree parsed from the same document. If the text of the
+   *   document has changed since `oldTree` was created, then you must edit `oldTree` to match
+   *   the new text using {@link Tree#edit}.
+   *
+   * @param {ParseOptions} [options] - Options for parsing the text.
+   *  This can be used to set the included ranges, or a progress callback.
+   *
+   * @returns {Tree | null} A {@link Tree} if parsing succeeded, or `null` if:
+   *  - The parser has not yet had a language assigned with {@link Parser#setLanguage}.
+   *  - The progress callback returned true.
+   */
+  parse(callback, oldTree, options) {
+    if (typeof callback === "string") {
+      C.currentParseCallback = (index) => callback.slice(index);
+    } else if (typeof callback === "function") {
+      C.currentParseCallback = callback;
+    } else {
+      throw new Error("Argument must be a string or a function");
+    }
+    if (options?.progressCallback) {
+      C.currentProgressCallback = options.progressCallback;
+    } else {
+      C.currentProgressCallback = null;
+    }
+    if (this.logCallback) {
+      C.currentLogCallback = this.logCallback;
+      C._ts_parser_enable_logger_wasm(this[0], 1);
+    } else {
+      C.currentLogCallback = null;
+      C._ts_parser_enable_logger_wasm(this[0], 0);
+    }
+    let rangeCount = 0;
+    let rangeAddress = 0;
+    if (options?.includedRanges) {
+      rangeCount = options.includedRanges.length;
+      rangeAddress = C._calloc(rangeCount, SIZE_OF_RANGE);
+      let address = rangeAddress;
+      for (let i2 = 0; i2 < rangeCount; i2++) {
+        marshalRange(address, options.includedRanges[i2]);
+        address += SIZE_OF_RANGE;
+      }
+    }
+    const treeAddress = C._ts_parser_parse_wasm(
+      this[0],
+      this[1],
+      oldTree ? oldTree[0] : 0,
+      rangeAddress,
+      rangeCount
+    );
+    if (!treeAddress) {
+      C.currentParseCallback = null;
+      C.currentLogCallback = null;
+      C.currentProgressCallback = null;
+      return null;
+    }
+    if (!this.language) {
+      throw new Error("Parser must have a language to parse");
+    }
+    const result = new Tree(INTERNAL, treeAddress, this.language, C.currentParseCallback);
+    C.currentParseCallback = null;
+    C.currentLogCallback = null;
+    C.currentProgressCallback = null;
+    return result;
+  }
+  /**
+   * Instruct the parser to start the next parse from the beginning.
+   *
+   * If the parser previously failed because of a callback, 
+   * then by default, it will resume where it left off on the
+   * next call to {@link Parser#parse} or other parsing functions.
+   * If you don't want to resume, and instead intend to use this parser to
+   * parse some other document, you must call `reset` first.
+   */
+  reset() {
+    C._ts_parser_reset(this[0]);
+  }
+  /** Get the ranges of text that the parser will include when parsing. */
+  getIncludedRanges() {
+    C._ts_parser_included_ranges_wasm(this[0]);
+    const count = C.getValue(TRANSFER_BUFFER, "i32");
+    const buffer = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i2 = 0; i2 < count; i2++) {
+        result[i2] = unmarshalRange(address);
+        address += SIZE_OF_RANGE;
+      }
+      C._free(buffer);
+    }
+    return result;
+  }
+  /** Set the logging callback that a parser should use during parsing. */
+  setLogger(callback) {
+    if (!callback) {
+      this.logCallback = null;
+    } else if (typeof callback !== "function") {
+      throw new Error("Logger callback must be a function");
+    } else {
+      this.logCallback = callback;
+    }
+    return this;
+  }
+  /** Get the parser's current logger. */
+  getLogger() {
+    return this.logCallback;
+  }
+};
+var PREDICATE_STEP_TYPE_CAPTURE = 1;
+var PREDICATE_STEP_TYPE_STRING = 2;
+var QUERY_WORD_REGEX = /[\w-]+/g;
+var CaptureQuantifier = {
+  Zero: 0,
+  ZeroOrOne: 1,
+  ZeroOrMore: 2,
+  One: 3,
+  OneOrMore: 4
+};
+var isCaptureStep = /* @__PURE__ */ __name((step) => step.type === "capture", "isCaptureStep");
+var isStringStep = /* @__PURE__ */ __name((step) => step.type === "string", "isStringStep");
+var QueryErrorKind = {
+  Syntax: 1,
+  NodeName: 2,
+  FieldName: 3,
+  CaptureName: 4,
+  PatternStructure: 5
+};
+var QueryError = class _QueryError extends Error {
+  constructor(kind, info2, index, length) {
+    super(_QueryError.formatMessage(kind, info2));
+    this.kind = kind;
+    this.info = info2;
+    this.index = index;
+    this.length = length;
+    this.name = "QueryError";
+  }
+  kind;
+  info;
+  index;
+  length;
+  static {
+    __name(this, "QueryError");
+  }
+  /** Formats an error message based on the error kind and info */
+  static formatMessage(kind, info2) {
+    switch (kind) {
+      case QueryErrorKind.NodeName:
+        return `Bad node name '${info2.word}'`;
+      case QueryErrorKind.FieldName:
+        return `Bad field name '${info2.word}'`;
+      case QueryErrorKind.CaptureName:
+        return `Bad capture name @${info2.word}`;
+      case QueryErrorKind.PatternStructure:
+        return `Bad pattern structure at offset ${info2.suffix}`;
+      case QueryErrorKind.Syntax:
+        return `Bad syntax at offset ${info2.suffix}`;
+    }
+  }
+};
+function parseAnyPredicate(steps, index, operator, textPredicates) {
+  if (steps.length !== 3) {
+    throw new Error(
+      `Wrong number of arguments to \`#${operator}\` predicate. Expected 2, got ${steps.length - 1}`
+    );
+  }
+  if (!isCaptureStep(steps[1])) {
+    throw new Error(
+      `First argument of \`#${operator}\` predicate must be a capture. Got "${steps[1].value}"`
+    );
+  }
+  const isPositive = operator === "eq?" || operator === "any-eq?";
+  const matchAll = !operator.startsWith("any-");
+  if (isCaptureStep(steps[2])) {
+    const captureName1 = steps[1].name;
+    const captureName2 = steps[2].name;
+    textPredicates[index].push((captures) => {
+      const nodes1 = [];
+      const nodes2 = [];
+      for (const c of captures) {
+        if (c.name === captureName1) nodes1.push(c.node);
+        if (c.name === captureName2) nodes2.push(c.node);
+      }
+      const compare = /* @__PURE__ */ __name((n1, n2, positive) => {
+        return positive ? n1.text === n2.text : n1.text !== n2.text;
+      }, "compare");
+      return matchAll ? nodes1.every((n1) => nodes2.some((n2) => compare(n1, n2, isPositive))) : nodes1.some((n1) => nodes2.some((n2) => compare(n1, n2, isPositive)));
+    });
+  } else {
+    const captureName = steps[1].name;
+    const stringValue = steps[2].value;
+    const matches = /* @__PURE__ */ __name((n) => n.text === stringValue, "matches");
+    const doesNotMatch = /* @__PURE__ */ __name((n) => n.text !== stringValue, "doesNotMatch");
+    textPredicates[index].push((captures) => {
+      const nodes = [];
+      for (const c of captures) {
+        if (c.name === captureName) nodes.push(c.node);
+      }
+      const test = isPositive ? matches : doesNotMatch;
+      return matchAll ? nodes.every(test) : nodes.some(test);
+    });
+  }
+}
+__name(parseAnyPredicate, "parseAnyPredicate");
+function parseMatchPredicate(steps, index, operator, textPredicates) {
+  if (steps.length !== 3) {
+    throw new Error(
+      `Wrong number of arguments to \`#${operator}\` predicate. Expected 2, got ${steps.length - 1}.`
+    );
+  }
+  if (steps[1].type !== "capture") {
+    throw new Error(
+      `First argument of \`#${operator}\` predicate must be a capture. Got "${steps[1].value}".`
+    );
+  }
+  if (steps[2].type !== "string") {
+    throw new Error(
+      `Second argument of \`#${operator}\` predicate must be a string. Got @${steps[2].name}.`
+    );
+  }
+  const isPositive = operator === "match?" || operator === "any-match?";
+  const matchAll = !operator.startsWith("any-");
+  const captureName = steps[1].name;
+  const regex = new RegExp(steps[2].value);
+  textPredicates[index].push((captures) => {
+    const nodes = [];
+    for (const c of captures) {
+      if (c.name === captureName) nodes.push(c.node.text);
+    }
+    const test = /* @__PURE__ */ __name((text, positive) => {
+      return positive ? regex.test(text) : !regex.test(text);
+    }, "test");
+    if (nodes.length === 0) return !isPositive;
+    return matchAll ? nodes.every((text) => test(text, isPositive)) : nodes.some((text) => test(text, isPositive));
+  });
+}
+__name(parseMatchPredicate, "parseMatchPredicate");
+function parseAnyOfPredicate(steps, index, operator, textPredicates) {
+  if (steps.length < 2) {
+    throw new Error(
+      `Wrong number of arguments to \`#${operator}\` predicate. Expected at least 1. Got ${steps.length - 1}.`
+    );
+  }
+  if (steps[1].type !== "capture") {
+    throw new Error(
+      `First argument of \`#${operator}\` predicate must be a capture. Got "${steps[1].value}".`
+    );
+  }
+  const isPositive = operator === "any-of?";
+  const captureName = steps[1].name;
+  const stringSteps = steps.slice(2);
+  if (!stringSteps.every(isStringStep)) {
+    throw new Error(
+      `Arguments to \`#${operator}\` predicate must be strings.".`
+    );
+  }
+  const values = stringSteps.map((s) => s.value);
+  textPredicates[index].push((captures) => {
+    const nodes = [];
+    for (const c of captures) {
+      if (c.name === captureName) nodes.push(c.node.text);
+    }
+    if (nodes.length === 0) return !isPositive;
+    return nodes.every((text) => values.includes(text)) === isPositive;
+  });
+}
+__name(parseAnyOfPredicate, "parseAnyOfPredicate");
+function parseIsPredicate(steps, index, operator, assertedProperties, refutedProperties) {
+  if (steps.length < 2 || steps.length > 3) {
+    throw new Error(
+      `Wrong number of arguments to \`#${operator}\` predicate. Expected 1 or 2. Got ${steps.length - 1}.`
+    );
+  }
+  if (!steps.every(isStringStep)) {
+    throw new Error(
+      `Arguments to \`#${operator}\` predicate must be strings.".`
+    );
+  }
+  const properties = operator === "is?" ? assertedProperties : refutedProperties;
+  if (!properties[index]) properties[index] = {};
+  properties[index][steps[1].value] = steps[2]?.value ?? null;
+}
+__name(parseIsPredicate, "parseIsPredicate");
+function parseSetDirective(steps, index, setProperties) {
+  if (steps.length < 2 || steps.length > 3) {
+    throw new Error(`Wrong number of arguments to \`#set!\` predicate. Expected 1 or 2. Got ${steps.length - 1}.`);
+  }
+  if (!steps.every(isStringStep)) {
+    throw new Error(`Arguments to \`#set!\` predicate must be strings.".`);
+  }
+  if (!setProperties[index]) setProperties[index] = {};
+  setProperties[index][steps[1].value] = steps[2]?.value ?? null;
+}
+__name(parseSetDirective, "parseSetDirective");
+function parsePattern(index, stepType, stepValueId, captureNames, stringValues, steps, textPredicates, predicates, setProperties, assertedProperties, refutedProperties) {
+  if (stepType === PREDICATE_STEP_TYPE_CAPTURE) {
+    const name2 = captureNames[stepValueId];
+    steps.push({ type: "capture", name: name2 });
+  } else if (stepType === PREDICATE_STEP_TYPE_STRING) {
+    steps.push({ type: "string", value: stringValues[stepValueId] });
+  } else if (steps.length > 0) {
+    if (steps[0].type !== "string") {
+      throw new Error("Predicates must begin with a literal value");
+    }
+    const operator = steps[0].value;
+    switch (operator) {
+      case "any-not-eq?":
+      case "not-eq?":
+      case "any-eq?":
+      case "eq?":
+        parseAnyPredicate(steps, index, operator, textPredicates);
+        break;
+      case "any-not-match?":
+      case "not-match?":
+      case "any-match?":
+      case "match?":
+        parseMatchPredicate(steps, index, operator, textPredicates);
+        break;
+      case "not-any-of?":
+      case "any-of?":
+        parseAnyOfPredicate(steps, index, operator, textPredicates);
+        break;
+      case "is?":
+      case "is-not?":
+        parseIsPredicate(steps, index, operator, assertedProperties, refutedProperties);
+        break;
+      case "set!":
+        parseSetDirective(steps, index, setProperties);
+        break;
+      default:
+        predicates[index].push({ operator, operands: steps.slice(1) });
+    }
+    steps.length = 0;
+  }
+}
+__name(parsePattern, "parsePattern");
+var finalizer5 = newFinalizer((address) => {
+  C._ts_query_delete(address);
+});
+var Query = class {
+  static {
+    __name(this, "Query");
+  }
+  /** @internal */
+  [0] = 0;
+  // Internal handle for Wasm
+  /** @internal */
+  exceededMatchLimit;
+  /** @internal */
+  textPredicates;
+  /** The names of the captures used in the query. */
+  captureNames;
+  /** The quantifiers of the captures used in the query. */
+  captureQuantifiers;
+  /**
+   * The other user-defined predicates associated with the given index.
+   *
+   * This includes predicates with operators other than:
+   * - `match?`
+   * - `eq?` and `not-eq?`
+   * - `any-of?` and `not-any-of?`
+   * - `is?` and `is-not?`
+   * - `set!`
+   */
+  predicates;
+  /** The properties for predicates with the operator `set!`. */
+  setProperties;
+  /** The properties for predicates with the operator `is?`. */
+  assertedProperties;
+  /** The properties for predicates with the operator `is-not?`. */
+  refutedProperties;
+  /** The maximum number of in-progress matches for this cursor. */
+  matchLimit;
+  /**
+   * Create a new query from a string containing one or more S-expression
+   * patterns.
+   *
+   * The query is associated with a particular language, and can only be run
+   * on syntax nodes parsed with that language. References to Queries can be
+   * shared between multiple threads.
+   *
+   * @link {@see https://tree-sitter.github.io/tree-sitter/using-parsers/queries}
+   */
+  constructor(language, source) {
+    const sourceLength = C.lengthBytesUTF8(source);
+    const sourceAddress = C._malloc(sourceLength + 1);
+    C.stringToUTF8(source, sourceAddress, sourceLength + 1);
+    const address = C._ts_query_new(
+      language[0],
+      sourceAddress,
+      sourceLength,
+      TRANSFER_BUFFER,
+      TRANSFER_BUFFER + SIZE_OF_INT
+    );
+    if (!address) {
+      const errorId = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+      const errorByte = C.getValue(TRANSFER_BUFFER, "i32");
+      const errorIndex = C.UTF8ToString(sourceAddress, errorByte).length;
+      const suffix = source.slice(errorIndex, errorIndex + 100).split("\n")[0];
+      const word = suffix.match(QUERY_WORD_REGEX)?.[0] ?? "";
+      C._free(sourceAddress);
+      switch (errorId) {
+        case QueryErrorKind.Syntax:
+          throw new QueryError(QueryErrorKind.Syntax, { suffix: `${errorIndex}: '${suffix}'...` }, errorIndex, 0);
+        case QueryErrorKind.NodeName:
+          throw new QueryError(errorId, { word }, errorIndex, word.length);
+        case QueryErrorKind.FieldName:
+          throw new QueryError(errorId, { word }, errorIndex, word.length);
+        case QueryErrorKind.CaptureName:
+          throw new QueryError(errorId, { word }, errorIndex, word.length);
+        case QueryErrorKind.PatternStructure:
+          throw new QueryError(errorId, { suffix: `${errorIndex}: '${suffix}'...` }, errorIndex, 0);
+      }
+    }
+    const stringCount = C._ts_query_string_count(address);
+    const captureCount = C._ts_query_capture_count(address);
+    const patternCount = C._ts_query_pattern_count(address);
+    const captureNames = new Array(captureCount);
+    const captureQuantifiers = new Array(patternCount);
+    const stringValues = new Array(stringCount);
+    for (let i2 = 0; i2 < captureCount; i2++) {
+      const nameAddress = C._ts_query_capture_name_for_id(
+        address,
+        i2,
+        TRANSFER_BUFFER
+      );
+      const nameLength = C.getValue(TRANSFER_BUFFER, "i32");
+      captureNames[i2] = C.UTF8ToString(nameAddress, nameLength);
+    }
+    for (let i2 = 0; i2 < patternCount; i2++) {
+      const captureQuantifiersArray = new Array(captureCount);
+      for (let j = 0; j < captureCount; j++) {
+        const quantifier = C._ts_query_capture_quantifier_for_id(address, i2, j);
+        captureQuantifiersArray[j] = quantifier;
+      }
+      captureQuantifiers[i2] = captureQuantifiersArray;
+    }
+    for (let i2 = 0; i2 < stringCount; i2++) {
+      const valueAddress = C._ts_query_string_value_for_id(
+        address,
+        i2,
+        TRANSFER_BUFFER
+      );
+      const nameLength = C.getValue(TRANSFER_BUFFER, "i32");
+      stringValues[i2] = C.UTF8ToString(valueAddress, nameLength);
+    }
+    const setProperties = new Array(patternCount);
+    const assertedProperties = new Array(patternCount);
+    const refutedProperties = new Array(patternCount);
+    const predicates = new Array(patternCount);
+    const textPredicates = new Array(patternCount);
+    for (let i2 = 0; i2 < patternCount; i2++) {
+      const predicatesAddress = C._ts_query_predicates_for_pattern(address, i2, TRANSFER_BUFFER);
+      const stepCount = C.getValue(TRANSFER_BUFFER, "i32");
+      predicates[i2] = [];
+      textPredicates[i2] = [];
+      const steps = new Array();
+      let stepAddress = predicatesAddress;
+      for (let j = 0; j < stepCount; j++) {
+        const stepType = C.getValue(stepAddress, "i32");
+        stepAddress += SIZE_OF_INT;
+        const stepValueId = C.getValue(stepAddress, "i32");
+        stepAddress += SIZE_OF_INT;
+        parsePattern(
+          i2,
+          stepType,
+          stepValueId,
+          captureNames,
+          stringValues,
+          steps,
+          textPredicates,
+          predicates,
+          setProperties,
+          assertedProperties,
+          refutedProperties
+        );
+      }
+      Object.freeze(textPredicates[i2]);
+      Object.freeze(predicates[i2]);
+      Object.freeze(setProperties[i2]);
+      Object.freeze(assertedProperties[i2]);
+      Object.freeze(refutedProperties[i2]);
+    }
+    C._free(sourceAddress);
+    this[0] = address;
+    this.captureNames = captureNames;
+    this.captureQuantifiers = captureQuantifiers;
+    this.textPredicates = textPredicates;
+    this.predicates = predicates;
+    this.setProperties = setProperties;
+    this.assertedProperties = assertedProperties;
+    this.refutedProperties = refutedProperties;
+    this.exceededMatchLimit = false;
+    finalizer5?.register(this, address, this);
+  }
+  /** Delete the query, freeing its resources. */
+  delete() {
+    finalizer5?.unregister(this);
+    C._ts_query_delete(this[0]);
+    this[0] = 0;
+  }
+  /**
+   * Iterate over all of the matches in the order that they were found.
+   *
+   * Each match contains the index of the pattern that matched, and a list of
+   * captures. Because multiple patterns can match the same set of nodes,
+   * one match may contain captures that appear *before* some of the
+   * captures from a previous match.
+   *
+   * @param {Node} node - The node to execute the query on.
+   *
+   * @param {QueryOptions} options - Options for query execution.
+   */
+  matches(node2, options = {}) {
+    const startPosition = options.startPosition ?? ZERO_POINT;
+    const endPosition = options.endPosition ?? ZERO_POINT;
+    const startIndex = options.startIndex ?? 0;
+    const endIndex = options.endIndex ?? 0;
+    const startContainingPosition = options.startContainingPosition ?? ZERO_POINT;
+    const endContainingPosition = options.endContainingPosition ?? ZERO_POINT;
+    const startContainingIndex = options.startContainingIndex ?? 0;
+    const endContainingIndex = options.endContainingIndex ?? 0;
+    const matchLimit = options.matchLimit ?? 4294967295;
+    const maxStartDepth = options.maxStartDepth ?? 4294967295;
+    const progressCallback = options.progressCallback;
+    if (typeof matchLimit !== "number") {
+      throw new Error("Arguments must be numbers");
+    }
+    this.matchLimit = matchLimit;
+    if (endIndex !== 0 && startIndex > endIndex) {
+      throw new Error("`startIndex` cannot be greater than `endIndex`");
+    }
+    if (endPosition !== ZERO_POINT && (startPosition.row > endPosition.row || startPosition.row === endPosition.row && startPosition.column > endPosition.column)) {
+      throw new Error("`startPosition` cannot be greater than `endPosition`");
+    }
+    if (endContainingIndex !== 0 && startContainingIndex > endContainingIndex) {
+      throw new Error("`startContainingIndex` cannot be greater than `endContainingIndex`");
+    }
+    if (endContainingPosition !== ZERO_POINT && (startContainingPosition.row > endContainingPosition.row || startContainingPosition.row === endContainingPosition.row && startContainingPosition.column > endContainingPosition.column)) {
+      throw new Error("`startContainingPosition` cannot be greater than `endContainingPosition`");
+    }
+    if (progressCallback) {
+      C.currentQueryProgressCallback = progressCallback;
+    }
+    marshalNode(node2);
+    C._ts_query_matches_wasm(
+      this[0],
+      node2.tree[0],
+      startPosition.row,
+      startPosition.column,
+      endPosition.row,
+      endPosition.column,
+      startIndex,
+      endIndex,
+      startContainingPosition.row,
+      startContainingPosition.column,
+      endContainingPosition.row,
+      endContainingPosition.column,
+      startContainingIndex,
+      endContainingIndex,
+      matchLimit,
+      maxStartDepth
+    );
+    const rawCount = C.getValue(TRANSFER_BUFFER, "i32");
+    const startAddress = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const didExceedMatchLimit = C.getValue(TRANSFER_BUFFER + 2 * SIZE_OF_INT, "i32");
+    const result = new Array(rawCount);
+    this.exceededMatchLimit = Boolean(didExceedMatchLimit);
+    let filteredCount = 0;
+    let address = startAddress;
+    for (let i2 = 0; i2 < rawCount; i2++) {
+      const patternIndex = C.getValue(address, "i32");
+      address += SIZE_OF_INT;
+      const captureCount = C.getValue(address, "i32");
+      address += SIZE_OF_INT;
+      const captures = new Array(captureCount);
+      address = unmarshalCaptures(this, node2.tree, address, patternIndex, captures);
+      if (this.textPredicates[patternIndex].every((p) => p(captures))) {
+        result[filteredCount] = { patternIndex, captures };
+        const setProperties = this.setProperties[patternIndex];
+        result[filteredCount].setProperties = setProperties;
+        const assertedProperties = this.assertedProperties[patternIndex];
+        result[filteredCount].assertedProperties = assertedProperties;
+        const refutedProperties = this.refutedProperties[patternIndex];
+        result[filteredCount].refutedProperties = refutedProperties;
+        filteredCount++;
+      }
+    }
+    result.length = filteredCount;
+    C._free(startAddress);
+    C.currentQueryProgressCallback = null;
+    return result;
+  }
+  /**
+   * Iterate over all of the individual captures in the order that they
+   * appear.
+   *
+   * This is useful if you don't care about which pattern matched, and just
+   * want a single, ordered sequence of captures.
+   *
+   * @param {Node} node - The node to execute the query on.
+   *
+   * @param {QueryOptions} options - Options for query execution.
+   */
+  captures(node2, options = {}) {
+    const startPosition = options.startPosition ?? ZERO_POINT;
+    const endPosition = options.endPosition ?? ZERO_POINT;
+    const startIndex = options.startIndex ?? 0;
+    const endIndex = options.endIndex ?? 0;
+    const startContainingPosition = options.startContainingPosition ?? ZERO_POINT;
+    const endContainingPosition = options.endContainingPosition ?? ZERO_POINT;
+    const startContainingIndex = options.startContainingIndex ?? 0;
+    const endContainingIndex = options.endContainingIndex ?? 0;
+    const matchLimit = options.matchLimit ?? 4294967295;
+    const maxStartDepth = options.maxStartDepth ?? 4294967295;
+    const progressCallback = options.progressCallback;
+    if (typeof matchLimit !== "number") {
+      throw new Error("Arguments must be numbers");
+    }
+    this.matchLimit = matchLimit;
+    if (endIndex !== 0 && startIndex > endIndex) {
+      throw new Error("`startIndex` cannot be greater than `endIndex`");
+    }
+    if (endPosition !== ZERO_POINT && (startPosition.row > endPosition.row || startPosition.row === endPosition.row && startPosition.column > endPosition.column)) {
+      throw new Error("`startPosition` cannot be greater than `endPosition`");
+    }
+    if (endContainingIndex !== 0 && startContainingIndex > endContainingIndex) {
+      throw new Error("`startContainingIndex` cannot be greater than `endContainingIndex`");
+    }
+    if (endContainingPosition !== ZERO_POINT && (startContainingPosition.row > endContainingPosition.row || startContainingPosition.row === endContainingPosition.row && startContainingPosition.column > endContainingPosition.column)) {
+      throw new Error("`startContainingPosition` cannot be greater than `endContainingPosition`");
+    }
+    if (progressCallback) {
+      C.currentQueryProgressCallback = progressCallback;
+    }
+    marshalNode(node2);
+    C._ts_query_captures_wasm(
+      this[0],
+      node2.tree[0],
+      startPosition.row,
+      startPosition.column,
+      endPosition.row,
+      endPosition.column,
+      startIndex,
+      endIndex,
+      startContainingPosition.row,
+      startContainingPosition.column,
+      endContainingPosition.row,
+      endContainingPosition.column,
+      startContainingIndex,
+      endContainingIndex,
+      matchLimit,
+      maxStartDepth
+    );
+    const count = C.getValue(TRANSFER_BUFFER, "i32");
+    const startAddress = C.getValue(TRANSFER_BUFFER + SIZE_OF_INT, "i32");
+    const didExceedMatchLimit = C.getValue(TRANSFER_BUFFER + 2 * SIZE_OF_INT, "i32");
+    const result = new Array();
+    this.exceededMatchLimit = Boolean(didExceedMatchLimit);
+    const captures = new Array();
+    let address = startAddress;
+    for (let i2 = 0; i2 < count; i2++) {
+      const patternIndex = C.getValue(address, "i32");
+      address += SIZE_OF_INT;
+      const captureCount = C.getValue(address, "i32");
+      address += SIZE_OF_INT;
+      const captureIndex = C.getValue(address, "i32");
+      address += SIZE_OF_INT;
+      captures.length = captureCount;
+      address = unmarshalCaptures(this, node2.tree, address, patternIndex, captures);
+      if (this.textPredicates[patternIndex].every((p) => p(captures))) {
+        const capture = captures[captureIndex];
+        const setProperties = this.setProperties[patternIndex];
+        capture.setProperties = setProperties;
+        const assertedProperties = this.assertedProperties[patternIndex];
+        capture.assertedProperties = assertedProperties;
+        const refutedProperties = this.refutedProperties[patternIndex];
+        capture.refutedProperties = refutedProperties;
+        result.push(capture);
+      }
+    }
+    C._free(startAddress);
+    C.currentQueryProgressCallback = null;
+    return result;
+  }
+  /** Get the predicates for a given pattern. */
+  predicatesForPattern(patternIndex) {
+    return this.predicates[patternIndex];
+  }
+  /**
+   * Disable a certain capture within a query.
+   *
+   * This prevents the capture from being returned in matches, and also
+   * avoids any resource usage associated with recording the capture.
+   */
+  disableCapture(captureName) {
+    const captureNameLength = C.lengthBytesUTF8(captureName);
+    const captureNameAddress = C._malloc(captureNameLength + 1);
+    C.stringToUTF8(captureName, captureNameAddress, captureNameLength + 1);
+    C._ts_query_disable_capture(this[0], captureNameAddress, captureNameLength);
+    C._free(captureNameAddress);
+  }
+  /**
+   * Disable a certain pattern within a query.
+   *
+   * This prevents the pattern from matching, and also avoids any resource
+   * usage associated with the pattern. This throws an error if the pattern
+   * index is out of bounds.
+   */
+  disablePattern(patternIndex) {
+    if (patternIndex >= this.predicates.length) {
+      throw new Error(
+        `Pattern index is ${patternIndex} but the pattern count is ${this.predicates.length}`
+      );
+    }
+    C._ts_query_disable_pattern(this[0], patternIndex);
+  }
+  /**
+   * Check if, on its last execution, this cursor exceeded its maximum number
+   * of in-progress matches.
+   */
+  didExceedMatchLimit() {
+    return this.exceededMatchLimit;
+  }
+  /** Get the byte offset where the given pattern starts in the query's source. */
+  startIndexForPattern(patternIndex) {
+    if (patternIndex >= this.predicates.length) {
+      throw new Error(
+        `Pattern index is ${patternIndex} but the pattern count is ${this.predicates.length}`
+      );
+    }
+    return C._ts_query_start_byte_for_pattern(this[0], patternIndex);
+  }
+  /** Get the byte offset where the given pattern ends in the query's source. */
+  endIndexForPattern(patternIndex) {
+    if (patternIndex >= this.predicates.length) {
+      throw new Error(
+        `Pattern index is ${patternIndex} but the pattern count is ${this.predicates.length}`
+      );
+    }
+    return C._ts_query_end_byte_for_pattern(this[0], patternIndex);
+  }
+  /** Get the number of patterns in the query. */
+  patternCount() {
+    return C._ts_query_pattern_count(this[0]);
+  }
+  /** Get the index for a given capture name. */
+  captureIndexForName(captureName) {
+    return this.captureNames.indexOf(captureName);
+  }
+  /** Check if a given pattern within a query has a single root node. */
+  isPatternRooted(patternIndex) {
+    return C._ts_query_is_pattern_rooted(this[0], patternIndex) === 1;
+  }
+  /** Check if a given pattern within a query has a single root node. */
+  isPatternNonLocal(patternIndex) {
+    return C._ts_query_is_pattern_non_local(this[0], patternIndex) === 1;
+  }
+  /**
+   * Check if a given step in a query is 'definite'.
+   *
+   * A query step is 'definite' if its parent pattern will be guaranteed to
+   * match successfully once it reaches the step.
+   */
+  isPatternGuaranteedAtStep(byteIndex) {
+    return C._ts_query_is_pattern_guaranteed_at_step(this[0], byteIndex) === 1;
+  }
+};
+
+// packages/code-intel/src/tree-sitter-parser.mjs
 function calculateHash(code2) {
   return crypto2.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
 }
+function getLines(node2) {
+  const startLine = node2.startPosition.row + 1;
+  const endLine = Math.max(
+    startLine,
+    node2.endPosition.column > 0 ? node2.endPosition.row + 1 : node2.endPosition.row
+  );
+  return { startLine, endLine };
+}
+function getSliceHash(lines, startLine, endLine) {
+  const slice = lines.slice(Math.max(0, startLine - 1), endLine).join("\n");
+  return calculateHash(slice);
+}
+function findIdentifier(node2) {
+  if (!node2) return null;
+  if (node2.type === "identifier" || node2.type === "field_identifier" || node2.type === "type_identifier") {
+    return node2.text;
+  }
+  for (const child of node2.namedChildren) {
+    const found = findIdentifier(child);
+    if (found) return found;
+  }
+  return null;
+}
+function findTypeIdentifier(node2) {
+  if (!node2) return null;
+  if (node2.type === "type_identifier") return node2.text;
+  for (const child of node2.namedChildren) {
+    const found = findTypeIdentifier(child);
+    if (found) return found;
+  }
+  return null;
+}
+var loadedLanguages = /* @__PURE__ */ new Map();
+var initPromise = null;
+var sharedParser = null;
+async function initTreeSitter() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      try {
+        let wasmPath = null;
+        try {
+          const require2 = createRequire(import.meta.url);
+          wasmPath = require2.resolve("web-tree-sitter/web-tree-sitter.wasm");
+        } catch (_) {
+        }
+        await Parser2.init({
+          locateFile(scriptName) {
+            if (scriptName.endsWith(".wasm") && wasmPath) return wasmPath;
+            return scriptName;
+          }
+        });
+        sharedParser = new Parser2();
+      } catch (_) {
+        sharedParser = null;
+      }
+    })();
+  }
+  return initPromise;
+}
+try {
+  await initTreeSitter();
+} catch (_) {
+}
+var GRAMMAR_MAPPING = {
+  javascript: "javascript",
+  typescript: "typescript",
+  tsx: "tsx",
+  python: "python",
+  go: "go",
+  rust: "rust",
+  swift: "swift",
+  java: "java",
+  kotlin: "kotlin",
+  cpp: "cpp",
+  c: "c",
+  csharp: "csharp",
+  php: "php",
+  ruby: "ruby"
+};
+function resolveLanguage(langName) {
+  const normalized = GRAMMAR_MAPPING[langName] || langName;
+  if (loadedLanguages.has(normalized)) {
+    return loadedLanguages.get(normalized);
+  }
+  const currentDir = path3.dirname(fileURLToPath(import.meta.url));
+  const candidatePaths = [
+    path3.join(currentDir, "..", "grammars", `tree-sitter-${normalized}.wasm`),
+    path3.join(currentDir, "..", "..", "..", "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
+    path3.join(process.cwd(), "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
+    path3.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`),
+    path3.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized === "csharp" ? "c_sharp" : normalized, `tree-sitter-${normalized === "csharp" ? "c_sharp" : normalized}.wasm`),
+    path3.join(process.cwd(), "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`)
+  ];
+  for (const p of candidatePaths) {
+    if (fs4.existsSync(p)) {
+      try {
+        const buf = fs4.readFileSync(p);
+        const lang = Language.loadSync(new WebAssembly.Module(buf));
+        loadedLanguages.set(normalized, lang);
+        return lang;
+      } catch (_) {
+      }
+    }
+  }
+  return null;
+}
+var TreeSitterParser = class {
+  static isLanguageSupported(lang) {
+    return Boolean(resolveLanguage(lang));
+  }
+  static parse(langName, content, lines) {
+    const lang = resolveLanguage(langName);
+    if (!lang || !sharedParser) return null;
+    try {
+      sharedParser.setLanguage(lang);
+      const tree = sharedParser.parse(content);
+      const symbols = [];
+      const imports = [];
+      switch (langName) {
+        case "javascript":
+        case "typescript":
+        case "tsx":
+          this._extractJsTs(tree.rootNode, lines, symbols, imports);
+          break;
+        case "python":
+          this._extractPython(tree.rootNode, lines, symbols, imports);
+          break;
+        case "go":
+          this._extractGo(tree.rootNode, lines, symbols, imports);
+          break;
+        case "rust":
+          this._extractRust(tree.rootNode, lines, symbols, imports);
+          break;
+        case "swift":
+          this._extractSwift(tree.rootNode, lines, symbols, imports);
+          break;
+        case "java":
+          this._extractJava(tree.rootNode, lines, symbols, imports);
+          break;
+        case "kotlin":
+          this._extractKotlin(tree.rootNode, lines, symbols, imports);
+          break;
+        case "cpp":
+        case "c":
+          this._extractCpp(tree.rootNode, lines, symbols, imports);
+          break;
+        case "csharp":
+          this._extractCSharp(tree.rootNode, lines, symbols, imports);
+          break;
+        case "php":
+          this._extractPhp(tree.rootNode, lines, symbols, imports);
+          break;
+        case "ruby":
+          this._extractRuby(tree.rootNode, lines, symbols, imports);
+          break;
+        default:
+          return null;
+      }
+      return { symbols, imports };
+    } catch (_) {
+      return null;
+    }
+  }
+  // --- 1. JS / TS / TSX ---
+  static _extractJsTs(rootNode, lines, symbols, imports) {
+    const walk = (node2) => {
+      for (const child of node2.namedChildren) {
+        let target = child;
+        if (target.type === "export_statement") {
+          const decl = target.childForFieldName("declaration") || target.namedChild(0);
+          if (decl && decl.type !== "export_clause") target = decl;
+        }
+        if (target.type === "expression_statement") {
+          const inner = target.namedChild(0);
+          if (inner && (inner.type === "internal_module" || inner.type === "module")) {
+            target = inner;
+          }
+        }
+        if (target.type === "internal_module" || target.type === "module") {
+          const name2 = target.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(target);
+          if (name2) {
+            symbols.push({
+              name: name2,
+              shortName: name2,
+              kind: "namespace",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+          const body2 = target.childForFieldName("body");
+          if (body2) walk(body2);
+          continue;
+        }
+        if (target.type === "import_statement") {
+          const srcNode = target.childForFieldName("source");
+          const source = srcNode?.text?.replace(/^['"]|['"]$/g, "");
+          const { startLine } = getLines(target);
+          if (source) imports.push({ source, line: startLine });
+          continue;
+        }
+        if (target.type === "interface_declaration") {
+          const name2 = target.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(target);
+          if (name2) {
+            symbols.push({
+              name: name2,
+              shortName: name2,
+              kind: "interface",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+          continue;
+        }
+        if (target.type === "type_alias_declaration") {
+          const name2 = target.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(target);
+          if (name2) {
+            symbols.push({
+              name: name2,
+              shortName: name2,
+              kind: "type",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+          continue;
+        }
+        if (target.type === "enum_declaration") {
+          const name2 = target.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(target);
+          if (name2) {
+            symbols.push({
+              name: name2,
+              shortName: name2,
+              kind: "enum",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+          continue;
+        }
+        if (target.type === "class_declaration" || target.type === "class_expression") {
+          const className = target.childForFieldName("name")?.text || "AnonymousClass";
+          const { startLine, endLine } = getLines(target);
+          const classSym = {
+            name: className,
+            shortName: className,
+            kind: "class",
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
+          };
+          symbols.push(classSym);
+          const body2 = target.childForFieldName("body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "method_definition") {
+                const mName = m.childForFieldName("name")?.text;
+                if (!mName) continue;
+                const isConstructor = mName === "constructor";
+                const { startLine: ms, endLine: me } = getLines(m);
+                const rawParams = m.childForFieldName("parameters")?.text || "()";
+                const sigParams = rawParams.replace(/\s+/g, " ");
+                const mSym = {
+                  name: `${className}.${mName}`,
+                  shortName: mName,
+                  containerName: className,
+                  kind: isConstructor ? "constructor" : "method",
+                  signature: `${mName}${sigParams}`,
+                  startLine: ms,
+                  endLine: me,
+                  hash: getSliceHash(lines, ms, me)
+                };
+                symbols.push(mSym);
+                classSym.methods.push(mSym);
+              } else if (m.type === "public_field_definition" || m.type === "field_definition" || m.type === "property_definition") {
+                const val = m.childForFieldName("value");
+                if (val && (val.type === "arrow_function" || val.type === "function_expression")) {
+                  const mName = m.childForFieldName("name")?.text;
+                  if (!mName) continue;
+                  const { startLine: ms, endLine: me } = getLines(m);
+                  const rawParams = val.childForFieldName("parameters")?.text || "()";
+                  const sigParams = rawParams.replace(/\s+/g, " ");
+                  const mSym = {
+                    name: `${className}.${mName}`,
+                    shortName: mName,
+                    containerName: className,
+                    kind: "method",
+                    signature: `${mName}${sigParams}`,
+                    startLine: ms,
+                    endLine: me,
+                    hash: getSliceHash(lines, ms, me)
+                  };
+                  symbols.push(mSym);
+                  classSym.methods.push(mSym);
+                }
+              }
+            }
+          }
+          continue;
+        }
+        if (target.type === "function_declaration" || target.type === "generator_function_declaration") {
+          const fnName = target.childForFieldName("name")?.text;
+          if (fnName) {
+            const { startLine, endLine } = getLines(target);
+            const rawParams = target.childForFieldName("parameters")?.text || "()";
+            const sigParams = rawParams.replace(/\s+/g, " ");
+            symbols.push({
+              name: fnName,
+              shortName: fnName,
+              kind: "function",
+              signature: `${fnName}${sigParams}`,
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+          continue;
+        }
+        if (target.type === "lexical_declaration" || target.type === "variable_declaration") {
+          for (const decl of target.namedChildren) {
+            if (decl.type === "variable_declarator") {
+              const varName = decl.childForFieldName("name")?.text;
+              const val = decl.childForFieldName("value");
+              if (val && (val.type === "arrow_function" || val.type === "function_expression")) {
+                const { startLine, endLine } = getLines(target);
+                const rawParams = val.childForFieldName("parameters")?.text || "()";
+                const sigParams = rawParams.replace(/\s+/g, " ");
+                symbols.push({
+                  name: varName,
+                  shortName: varName,
+                  kind: "function",
+                  signature: `${varName}${sigParams}`,
+                  startLine,
+                  endLine,
+                  hash: getSliceHash(lines, startLine, endLine)
+                });
+              }
+            }
+          }
+        }
+      }
+    };
+    walk(rootNode);
+  }
+  // --- 2. Python ---
+  static _extractPython(rootNode, lines, symbols, imports) {
+    const processItem = (node2) => {
+      let target = node2;
+      let outerNode = node2;
+      if (target.type === "decorated_definition") {
+        outerNode = target;
+        target = target.childForFieldName("definition") || target.namedChildren.find((c) => c.type === "function_definition" || c.type === "class_definition");
+        if (!target) return;
+      }
+      if (target.type === "import_statement") {
+        const { startLine } = getLines(target);
+        for (const nameNode of target.namedChildren) {
+          if (nameNode.type === "dotted_name" || nameNode.type === "aliased_import") {
+            const src = nameNode.childForFieldName("name")?.text || nameNode.text;
+            imports.push({ source: src, line: startLine });
+          }
+        }
+      } else if (target.type === "import_from_statement") {
+        const { startLine } = getLines(target);
+        const moduleNameNode = target.childForFieldName("module_name");
+        const src = moduleNameNode ? moduleNameNode.text : target.text;
+        imports.push({ source: src, line: startLine });
+      } else if (target.type === "class_definition") {
+        const className = target.childForFieldName("name")?.text;
+        if (!className) return;
+        const { startLine } = getLines(outerNode);
+        const { endLine } = getLines(target);
+        const classSym = {
+          name: className,
+          shortName: className,
+          kind: "class",
+          startLine,
+          endLine,
+          hash: getSliceHash(lines, startLine, endLine),
+          methods: []
+        };
+        symbols.push(classSym);
+        const body2 = target.childForFieldName("body");
+        if (body2) {
+          for (const m of body2.namedChildren) {
+            let mTarget = m;
+            let mOuter = m;
+            if (mTarget.type === "decorated_definition") {
+              mOuter = mTarget;
+              mTarget = mTarget.childForFieldName("definition") || mTarget.namedChildren.find((c) => c.type === "function_definition");
+            }
+            if (mTarget && mTarget.type === "function_definition") {
+              const mName = mTarget.childForFieldName("name")?.text;
+              if (mName) {
+                const { startLine: ms } = getLines(mOuter);
+                const { endLine: me } = getLines(mTarget);
+                const mSym = {
+                  name: `${className}.${mName}`,
+                  shortName: mName,
+                  containerName: className,
+                  kind: "method",
+                  startLine: ms,
+                  endLine: me,
+                  hash: getSliceHash(lines, ms, me)
+                };
+                symbols.push(mSym);
+                classSym.methods.push(mSym);
+              }
+            }
+          }
+        }
+      } else if (target.type === "function_definition") {
+        const fnName = target.childForFieldName("name")?.text;
+        if (fnName) {
+          const { startLine } = getLines(outerNode);
+          const { endLine } = getLines(target);
+          symbols.push({
+            name: fnName,
+            shortName: fnName,
+            kind: "function",
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine)
+          });
+        }
+      }
+    };
+    for (const child of rootNode.namedChildren) {
+      processItem(child);
+    }
+  }
+  // --- 3. Go ---
+  static _extractGo(rootNode, lines, symbols, imports) {
+    for (const child of rootNode.namedChildren) {
+      if (child.type === "import_declaration") {
+        for (const spec of child.namedChildren) {
+          if (spec.type === "import_spec") {
+            const pathNode = spec.childForFieldName("path");
+            const src = pathNode?.text?.replace(/^["']|["']$/g, "");
+            const { startLine } = getLines(spec);
+            if (src) imports.push({ source: src, line: startLine });
+          }
+        }
+      } else if (child.type === "type_declaration") {
+        for (const spec of child.namedChildren) {
+          if (spec.type === "type_spec") {
+            const name2 = spec.childForFieldName("name")?.text;
+            if (!name2) continue;
+            const typeNode = spec.childForFieldName("type");
+            const kind = typeNode?.type === "interface_type" ? "interface" : "struct";
+            const { startLine, endLine } = getLines(child);
+            const typeSym = {
+              name: name2,
+              shortName: name2,
+              kind,
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine),
+              methods: []
+            };
+            symbols.push(typeSym);
+            if (typeNode && typeNode.type === "interface_type") {
+              for (const elem of typeNode.namedChildren) {
+                if (elem.type === "method_elem" || elem.type === "method_spec") {
+                  const mName = elem.childForFieldName("name")?.text;
+                  if (mName) {
+                    const { startLine: ms, endLine: me } = getLines(elem);
+                    const mSym = {
+                      name: `${name2}.${mName}`,
+                      shortName: mName,
+                      containerName: name2,
+                      kind: "method",
+                      startLine: ms,
+                      endLine: me,
+                      hash: getSliceHash(lines, ms, me)
+                    };
+                    symbols.push(mSym);
+                    typeSym.methods.push(mSym);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else if (child.type === "method_declaration") {
+        const name2 = child.childForFieldName("name")?.text;
+        const rcvrNode = child.childForFieldName("receiver");
+        const rcvrName = findTypeIdentifier(rcvrNode) || "Receiver";
+        const { startLine, endLine } = getLines(child);
+        symbols.push({
+          name: `${rcvrName}.${name2}`,
+          shortName: name2,
+          containerName: rcvrName,
+          kind: "method",
+          startLine,
+          endLine,
+          hash: getSliceHash(lines, startLine, endLine)
+        });
+      } else if (child.type === "function_declaration") {
+        const name2 = child.childForFieldName("name")?.text;
+        const { startLine, endLine } = getLines(child);
+        symbols.push({
+          name: name2,
+          shortName: name2,
+          kind: "function",
+          startLine,
+          endLine,
+          hash: getSliceHash(lines, startLine, endLine)
+        });
+      }
+    }
+  }
+  // --- 4. Rust ---
+  static _extractRust(rootNode, lines, symbols, imports) {
+    const walk = (node2) => {
+      for (const child of node2.namedChildren) {
+        if (child.type === "use_declaration") {
+          const arg = child.childForFieldName("argument")?.text || child.text;
+          const { startLine } = getLines(child);
+          imports.push({ source: arg, line: startLine });
+        } else if (child.type === "mod_item") {
+          const name2 = child.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(child);
+          if (name2) {
+            symbols.push({
+              name: name2,
+              shortName: name2,
+              kind: "module",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+          const body2 = child.childForFieldName("body");
+          if (body2) walk(body2);
+        } else if (child.type === "trait_item") {
+          const name2 = child.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(child);
+          const traitSym = {
+            name: name2,
+            shortName: name2,
+            kind: "trait",
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
+          };
+          symbols.push(traitSym);
+          const body2 = child.childForFieldName("body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "function_signature_item" || m.type === "function_item") {
+                const fnName = m.childForFieldName("name")?.text;
+                const { startLine: ms, endLine: me } = getLines(m);
+                const mSym = {
+                  name: fnName,
+                  shortName: fnName,
+                  containerName: name2,
+                  kind: "function",
+                  startLine: ms,
+                  endLine: me,
+                  hash: getSliceHash(lines, ms, me)
+                };
+                symbols.push(mSym);
+                traitSym.methods.push(mSym);
+              }
+            }
+          }
+        } else if (child.type === "struct_item") {
+          const name2 = child.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(child);
+          symbols.push({
+            name: name2,
+            shortName: name2,
+            kind: "struct",
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine)
+          });
+        } else if (child.type === "enum_item") {
+          const name2 = child.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(child);
+          symbols.push({
+            name: name2,
+            shortName: name2,
+            kind: "enum",
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine)
+          });
+        } else if (child.type === "impl_item") {
+          const typeNode = child.childForFieldName("type");
+          const rawType = typeNode?.text || "Impl";
+          const targetName = rawType.replace(/<.*>$/, "").trim();
+          const body2 = child.childForFieldName("body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "function_item") {
+                const fnName = m.childForFieldName("name")?.text;
+                const { startLine: ms, endLine: me } = getLines(m);
+                symbols.push({
+                  name: `${targetName}.${fnName}`,
+                  shortName: fnName,
+                  containerName: targetName,
+                  kind: "method",
+                  startLine: ms,
+                  endLine: me,
+                  hash: getSliceHash(lines, ms, me)
+                });
+              }
+            }
+          }
+        } else if (child.type === "function_item") {
+          const fnName = child.childForFieldName("name")?.text;
+          const { startLine, endLine } = getLines(child);
+          symbols.push({
+            name: fnName,
+            shortName: fnName,
+            kind: "function",
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine)
+          });
+        }
+      }
+    };
+    walk(rootNode);
+  }
+  // --- 5. Swift ---
+  static _extractSwift(rootNode, lines, symbols, imports) {
+    for (const child of rootNode.namedChildren) {
+      if (child.type === "import_declaration") {
+        const pathNode = child.namedChildren.find((c) => c.type === "identifier");
+        const src = pathNode?.text || child.text.replace(/^import\s+/, "").trim();
+        const { startLine } = getLines(child);
+        imports.push({ source: src, line: startLine });
+      } else if (child.type === "class_declaration" || child.type === "struct_declaration" || child.type === "protocol_declaration" || child.type === "enum_declaration" || child.type === "extension_declaration") {
+        const typeId = child.namedChildren.find((c) => c.type === "type_identifier" || c.type === "user_type");
+        const typeName = typeId?.text || child.childForFieldName("name")?.text || "Type";
+        let kind = "class";
+        const hasStructToken = child.children?.some((c) => c.type === "struct");
+        const hasEnumToken = child.children?.some((c) => c.type === "enum");
+        const hasExtToken = child.children?.some((c) => c.type === "extension");
+        if (child.type === "struct_declaration" || hasStructToken) kind = "struct";
+        else if (child.type === "protocol_declaration") kind = "interface";
+        else if (child.type === "enum_declaration" || hasEnumToken) kind = "enum";
+        else if (child.type === "extension_declaration" || hasExtToken) kind = "extension";
+        const { startLine, endLine } = getLines(child);
+        const classSym = {
+          name: typeName,
+          shortName: typeName,
+          kind,
+          startLine,
+          endLine,
+          hash: getSliceHash(lines, startLine, endLine),
+          methods: []
+        };
+        symbols.push(classSym);
+        const body2 = child.namedChildren.find((c) => c.type === "class_body" || c.type === "protocol_body");
+        if (body2) {
+          for (const m of body2.namedChildren) {
+            if (m.type === "function_declaration" || m.type === "protocol_function_declaration") {
+              const fnId = m.namedChildren.find((c) => c.type === "simple_identifier");
+              const fnName = fnId?.text;
+              if (fnName) {
+                const { startLine: ms, endLine: me } = getLines(m);
+                const mSym = {
+                  name: `${typeName}.${fnName}`,
+                  shortName: fnName,
+                  containerName: typeName,
+                  kind: "method",
+                  startLine: ms,
+                  endLine: me,
+                  hash: getSliceHash(lines, ms, me)
+                };
+                symbols.push(mSym);
+                classSym.methods.push(mSym);
+              }
+            } else if (m.type === "property_declaration") {
+              const varMatch = m.text.match(/var\s+([A-Za-z0-9_]+)/);
+              if (varMatch && varMatch[1] === "body") {
+                const { startLine: ms, endLine: me } = getLines(m);
+                const mSym = {
+                  name: `${typeName}.body`,
+                  shortName: "body",
+                  containerName: typeName,
+                  kind: "method",
+                  startLine: ms,
+                  endLine: me,
+                  hash: getSliceHash(lines, ms, me)
+                };
+                symbols.push(mSym);
+                classSym.methods.push(mSym);
+              }
+            }
+          }
+        }
+      } else if (child.type === "function_declaration") {
+        const fnId = child.namedChildren.find((c) => c.type === "simple_identifier");
+        const fnName = fnId?.text;
+        if (fnName) {
+          const { startLine, endLine } = getLines(child);
+          symbols.push({
+            name: fnName,
+            shortName: fnName,
+            kind: "function",
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine)
+          });
+        }
+      }
+    }
+  }
+  // --- 6. Java ---
+  static _extractJava(rootNode, lines, symbols, imports) {
+    const walk = (node2, parentName = "") => {
+      for (const child of node2.namedChildren) {
+        if (child.type === "import_declaration") {
+          const srcNode = child.namedChildren.find((c) => c.type === "scoped_identifier" || c.type === "identifier");
+          const src = srcNode?.text || child.text;
+          const { startLine } = getLines(child);
+          imports.push({ source: src, line: startLine });
+        } else if (child.type === "class_declaration" || child.type === "interface_declaration" || child.type === "record_declaration" || child.type === "enum_declaration") {
+          const rawName = child.childForFieldName("name")?.text;
+          if (!rawName) continue;
+          const name2 = parentName ? `${parentName}.${rawName}` : rawName;
+          let kind = "class";
+          if (child.type === "interface_declaration") kind = "interface";
+          else if (child.type === "enum_declaration") kind = "enum";
+          else if (child.type === "record_declaration") kind = "record";
+          const { startLine, endLine } = getLines(child);
+          const classSym = {
+            name: name2,
+            shortName: rawName,
+            kind,
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
+          };
+          symbols.push(classSym);
+          const body2 = child.childForFieldName("body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "method_declaration" || m.type === "constructor_declaration") {
+                const mName = m.childForFieldName("name")?.text;
+                if (!mName) continue;
+                const { startLine: ms, endLine: me } = getLines(m);
+                const mSym = {
+                  name: `${name2}.${mName}`,
+                  shortName: mName,
+                  containerName: name2,
+                  kind: "method",
+                  startLine: ms,
+                  endLine: me,
+                  hash: getSliceHash(lines, ms, me)
+                };
+                symbols.push(mSym);
+                classSym.methods.push(mSym);
+              } else if (m.type === "class_declaration" || m.type === "interface_declaration" || m.type === "record_declaration" || m.type === "enum_declaration") {
+                walk({ namedChildren: [m] }, name2);
+              }
+            }
+          }
+        }
+      }
+    };
+    walk(rootNode);
+  }
+  // --- 7. Kotlin ---
+  static _extractKotlin(rootNode, lines, symbols, imports) {
+    const walk = (node2, parentName = "") => {
+      for (const child of node2.namedChildren) {
+        if (child.type === "import_header") {
+          const pathNode = child.namedChildren.find((c) => c.type === "identifier" || c.type === "scoped_identifier");
+          const src = pathNode?.text || child.text.replace(/^import\s+/, "").trim();
+          const { startLine } = getLines(child);
+          imports.push({ source: src, line: startLine });
+        } else if (child.type === "class_declaration" || child.type === "object_declaration") {
+          const typeId = child.namedChildren.find((c) => c.type === "type_identifier");
+          const rawName = typeId?.text || child.childForFieldName("name")?.text || (child.type === "object_declaration" ? "Companion" : "Class");
+          const name2 = parentName ? `${parentName}.${rawName}` : rawName;
+          let kind = "class";
+          if (child.text.includes("interface ")) kind = "interface";
+          else if (child.text.includes("enum class ")) kind = "enum";
+          const { startLine, endLine } = getLines(child);
+          const classSym = {
+            name: name2,
+            shortName: rawName,
+            kind,
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
+          };
+          symbols.push(classSym);
+          const body2 = child.namedChildren.find((c) => c.type === "class_body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "function_declaration") {
+                const fnId = m.namedChildren.find((c) => c.type === "simple_identifier");
+                const fnName = fnId?.text;
+                if (fnName) {
+                  const { startLine: ms, endLine: me } = getLines(m);
+                  const mSym = {
+                    name: `${name2}.${fnName}`,
+                    shortName: fnName,
+                    containerName: name2,
+                    kind: "method",
+                    startLine: ms,
+                    endLine: me,
+                    hash: getSliceHash(lines, ms, me)
+                  };
+                  symbols.push(mSym);
+                  classSym.methods.push(mSym);
+                }
+              } else if (m.type === "class_declaration" || m.type === "object_declaration") {
+                walk({ namedChildren: [m] }, name2);
+              }
+            }
+          }
+        } else if (child.type === "function_declaration") {
+          const fnId = child.namedChildren.find((c) => c.type === "simple_identifier");
+          const fnName = fnId?.text;
+          if (fnName) {
+            const { startLine, endLine } = getLines(child);
+            symbols.push({
+              name: fnName,
+              shortName: fnName,
+              kind: "function",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+        }
+      }
+    };
+    walk(rootNode);
+  }
+  // --- 8. C / C++ ---
+  static _extractCpp(rootNode, lines, symbols, imports) {
+    const walk = (node2, prefix2 = "") => {
+      for (const child of node2.namedChildren) {
+        if (child.type === "preproc_include") {
+          const pathNode = child.namedChildren[0];
+          const src = pathNode?.text || child.text;
+          const { startLine } = getLines(child);
+          imports.push({ source: src, line: startLine });
+        } else if (child.type === "namespace_definition") {
+          const body2 = child.childForFieldName("body");
+          if (body2) walk(body2, prefix2);
+        } else if (child.type === "template_declaration") {
+          for (const inner of child.namedChildren) {
+            if (inner.type === "class_specifier" || inner.type === "struct_specifier" || inner.type === "function_definition") {
+              walk({ namedChildren: [inner] }, prefix2);
+            }
+          }
+        } else if (child.type === "type_definition") {
+          const structSpec = child.namedChildren.find((c) => c.type === "struct_specifier");
+          const typeId = child.namedChildren.find((c) => c.type === "type_identifier");
+          if (structSpec) {
+            const rawName = typeId?.text || structSpec.childForFieldName("name")?.text;
+            if (rawName) {
+              const { startLine, endLine } = getLines(child);
+              symbols.push({
+                name: rawName,
+                shortName: rawName,
+                kind: "struct",
+                startLine,
+                endLine,
+                hash: getSliceHash(lines, startLine, endLine)
+              });
+            }
+          }
+        } else if (child.type === "class_specifier" || child.type === "struct_specifier") {
+          const name2 = child.childForFieldName("name")?.text;
+          if (!name2) continue;
+          const kind = child.type === "struct_specifier" ? "struct" : "class";
+          const { startLine, endLine } = getLines(child);
+          const classSym = {
+            name: name2,
+            shortName: name2,
+            kind,
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
+          };
+          symbols.push(classSym);
+          const body2 = child.childForFieldName("body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "field_declaration" || m.type === "function_definition") {
+                const declarator = m.childForFieldName("declarator");
+                const cleanName = findIdentifier(declarator);
+                if (cleanName) {
+                  const { startLine: ms, endLine: me } = getLines(m);
+                  const mSym = {
+                    name: `${name2}::${cleanName}`,
+                    shortName: cleanName,
+                    containerName: name2,
+                    kind: "method",
+                    startLine: ms,
+                    endLine: me,
+                    hash: getSliceHash(lines, ms, me)
+                  };
+                  symbols.push(mSym);
+                  classSym.methods.push(mSym);
+                }
+              }
+            }
+          }
+        } else if (child.type === "function_definition") {
+          const declarator = child.childForFieldName("declarator");
+          const fnName = findIdentifier(declarator);
+          if (fnName) {
+            const { startLine, endLine } = getLines(child);
+            symbols.push({
+              name: fnName,
+              shortName: fnName,
+              kind: "function",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+        }
+      }
+    };
+    walk(rootNode);
+  }
+  // --- 9. C# ---
+  static _extractCSharp(rootNode, lines, symbols, imports) {
+    const walk = (node2) => {
+      for (const child of node2.namedChildren) {
+        if (child.type === "using_directive") {
+          const nameNode = child.namedChildren.find((c) => c.type === "qualified_name" || c.type === "identifier");
+          const src = nameNode?.text || child.text;
+          const { startLine } = getLines(child);
+          imports.push({ source: src, line: startLine });
+        } else if (child.type === "enum_declaration") {
+          const name2 = child.childForFieldName("name")?.text;
+          if (name2) {
+            const { startLine, endLine } = getLines(child);
+            symbols.push({
+              name: name2,
+              shortName: name2,
+              kind: "enum",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+        } else if (child.type === "class_declaration" || child.type === "interface_declaration" || child.type === "struct_declaration" || child.type === "record_declaration") {
+          const name2 = child.childForFieldName("name")?.text;
+          if (!name2) continue;
+          let kind = "class";
+          if (child.type === "interface_declaration") kind = "interface";
+          else if (child.type === "struct_declaration") kind = "struct";
+          else if (child.type === "record_declaration") kind = "record";
+          const { startLine, endLine } = getLines(child);
+          const classSym = {
+            name: name2,
+            shortName: name2,
+            kind,
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
+          };
+          symbols.push(classSym);
+          const body2 = child.childForFieldName("body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "method_declaration" || m.type === "constructor_declaration") {
+                const mName = m.childForFieldName("name")?.text;
+                if (mName) {
+                  const { startLine: ms, endLine: me } = getLines(m);
+                  const mSym = {
+                    name: `${name2}.${mName}`,
+                    shortName: mName,
+                    containerName: name2,
+                    kind: "method",
+                    startLine: ms,
+                    endLine: me,
+                    hash: getSliceHash(lines, ms, me)
+                  };
+                  symbols.push(mSym);
+                  classSym.methods.push(mSym);
+                }
+              }
+            }
+          }
+        } else {
+          walk(child);
+        }
+      }
+    };
+    walk(rootNode);
+  }
+  // --- 10. PHP ---
+  static _extractPhp(rootNode, lines, symbols, imports) {
+    const walk = (node2) => {
+      for (const child of node2.namedChildren) {
+        if (child.type === "namespace_use_declaration") {
+          const clause = child.namedChildren.find((c) => c.type === "namespace_use_clause");
+          const src = clause?.text || child.text;
+          const { startLine } = getLines(child);
+          imports.push({ source: src, line: startLine });
+        } else if (child.type === "class_declaration" || child.type === "interface_declaration" || child.type === "trait_declaration" || child.type === "enum_declaration") {
+          const name2 = child.childForFieldName("name")?.text;
+          if (!name2) continue;
+          let kind = "class";
+          if (child.type === "interface_declaration") kind = "interface";
+          else if (child.type === "trait_declaration") kind = "trait";
+          else if (child.type === "enum_declaration") kind = "enum";
+          const { startLine, endLine } = getLines(child);
+          const classSym = {
+            name: name2,
+            shortName: name2,
+            kind,
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
+          };
+          symbols.push(classSym);
+          const body2 = child.childForFieldName("body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "method_declaration") {
+                const mName = m.childForFieldName("name")?.text;
+                if (mName) {
+                  const { startLine: ms, endLine: me } = getLines(m);
+                  const mSym = {
+                    name: `${name2}::${mName}`,
+                    shortName: mName,
+                    containerName: name2,
+                    kind: "method",
+                    startLine: ms,
+                    endLine: me,
+                    hash: getSliceHash(lines, ms, me)
+                  };
+                  symbols.push(mSym);
+                  classSym.methods.push(mSym);
+                }
+              }
+            }
+          }
+        } else if (child.type === "function_definition") {
+          const name2 = child.childForFieldName("name")?.text;
+          if (name2) {
+            const { startLine, endLine } = getLines(child);
+            symbols.push({
+              name: name2,
+              shortName: name2,
+              kind: "function",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+        } else {
+          walk(child);
+        }
+      }
+    };
+    walk(rootNode);
+  }
+  // --- 11. Ruby ---
+  static _extractRuby(rootNode, lines, symbols, imports) {
+    const walk = (node2, prefix2 = "") => {
+      for (const child of node2.namedChildren) {
+        if (child.type === "call") {
+          const method = child.childForFieldName("method")?.text;
+          if (method === "require" || method === "require_relative") {
+            const argNode = child.childForFieldName("arguments")?.namedChild(0);
+            const src = argNode?.text?.replace(/^['"]|['"]$/g, "");
+            const { startLine } = getLines(child);
+            if (src) imports.push({ source: src, line: startLine });
+          }
+        } else if (child.type === "class" || child.type === "module") {
+          const rawName = child.childForFieldName("name")?.text;
+          if (!rawName) continue;
+          const name2 = prefix2 ? `${prefix2}::${rawName}` : rawName;
+          const kind = child.type === "module" ? "module" : "class";
+          const { startLine, endLine } = getLines(child);
+          const classSym = {
+            name: name2,
+            shortName: rawName,
+            kind,
+            startLine,
+            endLine,
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
+          };
+          symbols.push(classSym);
+          const body2 = child.childForFieldName("body");
+          if (body2) {
+            for (const m of body2.namedChildren) {
+              if (m.type === "method" || m.type === "singleton_method") {
+                const mName = m.childForFieldName("name")?.text;
+                if (mName) {
+                  const { startLine: ms, endLine: me } = getLines(m);
+                  const sep = m.type === "singleton_method" ? "." : "#";
+                  const mSym = {
+                    name: `${name2}${sep}${mName}`,
+                    shortName: mName,
+                    containerName: name2,
+                    kind: "method",
+                    startLine: ms,
+                    endLine: me,
+                    hash: getSliceHash(lines, ms, me)
+                  };
+                  symbols.push(mSym);
+                  classSym.methods.push(mSym);
+                }
+              } else if (m.type === "class" || m.type === "module") {
+                walk({ namedChildren: [m] }, name2);
+              }
+            }
+          }
+        } else if (child.type === "method") {
+          const name2 = child.childForFieldName("name")?.text;
+          if (name2) {
+            const { startLine, endLine } = getLines(child);
+            symbols.push({
+              name: name2,
+              shortName: name2,
+              kind: "function",
+              startLine,
+              endLine,
+              hash: getSliceHash(lines, startLine, endLine)
+            });
+          }
+        }
+      }
+    };
+    walk(rootNode);
+  }
+};
+
+// packages/code-intel/src/language-registry.mjs
+function calculateHash2(code2) {
+  return crypto3.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
+}
 var LanguageRegistry = class {
   static getLanguage(filePath, content = "") {
-    const basename = path3.basename(filePath);
+    const basename = path4.basename(filePath);
     switch (basename) {
       case "Gemfile":
       case "Podfile":
       case "Rakefile":
-        return { name: "ruby", capability: "L2" };
+        return { name: "ruby", capability: "L3" };
       case "CMakeLists.txt":
-        return { name: "cpp", capability: "L2" };
+        return { name: "cpp", capability: "L3" };
     }
-    const ext = path3.extname(filePath).toLowerCase();
+    const ext = path4.extname(filePath).toLowerCase();
     switch (ext) {
       case ".js":
       case ".mjs":
@@ -38820,39 +44033,39 @@ var LanguageRegistry = class {
       case ".py":
         return { name: "python", capability: "L3" };
       case ".go":
-        return { name: "go", capability: "L2" };
+        return { name: "go", capability: "L3" };
       case ".rs":
-        return { name: "rust", capability: "L2" };
+        return { name: "rust", capability: "L3" };
       case ".swift":
-        return { name: "swift", capability: "L2" };
+        return { name: "swift", capability: "L3" };
       case ".java":
-        return { name: "java", capability: "L2" };
+        return { name: "java", capability: "L3" };
       case ".kt":
       case ".kts":
-        return { name: "kotlin", capability: "L2" };
+        return { name: "kotlin", capability: "L3" };
       case ".c":
       case ".h":
       case ".cpp":
       case ".hpp":
       case ".cc":
       case ".cxx":
-        return { name: "cpp", capability: "L2" };
+        return { name: "cpp", capability: "L3" };
       case ".cs":
-        return { name: "csharp", capability: "L2" };
+        return { name: "csharp", capability: "L3" };
       case ".php":
-        return { name: "php", capability: "L2" };
+        return { name: "php", capability: "L3" };
       case ".rb":
-        return { name: "ruby", capability: "L2" };
+        return { name: "ruby", capability: "L3" };
     }
     if (content) {
       const firstLine = content.slice(0, 150).split(/\r?\n/)[0].trim();
       if (firstLine.startsWith("#!")) {
         if (/python[0-9.]*(\s|$)/.test(firstLine)) return { name: "python", capability: "L3" };
         if (/(node|bun|deno)(\s|$)/.test(firstLine)) return { name: "javascript", capability: "L3" };
-        if (/ruby(\s|$)/.test(firstLine)) return { name: "ruby", capability: "L2" };
-        if (/php(\s|$)/.test(firstLine)) return { name: "php", capability: "L2" };
+        if (/ruby(\s|$)/.test(firstLine)) return { name: "ruby", capability: "L3" };
+        if (/php(\s|$)/.test(firstLine)) return { name: "php", capability: "L3" };
       } else if (firstLine.startsWith("<?php")) {
-        return { name: "php", capability: "L2" };
+        return { name: "php", capability: "L3" };
       }
     }
     return { name: "text", capability: "L1" };
@@ -38863,45 +44076,56 @@ var LanguageRegistry = class {
   static parseStructure(filePath, content, options = {}) {
     const { name: lang, capability } = this.getLanguage(filePath, content);
     const lines = content.split(/\r?\n/);
-    const symbols = [];
-    const imports = [];
-    if (lang === "javascript" || lang === "typescript") {
-      this._parseJsTs(lines, symbols, imports, content);
-    } else if (lang === "python") {
-      this._parsePython(lines, symbols, imports, content);
-    } else if (lang === "go") {
-      this._parseGo(lines, symbols, imports, content);
-    } else if (lang === "rust") {
-      this._parseRust(lines, symbols, imports, content);
-    } else if (lang === "swift") {
-      this._parseSwift(lines, symbols, imports, content);
-    } else if (lang === "java") {
-      this._parseJava(lines, symbols, imports, content);
-    } else if (lang === "kotlin") {
-      this._parseKotlin(lines, symbols, imports, content);
-    } else if (lang === "cpp") {
-      this._parseCpp(lines, symbols, imports, content);
-    } else if (lang === "csharp") {
-      this._parseCSharp(lines, symbols, imports, content);
-    } else if (lang === "php") {
-      this._parsePhp(lines, symbols, imports, content);
-    } else if (lang === "ruby") {
-      this._parseRuby(lines, symbols, imports, content);
-    } else {
-      symbols.push({
-        name: path3.basename(filePath),
-        kind: "file",
-        startLine: 1,
-        endLine: Math.max(1, lines.length),
-        hash: calculateHash(content)
-      });
+    let symbols = [];
+    let imports = [];
+    let parsedWithTreeSitter = false;
+    if (TreeSitterParser.isLanguageSupported(lang)) {
+      const tsResult = TreeSitterParser.parse(lang, content, lines);
+      if (tsResult && Array.isArray(tsResult.symbols)) {
+        symbols = tsResult.symbols;
+        imports = tsResult.imports || [];
+        parsedWithTreeSitter = true;
+      }
+    }
+    if (!parsedWithTreeSitter) {
+      if (lang === "javascript" || lang === "typescript") {
+        this._parseJsTs(lines, symbols, imports, content);
+      } else if (lang === "python") {
+        this._parsePython(lines, symbols, imports, content);
+      } else if (lang === "go") {
+        this._parseGo(lines, symbols, imports, content);
+      } else if (lang === "rust") {
+        this._parseRust(lines, symbols, imports, content);
+      } else if (lang === "swift") {
+        this._parseSwift(lines, symbols, imports, content);
+      } else if (lang === "java") {
+        this._parseJava(lines, symbols, imports, content);
+      } else if (lang === "kotlin") {
+        this._parseKotlin(lines, symbols, imports, content);
+      } else if (lang === "cpp") {
+        this._parseCpp(lines, symbols, imports, content);
+      } else if (lang === "csharp") {
+        this._parseCSharp(lines, symbols, imports, content);
+      } else if (lang === "php") {
+        this._parsePhp(lines, symbols, imports, content);
+      } else if (lang === "ruby") {
+        this._parseRuby(lines, symbols, imports, content);
+      } else {
+        symbols.push({
+          name: path4.basename(filePath),
+          kind: "file",
+          startLine: 1,
+          endLine: Math.max(1, lines.length),
+          hash: calculateHash2(content)
+        });
+      }
     }
     return {
       language: lang,
       capability,
       imports: options.imports !== false ? imports : [],
       symbols: symbols.filter((s) => {
-        if (options.classes === false && (s.kind === "class" || s.kind === "interface" || s.kind === "struct")) return false;
+        if (options.classes === false && (s.kind === "class" || s.kind === "interface" || s.kind === "struct" || s.kind === "trait")) return false;
         if (options.functions === false && (s.kind === "function" || s.kind === "method")) return false;
         return true;
       }),
@@ -38911,7 +44135,7 @@ var LanguageRegistry = class {
   static _parseJsTs(lines, symbols, imports, fullText) {
     try {
       this._parseJsTsWithBabel(lines, symbols, imports, fullText);
-    } catch (err) {
+    } catch (err2) {
       this._parseJsTsFallback(lines, symbols, imports, fullText);
     }
   }
@@ -38933,11 +44157,11 @@ var LanguageRegistry = class {
         "topLevelAwait"
       ]
     });
-    const getSliceHash = (startLine, endLine) => {
+    const getSliceHash2 = (startLine, endLine) => {
       const slice = lines.slice(Math.max(0, startLine - 1), endLine).join("\n");
-      return calculateHash(slice);
+      return calculateHash2(slice);
     };
-    const extractFunctionSignature = (node2, name) => {
+    const extractFunctionSignature = (node2, name2) => {
       const params = (node2.params || []).map((p) => {
         if (p.type === "Identifier") return p.name;
         if (p.type === "AssignmentPattern" && p.left?.name) return `${p.left.name}=...`;
@@ -38946,7 +44170,7 @@ var LanguageRegistry = class {
         if (p.type === "ArrayPattern") return "[...]";
         return "arg";
       }).join(", ");
-      return `${name}(${params})`;
+      return `${name2}(${params})`;
     };
     for (const stmt of ast.program.body) {
       if (stmt.type === "ImportDeclaration") {
@@ -38971,7 +44195,7 @@ var LanguageRegistry = class {
           kind: "class",
           startLine,
           endLine,
-          hash: getSliceHash(startLine, endLine),
+          hash: getSliceHash2(startLine, endLine),
           methods: []
         };
         symbols.push(classSymbol);
@@ -38991,7 +44215,7 @@ var LanguageRegistry = class {
               signature: sig,
               startLine: mStart,
               endLine: mEnd,
-              hash: getSliceHash(mStart, mEnd)
+              hash: getSliceHash2(mStart, mEnd)
             };
             symbols.push(methodSymbol);
             classSymbol.methods.push(methodSymbol);
@@ -39007,7 +44231,7 @@ var LanguageRegistry = class {
               signature: sig,
               startLine: mStart,
               endLine: mEnd,
-              hash: getSliceHash(mStart, mEnd)
+              hash: getSliceHash2(mStart, mEnd)
             };
             symbols.push(methodSymbol);
             classSymbol.methods.push(methodSymbol);
@@ -39024,7 +44248,7 @@ var LanguageRegistry = class {
           signature: extractFunctionSignature(target, fnName),
           startLine,
           endLine,
-          hash: getSliceHash(startLine, endLine)
+          hash: getSliceHash2(startLine, endLine)
         });
       } else if (target.type === "VariableDeclaration") {
         for (const decl of target.declarations || []) {
@@ -39040,7 +44264,7 @@ var LanguageRegistry = class {
               signature: extractFunctionSignature(decl.init, varName),
               startLine,
               endLine,
-              hash: getSliceHash(startLine, endLine)
+              hash: getSliceHash2(startLine, endLine)
             });
           }
         }
@@ -39054,7 +44278,7 @@ var LanguageRegistry = class {
           kind: "interface",
           startLine,
           endLine,
-          hash: getSliceHash(startLine, endLine)
+          hash: getSliceHash2(startLine, endLine)
         });
       } else if (target.type === "TSTypeAliasDeclaration") {
         const typeName = target.id?.name;
@@ -39066,7 +44290,7 @@ var LanguageRegistry = class {
           kind: "type",
           startLine,
           endLine,
-          hash: getSliceHash(startLine, endLine)
+          hash: getSliceHash2(startLine, endLine)
         });
       } else if (target.type === "TSEnumDeclaration") {
         const enumName = target.id?.name;
@@ -39078,17 +44302,17 @@ var LanguageRegistry = class {
           kind: "enum",
           startLine,
           endLine,
-          hash: getSliceHash(startLine, endLine)
+          hash: getSliceHash2(startLine, endLine)
         });
       }
     }
   }
   static _parseJsTsFallback(lines, symbols, imports, fullText) {
     let currentClass = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
       const trimmed = line.trim();
-      const lineNum = i + 1;
+      const lineNum = i2 + 1;
       const importMatch = line.match(/^\s*import\s+(?:(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]/);
       if (importMatch) {
         imports.push({ source: importMatch[1], line: lineNum });
@@ -39097,30 +44321,30 @@ var LanguageRegistry = class {
       const typeMatch = line.match(/^\s*(?:export\s+)?(?:default\s+)?(?:interface|type|enum)\s+([A-Za-z0-9_$]+)/);
       if (typeMatch) {
         const typeName = typeMatch[1];
-        const endLine = line.includes("{") ? this._findClosingBrace(lines, i) : lineNum;
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = line.includes("{") ? this._findClosingBrace(lines, i2) : lineNum;
+        const snippet = lines.slice(i2, endLine).join("\n");
         symbols.push({
           name: typeName,
           shortName: typeName,
           kind: "interface",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(snippet)
+          hash: calculateHash2(snippet)
         });
         continue;
       }
       const classMatch = line.match(/^\s*(?:export\s+)?(?:default\s+)?class\s+([A-Za-z0-9_$]+)/);
       if (classMatch) {
         const className = classMatch[1];
-        const endLine = this._findClosingBrace(lines, i);
-        const classSnippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findClosingBrace(lines, i2);
+        const classSnippet = lines.slice(i2, endLine).join("\n");
         currentClass = {
           name: className,
           shortName: className,
           kind: "class",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(classSnippet),
+          hash: calculateHash2(classSnippet),
           methods: []
         };
         symbols.push(currentClass);
@@ -39130,8 +44354,8 @@ var LanguageRegistry = class {
         const methodMatch = line.match(/^\s*(?:async\s+)?(?:static\s+)?(?:get\s+|set\s+)?([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{/);
         if (methodMatch && !["if", "for", "while", "switch", "catch"].includes(methodMatch[1])) {
           const methodName = methodMatch[1];
-          const endLine = this._findClosingBrace(lines, i);
-          const methodSnippet = lines.slice(i, endLine).join("\n");
+          const endLine = this._findClosingBrace(lines, i2);
+          const methodSnippet = lines.slice(i2, endLine).join("\n");
           const methodSymbol = {
             name: `${currentClass.name}.${methodName}`,
             shortName: methodName,
@@ -39139,7 +44363,7 @@ var LanguageRegistry = class {
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(methodSnippet)
+            hash: calculateHash2(methodSnippet)
           };
           symbols.push(methodSymbol);
           currentClass.methods.push(methodSymbol);
@@ -39151,15 +44375,15 @@ var LanguageRegistry = class {
       const fnMatch = line.match(/^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/) || line.match(/^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z0-9_$]+)\s*=>\s*\{?/);
       if (fnMatch) {
         const fnName = fnMatch[1];
-        const endLine = line.includes("{") ? this._findClosingBrace(lines, i) : lineNum;
-        const fnSnippet = lines.slice(i, endLine).join("\n");
+        const endLine = line.includes("{") ? this._findClosingBrace(lines, i2) : lineNum;
+        const fnSnippet = lines.slice(i2, endLine).join("\n");
         symbols.push({
           name: fnName,
           shortName: fnName,
           kind: "function",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(fnSnippet)
+          hash: calculateHash2(fnSnippet)
         });
       }
     }
@@ -39207,12 +44431,12 @@ for node in ast.iter_child_nodes(tree):
         })
 print(json.dumps({"imports": imports, "symbols": symbols}))
 `;
-      const out = execFileSync("python3", ["-c", script], { input: fullText, encoding: "utf8", timeout: 3e3 });
-      const data = JSON.parse(out);
+      const out2 = execFileSync("python3", ["-c", script], { input: fullText, encoding: "utf8", timeout: 3e3 });
+      const data = JSON.parse(out2);
       for (const imp of data.imports) imports.push(imp);
       for (const s of data.symbols) {
         const slice = lines.slice(s.startLine - 1, s.endLine).join("\n");
-        s.hash = calculateHash(slice);
+        s.hash = calculateHash2(slice);
         symbols.push(s);
       }
       return;
@@ -39222,9 +44446,9 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
   }
   static _parsePythonFallback(lines, symbols, imports) {
     let currentClass = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const importMatch = line.match(/^(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+([a-zA-Z0-9_.]+))/);
       if (importMatch) {
         imports.push({ source: importMatch[1] || importMatch[2], line: lineNum });
@@ -39233,14 +44457,14 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const classMatch = line.match(/^class\s+([A-Za-z0-9_]+)(?:\([^)]*\))?:/);
       if (classMatch) {
         const className = classMatch[1];
-        const endLine = this._findPythonBlockEnd(lines, i);
-        const classSnippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findPythonBlockEnd(lines, i2);
+        const classSnippet = lines.slice(i2, endLine).join("\n");
         currentClass = {
           name: className,
           kind: "class",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(classSnippet),
+          hash: calculateHash2(classSnippet),
           methods: []
         };
         symbols.push(currentClass);
@@ -39249,44 +44473,44 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const defMatch = line.match(/^(\s*)(?:async\s+)?def\s+([A-Za-z0-9_]+)\s*\(/);
       if (defMatch) {
         const indent = defMatch[1].length;
-        const name = defMatch[2];
-        const endLine = this._findPythonBlockEnd(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const name2 = defMatch[2];
+        const endLine = this._findPythonBlockEnd(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         if (indent > 0 && currentClass && lineNum <= currentClass.endLine) {
           const methodSymbol = {
-            name: `${currentClass.name}.${name}`,
+            name: `${currentClass.name}.${name2}`,
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           };
           symbols.push(methodSymbol);
           currentClass.methods.push(methodSymbol);
         } else {
           symbols.push({
-            name,
+            name: name2,
             kind: "function",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         }
       }
     }
   }
   static _parseGo(lines, symbols, imports, fullText) {
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const typeMatch = line.match(/^type\s+([A-Za-z0-9_]+)\s+(?:struct|interface)/);
       if (typeMatch) {
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         symbols.push({
           name: typeMatch[1],
           kind: "struct",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         });
         continue;
       }
@@ -39294,67 +44518,78 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       if (methodMatch) {
         const receiver = methodMatch[1];
         const methodName = methodMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         symbols.push({
           name: `${receiver}.${methodName}`,
           kind: "method",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         });
         continue;
       }
       const fnMatch = line.match(/^func\s+([A-Za-z0-9_]+)\s*\(/);
       if (fnMatch) {
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         symbols.push({
           name: fnMatch[1],
           kind: "function",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         });
       }
     }
   }
   static _parseRust(lines, symbols, imports, fullText) {
     let currentImpl = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const typeMatch = line.match(/^\s*(?:pub(?:\([^)]+\))?\s+)?(struct|enum|trait)\s+([A-Za-z0-9_]+)/);
       if (typeMatch) {
         const typeKind = typeMatch[1];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findDeclarationOrBraceEnd(lines, i2);
         symbols.push({
           name: typeMatch[2],
           kind: typeKind === "trait" ? "trait" : typeKind === "enum" ? "enum" : "struct",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         });
         continue;
       }
-      const implMatch = line.match(/^\s*impl(?:\s+<[^>]+>)?\s+(?:[A-Za-z0-9_]+\s+for\s+)?([A-Za-z0-9_]+)/);
-      if (implMatch) {
-        currentImpl = {
-          name: implMatch[1],
-          startLine: lineNum,
-          endLine: this._findClosingBrace(lines, i)
-        };
+      if (/^\s*impl\b/.test(line)) {
+        let implTarget = null;
+        const forMatch = line.match(/\bfor\s+([A-Za-z0-9_]+)/);
+        if (forMatch) {
+          implTarget = forMatch[1];
+        } else {
+          const directMatch = line.match(/^\s*impl(?:\s*<.*?>)?\s+([A-Za-z0-9_]+)/);
+          if (directMatch) {
+            implTarget = directMatch[1];
+          }
+        }
+        if (implTarget) {
+          currentImpl = {
+            name: implTarget,
+            startLine: lineNum,
+            endLine: this._findClosingBrace(lines, i2)
+          };
+        }
       }
-      const fnMatch = line.match(/^(?:\s*)(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z0-9_]+)\s*\(/);
+      const fnMatch = line.match(/^\s*(?:(?:pub(?:\([^)]*\))?|const|async|unsafe|extern(?:\s+"[^"]*")?)\s+)*fn\s+([A-Za-z0-9_]+)\s*(?:<|\()/);
       if (fnMatch) {
         const fnName = fnMatch[1];
-        const endLine = this._findClosingBrace(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findDeclarationOrBraceEnd(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         if (currentImpl && lineNum <= currentImpl.endLine) {
           symbols.push({
             name: `${currentImpl.name}.${fnName}`,
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         } else {
           symbols.push({
@@ -39362,7 +44597,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
             kind: "function",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         }
       }
@@ -39370,9 +44605,9 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
   }
   static _parseSwift(lines, symbols, imports, fullText) {
     let currentType = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const importMatch = line.match(/^import\s+([A-Za-z0-9_]+)/);
       if (importMatch) {
         imports.push({ source: importMatch[1], line: lineNum });
@@ -39383,13 +44618,13 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       );
       if (typeMatch) {
         const typeName = typeMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         currentType = {
           name: typeName,
           kind: typeMatch[1] === "class" ? "class" : "struct",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         };
         symbols.push(currentType);
         continue;
@@ -39397,15 +44632,15 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const funcMatch = line.match(/^(?:\s*)(?:public\s+|private\s+|static\s+)?func\s+([A-Za-z0-9_]+)\s*(?:<[^>]+>)?\s*\(/);
       if (funcMatch) {
         const funcName = funcMatch[1];
-        const endLine = this._findClosingBrace(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findClosingBrace(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         if (currentType && lineNum <= currentType.endLine) {
           symbols.push({
             name: `${currentType.name}.${funcName}`,
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         } else {
           symbols.push({
@@ -39413,30 +44648,30 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
             kind: "function",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         }
         continue;
       }
       const bodyMatch = line.match(/^(?:\s*)var\s+(body)\s*:\s*some\s+View\s*\{/);
       if (bodyMatch && currentType) {
-        const endLine = this._findClosingBrace(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findClosingBrace(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         symbols.push({
           name: `${currentType.name}.body`,
           kind: "method",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(snippet)
+          hash: calculateHash2(snippet)
         });
       }
     }
   }
   static _parseJava(lines, symbols, imports, fullText) {
     let currentClass = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const importMatch = line.match(/^import\s+(?:static\s+)?([A-Za-z0-9_.*]+);/);
       if (importMatch) {
         imports.push({ source: importMatch[1], line: lineNum });
@@ -39447,13 +44682,13 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       );
       if (typeMatch) {
         const typeName = typeMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         currentClass = {
           name: typeName,
           kind: typeMatch[1] === "interface" ? "interface" : "class",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         };
         symbols.push(currentClass);
         continue;
@@ -39464,15 +44699,15 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       if (methodMatch) {
         const methodName = methodMatch[1];
         if (["if", "for", "while", "switch", "catch", "synchronized"].includes(methodName)) continue;
-        const endLine = this._findClosingBrace(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findClosingBrace(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         if (currentClass && lineNum <= currentClass.endLine) {
           symbols.push({
             name: `${currentClass.name}.${methodName}`,
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         } else {
           symbols.push({
@@ -39480,7 +44715,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
             kind: "function",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         }
       }
@@ -39488,9 +44723,9 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
   }
   static _parseKotlin(lines, symbols, imports, fullText) {
     let currentType = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const importMatch = line.match(/^\s*import\s+([A-Za-z0-9_.*]+)/);
       if (importMatch) {
         imports.push({ source: importMatch[1], line: lineNum });
@@ -39501,13 +44736,13 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       );
       if (typeMatch) {
         const typeName = typeMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         currentType = {
           name: typeName,
           kind: typeMatch[1] === "interface" ? "interface" : "class",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         };
         symbols.push(currentType);
         continue;
@@ -39518,8 +44753,8 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       if (funMatch) {
         const receiver = funMatch[1];
         const funName = funMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findClosingBrace(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         const inType = currentType && lineNum <= currentType.endLine;
         const fullName = receiver ? `${receiver}.${funName}` : inType ? `${currentType.name}.${funName}` : funName;
         symbols.push({
@@ -39527,16 +44762,16 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
           kind: inType || receiver ? "method" : "function",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(snippet)
+          hash: calculateHash2(snippet)
         });
       }
     }
   }
   static _parseCpp(lines, symbols, imports, fullText) {
     let currentClass = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const includeMatch = line.match(/^\s*#include\s+([<"][^>"]+[>"])/);
       if (includeMatch) {
         imports.push({ source: includeMatch[1], line: lineNum });
@@ -39545,13 +44780,13 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const classMatch = line.match(/^\s*(?:template\s*<[^>]*>\s*)?(class|struct)\s+([A-Za-z0-9_]+)(?:\s*:[^{]*)?\s*\{/);
       if (classMatch) {
         const className = classMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         currentClass = {
           name: className,
           kind: classMatch[1] === "class" ? "class" : "struct",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         };
         symbols.push(currentClass);
         continue;
@@ -39560,13 +44795,13 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       if (outOfLineMatch) {
         const scope = outOfLineMatch[1];
         const fnName = outOfLineMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         symbols.push({
           name: `${scope}::${fnName}`,
           kind: "method",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         });
         continue;
       }
@@ -39574,15 +44809,15 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       if (fnMatch) {
         const fnName = fnMatch[1];
         if (["if", "for", "while", "switch", "catch"].includes(fnName)) continue;
-        const endLine = this._findClosingBrace(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findClosingBrace(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         if (currentClass && lineNum <= currentClass.endLine) {
           symbols.push({
             name: `${currentClass.name}::${fnName}`,
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         } else {
           symbols.push({
@@ -39590,7 +44825,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
             kind: "function",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         }
       }
@@ -39598,9 +44833,9 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
   }
   static _parseCSharp(lines, symbols, imports, fullText) {
     let currentClass = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const usingMatch = line.match(/^\s*using\s+([A-Za-z0-9_.]+);/);
       if (usingMatch) {
         imports.push({ source: usingMatch[1], line: lineNum });
@@ -39611,13 +44846,13 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       );
       if (typeMatch) {
         const typeName = typeMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         currentClass = {
           name: typeName,
           kind: typeMatch[1] === "interface" ? "interface" : "class",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         };
         symbols.push(currentClass);
         continue;
@@ -39628,15 +44863,15 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       if (methodMatch) {
         const methodName = methodMatch[1];
         if (["if", "for", "foreach", "while", "switch", "catch", "using", "lock"].includes(methodName)) continue;
-        const endLine = this._findClosingBrace(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findClosingBrace(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         if (currentClass && lineNum <= currentClass.endLine) {
           symbols.push({
             name: `${currentClass.name}.${methodName}`,
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         } else {
           symbols.push({
@@ -39644,7 +44879,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
             kind: "function",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         }
       }
@@ -39652,9 +44887,9 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
   }
   static _parsePhp(lines, symbols, imports, fullText) {
     let currentClass = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const useMatch = line.match(/^\s*use\s+([A-Za-z0-9_\\]+);/);
       if (useMatch) {
         imports.push({ source: useMatch[1], line: lineNum });
@@ -39663,13 +44898,13 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const typeMatch = line.match(/^\s*(?:abstract\s+|final\s+)?(class|interface|trait)\s+([A-Za-z0-9_]+)/);
       if (typeMatch) {
         const typeName = typeMatch[2];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findClosingBrace(lines, i2);
         currentClass = {
           name: typeName,
           kind: typeMatch[1] === "interface" ? "interface" : "class",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         };
         symbols.push(currentClass);
         continue;
@@ -39677,15 +44912,15 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const fnMatch = line.match(/^(?:\s*)(?:public\s+|protected\s+|private\s+)?(?:static\s+)?function\s+([A-Za-z0-9_]+)\s*\(/);
       if (fnMatch) {
         const fnName = fnMatch[1];
-        const endLine = this._findClosingBrace(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findClosingBrace(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         if (currentClass && lineNum <= currentClass.endLine) {
           symbols.push({
             name: `${currentClass.name}::${fnName}`,
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         } else {
           symbols.push({
@@ -39693,7 +44928,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
             kind: "function",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         }
       }
@@ -39701,9 +44936,9 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
   }
   static _parseRuby(lines, symbols, imports, fullText) {
     let currentClass = null;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const lineNum = i + 1;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const lineNum = i2 + 1;
       const requireMatch = line.match(/^\s*(?:require|require_relative)\s+['"]([^'"]+)['"]/);
       if (requireMatch) {
         imports.push({ source: requireMatch[1], line: lineNum });
@@ -39712,13 +44947,13 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const typeMatch = line.match(/^\s*(?:class|module)\s+([A-Za-z0-9_:]+)/);
       if (typeMatch) {
         const typeName = typeMatch[1];
-        const endLine = this._findRubyBlockEnd(lines, i);
+        const endLine = this._findRubyBlockEnd(lines, i2);
         currentClass = {
           name: typeName,
           kind: "class",
           startLine: lineNum,
           endLine,
-          hash: calculateHash(lines.slice(i, endLine).join("\n"))
+          hash: calculateHash2(lines.slice(i2, endLine).join("\n"))
         };
         symbols.push(currentClass);
         continue;
@@ -39726,15 +44961,15 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const defMatch = line.match(/^(\s*)def\s+([A-Za-z0-9_!?.]+)/);
       if (defMatch) {
         const fnName = defMatch[2];
-        const endLine = this._findRubyBlockEnd(lines, i);
-        const snippet = lines.slice(i, endLine).join("\n");
+        const endLine = this._findRubyBlockEnd(lines, i2);
+        const snippet = lines.slice(i2, endLine).join("\n");
         if (currentClass && lineNum <= currentClass.endLine) {
           symbols.push({
             name: `${currentClass.name}#${fnName}`,
             kind: "method",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         } else {
           symbols.push({
@@ -39742,7 +44977,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
             kind: "function",
             startLine: lineNum,
             endLine,
-            hash: calculateHash(snippet)
+            hash: calculateHash2(snippet)
           });
         }
       }
@@ -39752,12 +44987,12 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     let depth = 0;
     const startKeywords = /^\s*(?:class|module|def|if|unless|while|until|for|case)\b/;
     const endKeyword = /^\s*end\b/;
-    for (let i = startIndex; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i2 = startIndex; i2 < lines.length; i2++) {
+      const line = lines[i2];
       if (startKeywords.test(line)) depth++;
       if (endKeyword.test(line)) {
         depth--;
-        if (depth === 0) return i + 1;
+        if (depth === 0) return i2 + 1;
       }
     }
     return lines.length;
@@ -39770,10 +45005,11 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     let depth = 0;
     let foundOpen = false;
     let inString = null;
+    let inRawString = false;
     let inLineComment = false;
     let inBlockComment = false;
-    for (let i = startIndex; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i2 = startIndex; i2 < lines.length; i2++) {
+      const line = lines[i2];
       inLineComment = false;
       for (let j = 0; j < line.length; j++) {
         const ch = line[j];
@@ -39786,12 +45022,24 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
           }
           continue;
         }
+        if (inRawString) {
+          if (ch === ")" && next === '"') {
+            inRawString = false;
+            j++;
+          }
+          continue;
+        }
         if (inString !== null) {
           if (ch === "\\") {
             j++;
             continue;
           }
-          if (ch === inString) {
+          if (inString.length === 3) {
+            if (ch === inString[0] && next === inString[0] && line[j + 2] === inString[0]) {
+              inString = null;
+              j += 2;
+            }
+          } else if (ch === inString) {
             inString = null;
           }
           continue;
@@ -39806,6 +45054,26 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
           j++;
           continue;
         }
+        if (ch === "R" && next === '"' && line[j + 2] === "(") {
+          inRawString = true;
+          j += 2;
+          continue;
+        }
+        if ((ch === '"' || ch === "'") && next === ch && line[j + 2] === ch) {
+          inString = ch.repeat(3);
+          j += 2;
+          continue;
+        }
+        if (ch === "'") {
+          const rest = line.slice(j);
+          const lifetimeMatch = rest.match(/^'([a-zA-Z_][a-zA-Z0-9_]*)/);
+          if (lifetimeMatch) {
+            if (rest[lifetimeMatch[0].length] !== "'") {
+              j += lifetimeMatch[0].length - 1;
+              continue;
+            }
+          }
+        }
         if (ch === '"' || ch === "'" || ch === "`") {
           inString = ch;
           continue;
@@ -39814,9 +45082,115 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
           depth++;
           foundOpen = true;
         } else if (ch === "}") {
+          if (!foundOpen) {
+            return i2 + 1;
+          }
           depth--;
           if (foundOpen && depth === 0) {
-            return i + 1;
+            return i2 + 1;
+          }
+        }
+      }
+    }
+    return lines.length;
+  }
+  /**
+   * Declaration- or Brace-Aware End Finder.
+   * If a declaration terminates with a semicolon ';' before any opening brace '{' is found
+   * (e.g. Rust trait methods 'fn work(&self);', tuple structs 'struct Point(f64, f64);', or externs),
+   * it returns the line number of the semicolon.
+   * If an opening brace '{' is found first, it tracks balanced braces to the closing '}'.
+   */
+  static _findDeclarationOrBraceEnd(lines, startIndex) {
+    let depth = 0;
+    let foundOpen = false;
+    let inString = null;
+    let inRawString = false;
+    let inLineComment = false;
+    let inBlockComment = false;
+    for (let i2 = startIndex; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      inLineComment = false;
+      for (let j = 0; j < line.length; j++) {
+        const ch = line[j];
+        const next = j + 1 < line.length ? line[j + 1] : "";
+        if (inLineComment) break;
+        if (inBlockComment) {
+          if (ch === "*" && next === "/") {
+            inBlockComment = false;
+            j++;
+          }
+          continue;
+        }
+        if (inRawString) {
+          if (ch === ")" && next === '"') {
+            inRawString = false;
+            j++;
+          }
+          continue;
+        }
+        if (inString !== null) {
+          if (ch === "\\") {
+            j++;
+            continue;
+          }
+          if (inString.length === 3) {
+            if (ch === inString[0] && next === inString[0] && line[j + 2] === inString[0]) {
+              inString = null;
+              j += 2;
+            }
+          } else if (ch === inString) {
+            inString = null;
+          }
+          continue;
+        }
+        if (ch === "/" && next === "/") {
+          inLineComment = true;
+          j++;
+          continue;
+        }
+        if (ch === "/" && next === "*") {
+          inBlockComment = true;
+          j++;
+          continue;
+        }
+        if (ch === "R" && next === '"' && line[j + 2] === "(") {
+          inRawString = true;
+          j += 2;
+          continue;
+        }
+        if ((ch === '"' || ch === "'") && next === ch && line[j + 2] === ch) {
+          inString = ch.repeat(3);
+          j += 2;
+          continue;
+        }
+        if (ch === "'") {
+          const rest = line.slice(j);
+          const lifetimeMatch = rest.match(/^'([a-zA-Z_][a-zA-Z0-9_]*)/);
+          if (lifetimeMatch) {
+            if (rest[lifetimeMatch[0].length] !== "'") {
+              j += lifetimeMatch[0].length - 1;
+              continue;
+            }
+          }
+        }
+        if (ch === '"' || ch === "'" || ch === "`") {
+          inString = ch;
+          continue;
+        }
+        if (!foundOpen && ch === ";") {
+          return i2 + 1;
+        }
+        if (!foundOpen && ch === "}") {
+          return i2 + 1;
+        }
+        if (ch === "{") {
+          depth++;
+          foundOpen = true;
+        } else if (ch === "}") {
+          depth--;
+          if (foundOpen && depth === 0) {
+            return i2 + 1;
           }
         }
       }
@@ -39825,12 +45199,12 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
   }
   static _findPythonBlockEnd(lines, startIndex) {
     const baseIndent = lines[startIndex].match(/^(\s*)/)[1].length;
-    for (let i = startIndex + 1; i < lines.length; i++) {
-      const line = lines[i];
+    for (let i2 = startIndex + 1; i2 < lines.length; i2++) {
+      const line = lines[i2];
       if (!line.trim() || line.trim().startsWith("#")) continue;
       const indent = line.match(/^(\s*)/)[1].length;
       if (indent <= baseIndent) {
-        return i;
+        return i2;
       }
     }
     return lines.length;
@@ -39838,8 +45212,8 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
 };
 
 // packages/code-intel/src/code-tools.mjs
-import fs3 from "node:fs";
-import path4 from "node:path";
+import fs5 from "node:fs";
+import path5 from "node:path";
 var CodeTools = class {
   /**
    * 1. Outline: Progressive L1 structure view
@@ -39884,7 +45258,7 @@ var CodeTools = class {
    */
   static create(filePath, content = "") {
     const structure = LanguageRegistry.parseStructure(filePath, content);
-    const newHash = calculateHash(content);
+    const newHash = calculateHash2(content);
     return {
       filePath,
       content,
@@ -39922,9 +45296,9 @@ var CodeTools = class {
       targetSymbol = selector.symbol;
     } else if (selector.method) {
       targetSymbol = selector.method;
-    } else if (selector.startLine && selector.endLine) {
-      startLine = Number(selector.startLine);
-      endLine = Number(selector.endLine);
+    } else if (selector.startLine !== void 0 || selector.endLine !== void 0) {
+      startLine = selector.startLine !== void 0 && selector.startLine !== null ? Number(selector.startLine) : 1;
+      endLine = selector.endLine !== void 0 && selector.endLine !== null ? Number(selector.endLine) : Math.min(lines.length, startLine + 100);
     } else if (selector.fullFile === true) {
       startLine = 1;
       endLine = lines.length;
@@ -39946,7 +45320,7 @@ var CodeTools = class {
     endLine = Math.max(startLine, Math.min(endLine, lines.length));
     const selectedLines = lines.slice(startLine - 1, endLine);
     const codeSnippet = selectedLines.join("\n");
-    const hash = calculateHash(codeSnippet);
+    const hash = calculateHash2(codeSnippet);
     return {
       filePath,
       startLine,
@@ -39969,16 +45343,18 @@ var CodeTools = class {
     }
     let newContent = "";
     const lines = content.split(/\r?\n/);
-    if (startLine !== null && endLine !== null) {
-      const chunkStart = Math.max(0, startLine - 1);
-      const chunkEnd = Math.min(lines.length, endLine);
+    if (startLine !== null || endLine !== null) {
+      const effectiveStart = startLine !== null && startLine !== void 0 ? Number(startLine) : 1;
+      const effectiveEnd = endLine !== null && endLine !== void 0 ? Number(endLine) : lines.length;
+      const chunkStart = Math.max(0, effectiveStart - 1);
+      const chunkEnd = Math.min(lines.length, effectiveEnd);
       const chunk = lines.slice(chunkStart, chunkEnd).join("\n");
       if (!chunk.includes(targetContent)) {
         throw new Error(
-          `TargetContent not found in specified range [L${startLine}-L${endLine}] of ${filePath}`
+          `TargetContent not found in specified range [L${effectiveStart}-L${effectiveEnd}] of ${filePath}`
         );
       }
-      const replacedChunk = chunk.replace(targetContent, replacementContent);
+      const replacedChunk = chunk.replace(targetContent, () => replacementContent);
       newContent = [
         ...lines.slice(0, chunkStart),
         replacedChunk,
@@ -39991,13 +45367,13 @@ var CodeTools = class {
       }
       if (occurrences > 1) {
         throw new Error(
-          `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine to disambiguate.`
+          `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
         );
       }
-      newContent = content.replace(targetContent, replacementContent);
+      newContent = content.replace(targetContent, () => replacementContent);
     }
     const updatedStructure = LanguageRegistry.parseStructure(filePath, newContent);
-    const newHash = calculateHash(newContent);
+    const newHash = calculateHash2(newContent);
     return {
       filePath,
       newContent,
@@ -40034,11 +45410,11 @@ var CodeTools = class {
     }));
     const lines = content.split(/\r?\n/);
     const matchingLines = [];
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].toLowerCase().includes(queryLower)) {
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      if (lines[i2].toLowerCase().includes(queryLower)) {
         matchingLines.push({
-          line: i + 1,
-          content: lines[i].trim()
+          line: i2 + 1,
+          content: lines[i2].trim()
         });
       }
     }
@@ -40056,10 +45432,10 @@ var CodeTools = class {
     const queryLower = query.toLowerCase();
     const results = [];
     for (const relPath of candidateFiles) {
-      const fullPath = path4.resolve(repoRoot, relPath);
-      if (!fs3.existsSync(fullPath)) continue;
+      const fullPath = path5.resolve(repoRoot, relPath);
+      if (!fs5.existsSync(fullPath)) continue;
       try {
-        const content = fs3.readFileSync(fullPath, "utf8");
+        const content = fs5.readFileSync(fullPath, "utf8");
         const structure = LanguageRegistry.parseStructure(relPath, content);
         for (const s of structure.symbols) {
           const nameMatch = s.name.toLowerCase().includes(queryLower);
@@ -40140,10 +45516,248 @@ var CoverageChecker = class {
 };
 
 // packages/application/src/task-service.mjs
+var CODE_EXTENSIONS = /* @__PURE__ */ new Set([
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".ts",
+  ".tsx",
+  ".jsx",
+  ".py",
+  ".go",
+  ".rs",
+  ".swift",
+  ".java",
+  ".kt",
+  ".kts",
+  ".c",
+  ".h",
+  ".cpp",
+  ".hpp",
+  ".cc",
+  ".cxx",
+  ".cs",
+  ".php",
+  ".rb"
+]);
+function scanProjectSourceFiles(projectRoot, maxFiles = 300) {
+  const result = [];
+  const ignoredDirs = /* @__PURE__ */ new Set([".git", "node_modules", ".contextos", "dist", "build", ".next", ".nuxt", "coverage", ".turbo"]);
+  const searchDirs = ["src", "packages", "apps", "lib", "scripts", "test"];
+  const walk = (dir, relDir = "", depth = 0) => {
+    if (depth > 5 || result.length >= maxFiles) return;
+    let entries = [];
+    try {
+      entries = fs6.readdirSync(dir, { withFileTypes: true });
+    } catch (_) {
+      return;
+    }
+    for (const ent of entries) {
+      if (ignoredDirs.has(ent.name)) continue;
+      const childRel = relDir ? path6.join(relDir, ent.name) : ent.name;
+      const childFull = path6.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        walk(childFull, childRel, depth + 1);
+      } else if (ent.isFile() && CODE_EXTENSIONS.has(path6.extname(ent.name).toLowerCase())) {
+        result.push(childRel);
+      }
+    }
+  };
+  for (const sDir of searchDirs) {
+    const full = path6.join(projectRoot, sDir);
+    if (fs6.existsSync(full)) {
+      walk(full, sDir, 0);
+    }
+  }
+  try {
+    const rootEntries = fs6.readdirSync(projectRoot, { withFileTypes: true });
+    for (const ent of rootEntries) {
+      if (ent.isFile() && !ent.name.startsWith(".") && CODE_EXTENSIONS.has(path6.extname(ent.name).toLowerCase())) {
+        result.push(ent.name);
+      }
+    }
+  } catch (_) {
+  }
+  return result;
+}
 var TaskService = class {
   constructor(db, syncEngine) {
     this.db = db;
     this.syncEngine = syncEngine;
+  }
+  _initializeFileSnapshots(task, projectRoot) {
+    if (!task.baseline) {
+      task.baseline = { fileSnapshots: {} };
+    }
+    if (!task.baseline.fileSnapshots) {
+      task.baseline.fileSnapshots = {};
+    }
+    const dbBlocks = this.db.listBlocks() || [];
+    const filesToSnapshot = new Set(task.workingSet.files || []);
+    for (const b of dbBlocks) {
+      for (const ref of b.artifactRefs || []) {
+        if (ref.path) filesToSnapshot.add(ref.path);
+      }
+    }
+    for (const relPath of filesToSnapshot) {
+      if (task.baseline.fileSnapshots[relPath]) continue;
+      const fullPath = path6.isAbsolute(relPath) ? relPath : path6.join(projectRoot, relPath);
+      if (fs6.existsSync(fullPath)) {
+        try {
+          const stat = fs6.statSync(fullPath);
+          if (stat.isDirectory()) continue;
+          const content = fs6.readFileSync(fullPath, "utf8");
+          const hash = crypto4.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
+          task.baseline.fileSnapshots[relPath] = {
+            mtimeMs: stat.mtimeMs,
+            size: stat.size,
+            hash,
+            snapshottedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+        } catch (_) {
+        }
+      }
+    }
+  }
+  _refreshFileAstAndLocators(relPath, content, dbBlocks, task) {
+    try {
+      const structure = LanguageRegistry.parseStructure(relPath, content);
+      const fileHash = crypto4.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
+      const newLocators = (structure.symbols || []).map((s) => ({
+        path: relPath,
+        symbol: s.name,
+        startLine: s.startLine,
+        endLine: s.endLine,
+        hash: s.hash,
+        role: "implementation"
+      }));
+      if (task && task.contextSlice) {
+        const remaining = (task.contextSlice.locators || []).filter((l) => l.path !== relPath);
+        task.contextSlice.locators = [...remaining, ...newLocators];
+      }
+      for (const block of dbBlocks || []) {
+        let blockModified = false;
+        for (const ref of block.artifactRefs || []) {
+          if (ref.path === relPath) {
+            if (ref.hash !== fileHash) {
+              ref.hash = fileHash;
+              blockModified = true;
+            }
+          }
+        }
+        if (blockModified) {
+          this.db.saveBlock(block);
+        }
+      }
+    } catch (_) {
+    }
+  }
+  _reconcileWorkingSet(task, projectRoot, dbBlocks = []) {
+    if (!projectRoot || !fs6.existsSync(projectRoot)) return;
+    if (!task.baseline) {
+      task.baseline = { fileSnapshots: {} };
+    }
+    if (!task.baseline.fileSnapshots) {
+      task.baseline.fileSnapshots = {};
+    }
+    const candidateFiles = /* @__PURE__ */ new Set([
+      ...task.workingSet.files || [],
+      ...Object.keys(task.baseline.fileSnapshots)
+    ]);
+    for (const block of dbBlocks) {
+      for (const ref of block.artifactRefs || []) {
+        if (ref.path) candidateFiles.add(ref.path);
+      }
+    }
+    try {
+      const gitOutput = execSync("git status --porcelain", {
+        cwd: projectRoot,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "ignore"]
+      });
+      const lines = gitOutput.split("\n");
+      for (const line of lines) {
+        if (!line || line.length < 4) continue;
+        let rawPath = line.slice(3).trim();
+        if (rawPath.startsWith('"') && rawPath.endsWith('"')) {
+          rawPath = rawPath.slice(1, -1);
+        }
+        if (rawPath.includes(" -> ")) {
+          rawPath = rawPath.split(" -> ").pop().trim();
+        }
+        if (rawPath && !rawPath.startsWith(".contextos") && !rawPath.startsWith(".git") && !rawPath.includes("node_modules")) {
+          candidateFiles.add(rawPath);
+        }
+      }
+    } catch (_) {
+    }
+    const scannedFiles = scanProjectSourceFiles(projectRoot);
+    for (const f of scannedFiles) {
+      candidateFiles.add(f);
+    }
+    for (const relPath of candidateFiles) {
+      const fullPath = path6.isAbsolute(relPath) ? relPath : path6.join(projectRoot, relPath);
+      if (!fs6.existsSync(fullPath)) {
+        if (task.baseline.fileSnapshots[relPath]) {
+          delete task.baseline.fileSnapshots[relPath];
+          if (task.contextSlice && task.contextSlice.locators) {
+            task.contextSlice.locators = task.contextSlice.locators.filter((l) => l.path !== relPath);
+          }
+          task.addNote({
+            text: `[Host Native Modification] Detected external deletion of '${relPath}'. Cleaned up baseline snapshots and locators.`,
+            kind: "system"
+          });
+        }
+        continue;
+      }
+      let stat;
+      try {
+        stat = fs6.statSync(fullPath);
+      } catch (_) {
+        continue;
+      }
+      if (stat.isDirectory()) continue;
+      const snapshot = task.baseline.fileSnapshots[relPath];
+      const statChanged = !snapshot || stat.mtimeMs !== snapshot.mtimeMs || stat.size !== snapshot.size;
+      if (statChanged) {
+        let content = "";
+        try {
+          content = fs6.readFileSync(fullPath, "utf8");
+        } catch (_) {
+          continue;
+        }
+        const currentHash = crypto4.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
+        const blockRef = dbBlocks.flatMap((b) => b.artifactRefs || []).find((r) => r.path === relPath);
+        const baseHash = snapshot ? snapshot.hash : blockRef?.hash || null;
+        if (!baseHash || currentHash !== baseHash) {
+          task.addFileToWorkingSet(relPath);
+          task.baseline.fileSnapshots[relPath] = {
+            mtimeMs: stat.mtimeMs,
+            size: stat.size,
+            hash: currentHash,
+            modifiedLocally: true,
+            lastReconciledAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+          this._refreshFileAstAndLocators(relPath, content, dbBlocks, task);
+          task.addNote({
+            text: `[Host Native Modification] Detected external disk modification in '${relPath}' via mtime/SHA256 comparison (${baseHash ? `${baseHash.slice(0, 8)} -> ${currentHash.slice(0, 8)}` : `new: ${currentHash.slice(0, 8)}`}). Working set and AST outlines refreshed.`,
+            kind: "system"
+          });
+        } else {
+          if (!task.baseline.fileSnapshots[relPath]) {
+            task.baseline.fileSnapshots[relPath] = {
+              mtimeMs: stat.mtimeMs,
+              size: stat.size,
+              hash: currentHash,
+              snapshottedAt: (/* @__PURE__ */ new Date()).toISOString()
+            };
+          } else {
+            task.baseline.fileSnapshots[relPath].mtimeMs = stat.mtimeMs;
+            task.baseline.fileSnapshots[relPath].size = stat.size;
+          }
+        }
+      }
+    }
   }
   createTask({
     id,
@@ -40155,7 +45769,7 @@ var TaskService = class {
     workingSet = {},
     references = {},
     baseline = {}
-  }) {
+  }, projectRoot = null) {
     const task = new Task({
       id: id || `task-${Date.now()}`,
       planId,
@@ -40167,6 +45781,9 @@ var TaskService = class {
       references,
       baseline
     });
+    if (projectRoot && fs6.existsSync(projectRoot)) {
+      this._initializeFileSnapshots(task, projectRoot);
+    }
     this.db.saveTask(task.toJSON());
     return task.toJSON();
   }
@@ -40176,11 +45793,24 @@ var TaskService = class {
   listTasks(planId = null) {
     return this.db.listTasks(planId);
   }
-  activateTask(taskId) {
+  activateTask(taskId, projectRoot = null) {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
     const task = new Task(raw);
     task.activate();
+    if (projectRoot && fs6.existsSync(projectRoot)) {
+      this._initializeFileSnapshots(task, projectRoot);
+      this._reconcileWorkingSet(task, projectRoot, this.db.listBlocks(raw.projectId));
+    }
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+  reconcileTask(taskId, projectRoot, projectId = null) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const task = new Task(raw);
+    const dbBlocks = (projectId ? this.db.listBlocks(projectId) : this.db.listBlocks()) || [];
+    this._reconcileWorkingSet(task, projectRoot, dbBlocks);
     this.db.saveTask(task.toJSON());
     return task.toJSON();
   }
@@ -40200,10 +45830,14 @@ var TaskService = class {
     this.db.saveTask(task.toJSON());
     return task.toJSON();
   }
-  addCheck(taskId, { receiptId = null, description, passed = true, evidence = "" }) {
+  addCheck(taskId, { receiptId = null, description, passed = true, evidence = "" }, projectRoot = null, projectId = null) {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
     const task = new Task(raw);
+    if (projectRoot && fs6.existsSync(projectRoot)) {
+      const dbBlocks = (projectId ? this.db.listBlocks(projectId) : this.db.listBlocks(raw.projectId)) || [];
+      this._reconcileWorkingSet(task, projectRoot, dbBlocks);
+    }
     const check = task.addCheck({ receiptId, description, passed, evidence });
     this.db.saveTask(task.toJSON());
     return check;
@@ -40219,21 +45853,82 @@ var TaskService = class {
     this.db.saveTask(task.toJSON());
     return task.toJSON();
   }
-  syncTask(taskId, { blocks = [], chains = [], links = [], projectRoot, projectId }) {
+  syncTask(taskId, { blocks = [], chains = [], links = [], projectRoot, projectId, coverageMode = "strict" }) {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
     const task = new Task(raw);
-    const resolvedBlocks = blocks.map((b) => typeof b === "string" ? this.db.getBlock(b) : b).filter(Boolean);
+    const inputBlocks = blocks.map((b) => typeof b === "string" ? this.db.getBlock(b) : b).filter(Boolean);
+    const dbBlocks = (projectId ? this.db.listBlocks(projectId) : this.db.listBlocks()) || [];
+    this._reconcileWorkingSet(task, projectRoot, dbBlocks);
+    const blockMap = /* @__PURE__ */ new Map();
+    for (const b of dbBlocks) {
+      blockMap.set(b.id, { ...b });
+    }
+    for (const b of inputBlocks) {
+      blockMap.set(b.id, { ...b });
+    }
+    let resolvedBlocks = Array.from(blockMap.values());
+    for (const b of resolvedBlocks) {
+      for (const ref of b.artifactRefs || []) {
+        const snap = task.baseline?.fileSnapshots?.[ref.path];
+        if (snap && snap.hash && ref.hash !== snap.hash) {
+          ref.hash = snap.hash;
+        }
+      }
+    }
     const resolvedChains = chains.map((c) => typeof c === "string" ? this.db.getChain(c) : c).filter(Boolean);
     const resolvedLinks = links.map((l) => typeof l === "string" ? this.db.getLink(l) : l).filter(Boolean);
     task.startSyncing();
     const coverageReport = CoverageChecker.checkCoverage(task.workingSet.files || [], resolvedBlocks);
     if (!coverageReport.isFullyCovered) {
-      task.failSync(`Coverage gap: Missing Block ownership for: ${coverageReport.uncoveredList.join(", ")}`);
-      this.db.saveTask(task.toJSON());
-      throw new Error(
-        `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverageReport.uncoveredList.join(", ")}`
-      );
+      if (coverageMode === "adaptive") {
+        let unassignedBlock = resolvedBlocks.find(
+          (b) => b.id === "block-unassigned" || b.id === `block-unassigned-${task.id}`
+        );
+        if (!unassignedBlock) {
+          unassignedBlock = {
+            id: `block-unassigned-${task.id}`,
+            projectId: projectId || raw.projectId || "contextos",
+            title: `Unassigned Working Set (${task.title})`,
+            summary: `Adaptive block for unassigned files: ${coverageReport.uncoveredList.join(", ")}`,
+            details: "Automatically created by ContextOS adaptive coverage gate.",
+            kind: "unassigned",
+            artifactRefs: []
+          };
+          resolvedBlocks.push(unassignedBlock);
+        }
+        for (const filePath of coverageReport.uncoveredList) {
+          if (unassignedBlock.artifactRefs.some((r) => r.path === filePath)) {
+            continue;
+          }
+          let hash = "untracked";
+          if (projectRoot) {
+            const fullPath = path6.isAbsolute(filePath) ? filePath : path6.join(projectRoot, filePath);
+            if (fs6.existsSync(fullPath)) {
+              try {
+                const content = fs6.readFileSync(fullPath, "utf8");
+                hash = crypto4.createHash("sha256").update(content).digest("hex").slice(0, 16);
+              } catch (_) {
+              }
+            }
+          }
+          unassignedBlock.artifactRefs.push({
+            path: filePath,
+            symbol: "*",
+            hash
+          });
+        }
+        task.addNote({
+          text: `[Adaptive Coverage Warning] Automatically mapped unassigned files to ${unassignedBlock.id}: ${coverageReport.uncoveredList.join(", ")}`,
+          kind: "system"
+        });
+      } else {
+        task.failSync(`Coverage gap: Missing Block ownership for: ${coverageReport.uncoveredList.join(", ")}`);
+        this.db.saveTask(task.toJSON());
+        throw new Error(
+          `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverageReport.uncoveredList.join(", ")}`
+        );
+      }
     }
     for (const b of resolvedBlocks) {
       assertBlockHasRealCode(b);
@@ -40278,24 +45973,24 @@ var TaskService = class {
 };
 
 // packages/application/src/knowledge-service.mjs
-import path5 from "node:path";
-import fs4 from "node:fs";
+import path7 from "node:path";
+import fs7 from "node:fs";
 var KnowledgeService = class {
   static getDecisionPath(projectRoot) {
-    const defaultPath = path5.join(projectRoot, "DECISION.md");
-    if (fs4.existsSync(defaultPath)) return defaultPath;
-    const dotPath = path5.join(projectRoot, ".contextos", "DECISION.md");
-    return fs4.existsSync(dotPath) ? dotPath : defaultPath;
+    const defaultPath = path7.join(projectRoot, "DECISION.md");
+    if (fs7.existsSync(defaultPath)) return defaultPath;
+    const dotPath = path7.join(projectRoot, ".contextos", "DECISION.md");
+    return fs7.existsSync(dotPath) ? dotPath : defaultPath;
   }
   static getDecision(projectRoot) {
     const docPath = this.getDecisionPath(projectRoot);
-    if (!fs4.existsSync(docPath)) {
+    if (!fs7.existsSync(docPath)) {
       return {
         path: docPath,
         document: new DecisionDocument("# Project Decisions\n")
       };
     }
-    const raw = fs4.readFileSync(docPath, "utf8");
+    const raw = fs7.readFileSync(docPath, "utf8");
     return {
       path: docPath,
       document: new DecisionDocument(raw)
@@ -40304,27 +45999,27 @@ var KnowledgeService = class {
   static patchDecisionSection(projectRoot, { id, title, content }) {
     const { path: docPath, document } = this.getDecision(projectRoot);
     const updatedSection = document.upsertSection({ id, title, content });
-    fs4.mkdirSync(path5.dirname(docPath), { recursive: true });
-    fs4.writeFileSync(docPath, document.toMarkdown(), "utf8");
+    fs7.mkdirSync(path7.dirname(docPath), { recursive: true });
+    fs7.writeFileSync(docPath, document.toMarkdown(), "utf8");
     return {
       docPath,
       section: updatedSection
     };
   }
   static getRulesDir(projectRoot) {
-    const dotDir = path5.join(projectRoot, ".contextos", "rules");
-    if (fs4.existsSync(dotDir)) return dotDir;
-    const standardDir = path5.join(projectRoot, "rules");
-    return fs4.existsSync(standardDir) ? standardDir : dotDir;
+    const dotDir = path7.join(projectRoot, ".contextos", "rules");
+    if (fs7.existsSync(dotDir)) return dotDir;
+    const standardDir = path7.join(projectRoot, "rules");
+    return fs7.existsSync(standardDir) ? standardDir : dotDir;
   }
   static listRules(projectRoot) {
     const rulesDir = this.getRulesDir(projectRoot);
-    if (!fs4.existsSync(rulesDir)) return [];
-    const files = fs4.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+    if (!fs7.existsSync(rulesDir)) return [];
+    const files = fs7.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
     const rules = [];
     for (const file of files) {
-      const filePath = path5.join(rulesDir, file);
-      const raw = fs4.readFileSync(filePath, "utf8");
+      const filePath = path7.join(rulesDir, file);
+      const raw = fs7.readFileSync(filePath, "utf8");
       const rule = this.parseRuleFile(file, raw);
       rules.push(rule.toSummaryJSON());
     }
@@ -40332,25 +46027,25 @@ var KnowledgeService = class {
   }
   static getRule(projectRoot, ruleId) {
     const rulesDir = this.getRulesDir(projectRoot);
-    const targetFile = path5.join(rulesDir, `${ruleId}.md`);
-    if (!fs4.existsSync(targetFile)) {
-      const files = fs4.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+    const targetFile = path7.join(rulesDir, `${ruleId}.md`);
+    if (!fs7.existsSync(targetFile)) {
+      const files = fs7.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
       for (const file of files) {
-        const filePath = path5.join(rulesDir, file);
-        const raw2 = fs4.readFileSync(filePath, "utf8");
+        const filePath = path7.join(rulesDir, file);
+        const raw2 = fs7.readFileSync(filePath, "utf8");
         const rule = this.parseRuleFile(file, raw2);
         if (rule.id === ruleId) return rule.toJSON();
       }
       return null;
     }
-    const raw = fs4.readFileSync(targetFile, "utf8");
+    const raw = fs7.readFileSync(targetFile, "utf8");
     return this.parseRuleFile(`${ruleId}.md`, raw).toJSON();
   }
   static saveRule(projectRoot, { id, title, category, summary, content, priority = "normal" }) {
     const rule = new Rule({ id, title, category, summary, content, priority });
     const rulesDir = this.getRulesDir(projectRoot);
-    fs4.mkdirSync(rulesDir, { recursive: true });
-    const targetFile = path5.join(rulesDir, `${id}.md`);
+    fs7.mkdirSync(rulesDir, { recursive: true });
+    const targetFile = path7.join(rulesDir, `${id}.md`);
     const markdown = `---
 id: ${rule.id}
 title: ${rule.title}
@@ -40363,7 +46058,7 @@ summary: ${rule.summary}
 
 ${rule.content}
 `;
-    fs4.writeFileSync(targetFile, markdown, "utf8");
+    fs7.writeFileSync(targetFile, markdown, "utf8");
     return rule.toJSON();
   }
   static parseRuleFile(fileName, rawText) {
@@ -40476,10 +46171,10 @@ ${tail}`;
 }
 
 // packages/process-host/src/runner.mjs
-import { spawn } from "node:child_process";
-import path6 from "node:path";
-import fs5 from "node:fs";
-import crypto3 from "node:crypto";
+import { spawn, execSync as execSync2 } from "node:child_process";
+import path8 from "node:path";
+import fs8 from "node:fs";
+import crypto5 from "node:crypto";
 async function runCommand({
   command,
   cwd = process.cwd(),
@@ -40488,23 +46183,35 @@ async function runCommand({
   timeoutMs = 6e4,
   projectRoot = cwd
 }) {
-  const receiptId = `receipt-${Date.now()}-${crypto3.randomBytes(3).toString("hex")}`;
+  const receiptId = `receipt-${Date.now()}-${crypto5.randomBytes(3).toString("hex")}`;
   const startTime = Date.now();
-  const logDir = path6.join(projectRoot, ".contextos", "logs");
-  fs5.mkdirSync(logDir, { recursive: true });
-  const logFile = path6.join(logDir, `${receiptId}.log`);
+  const logDir = path8.join(projectRoot, ".contextos", "logs");
+  fs8.mkdirSync(logDir, { recursive: true });
+  const logFile = path8.join(logDir, `${receiptId}.log`);
   return new Promise((resolve) => {
     let stdoutData = "";
     let stderrData = "";
     let killedByTimeout = false;
-    const child = spawn("/bin/sh", ["-c", command], {
+    const isWin = process.platform === "win32";
+    const shell = isWin ? process.env.ComSpec || "cmd.exe" : "/bin/sh";
+    const shellArgs = isWin ? ["/d", "/s", "/c", command] : ["-c", command];
+    const child = spawn(shell, shellArgs, {
       cwd,
       env,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsVerbatimArguments: isWin
     });
     const timer = setTimeout(() => {
       killedByTimeout = true;
-      child.kill("SIGKILL");
+      if (isWin && child.pid) {
+        try {
+          execSync2(`taskkill /pid ${child.pid} /T /F`, { stdio: "ignore" });
+        } catch (_) {
+          child.kill("SIGKILL");
+        }
+      } else {
+        child.kill("SIGKILL");
+      }
     }, timeoutMs);
     child.stdout.on("data", (chunk) => {
       stdoutData += chunk.toString("utf8");
@@ -40519,12 +46226,12 @@ async function runCommand({
 --- STDERR ---
 ${stderrData}` : "");
       try {
-        fs5.writeFileSync(logFile, rawOutput, "utf8");
+        fs8.writeFileSync(logFile, rawOutput, "utf8");
       } catch (_) {
       }
       const exitCode = killedByTimeout ? 124 : code2 !== null ? code2 : 1;
       const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars });
-      const relativeLogHandle = path6.relative(projectRoot, logFile);
+      const relativeLogHandle = path8.relative(projectRoot, logFile);
       resolve({
         id: receiptId,
         command: redactSecrets(command),
@@ -40539,7 +46246,7 @@ ${stderrData}` : "");
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       });
     });
-    child.on("error", (err) => {
+    child.on("error", (err2) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
       resolve({
@@ -40548,9 +46255,9 @@ ${stderrData}` : "");
         cwd,
         exitCode: 1,
         durationMs,
-        summary: `Command process error: ${err.message}`,
-        text: `Error: ${err.message}`,
-        errors: [err.message],
+        summary: `Command process error: ${err2.message}`,
+        text: `Error: ${err2.message}`,
+        errors: [err2.message],
         warnings: [],
         logHandle: null,
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -40560,14 +46267,60 @@ ${stderrData}` : "");
 }
 
 // packages/process-host/src/process-manager.mjs
-import { spawn as spawn2 } from "node:child_process";
-import path7 from "node:path";
-import fs6 from "node:fs";
-import crypto4 from "node:crypto";
+import { spawn as spawn2, execSync as execSync3 } from "node:child_process";
+import path9 from "node:path";
+import fs9 from "node:fs";
+import crypto6 from "node:crypto";
 var ProcessManager = class {
   constructor({ projectRoot = process.cwd() } = {}) {
-    this.projectRoot = path7.resolve(projectRoot);
+    this.projectRoot = path9.resolve(projectRoot);
     this.sessions = /* @__PURE__ */ new Map();
+    this._healZombieProcesses();
+  }
+  _healZombieProcesses() {
+    try {
+      const procFile = path9.join(this.projectRoot, ".contextos", "processes.json");
+      if (!fs9.existsSync(procFile)) return;
+      const data = JSON.parse(fs9.readFileSync(procFile, "utf8"));
+      if (!Array.isArray(data)) return;
+      let hasChanges = false;
+      for (const item of data) {
+        if (!item || !item.id) continue;
+        const pid = item.pid;
+        let isAlive = false;
+        if (pid) {
+          try {
+            process.kill(pid, 0);
+            isAlive = true;
+          } catch (_) {
+            isAlive = false;
+          }
+        }
+        if (isAlive) {
+          this.sessions.set(item.id, {
+            id: item.id,
+            command: item.command,
+            cwd: item.cwd || this.projectRoot,
+            pid: item.pid,
+            pgid: item.pid,
+            status: item.status || "running",
+            startedAt: item.startedAt || (/* @__PURE__ */ new Date()).toISOString(),
+            stoppedAt: null,
+            exitCode: null,
+            port: item.port || null,
+            url: item.url || null,
+            logFile: item.logFile || path9.join(this.projectRoot, ".contextos", "logs", `${item.id}.log`),
+            child: null
+          });
+        } else {
+          hasChanges = true;
+        }
+      }
+      if (hasChanges) {
+        this._persistProcesses();
+      }
+    } catch (_) {
+    }
   }
   async startProcess({
     command,
@@ -40576,16 +46329,20 @@ var ProcessManager = class {
     readyRegex = null,
     portRegex = null
   }) {
-    const sessionId = `proc-${Date.now()}-${crypto4.randomBytes(3).toString("hex")}`;
-    const logDir = path7.join(this.projectRoot, ".contextos", "logs");
-    fs6.mkdirSync(logDir, { recursive: true });
-    const logFile = path7.join(logDir, `${sessionId}.log`);
-    const logStream = fs6.createWriteStream(logFile, { flags: "a" });
-    const child = spawn2("/bin/sh", ["-c", command], {
+    const sessionId = `proc-${Date.now()}-${crypto6.randomBytes(3).toString("hex")}`;
+    const logDir = path9.join(this.projectRoot, ".contextos", "logs");
+    fs9.mkdirSync(logDir, { recursive: true });
+    const logFile = path9.join(logDir, `${sessionId}.log`);
+    const logStream = fs9.createWriteStream(logFile, { flags: "a" });
+    const isWin = process.platform === "win32";
+    const shell = isWin ? process.env.ComSpec || "cmd.exe" : "/bin/sh";
+    const shellArgs = isWin ? ["/d", "/s", "/c", command] : ["-c", command];
+    const child = spawn2(shell, shellArgs, {
       cwd,
       env,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"]
+      detached: !isWin,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsVerbatimArguments: isWin
     });
     const session = {
       id: sessionId,
@@ -40628,9 +46385,9 @@ var ProcessManager = class {
       logStream.end();
       this._persistProcesses();
     });
-    child.on("error", (err) => {
+    child.on("error", (err2) => {
       session.status = "error";
-      session.error = err.message;
+      session.error = err2.message;
       session.stoppedAt = (/* @__PURE__ */ new Date()).toISOString();
       logStream.end();
       this._persistProcesses();
@@ -40644,9 +46401,9 @@ var ProcessManager = class {
   }
   _persistProcesses() {
     try {
-      const procFile = path7.join(this.projectRoot, ".contextos", "processes.json");
-      fs6.mkdirSync(path7.dirname(procFile), { recursive: true });
-      fs6.writeFileSync(procFile, JSON.stringify(this.listProcesses(), null, 2), "utf8");
+      const procFile = path9.join(this.projectRoot, ".contextos", "processes.json");
+      fs9.mkdirSync(path9.dirname(procFile), { recursive: true });
+      fs9.writeFileSync(procFile, JSON.stringify(this.listProcesses(), null, 2), "utf8");
     } catch (_) {
     }
   }
@@ -40660,19 +46417,19 @@ var ProcessManager = class {
   getLogs(sessionId, { lines = 100, grep = null, startLine = null, endLine = null } = {}) {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Process session '${sessionId}' not found`);
-    if (!fs6.existsSync(session.logFile)) {
+    if (!fs9.existsSync(session.logFile)) {
       return { lines: [], total: 0 };
     }
-    const content = fs6.readFileSync(session.logFile, "utf8");
+    const content = fs9.readFileSync(session.logFile, "utf8");
     let allLines = content.split(/\r?\n/);
     if (grep) {
       const query = grep.toLowerCase();
       allLines = allLines.filter((l) => l.toLowerCase().includes(query));
     }
     if (startLine !== null && endLine !== null) {
-      const start = Math.max(0, startLine - 1);
+      const start2 = Math.max(0, startLine - 1);
       const end = Math.min(allLines.length, endLine);
-      allLines = allLines.slice(start, end);
+      allLines = allLines.slice(start2, end);
     } else if (lines > 0) {
       allLines = allLines.slice(-lines);
     }
@@ -40680,7 +46437,7 @@ var ProcessManager = class {
       sessionId,
       lines: allLines,
       total: allLines.length,
-      logFile: path7.relative(this.projectRoot, session.logFile)
+      logFile: path9.relative(this.projectRoot, session.logFile)
     };
   }
   async stopProcess(sessionId, { graceMs = 2e3 } = {}) {
@@ -40689,22 +46446,48 @@ var ProcessManager = class {
     if (session.status === "stopped" || session.status === "error") {
       return this._sessionSummary(session);
     }
-    const pgid = session.pgid;
+    const pgid = session.pgid || session.pid;
+    const isWin = process.platform === "win32";
     try {
-      process.kill(-pgid, "SIGTERM");
+      if (isWin && session.pid) {
+        try {
+          execSync3(`taskkill /pid ${session.pid} /T /F`, { stdio: "ignore" });
+        } catch (_) {
+          process.kill(session.pid, "SIGTERM");
+        }
+      } else if (pgid) {
+        process.kill(-pgid, "SIGTERM");
+      }
     } catch (_) {
       try {
         session.child?.kill("SIGTERM");
       } catch (_2) {
       }
     }
-    const start = Date.now();
-    while (session.status !== "stopped" && Date.now() - start < graceMs) {
+    const start2 = Date.now();
+    while (session.status !== "stopped" && Date.now() - start2 < graceMs) {
+      if (!session.child && session.pid) {
+        try {
+          process.kill(session.pid, 0);
+        } catch (_) {
+          session.status = "stopped";
+          session.stoppedAt = (/* @__PURE__ */ new Date()).toISOString();
+          break;
+        }
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
     if (session.status !== "stopped") {
       try {
-        process.kill(-pgid, "SIGKILL");
+        if (isWin && session.pid) {
+          try {
+            execSync3(`taskkill /pid ${session.pid} /T /F`, { stdio: "ignore" });
+          } catch (_) {
+            process.kill(session.pid, "SIGKILL");
+          }
+        } else if (pgid) {
+          process.kill(-pgid, "SIGKILL");
+        }
       } catch (_) {
         try {
           session.child?.kill("SIGKILL");
@@ -41003,10 +46786,10 @@ ${block.details}`);
 // packages/mcp/src/v2-service.mjs
 var ContextOSV2Service = class {
   constructor({ projectRoot = process.cwd(), projectId = "contextos" } = {}) {
-    this.projectRoot = path8.resolve(projectRoot);
+    this.projectRoot = path10.resolve(projectRoot);
     this.projectId = projectId;
-    const dbPath = path8.join(this.projectRoot, ".contextos", "state.sqlite");
-    this.db = new V2Database(dbPath);
+    const dbPath2 = path10.join(this.projectRoot, ".contextos", "state.sqlite");
+    this.db = new V2Database(dbPath2);
     this.db.ensureProject(this.projectId, this.projectRoot);
     this.syncEngine = new SyncEngine(this.db);
     this.planService = new PlanService(this.db);
@@ -41025,15 +46808,25 @@ var ContextOSV2Service = class {
       case "brief": {
         const project = this.db.getProject(this.projectId) || { id: this.projectId, repo_root: this.projectRoot };
         const plans = this.db.listPlans(this.projectId);
-        const activePlan = plans.find((p) => p.status === "active") || plans[0] || null;
-        const tasks = this.db.listTasks(activePlan?.id);
-        const activeTask = tasks.find((t) => ["active", "checking", "syncing"].includes(t.status)) || tasks[0] || null;
+        const planIds = new Set(plans.map((p) => p.id));
+        const allTasks = this.db.listTasks();
+        const projectTasks = planIds.size > 0 ? allTasks.filter((t) => planIds.has(t.planId)) : allTasks;
+        const activeTasks = projectTasks.filter((t) => ["active", "checking", "syncing"].includes(t.status));
+        const activeTask = activeTasks.length > 0 ? activeTasks[activeTasks.length - 1] : null;
+        let activePlan = null;
+        if (activeTask && activeTask.planId) {
+          activePlan = plans.find((p) => p.id === activeTask.planId) || this.db.getPlan(activeTask.planId) || null;
+        }
+        if (!activePlan) {
+          activePlan = plans.find((p) => p.status === "active") || plans[0] || null;
+        }
+        const displayTask = activeTask || (activePlan ? this.db.listTasks(activePlan.id)[0] || null : null);
         const processes = this.processManager.listProcesses().filter((p) => p.status === "running" || p.status === "ready");
         const recentBlocks = this.db.listBlocks(this.projectId);
         if (format === "json") {
-          return { project, activePlan, activeTask, processes, recentBlocks };
+          return { project, activePlan, activeTask: displayTask, processes, recentBlocks };
         }
-        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask, processes, recentBlocks });
+        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks });
       }
       case "search": {
         const queryLower = (query || "").toLowerCase();
@@ -41122,10 +46915,16 @@ Summary: ${completed.completedSummary}`;
   async task({ action, id, taskData = {}, text, kind, checkData = {}, syncData = {}, format = "markdown" }) {
     switch (action) {
       case "create": {
-        const created = this.taskService.createTask(taskData);
+        const created = this.taskService.createTask(taskData, this.projectRoot);
         return format === "json" ? created : MarkdownRenderer.renderTask(created);
       }
       case "open": {
+        if (this.projectRoot) {
+          try {
+            this.taskService.reconcileTask(id, this.projectRoot, this.projectId);
+          } catch (_) {
+          }
+        }
         const task = this.db.getTask(id);
         if (!task) throw new Error(`Task '${id}' not found`);
         return format === "json" ? task : MarkdownRenderer.renderTask(task);
@@ -41135,11 +46934,12 @@ Summary: ${completed.completedSummary}`;
         return `Note added to Task '${id}': ${note.text}`;
       }
       case "check": {
-        const check = this.taskService.addCheck(id, checkData);
+        const check = this.taskService.addCheck(id, checkData, this.projectRoot, this.projectId);
         return `Verification check recorded for Task '${id}': [${check.passed ? "PASS" : "FAIL"}] ${check.description}`;
       }
       case "sync": {
         const result = this.taskService.syncTask(id, {
+          coverageMode: syncData.coverageMode || "adaptive",
           ...syncData,
           projectRoot: this.projectRoot,
           projectId: this.projectId
@@ -41148,9 +46948,13 @@ Summary: ${completed.completedSummary}`;
 Revision: ${result.graphRevision}
 Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
       }
+      case "reconcile": {
+        const result = this.taskService.reconcileTask(id, this.projectRoot, this.projectId);
+        return format === "json" ? result : `Task '${id}' reconciled. Working set files: ${(result.workingSet.files || []).join(", ")}`;
+      }
       case "activate":
       case "develop": {
-        const activated = this.taskService.activateTask(id);
+        const activated = this.taskService.activateTask(id, this.projectRoot);
         return `Task '${id}' moved to state: ${activated.status}.`;
       }
       case "resume": {
@@ -41296,7 +47100,7 @@ Members: ${chain.memberIds.join(", ")}`;
     }
   }
   // ================= 6. code =================
-  async code({ action, path: relPath, selector, targetContent, replacementContent, content: rawContent, query, format = "markdown" }) {
+  async code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, format = "markdown" }) {
     if (action === "search" && !relPath) {
       const blocks = this.db.listBlocks(this.projectId);
       const allFiles = /* @__PURE__ */ new Set();
@@ -41319,12 +47123,30 @@ Members: ${chain.memberIds.join(", ")}`;
       return lines.join("\n");
     }
     if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
-    const fullPath = path8.resolve(this.projectRoot, relPath);
+    const fullPath = path10.resolve(this.projectRoot, relPath);
     if (action === "create") {
-      fs7.mkdirSync(path8.dirname(fullPath), { recursive: true });
+      fs10.mkdirSync(path10.dirname(fullPath), { recursive: true });
       const initialContent = replacementContent || rawContent || "";
-      fs7.writeFileSync(fullPath, initialContent, "utf8");
+      fs10.writeFileSync(fullPath, initialContent, "utf8");
       const res = CodeTools.create(relPath, initialContent);
+      const activeTasks = this.taskService.listTasks?.(this.projectId) || [];
+      const activeTask = activeTasks.find((t) => t.status === "active");
+      if (activeTask) {
+        this.taskService.addFileToWorkingSet(activeTask.id, relPath);
+        try {
+          const stat = fs10.statSync(fullPath);
+          activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
+          activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
+          activeTask.baseline.fileSnapshots[relPath] = {
+            mtimeMs: stat.mtimeMs,
+            size: stat.size,
+            hash: res.newHash,
+            snapshottedAt: (/* @__PURE__ */ new Date()).toISOString()
+          };
+          this.db.saveTask(activeTask);
+        } catch (_) {
+        }
+      }
       return {
         filePath: relPath,
         newHash: res.newHash,
@@ -41332,28 +47154,65 @@ Members: ${chain.memberIds.join(", ")}`;
         message: `File '${relPath}' created successfully with AST anchors initialized.`
       };
     }
-    if (!fs7.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
-    const content = fs7.readFileSync(fullPath, "utf8");
+    if (!fs10.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
+    const content = fs10.readFileSync(fullPath, "utf8");
     switch (action) {
       case "outline": {
         const res = CodeTools.outline(relPath, content);
         return format === "json" ? res.structure : res.markdown;
       }
       case "read": {
-        const res = CodeTools.read(relPath, content, selector);
+        const effectiveSelector = selector || (startLine !== void 0 || endLine !== void 0 ? { startLine, endLine } : null);
+        const res = CodeTools.read(relPath, content, effectiveSelector);
         if (format === "json") return res;
-        return `\`\`\`${path8.extname(relPath).slice(1) || "text"}
+        return `\`\`\`${path10.extname(relPath).slice(1) || "text"}
 // ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})
 ${res.code}
 \`\`\``;
       }
       case "edit": {
+        let selectorObj = {};
+        if (typeof selector === "object" && selector !== null) {
+          selectorObj = selector;
+        } else if (typeof selector === "string") {
+          const rangeMatch = selector.match(/^(?:.*-)?L(\d+)-L(\d+)$/);
+          if (rangeMatch) {
+            selectorObj = {
+              startLine: parseInt(rangeMatch[1], 10),
+              endLine: parseInt(rangeMatch[2], 10)
+            };
+          } else {
+            selectorObj = { symbol: selector };
+          }
+        }
+        const effectiveStartLine = startLine !== void 0 ? startLine : selectorObj.startLine;
+        const effectiveEndLine = endLine !== void 0 ? endLine : selectorObj.endLine;
         const res = CodeTools.edit(relPath, content, {
+          ...selectorObj,
           targetContent,
           replacementContent,
-          ...typeof selector === "object" ? selector : {}
+          startLine: effectiveStartLine,
+          endLine: effectiveEndLine
         });
-        fs7.writeFileSync(fullPath, res.newContent, "utf8");
+        fs10.writeFileSync(fullPath, res.newContent, "utf8");
+        const activeTasks = this.taskService.listTasks?.(this.projectId) || [];
+        const activeTask = activeTasks.find((t) => t.status === "active");
+        if (activeTask) {
+          this.taskService.addFileToWorkingSet(activeTask.id, relPath);
+          try {
+            const stat = fs10.statSync(fullPath);
+            activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
+            activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
+            activeTask.baseline.fileSnapshots[relPath] = {
+              mtimeMs: stat.mtimeMs,
+              size: stat.size,
+              hash: res.newHash,
+              snapshottedAt: (/* @__PURE__ */ new Date()).toISOString()
+            };
+            this.db.saveTask(activeTask);
+          } catch (_) {
+          }
+        }
         return {
           filePath: relPath,
           newHash: res.newHash,
@@ -41386,7 +47245,7 @@ ${res.code}
   }
   // ================= 7. run_command =================
   async runCommand({ command, cwd, maxChars = 1500, timeoutMs = 6e4 }) {
-    const targetCwd = cwd ? path8.resolve(this.projectRoot, cwd) : this.projectRoot;
+    const targetCwd = cwd ? path10.resolve(this.projectRoot, cwd) : this.projectRoot;
     return runCommand({
       command,
       cwd: targetCwd,
@@ -41478,7 +47337,7 @@ var ContextOSCloudClient = class {
     }
     return headers;
   }
-  async call(tool, args = {}) {
+  async call(tool, args2 = {}) {
     const url = `${this.cloudUrl}/api/v2/call`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -41488,10 +47347,10 @@ var ContextOSCloudClient = class {
         headers: this.getHeaders(),
         body: JSON.stringify({
           tool,
-          projectId: args.projectId || this.projectId,
+          projectId: args2.projectId || this.projectId,
           input: {
-            ...args,
-            projectId: args.projectId || this.projectId
+            ...args2,
+            projectId: args2.projectId || this.projectId
           }
         }),
         signal: controller.signal
@@ -41503,12 +47362,12 @@ var ContextOSCloudClient = class {
       }
       const data = await response.json();
       return data.result ?? data;
-    } catch (err) {
+    } catch (err2) {
       clearTimeout(timeout);
-      if (err.name === "AbortError") {
+      if (err2.name === "AbortError") {
         throw new Error(`[ContextOS Cloud] Request to ${url} timed out after ${this.timeoutMs}ms.`);
       }
-      throw new Error(`[ContextOS Cloud Error] Failed to call '${tool}' on cloud hub (${this.cloudUrl}): ${err.message}`);
+      throw new Error(`[ContextOS Cloud Error] Failed to call '${tool}' on cloud hub (${this.cloudUrl}): ${err2.message}`);
     }
   }
   async fetchSnapshot(projectId) {
@@ -41527,9 +47386,9 @@ var ContextOSCloudClient = class {
         throw new Error(`Cloud server returned HTTP ${response.status}: ${response.statusText}`);
       }
       return await response.json();
-    } catch (err) {
+    } catch (err2) {
       clearTimeout(timeout);
-      throw new Error(`[ContextOS Cloud Error] Failed to fetch snapshot from ${url}: ${err.message}`);
+      throw new Error(`[ContextOS Cloud Error] Failed to fetch snapshot from ${url}: ${err2.message}`);
     }
   }
   async pushSnapshot(snapshot, projectId) {
@@ -41643,12 +47502,12 @@ var HybridContextOSService = class {
 ${cloudRes}`;
       }
       return cloudRes;
-    } catch (err) {
+    } catch (err2) {
       if (action === "brief") {
         const warning = [
           `> [!WARNING]`,
           `> **ContextOS Cloud Unavailable**: Unable to connect to \`${this.cloudUrl}\`.`,
-          `> Reason: ${err.message}`,
+          `> Reason: ${err2.message}`,
           `> Falling back to local workspace context. Verify \`CONTEXTOS_CLOUD_URL\` or unset it to run offline.`,
           ""
         ].join("\n");
@@ -41656,7 +47515,7 @@ ${cloudRes}`;
         return format === "markdown" && typeof localBrief === "string" ? `${warning}
 ${localBrief}` : localBrief;
       }
-      throw err;
+      throw err2;
     }
   }
   // ================= 2. plan =================
@@ -41698,25 +47557,50 @@ ${localBrief}` : localBrief;
 };
 
 // packages/mcp/src/bootstrap-util.mjs
-import fs8 from "node:fs";
-import path9 from "node:path";
+import fs11 from "node:fs";
+import path11 from "node:path";
 import os from "node:os";
-import { execSync } from "node:child_process";
+import { execSync as execSync4 } from "node:child_process";
 var HOME = os.homedir();
 function resolveNodeExecutable() {
-  const candidates = [
-    "/Applications/ContextOS.app/Contents/Resources/bin/node",
-    path9.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
-    "/opt/homebrew/bin/node",
-    "/usr/local/bin/node",
-    path9.join(HOME, ".nvm/current/bin/node"),
-    "/usr/bin/node",
-    process.execPath
-  ];
+  const isWin = process.platform === "win32";
+  const isMac = process.platform === "darwin";
+  const candidates = [process.execPath];
+  if (isWin) {
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+    const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+    const localAppData = process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local");
+    const appData = process.env.APPDATA || path11.join(HOME, "AppData\\Roaming");
+    candidates.push(
+      path11.join(programFiles, "nodejs\\node.exe"),
+      path11.join(programFilesX86, "nodejs\\node.exe"),
+      path11.join(appData, "nvm\\current\\node.exe"),
+      path11.join(localAppData, "Programs\\node\\node.exe"),
+      path11.join(localAppData, "ContextOS\\bin\\node.exe")
+    );
+  } else if (isMac) {
+    candidates.push(
+      "/Applications/ContextOS.app/Contents/Resources/bin/node",
+      path11.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
+      "/opt/homebrew/bin/node",
+      "/usr/local/bin/node",
+      path11.join(HOME, ".nvm/current/bin/node"),
+      "/usr/bin/node"
+    );
+  } else {
+    candidates.push(
+      "/usr/bin/node",
+      "/usr/local/bin/node",
+      "/snap/bin/node",
+      path11.join(HOME, ".nvm/current/bin/node"),
+      path11.join(HOME, ".local/share/nvm/current/bin/node"),
+      path11.join(HOME, ".local/bin/node")
+    );
+  }
   for (const candidate of candidates) {
-    if (fs8.existsSync(candidate)) {
+    if (candidate && fs11.existsSync(candidate)) {
       try {
-        fs8.accessSync(candidate, fs8.constants.X_OK);
+        fs11.accessSync(candidate, fs11.constants.X_OK);
         return candidate;
       } catch (_) {
       }
@@ -41725,19 +47609,37 @@ function resolveNodeExecutable() {
   return "node";
 }
 function resolveCodexExecutable() {
-  const candidates = [
-    "/Applications/Codex.app/Contents/Resources/codex",
-    "/Applications/ChatGPT.app/Contents/Resources/codex",
-    path9.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
-    "/opt/homebrew/bin/codex",
-    "/usr/local/bin/codex",
-    path9.join(HOME, ".cargo/bin/codex"),
-    path9.join(HOME, ".local/bin/codex")
-  ];
+  const isWin = process.platform === "win32";
+  const isMac = process.platform === "darwin";
+  const candidates = [];
+  if (isWin) {
+    const localAppData = process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local");
+    candidates.push(
+      path11.join(localAppData, "Programs\\Codex\\codex.exe"),
+      path11.join(HOME, ".cargo\\bin\\codex.exe")
+    );
+  } else if (isMac) {
+    candidates.push(
+      "/Applications/Codex.app/Contents/Resources/codex",
+      "/Applications/ChatGPT.app/Contents/Resources/codex",
+      path11.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
+      "/opt/homebrew/bin/codex",
+      "/usr/local/bin/codex",
+      path11.join(HOME, ".cargo/bin/codex"),
+      path11.join(HOME, ".local/bin/codex")
+    );
+  } else {
+    candidates.push(
+      "/usr/bin/codex",
+      "/usr/local/bin/codex",
+      path11.join(HOME, ".cargo/bin/codex"),
+      path11.join(HOME, ".local/bin/codex")
+    );
+  }
   for (const c of candidates) {
-    if (fs8.existsSync(c)) {
+    if (c && fs11.existsSync(c)) {
       try {
-        fs8.accessSync(c, fs8.constants.X_OK);
+        fs11.accessSync(c, fs11.constants.X_OK);
         return c;
       } catch (_) {
       }
@@ -41746,41 +47648,41 @@ function resolveCodexExecutable() {
   return null;
 }
 function deployCanonicalServer(sourceScriptPath = null) {
-  const canonicalDir = path9.join(HOME, ".contextos", "server");
-  const canonicalScript = path9.join(canonicalDir, "contextos-mcp.mjs");
-  fs8.mkdirSync(canonicalDir, { recursive: true });
+  const canonicalDir = path11.join(HOME, ".contextos", "server");
+  const canonicalScript = path11.join(canonicalDir, "contextos-mcp.mjs");
+  fs11.mkdirSync(canonicalDir, { recursive: true });
   const candidates = [
     sourceScriptPath,
     "/Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs",
-    path9.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
+    path11.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
   ].filter(Boolean);
-  const found = candidates.find((p) => fs8.existsSync(p));
+  const found = candidates.find((p) => fs11.existsSync(p));
   if (found && found !== canonicalScript) {
-    fs8.copyFileSync(found, canonicalScript);
+    fs11.copyFileSync(found, canonicalScript);
   }
   return canonicalScript;
 }
 function copyDirectoryRecursive(src, dest) {
-  if (!fs8.existsSync(src)) return;
-  fs8.mkdirSync(dest, { recursive: true });
-  const entries = fs8.readdirSync(src, { withFileTypes: true });
+  if (!fs11.existsSync(src)) return;
+  fs11.mkdirSync(dest, { recursive: true });
+  const entries = fs11.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
-    const srcPath = path9.join(src, entry.name);
-    const destPath = path9.join(dest, entry.name);
+    const srcPath = path11.join(src, entry.name);
+    const destPath = path11.join(dest, entry.name);
     if (entry.isDirectory()) {
       copyDirectoryRecursive(srcPath, destPath);
     } else {
-      fs8.copyFileSync(srcPath, destPath);
+      fs11.copyFileSync(srcPath, destPath);
     }
   }
 }
 function configureJsonMcp({ configPath, serverScript, nodePath, env = null, version: version2 = "2.1.0" }) {
-  const dir = path9.dirname(configPath);
-  fs8.mkdirSync(dir, { recursive: true });
+  const dir = path11.dirname(configPath);
+  fs11.mkdirSync(dir, { recursive: true });
   let json = {};
-  if (fs8.existsSync(configPath)) {
+  if (fs11.existsSync(configPath)) {
     try {
-      json = JSON.parse(fs8.readFileSync(configPath, "utf8"));
+      json = JSON.parse(fs11.readFileSync(configPath, "utf8"));
     } catch (_) {
       json = {};
     }
@@ -41797,13 +47699,13 @@ function configureJsonMcp({ configPath, serverScript, nodePath, env = null, vers
     delete serverEntry.env;
   }
   json.mcpServers.contextos = serverEntry;
-  fs8.writeFileSync(configPath, JSON.stringify(json, null, 2) + "\n", "utf8");
+  fs11.writeFileSync(configPath, JSON.stringify(json, null, 2) + "\n", "utf8");
   return true;
 }
 function configureTomlCodex({ configPath, serverScript, nodePath, env = null }) {
-  const dir = path9.dirname(configPath);
-  fs8.mkdirSync(dir, { recursive: true });
-  let content = fs8.existsSync(configPath) ? fs8.readFileSync(configPath, "utf8") : "";
+  const dir = path11.dirname(configPath);
+  fs11.mkdirSync(dir, { recursive: true });
+  let content = fs11.existsSync(configPath) ? fs11.readFileSync(configPath, "utf8") : "";
   const sectionHeader = "[mcp_servers.contextos]";
   const startIndex = content.indexOf(sectionHeader);
   if (startIndex !== -1) {
@@ -41815,50 +47717,52 @@ function configureTomlCodex({ configPath, serverScript, nodePath, env = null }) 
     }
   }
   content = content.trimEnd();
+  const safeNodePath = nodePath.replace(/\\/g, "\\\\");
+  const safeServerScript = serverScript.replace(/\\/g, "\\\\");
   let tomlBlock = `
 
 [mcp_servers.contextos]
-command = "${nodePath}"
-args = ["--no-warnings=ExperimentalWarning", "${serverScript}"]
+command = "${safeNodePath}"
+args = ["--no-warnings=ExperimentalWarning", "${safeServerScript}"]
 `;
   if (env && Object.keys(env).length > 0) {
     tomlBlock += `[mcp_servers.contextos.env]
 `;
     for (const [k, v] of Object.entries(env)) {
-      tomlBlock += `${k} = "${v}"
+      tomlBlock += `${k} = "${String(v).replace(/\\/g, "\\\\")}"
 `;
     }
   }
-  fs8.writeFileSync(configPath, (content + tomlBlock).trim() + "\n", "utf8");
+  fs11.writeFileSync(configPath, (content + tomlBlock).trim() + "\n", "utf8");
 }
 function cleanTomlCodex({ configPath }) {
-  if (!fs8.existsSync(configPath)) return;
-  let content = fs8.readFileSync(configPath, "utf8");
+  if (!fs11.existsSync(configPath)) return;
+  let content = fs11.readFileSync(configPath, "utf8");
   const regex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
   content = content.replace(regex, "");
-  fs8.writeFileSync(configPath, content.trim() + "\n", "utf8");
+  fs11.writeFileSync(configPath, content.trim() + "\n", "utf8");
 }
 function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
-  const userPluginsContextOS = path9.join(HOME, "plugins", "contextos");
-  const personalMarketplaceDir = path9.join(HOME, ".agents", "plugins");
-  const personalMarketplaceURL = path9.join(personalMarketplaceDir, "marketplace.json");
-  const codexConfigURL = path9.join(HOME, ".codex", "config.toml");
-  if (pluginSource && fs8.existsSync(pluginSource)) {
+  const userPluginsContextOS = path11.join(HOME, "plugins", "contextos");
+  const personalMarketplaceDir = path11.join(HOME, ".agents", "plugins");
+  const personalMarketplaceURL = path11.join(personalMarketplaceDir, "marketplace.json");
+  const codexConfigURL = path11.join(HOME, ".codex", "config.toml");
+  if (pluginSource && fs11.existsSync(pluginSource)) {
     try {
-      fs8.rmSync(userPluginsContextOS, { recursive: true, force: true });
+      fs11.rmSync(userPluginsContextOS, { recursive: true, force: true });
     } catch (_) {
     }
     copyDirectoryRecursive(pluginSource, userPluginsContextOS);
-  } else if (!fs8.existsSync(userPluginsContextOS)) {
-    fs8.mkdirSync(path9.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
-    fs8.mkdirSync(path9.join(userPluginsContextOS, "server"), { recursive: true });
-    fs8.copyFileSync(serverScript, path9.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
+  } else if (!fs11.existsSync(userPluginsContextOS)) {
+    fs11.mkdirSync(path11.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
+    fs11.mkdirSync(path11.join(userPluginsContextOS, "server"), { recursive: true });
+    fs11.copyFileSync(serverScript, path11.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
   }
-  fs8.mkdirSync(personalMarketplaceDir, { recursive: true });
+  fs11.mkdirSync(personalMarketplaceDir, { recursive: true });
   let marketplaces = [];
-  if (fs8.existsSync(personalMarketplaceURL)) {
+  if (fs11.existsSync(personalMarketplaceURL)) {
     try {
-      const parsed = JSON.parse(fs8.readFileSync(personalMarketplaceURL, "utf8"));
+      const parsed = JSON.parse(fs11.readFileSync(personalMarketplaceURL, "utf8"));
       marketplaces = Array.isArray(parsed) ? parsed : [parsed];
     } catch (_) {
     }
@@ -41877,7 +47781,7 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   };
   const filtered = marketplaces.filter((m) => m.name !== "personal");
   filtered.push(personalEntry);
-  fs8.writeFileSync(
+  fs11.writeFileSync(
     personalMarketplaceURL,
     JSON.stringify(filtered.length === 1 ? filtered[0] : filtered, null, 2) + "\n",
     "utf8"
@@ -41887,10 +47791,10 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   if (codexBin) {
     try {
       try {
-        execSync(`"${codexBin}" plugin remove contextos@personal --json`, { stdio: "ignore" });
+        execSync4(`"${codexBin}" plugin remove contextos@personal --json`, { stdio: "ignore" });
       } catch (_) {
       }
-      execSync(`"${codexBin}" plugin add contextos@personal --json`, { stdio: "pipe" });
+      execSync4(`"${codexBin}" plugin add contextos@personal --json`, { stdio: "pipe" });
       installedViaCli = true;
     } catch (_) {
     }
@@ -41907,15 +47811,24 @@ function detectInstalledPlatforms() {
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
   const platforms = [];
+  const localAppData = isWin ? process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local") : "";
+  const appData = isWin ? process.env.APPDATA || path11.join(HOME, "AppData\\Roaming") : "";
   let claudeConfigPath = "";
   if (isMac) {
-    claudeConfigPath = path9.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
+    claudeConfigPath = path11.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
   } else if (isWin) {
-    claudeConfigPath = path9.join(process.env.APPDATA || path9.join(HOME, "AppData/Roaming"), "Claude/claude_desktop_config.json");
+    claudeConfigPath = path11.join(appData, "Claude\\claude_desktop_config.json");
   } else {
-    claudeConfigPath = path9.join(HOME, ".config/Claude/claude_desktop_config.json");
+    claudeConfigPath = path11.join(HOME, ".config/Claude/claude_desktop_config.json");
   }
-  const claudeAppExists = fs8.existsSync("/Applications/Claude.app") || fs8.existsSync(path9.join(HOME, "Applications/Claude.app")) || fs8.existsSync(path9.dirname(claudeConfigPath));
+  let claudeAppExists = false;
+  if (isMac) {
+    claudeAppExists = fs11.existsSync("/Applications/Claude.app") || fs11.existsSync(path11.join(HOME, "Applications/Claude.app")) || fs11.existsSync(path11.dirname(claudeConfigPath));
+  } else if (isWin) {
+    claudeAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Claude\\Claude.exe")) || fs11.existsSync(path11.dirname(claudeConfigPath));
+  } else {
+    claudeAppExists = fs11.existsSync("/usr/bin/claude") || fs11.existsSync("/snap/bin/claude") || fs11.existsSync(path11.dirname(claudeConfigPath));
+  }
   platforms.push({
     id: "claude",
     name: "Claude Desktop",
@@ -41923,43 +47836,71 @@ function detectInstalledPlatforms() {
     configPath: claudeConfigPath,
     type: "json"
   });
-  const cursorDir = path9.join(HOME, ".cursor");
-  const cursorAppExists = fs8.existsSync("/Applications/Cursor.app") || fs8.existsSync(path9.join(HOME, "Applications/Cursor.app")) || fs8.existsSync(cursorDir);
+  const cursorDir = path11.join(HOME, ".cursor");
+  let cursorAppExists = false;
+  if (isMac) {
+    cursorAppExists = fs11.existsSync("/Applications/Cursor.app") || fs11.existsSync(path11.join(HOME, "Applications/Cursor.app")) || fs11.existsSync(cursorDir);
+  } else if (isWin) {
+    cursorAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\cursor\\Cursor.exe")) || fs11.existsSync(cursorDir);
+  } else {
+    cursorAppExists = fs11.existsSync("/usr/bin/cursor") || fs11.existsSync("/opt/Cursor/cursor") || fs11.existsSync(path11.join(HOME, ".local/share/cursor")) || fs11.existsSync(cursorDir);
+  }
   platforms.push({
     id: "cursor",
     name: "Cursor",
     isInstalled: cursorAppExists,
-    configPath: path9.join(cursorDir, "mcp.json"),
-    skillPath: path9.join(cursorDir, "skills", "contextos"),
+    configPath: path11.join(cursorDir, "mcp.json"),
+    skillPath: path11.join(cursorDir, "skills", "contextos"),
     type: "json"
   });
-  const geminiDir = path9.join(HOME, ".gemini/config");
-  const antigravityAppExists = fs8.existsSync("/Applications/Antigravity.app") || fs8.existsSync(path9.join(HOME, "Applications/Antigravity.app")) || fs8.existsSync(geminiDir);
+  const geminiDir = path11.join(HOME, ".gemini/config");
+  let antigravityAppExists = false;
+  if (isMac) {
+    antigravityAppExists = fs11.existsSync("/Applications/Antigravity.app") || fs11.existsSync(path11.join(HOME, "Applications/Antigravity.app")) || fs11.existsSync(geminiDir);
+  } else if (isWin) {
+    antigravityAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Antigravity\\Antigravity.exe")) || fs11.existsSync(geminiDir);
+  } else {
+    antigravityAppExists = fs11.existsSync("/usr/bin/antigravity") || fs11.existsSync(path11.join(HOME, ".local/share/antigravity")) || fs11.existsSync(geminiDir);
+  }
   platforms.push({
     id: "antigravity",
     name: "Antigravity",
     isInstalled: antigravityAppExists,
-    configPath: path9.join(geminiDir, "mcp_config.json"),
-    skillPath: path9.join(geminiDir, "skills", "contextos"),
+    configPath: path11.join(geminiDir, "mcp_config.json"),
+    skillPath: path11.join(geminiDir, "skills", "contextos"),
     type: "json"
   });
-  const opencodeDir = path9.join(HOME, ".config/opencode");
-  const opencodeAppExists = fs8.existsSync("/Applications/OpenCode.app") || fs8.existsSync(path9.join(HOME, "Applications/OpenCode.app")) || fs8.existsSync(opencodeDir);
+  const opencodeDir = path11.join(HOME, ".config/opencode");
+  let opencodeAppExists = false;
+  if (isMac) {
+    opencodeAppExists = fs11.existsSync("/Applications/OpenCode.app") || fs11.existsSync(path11.join(HOME, "Applications/OpenCode.app")) || fs11.existsSync(opencodeDir);
+  } else if (isWin) {
+    opencodeAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\OpenCode\\OpenCode.exe")) || fs11.existsSync(opencodeDir);
+  } else {
+    opencodeAppExists = fs11.existsSync("/usr/bin/opencode") || fs11.existsSync(path11.join(HOME, ".local/share/opencode")) || fs11.existsSync(opencodeDir);
+  }
   platforms.push({
     id: "opencode",
     name: "OpenCode",
     isInstalled: opencodeAppExists,
-    configPath: path9.join(opencodeDir, "mcp.json"),
-    skillPath: path9.join(opencodeDir, "skills", "contextos"),
+    configPath: path11.join(opencodeDir, "mcp.json"),
+    skillPath: path11.join(opencodeDir, "skills", "contextos"),
     type: "json"
   });
-  const codexDir = path9.join(HOME, ".codex");
-  const codexAppExists = fs8.existsSync("/Applications/ChatGPT.app") || fs8.existsSync("/Applications/Codex.app") || fs8.existsSync(codexDir) || fs8.existsSync(path9.join(HOME, ".agents/plugins"));
+  const codexDir = path11.join(HOME, ".codex");
+  let codexAppExists = false;
+  if (isMac) {
+    codexAppExists = fs11.existsSync("/Applications/ChatGPT.app") || fs11.existsSync("/Applications/Codex.app") || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+  } else if (isWin) {
+    codexAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Codex\\Codex.exe")) || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+  } else {
+    codexAppExists = fs11.existsSync("/usr/bin/codex") || fs11.existsSync(path11.join(HOME, ".local/bin/codex")) || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+  }
   platforms.push({
     id: "codex",
     name: "Codex",
     isInstalled: codexAppExists,
-    configPath: path9.join(codexDir, "config.toml"),
+    configPath: path11.join(codexDir, "config.toml"),
     type: "codex-plugin"
   });
   return platforms;
@@ -41989,7 +47930,7 @@ function syncAllPlatforms({
       modified.push(resultName);
       continue;
     }
-    if (platform.skillPath && skillSource && fs8.existsSync(skillSource)) {
+    if (platform.skillPath && skillSource && fs11.existsSync(skillSource)) {
       copyDirectoryRecursive(skillSource, platform.skillPath);
     }
     if (platform.type === "json") {
@@ -42007,10 +47948,10 @@ function syncAllPlatforms({
     const shouldSyncAntigravity = !selectedPlatforms || selectedPlatforms.includes("antigravity");
     const shouldSyncOpencode = !selectedPlatforms || selectedPlatforms.includes("opencode");
     if (shouldSyncCursor) {
-      const wsCursor = path9.join(targetRoot, ".cursor");
-      if (fs8.existsSync(wsCursor)) {
+      const wsCursor = path11.join(targetRoot, ".cursor");
+      if (fs11.existsSync(wsCursor)) {
         configureJsonMcp({
-          configPath: path9.join(wsCursor, "mcp.json"),
+          configPath: path11.join(wsCursor, "mcp.json"),
           serverScript,
           nodePath,
           env
@@ -42019,10 +47960,10 @@ function syncAllPlatforms({
       }
     }
     if (shouldSyncAntigravity) {
-      const wsAgents = path9.join(targetRoot, ".agents");
-      if (fs8.existsSync(wsAgents)) {
+      const wsAgents = path11.join(targetRoot, ".agents");
+      if (fs11.existsSync(wsAgents)) {
         configureJsonMcp({
-          configPath: path9.join(wsAgents, "mcp_config.json"),
+          configPath: path11.join(wsAgents, "mcp_config.json"),
           serverScript,
           nodePath,
           env
@@ -42031,10 +47972,10 @@ function syncAllPlatforms({
       }
     }
     if (shouldSyncOpencode) {
-      const wsOpencode = path9.join(targetRoot, ".opencode");
-      if (fs8.existsSync(wsOpencode)) {
+      const wsOpencode = path11.join(targetRoot, ".opencode");
+      if (fs11.existsSync(wsOpencode)) {
         configureJsonMcp({
-          configPath: path9.join(wsOpencode, "mcp.json"),
+          configPath: path11.join(wsOpencode, "mcp.json"),
           serverScript,
           nodePath,
           env
@@ -42046,25 +47987,25 @@ function syncAllPlatforms({
   return modified;
 }
 function getGlobalCloudConfig() {
-  const globalCloudPath = path9.join(HOME, ".contextos", "cloud.json");
-  if (fs8.existsSync(globalCloudPath)) {
+  const globalCloudPath = path11.join(HOME, ".contextos", "cloud.json");
+  if (fs11.existsSync(globalCloudPath)) {
     try {
-      return JSON.parse(fs8.readFileSync(globalCloudPath, "utf8"));
+      return JSON.parse(fs11.readFileSync(globalCloudPath, "utf8"));
     } catch (_) {
     }
   }
   return null;
 }
 function saveGlobalCloudConfig({ cloudUrl, token }) {
-  const dotContextos = path9.join(HOME, ".contextos");
-  fs8.mkdirSync(dotContextos, { recursive: true });
-  const globalCloudPath = path9.join(dotContextos, "cloud.json");
+  const dotContextos = path11.join(HOME, ".contextos");
+  fs11.mkdirSync(dotContextos, { recursive: true });
+  const globalCloudPath = path11.join(dotContextos, "cloud.json");
   const config2 = {
     cloudUrl: cloudUrl ? cloudUrl.replace(/\/+$/, "") : "",
     token: token || "",
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  fs8.writeFileSync(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", "utf8");
+  fs11.writeFileSync(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", "utf8");
   return config2;
 }
 function initProjectWorkspace({
@@ -42074,13 +48015,13 @@ function initProjectWorkspace({
   token = "",
   projectId = "contextos"
 }) {
-  const dotContextos = path9.join(projectRoot, ".contextos");
-  fs8.mkdirSync(dotContextos, { recursive: true });
-  const projectJsonPath = path9.join(dotContextos, "project.json");
+  const dotContextos = path11.join(projectRoot, ".contextos");
+  fs11.mkdirSync(dotContextos, { recursive: true });
+  const projectJsonPath = path11.join(dotContextos, "project.json");
   let existing = {};
-  if (fs8.existsSync(projectJsonPath)) {
+  if (fs11.existsSync(projectJsonPath)) {
     try {
-      existing = JSON.parse(fs8.readFileSync(projectJsonPath, "utf8"));
+      existing = JSON.parse(fs11.readFileSync(projectJsonPath, "utf8"));
     } catch (_) {
     }
   }
@@ -42101,28 +48042,25 @@ function initProjectWorkspace({
     delete projectConfig.cloudUrl;
     delete projectConfig.token;
   }
-  fs8.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n", "utf8");
+  fs11.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n", "utf8");
   return projectConfig;
 }
 
 // packages/mcp/src/v2-server.mjs
 var serviceCache = /* @__PURE__ */ new Map();
 function findDefaultProjectRoot() {
-  if (process.env.CONTEXTOS_PROJECT_ROOT && fs9.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
+  if (process.env.CONTEXTOS_PROJECT_ROOT && fs12.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
     return process.env.CONTEXTOS_PROJECT_ROOT;
   }
   let cur = process.cwd();
-  if (cur && cur !== "/") {
-    while (cur && cur !== path10.dirname(cur)) {
-      if (fs9.existsSync(path10.join(cur, ".contextos"))) {
-        return cur;
-      }
-      cur = path10.dirname(cur);
+  while (cur && cur !== path12.dirname(cur)) {
+    if (fs12.existsSync(path12.join(cur, ".contextos")) || fs12.existsSync(path12.join(cur, ".git")) || fs12.existsSync(path12.join(cur, "package.json"))) {
+      return cur;
     }
+    cur = path12.dirname(cur);
   }
-  const defaultRepo = "/Users/a1-6/Documents/GitHub/mdflow";
-  if (fs9.existsSync(defaultRepo)) {
-    return defaultRepo;
+  if (cur && (fs12.existsSync(path12.join(cur, ".contextos")) || fs12.existsSync(path12.join(cur, ".git")) || fs12.existsSync(path12.join(cur, "package.json")))) {
+    return cur;
   }
   return process.cwd();
 }
@@ -42132,10 +48070,10 @@ function getService(projectRoot) {
   let cloudUrl = null;
   let token = null;
   let projectId = "contextos";
-  const projJsonPath = path10.join(root, ".contextos", "project.json");
-  if (fs9.existsSync(projJsonPath)) {
+  const projJsonPath = path12.join(root, ".contextos", "project.json");
+  if (fs12.existsSync(projJsonPath)) {
     try {
-      const proj = JSON.parse(fs9.readFileSync(projJsonPath, "utf8"));
+      const proj = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
       if (proj.id) projectId = proj.id;
       if (proj.storage === "cloud" || proj.isCloud === true) {
         mode = "cloud";
@@ -42293,6 +48231,8 @@ function createV2Server() {
         action: _enum(["outline", "read", "edit", "search", "create"]),
         path: string2().optional(),
         selector: union([string2(), record(any())]).optional(),
+        startLine: number2().optional(),
+        endLine: number2().optional(),
         targetContent: string2().optional(),
         replacementContent: string2().optional(),
         content: string2().optional(),
@@ -42423,8 +48363,8 @@ function createV2Server() {
           };
           if (resolvedToken) env.CONTEXTOS_CLOUD_TOKEN = resolvedToken;
         }
-        const skillSource = path10.join(findDefaultProjectRoot(), "plugins", "contextos", "skills", "contextos");
-        const pluginSource = path10.join(findDefaultProjectRoot(), "plugins", "contextos");
+        const skillSource = path12.join(findDefaultProjectRoot(), "plugins", "contextos", "skills", "contextos");
+        const pluginSource = path12.join(findDefaultProjectRoot(), "plugins", "contextos");
         const modified = syncAllPlatforms({
           serverScript,
           nodePath,
@@ -42456,11 +48396,11 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
       const root = input.projectRoot || findDefaultProjectRoot();
       const nodePath = resolveNodeExecutable();
       let nodeVer = process.version;
-      const projJsonPath = path10.join(root, ".contextos", "project.json");
+      const projJsonPath = path12.join(root, ".contextos", "project.json");
       let projectConfig = null;
-      if (fs9.existsSync(projJsonPath)) {
+      if (fs12.existsSync(projJsonPath)) {
         try {
-          projectConfig = JSON.parse(fs9.readFileSync(projJsonPath, "utf8"));
+          projectConfig = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
         } catch (_) {
         }
       }
@@ -42475,8 +48415,8 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
             headers: projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN ? { Authorization: `Bearer ${projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` } : {}
           });
           cloudHealth = res.ok ? "\u{1F7E2} Connected (200 OK)" : `\u{1F534} HTTP ${res.status}`;
-        } catch (err) {
-          cloudHealth = `\u{1F534} Connection failed: ${err.message}`;
+        } catch (err2) {
+          cloudHealth = `\u{1F534} Connection failed: ${err2.message}`;
         }
       }
       const platforms = detectInstalledPlatforms();
@@ -42511,12 +48451,12 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
     },
     async (input) => {
       const root = input.projectRoot || findDefaultProjectRoot();
-      const dotContextos = path10.join(root, ".contextos");
-      const projJsonPath = path10.join(dotContextos, "project.json");
+      const dotContextos = path12.join(root, ".contextos");
+      const projJsonPath = path12.join(dotContextos, "project.json");
       let proj = {};
-      if (fs9.existsSync(projJsonPath)) {
+      if (fs12.existsSync(projJsonPath)) {
         try {
-          proj = JSON.parse(fs9.readFileSync(projJsonPath, "utf8"));
+          proj = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
         } catch (_) {
         }
       }
@@ -42528,16 +48468,16 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         if (!resolvedCloudUrl) {
           throw new Error("Switching to cloud requires a cloudUrl. Provide cloudUrl or configure global credentials via ~/.contextos/cloud.json.");
         }
-        let localSnapshot = { blocks: [], chains: [], links: [], plans: [] };
-        const localDbPath = path10.join(dotContextos, "state.sqlite");
-        if (fs9.existsSync(localDbPath)) {
+        let localSnapshot = { blocks: [], chains: [], links: [], plans: [], tasks: [] };
+        if (fs12.existsSync(dbPath)) {
           try {
             const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
-            const blocks = localService.db.listBlocks();
-            const chains = localService.db.listChains();
-            const links = localService.db.listLinks();
-            const plans = localService.db.listPlans();
-            localSnapshot = { blocks, chains, links, plans };
+            const blocks = localService.db.listBlocks(pid);
+            const chains = localService.db.listChains(pid);
+            const links = localService.db.listLinks(pid);
+            const plans = localService.db.listPlans(pid);
+            const tasks = localService.db.listTasks();
+            localSnapshot = { blocks, chains, links, plans, tasks };
             localService.close();
           } catch (_) {
           }
@@ -42553,7 +48493,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         proj.cloudUrl = resolvedCloudUrl.replace(/\/+$/, "");
         if (resolvedToken) proj.token = resolvedToken;
         proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        fs9.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+        fs12.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
         for (const k of Array.from(serviceCache.keys())) {
           if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
             try {
@@ -42565,7 +48505,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         }
         return textResult(
           `\u2713 Successfully migrated project \`${pid}\` to **CLOUD** mode.
-- Uploaded ${localSnapshot.blocks.length} blocks, ${localSnapshot.chains.length} chains, and ${localSnapshot.plans.length} plans to ${resolvedCloudUrl}.
+- Uploaded ${localSnapshot.blocks.length} blocks, ${localSnapshot.chains.length} chains, ${localSnapshot.plans.length} plans, and ${localSnapshot.tasks?.length || 0} tasks to ${resolvedCloudUrl}.
 - All future task & plan changes will synchronize with Cloudflare D1.`
         );
       } else {
@@ -42587,7 +48527,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
                   kind: b.kind || "service",
                   summary: b.summary || "",
                   details: b.body || "",
-                  artifactRefs: []
+                  artifactRefs: b.artifactRefs || b.artifact_refs || []
                 });
               }
               for (const c of cloudSnapshot.chains || []) {
@@ -42597,7 +48537,16 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
                   title: c.title,
                   summary: c.purpose || "",
                   kind: c.chainType || "linear",
-                  memberIds: []
+                  memberIds: c.memberIds || c.member_ids || []
+                });
+              }
+              for (const l of cloudSnapshot.links || []) {
+                localService.db.saveLink({
+                  id: l.id,
+                  projectId: pid,
+                  fromBlockId: l.fromBlockId || l.from_block_id || l.from,
+                  toBlockId: l.toBlockId || l.to_block_id || l.to,
+                  kind: l.kind || "calls"
                 });
               }
               for (const p of cloudSnapshot.plans || []) {
@@ -42608,6 +48557,24 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
                   summary: p.summary || "",
                   status: p.status || "active",
                   priority: p.priority || "normal"
+                });
+              }
+              for (const t of cloudSnapshot.tasks || []) {
+                localService.db.saveTask({
+                  id: t.id,
+                  planId: t.planId || t.plan_id || "plan-v2-rebuild",
+                  phaseId: t.phaseId || t.phase_id || "P0",
+                  title: t.title || "Untitled Task",
+                  status: t.status || "draft",
+                  contextSlice: t.contextSlice || t.context_slice || {},
+                  workingSet: t.workingSet || t.working_set || {},
+                  references: t.references || {},
+                  baseline: t.baseline || {},
+                  notes: t.notes || [],
+                  checks: t.checks || [],
+                  syncResult: t.syncResult || t.sync_result || null,
+                  createdAt: t.createdAt || t.created_at,
+                  updatedAt: t.updatedAt || t.updated_at
                 });
               }
               localService.close();
@@ -42621,7 +48588,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         delete proj.cloudUrl;
         delete proj.token;
         proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        fs9.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+        fs12.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
         for (const k of Array.from(serviceCache.keys())) {
           if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
             try {
@@ -42644,8 +48611,8 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
 if (import.meta.url === `file://${process.argv[1]}`) {
   const server = createV2Server();
   const transport = new StdioServerTransport();
-  server.connect(transport).catch((err) => {
-    console.error("Fatal MCP Server error:", err);
+  server.connect(transport).catch((err2) => {
+    console.error("Fatal MCP Server error:", err2);
     process.exit(1);
   });
 }

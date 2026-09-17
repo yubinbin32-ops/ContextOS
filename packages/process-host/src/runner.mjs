@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -24,15 +24,28 @@ export async function runCommand({
     let stderrData = '';
     let killedByTimeout = false;
 
-    const child = spawn('/bin/sh', ['-c', command], {
+    const isWin = process.platform === 'win32';
+    const shell = isWin ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
+    const shellArgs = isWin ? ['/d', '/s', '/c', command] : ['-c', command];
+
+    const child = spawn(shell, shellArgs, {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsVerbatimArguments: isWin,
     });
 
     const timer = setTimeout(() => {
       killedByTimeout = true;
-      child.kill('SIGKILL');
+      if (isWin && child.pid) {
+        try {
+          execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' });
+        } catch (_) {
+          child.kill('SIGKILL');
+        }
+      } else {
+        child.kill('SIGKILL');
+      }
     }, timeoutMs);
 
     child.stdout.on('data', (chunk) => {

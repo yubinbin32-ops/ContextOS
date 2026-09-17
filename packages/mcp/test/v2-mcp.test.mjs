@@ -61,9 +61,14 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
   const codeRead = await service.code({ action: 'read', path: 'sample.js', selector: 'file-compute' });
   assert.ok(codeRead.includes('return x + 1'));
 
+  // Test top-level startLine/endLine
+  const rangeRead = await service.code({ action: 'read', path: 'sample.js', startLine: 1, endLine: 1 });
+  assert.ok(rangeRead.includes('compute'));
+
   const editRes = await service.code({
     action: 'edit',
     path: 'sample.js',
+    startLine: 1,
     targetContent: 'return x + 1;',
     replacementContent: 'return x + 50;',
   });

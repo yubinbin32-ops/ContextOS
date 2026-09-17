@@ -6,18 +6,45 @@ import { execSync } from 'node:child_process';
 const HOME = os.homedir();
 
 export function resolveNodeExecutable() {
-  const candidates = [
-    '/Applications/ContextOS.app/Contents/Resources/bin/node',
-    path.join(HOME, 'Applications/ContextOS.app/Contents/Resources/bin/node'),
-    '/opt/homebrew/bin/node',
-    '/usr/local/bin/node',
-    path.join(HOME, '.nvm/current/bin/node'),
-    '/usr/bin/node',
-    process.execPath,
-  ];
+  const isWin = process.platform === 'win32';
+  const isMac = process.platform === 'darwin';
+  const candidates = [process.execPath];
+
+  if (isWin) {
+    const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+    const localAppData = process.env.LOCALAPPDATA || path.join(HOME, 'AppData\\Local');
+    const appData = process.env.APPDATA || path.join(HOME, 'AppData\\Roaming');
+    candidates.push(
+      path.join(programFiles, 'nodejs\\node.exe'),
+      path.join(programFilesX86, 'nodejs\\node.exe'),
+      path.join(appData, 'nvm\\current\\node.exe'),
+      path.join(localAppData, 'Programs\\node\\node.exe'),
+      path.join(localAppData, 'ContextOS\\bin\\node.exe')
+    );
+  } else if (isMac) {
+    candidates.push(
+      '/Applications/ContextOS.app/Contents/Resources/bin/node',
+      path.join(HOME, 'Applications/ContextOS.app/Contents/Resources/bin/node'),
+      '/opt/homebrew/bin/node',
+      '/usr/local/bin/node',
+      path.join(HOME, '.nvm/current/bin/node'),
+      '/usr/bin/node'
+    );
+  } else {
+    // Linux / other Unix
+    candidates.push(
+      '/usr/bin/node',
+      '/usr/local/bin/node',
+      '/snap/bin/node',
+      path.join(HOME, '.nvm/current/bin/node'),
+      path.join(HOME, '.local/share/nvm/current/bin/node'),
+      path.join(HOME, '.local/bin/node')
+    );
+  }
 
   for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
+    if (candidate && fs.existsSync(candidate)) {
       try {
         fs.accessSync(candidate, fs.constants.X_OK);
         return candidate;
@@ -28,17 +55,37 @@ export function resolveNodeExecutable() {
 }
 
 export function resolveCodexExecutable() {
-  const candidates = [
-    '/Applications/Codex.app/Contents/Resources/codex',
-    '/Applications/ChatGPT.app/Contents/Resources/codex',
-    path.join(HOME, 'Applications/Codex.app/Contents/Resources/codex'),
-    '/opt/homebrew/bin/codex',
-    '/usr/local/bin/codex',
-    path.join(HOME, '.cargo/bin/codex'),
-    path.join(HOME, '.local/bin/codex'),
-  ];
+  const isWin = process.platform === 'win32';
+  const isMac = process.platform === 'darwin';
+  const candidates = [];
+
+  if (isWin) {
+    const localAppData = process.env.LOCALAPPDATA || path.join(HOME, 'AppData\\Local');
+    candidates.push(
+      path.join(localAppData, 'Programs\\Codex\\codex.exe'),
+      path.join(HOME, '.cargo\\bin\\codex.exe')
+    );
+  } else if (isMac) {
+    candidates.push(
+      '/Applications/Codex.app/Contents/Resources/codex',
+      '/Applications/ChatGPT.app/Contents/Resources/codex',
+      path.join(HOME, 'Applications/Codex.app/Contents/Resources/codex'),
+      '/opt/homebrew/bin/codex',
+      '/usr/local/bin/codex',
+      path.join(HOME, '.cargo/bin/codex'),
+      path.join(HOME, '.local/bin/codex')
+    );
+  } else {
+    candidates.push(
+      '/usr/bin/codex',
+      '/usr/local/bin/codex',
+      path.join(HOME, '.cargo/bin/codex'),
+      path.join(HOME, '.local/bin/codex')
+    );
+  }
+
   for (const c of candidates) {
-    if (fs.existsSync(c)) {
+    if (c && fs.existsSync(c)) {
       try {
         fs.accessSync(c, fs.constants.X_OK);
         return c;
@@ -130,11 +177,13 @@ export function configureTomlCodex({ configPath, serverScript, nodePath, env = n
   }
 
   content = content.trimEnd();
-  let tomlBlock = `\n\n[mcp_servers.contextos]\ncommand = "${nodePath}"\nargs = ["--no-warnings=ExperimentalWarning", "${serverScript}"]\n`;
+  const safeNodePath = nodePath.replace(/\\/g, '\\\\');
+  const safeServerScript = serverScript.replace(/\\/g, '\\\\');
+  let tomlBlock = `\n\n[mcp_servers.contextos]\ncommand = "${safeNodePath}"\nargs = ["--no-warnings=ExperimentalWarning", "${safeServerScript}"]\n`;
   if (env && Object.keys(env).length > 0) {
     tomlBlock += `[mcp_servers.contextos.env]\n`;
     for (const [k, v] of Object.entries(env)) {
-      tomlBlock += `${k} = "${v}"\n`;
+      tomlBlock += `${k} = "${String(v).replace(/\\/g, '\\\\')}"\n`;
     }
   }
 
@@ -220,19 +269,34 @@ export function detectInstalledPlatforms() {
   const isWin = process.platform === 'win32';
   const platforms = [];
 
+  const localAppData = isWin ? (process.env.LOCALAPPDATA || path.join(HOME, 'AppData\\Local')) : '';
+  const appData = isWin ? (process.env.APPDATA || path.join(HOME, 'AppData\\Roaming')) : '';
+
   // 1. Claude Desktop
   let claudeConfigPath = '';
   if (isMac) {
     claudeConfigPath = path.join(HOME, 'Library/Application Support/Claude/claude_desktop_config.json');
   } else if (isWin) {
-    claudeConfigPath = path.join(process.env.APPDATA || path.join(HOME, 'AppData/Roaming'), 'Claude/claude_desktop_config.json');
+    claudeConfigPath = path.join(appData, 'Claude\\claude_desktop_config.json');
   } else {
     claudeConfigPath = path.join(HOME, '.config/Claude/claude_desktop_config.json');
   }
-  const claudeAppExists =
-    fs.existsSync('/Applications/Claude.app') ||
-    fs.existsSync(path.join(HOME, 'Applications/Claude.app')) ||
-    fs.existsSync(path.dirname(claudeConfigPath));
+  let claudeAppExists = false;
+  if (isMac) {
+    claudeAppExists =
+      fs.existsSync('/Applications/Claude.app') ||
+      fs.existsSync(path.join(HOME, 'Applications/Claude.app')) ||
+      fs.existsSync(path.dirname(claudeConfigPath));
+  } else if (isWin) {
+    claudeAppExists =
+      fs.existsSync(path.join(localAppData, 'Programs\\Claude\\Claude.exe')) ||
+      fs.existsSync(path.dirname(claudeConfigPath));
+  } else {
+    claudeAppExists =
+      fs.existsSync('/usr/bin/claude') ||
+      fs.existsSync('/snap/bin/claude') ||
+      fs.existsSync(path.dirname(claudeConfigPath));
+  }
   platforms.push({
     id: 'claude',
     name: 'Claude Desktop',
@@ -243,10 +307,23 @@ export function detectInstalledPlatforms() {
 
   // 2. Cursor
   const cursorDir = path.join(HOME, '.cursor');
-  const cursorAppExists =
-    fs.existsSync('/Applications/Cursor.app') ||
-    fs.existsSync(path.join(HOME, 'Applications/Cursor.app')) ||
-    fs.existsSync(cursorDir);
+  let cursorAppExists = false;
+  if (isMac) {
+    cursorAppExists =
+      fs.existsSync('/Applications/Cursor.app') ||
+      fs.existsSync(path.join(HOME, 'Applications/Cursor.app')) ||
+      fs.existsSync(cursorDir);
+  } else if (isWin) {
+    cursorAppExists =
+      fs.existsSync(path.join(localAppData, 'Programs\\cursor\\Cursor.exe')) ||
+      fs.existsSync(cursorDir);
+  } else {
+    cursorAppExists =
+      fs.existsSync('/usr/bin/cursor') ||
+      fs.existsSync('/opt/Cursor/cursor') ||
+      fs.existsSync(path.join(HOME, '.local/share/cursor')) ||
+      fs.existsSync(cursorDir);
+  }
   platforms.push({
     id: 'cursor',
     name: 'Cursor',
@@ -258,10 +335,22 @@ export function detectInstalledPlatforms() {
 
   // 3. Antigravity
   const geminiDir = path.join(HOME, '.gemini/config');
-  const antigravityAppExists =
-    fs.existsSync('/Applications/Antigravity.app') ||
-    fs.existsSync(path.join(HOME, 'Applications/Antigravity.app')) ||
-    fs.existsSync(geminiDir);
+  let antigravityAppExists = false;
+  if (isMac) {
+    antigravityAppExists =
+      fs.existsSync('/Applications/Antigravity.app') ||
+      fs.existsSync(path.join(HOME, 'Applications/Antigravity.app')) ||
+      fs.existsSync(geminiDir);
+  } else if (isWin) {
+    antigravityAppExists =
+      fs.existsSync(path.join(localAppData, 'Programs\\Antigravity\\Antigravity.exe')) ||
+      fs.existsSync(geminiDir);
+  } else {
+    antigravityAppExists =
+      fs.existsSync('/usr/bin/antigravity') ||
+      fs.existsSync(path.join(HOME, '.local/share/antigravity')) ||
+      fs.existsSync(geminiDir);
+  }
   platforms.push({
     id: 'antigravity',
     name: 'Antigravity',
@@ -273,10 +362,22 @@ export function detectInstalledPlatforms() {
 
   // 4. OpenCode
   const opencodeDir = path.join(HOME, '.config/opencode');
-  const opencodeAppExists =
-    fs.existsSync('/Applications/OpenCode.app') ||
-    fs.existsSync(path.join(HOME, 'Applications/OpenCode.app')) ||
-    fs.existsSync(opencodeDir);
+  let opencodeAppExists = false;
+  if (isMac) {
+    opencodeAppExists =
+      fs.existsSync('/Applications/OpenCode.app') ||
+      fs.existsSync(path.join(HOME, 'Applications/OpenCode.app')) ||
+      fs.existsSync(opencodeDir);
+  } else if (isWin) {
+    opencodeAppExists =
+      fs.existsSync(path.join(localAppData, 'Programs\\OpenCode\\OpenCode.exe')) ||
+      fs.existsSync(opencodeDir);
+  } else {
+    opencodeAppExists =
+      fs.existsSync('/usr/bin/opencode') ||
+      fs.existsSync(path.join(HOME, '.local/share/opencode')) ||
+      fs.existsSync(opencodeDir);
+  }
   platforms.push({
     id: 'opencode',
     name: 'OpenCode',
@@ -288,11 +389,25 @@ export function detectInstalledPlatforms() {
 
   // 5. Codex
   const codexDir = path.join(HOME, '.codex');
-  const codexAppExists =
-    fs.existsSync('/Applications/ChatGPT.app') ||
-    fs.existsSync('/Applications/Codex.app') ||
-    fs.existsSync(codexDir) ||
-    fs.existsSync(path.join(HOME, '.agents/plugins'));
+  let codexAppExists = false;
+  if (isMac) {
+    codexAppExists =
+      fs.existsSync('/Applications/ChatGPT.app') ||
+      fs.existsSync('/Applications/Codex.app') ||
+      fs.existsSync(codexDir) ||
+      fs.existsSync(path.join(HOME, '.agents/plugins'));
+  } else if (isWin) {
+    codexAppExists =
+      fs.existsSync(path.join(localAppData, 'Programs\\Codex\\Codex.exe')) ||
+      fs.existsSync(codexDir) ||
+      fs.existsSync(path.join(HOME, '.agents/plugins'));
+  } else {
+    codexAppExists =
+      fs.existsSync('/usr/bin/codex') ||
+      fs.existsSync(path.join(HOME, '.local/bin/codex')) ||
+      fs.existsSync(codexDir) ||
+      fs.existsSync(path.join(HOME, '.agents/plugins'));
+  }
   platforms.push({
     id: 'codex',
     name: 'Codex',

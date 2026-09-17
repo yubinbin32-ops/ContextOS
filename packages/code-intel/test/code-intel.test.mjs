@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LanguageRegistry, CodeTools, CoverageChecker } from '../src/index.mjs';
+import { LanguageRegistry, CodeTools, CoverageChecker, TreeSitterParser } from '../src/index.mjs';
 
 const JS_CODE = `import fs from 'node:fs';
 import path from 'node:path';
@@ -157,25 +157,44 @@ func CalculateSum(a, b int) int {
 test('LanguageRegistry parses Rust structs, traits, and impl methods', () => {
   const rustCode = `use std::collections::HashMap;
 
-pub trait Worker {
-  fn work(&self);
+pub trait Worker<'a> {
+  fn work(&'a self) -> &'a str;
 }
 
-pub struct Engine {
+pub struct Engine<'a> {
   id: u32,
+  tag: &'a str,
 }
 
-impl Engine {
-  pub fn new(id: u32) -> Self {
-    Engine { id }
+struct Point(f64, f64);
+
+impl<'a> Engine<'a> {
+  pub fn new(id: u32, tag: &'a str) -> Self {
+    Engine { id, tag }
+  }
+
+  pub(crate) const unsafe fn process<'a, T: AsRef<str>>(&'a self, x: T) -> &'a str {
+    self.tag
   }
 }
 `;
   const structure = LanguageRegistry.parseStructure('src/lib.rs', rustCode);
   assert.equal(structure.language, 'rust');
   assert.ok(structure.symbols.some((s) => s.name === 'Worker' && s.kind === 'trait'));
+
+  const workFn = structure.symbols.find((s) => s.name === 'work');
+  assert.ok(workFn, 'work function must be found');
+  assert.equal(workFn.startLine, 4);
+  assert.equal(workFn.endLine, 4, 'work function without body must terminate at line 4');
+
+  const pointStruct = structure.symbols.find((s) => s.name === 'Point');
+  assert.ok(pointStruct, 'Point tuple struct must be found');
+  assert.equal(pointStruct.startLine, 12);
+  assert.equal(pointStruct.endLine, 12, 'tuple struct must terminate at line 12');
+
   assert.ok(structure.symbols.some((s) => s.name === 'Engine' && s.kind === 'struct'));
   assert.ok(structure.symbols.some((s) => s.name === 'Engine.new' && s.kind === 'method'));
+  assert.ok(structure.symbols.some((s) => s.name === 'Engine.process' && s.kind === 'method'));
 });
 
 test('LanguageRegistry parses Java classes, interfaces, and methods', () => {
@@ -352,7 +371,11 @@ test('CodeTools.read surgical extraction', () => {
   const strRead = CodeTools.read('src/engine.js', JS_CODE, 'file-helperFunction');
   assert.ok(strRead.code.includes('return val * 2;'));
 
-  // 4. Default rejection of full file read without flag
+  // 4. Read by startLine only
+  const startOnlyRead = CodeTools.read('src/engine.js', JS_CODE, { startLine: 20 });
+  assert.ok(startOnlyRead.code.includes('export function helperFunction'));
+
+  // 5. Default rejection of full file read without flag
   assert.throws(
     () => CodeTools.read('src/engine.js', JS_CODE, {}),
     /Selector must specify symbol or line range/
@@ -366,6 +389,7 @@ test('CodeTools.edit surgical modification and re-anchoring', () => {
   const editResult = CodeTools.edit('src/engine.js', JS_CODE, {
     targetContent: target,
     replacementContent: replacement,
+    startLine: 20,
   });
 
   assert.ok(editResult.newContent.includes('return val * 10;'));
@@ -375,6 +399,15 @@ test('CodeTools.edit surgical modification and re-anchoring', () => {
   // Symbol re-anchoring verified
   const fnLocator = editResult.updatedLocators.find((l) => l.symbol === 'helperFunction');
   assert.ok(fnLocator);
+
+  // Verify regex special tokens ($1, $&, $$) are not expanded
+  const placeholderTarget = 'val * 10;';
+  const placeholderReplacement = '$1 and $& and $$;';
+  const placeholderResult = CodeTools.edit('src/engine.js', editResult.newContent, {
+    targetContent: placeholderTarget,
+    replacementContent: placeholderReplacement,
+  });
+  assert.ok(placeholderResult.newContent.includes('$1 and $& and $$;'));
 });
 
 test('CoverageChecker identifies gaps and covered files', () => {
@@ -393,4 +426,196 @@ test('CoverageChecker identifies gaps and covered files', () => {
   assert.equal(report.isFullyCovered, false);
   assert.deepEqual(report.uncoveredList, ['src/c.js']);
   assert.equal(report.gaps.length, 1);
+});
+
+test('TreeSitterParser extracts true AST symbols across target languages', () => {
+  // 1. Rust AST
+  const rustCode = `
+pub trait Service<'a> {
+  fn serve(&'a self) -> bool;
+}
+pub struct AppEngine {
+  workers: u32,
+}
+impl AppEngine {
+  pub fn run(&self) -> bool {
+    true
+  }
+}
+`;
+  const rustRes = TreeSitterParser.parse('rust', rustCode, rustCode.split('\n'));
+  assert.ok(rustRes);
+  assert.ok(rustRes.symbols.some((s) => s.name === 'Service' && s.kind === 'trait'));
+  assert.ok(rustRes.symbols.some((s) => s.name === 'serve' && s.kind === 'function'));
+  assert.ok(rustRes.symbols.some((s) => s.name === 'AppEngine' && s.kind === 'struct'));
+  assert.ok(rustRes.symbols.some((s) => s.name === 'AppEngine.run' && s.kind === 'method'));
+
+  // 2. Go AST
+  const goCode = `
+package worker
+type JobPool struct {
+  Size int
+}
+func (jp *JobPool) Dispatch() error {
+  return nil
+}
+`;
+  const goRes = TreeSitterParser.parse('go', goCode, goCode.split('\n'));
+  assert.ok(goRes);
+  assert.ok(goRes.symbols.some((s) => s.name === 'JobPool' && s.kind === 'struct'));
+  assert.ok(goRes.symbols.some((s) => s.name === 'JobPool.Dispatch' && s.kind === 'method'));
+
+  // 3. Python AST
+  const pyCode = `
+class NeuralNet:
+    def __init__(self, layers):
+        self.layers = layers
+    async def forward(self, x):
+        return x
+`;
+  const pyRes = TreeSitterParser.parse('python', pyCode, pyCode.split('\n'));
+  assert.ok(pyRes);
+  assert.ok(pyRes.symbols.some((s) => s.name === 'NeuralNet' && s.kind === 'class'));
+  assert.ok(pyRes.symbols.some((s) => s.name === 'NeuralNet.forward' && s.kind === 'method'));
+});
+
+test('LanguageRegistry robust fallback when language wasm is missing or unsupported', () => {
+  // Plain text / unsupported extension
+  const textContent = 'Simple plain text without grammar.\nLine 2.\n';
+  const textStructure = LanguageRegistry.parseStructure('README.txt', textContent);
+  assert.equal(textStructure.language, 'text');
+  assert.equal(textStructure.capability, 'L1');
+  assert.equal(textStructure.symbols.length, 1);
+  assert.equal(textStructure.symbols[0].kind, 'file');
+
+  // Verify non-existent language does not crash TreeSitterParser
+  const invalidRes = TreeSitterParser.parse('nonexistent_lang_xyz', 'hello', ['hello']);
+  assert.equal(invalidRes, null);
+  assert.equal(TreeSitterParser.isLanguageSupported('nonexistent_lang_xyz'), false);
+});
+
+test('TreeSitterParser handles advanced language features across all target grammars', () => {
+  // 1. Python decorated functions and methods
+  const pyAdvanced = `
+@app.route("/metrics")
+@login_required
+def get_metrics():
+    return {}
+
+class UserProfile:
+    @property
+    def display_name(self):
+        return self._name
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls()
+`;
+  const pyRes = TreeSitterParser.parse('python', pyAdvanced, pyAdvanced.split('\n'));
+  assert.ok(pyRes.symbols.some((s) => s.name === 'get_metrics' && s.kind === 'function'));
+  assert.ok(pyRes.symbols.some((s) => s.name === 'UserProfile' && s.kind === 'class'));
+  assert.ok(pyRes.symbols.some((s) => s.name === 'UserProfile.display_name' && s.kind === 'method'));
+  assert.ok(pyRes.symbols.some((s) => s.name === 'UserProfile.from_dict' && s.kind === 'method'));
+
+  // 2. C++ namespaces, templates, and clean pointer return names
+  const cppAdvanced = `
+namespace compute::math {
+  template <typename T>
+  class TensorEngine {
+    void scale();
+  };
+}
+char* format_buffer(int size) { return nullptr; }
+`;
+  const cppRes = TreeSitterParser.parse('cpp', cppAdvanced, cppAdvanced.split('\n'));
+  assert.ok(cppRes.symbols.some((s) => s.name === 'TensorEngine' && s.kind === 'class'));
+  assert.ok(cppRes.symbols.some((s) => s.name === 'TensorEngine::scale' && s.kind === 'method'));
+  assert.ok(cppRes.symbols.some((s) => s.name === 'format_buffer' && s.kind === 'function'));
+
+  // 3. C typedef struct
+  const cCode = `
+typedef struct GeometryPoint {
+  double x;
+  double y;
+} GeoPoint;
+`;
+  const cRes = TreeSitterParser.parse('c', cCode, cCode.split('\n'));
+  assert.ok(cRes.symbols.some((s) => (s.name === 'GeoPoint' || s.name === 'GeometryPoint') && s.kind === 'struct'));
+
+  // 4. Swift protocols and structs with public/private modifiers
+  const swiftAdvanced = `
+protocol DataRepository {
+  func fetchAll() -> [String]
+}
+public struct AppTheme {
+  let primaryColor: String
+}
+`;
+  const swiftRes = TreeSitterParser.parse('swift', swiftAdvanced, swiftAdvanced.split('\n'));
+  const proto = swiftRes.symbols.find((s) => s.name === 'DataRepository');
+  assert.ok(proto);
+  assert.equal(proto.kind, 'interface');
+  assert.ok(swiftRes.symbols.some((s) => s.name === 'DataRepository.fetchAll' && s.kind === 'method'));
+  const strct = swiftRes.symbols.find((s) => s.name === 'AppTheme');
+  assert.ok(strct);
+  assert.equal(strct.kind, 'struct');
+
+  // 5. Go generics receiver and interface methods
+  const goAdvanced = `
+package server
+type HttpHandler interface {
+  HandleRequest(req string) bool
+}
+func (s *ClusterManager[T]) Rebalance() error {
+  return nil
+}
+`;
+  const goRes = TreeSitterParser.parse('go', goAdvanced, goAdvanced.split('\n'));
+  assert.ok(goRes.symbols.some((s) => s.name === 'HttpHandler' && s.kind === 'interface'));
+  assert.ok(goRes.symbols.some((s) => s.name === 'HttpHandler.HandleRequest' && s.kind === 'method'));
+  assert.ok(goRes.symbols.some((s) => s.name === 'ClusterManager.Rebalance' && s.kind === 'method'));
+
+  // 6. Rust mod items
+  const rustAdvanced = `
+mod networking {
+  pub struct Socket {
+    fd: i32,
+  }
+  impl Socket {
+    pub fn connect(&self) -> bool { true }
+  }
+}
+`;
+  const rustRes = TreeSitterParser.parse('rust', rustAdvanced, rustAdvanced.split('\n'));
+  assert.ok(rustRes.symbols.some((s) => s.name === 'networking' && s.kind === 'module'));
+  assert.ok(rustRes.symbols.some((s) => s.name === 'Socket' && s.kind === 'struct'));
+  assert.ok(rustRes.symbols.some((s) => s.name === 'Socket.connect' && s.kind === 'method'));
+
+  // 7. Ruby nested modules and classes
+  const rbAdvanced = `
+module Analytics
+  class Tracker
+    def track_event(name)
+      puts name
+    end
+  end
+end
+`;
+  const rbRes = TreeSitterParser.parse('ruby', rbAdvanced, rbAdvanced.split('\n'));
+  assert.ok(rbRes.symbols.some((s) => s.name === 'Analytics' && s.kind === 'module'));
+  assert.ok(rbRes.symbols.some((s) => s.name === 'Analytics::Tracker' && s.kind === 'class'));
+  assert.ok(rbRes.symbols.some((s) => s.name === 'Analytics::Tracker#track_event' && s.kind === 'method'));
+
+  // 8. Java, C#, PHP enums
+  const csEnum = `public enum TaskStatus { Draft, Active, Done }`;
+  const csRes = TreeSitterParser.parse('csharp', csEnum, csEnum.split('\n'));
+  assert.ok(csRes.symbols.some((s) => s.name === 'TaskStatus' && s.kind === 'enum'));
+
+  const javaEnum = `public enum LogLevel { DEBUG, INFO, ERROR }`;
+  const javaRes = TreeSitterParser.parse('java', javaEnum, javaEnum.split('\n'));
+  assert.ok(javaRes.symbols.some((s) => s.name === 'LogLevel' && s.kind === 'enum'));
+
+  const phpEnum = `<?php\nenum PaymentState: string { case PAID = 'paid'; }`;
+  const phpRes = TreeSitterParser.parse('php', phpEnum, phpEnum.split('\n'));
+  assert.ok(phpRes.symbols.some((s) => s.name === 'PaymentState' && s.kind === 'enum'));
 });

@@ -132,8 +132,80 @@ async function executeTool(tool, input = {}, projectId = 'contextos', db) {
       result = `Plan action '${action}' executed on cloud hub.`;
     }
   } else if (tool === 'task') {
-    const action = input.action || 'create';
-    result = `Task '${input.id || 'draft'}' action '${action}' synchronized to cloud hub.`;
+    const action = input.action || 'list';
+    if (action === 'create' && db) {
+      const t = input.taskData || input;
+      const taskId = t.id || input.id || `task-${Date.now()}`;
+      const planId = t.planId || input.planId || 'plan-v2-rebuild';
+      const phaseId = t.phaseId || input.phaseId || 'P0';
+      const title = t.title || input.title || 'Untitled Task';
+      const status = t.status || 'draft';
+      const now = new Date().toISOString();
+      const contextSlice = JSON.stringify(t.contextSlice || {});
+      const workingSet = JSON.stringify(Array.isArray(t.workingSet) ? { files: t.workingSet } : (t.workingSet || {}));
+      const references = JSON.stringify(t.references || {});
+      const baseline = JSON.stringify(t.baseline || {});
+      await db.prepare('INSERT OR REPLACE INTO tasks (id, plan_id, phase_id, title, status, context_slice_json, working_set_json, references_json, baseline_json, notes_json, checks_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(taskId, planId, phaseId, title, status, contextSlice, workingSet, references, baseline, '[]', '[]', now, now).run();
+      result = { id: taskId, planId, phaseId, title, status };
+    } else if ((action === 'activate' || action === 'develop') && db) {
+      const taskId = input.id;
+      const now = new Date().toISOString();
+      await db.prepare('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?').bind('active', now, taskId).run();
+      result = { id: taskId, status: 'active' };
+    } else if (action === 'check' && db) {
+      const taskId = input.id;
+      const checkData = input.checkData || {};
+      const row = await db.prepare('SELECT checks_json FROM tasks WHERE id = ?').bind(taskId).first();
+      const checks = row?.checks_json ? JSON.parse(row.checks_json) : [];
+      checks.push({
+        id: `check-${Date.now()}`,
+        description: checkData.description || 'Check recorded',
+        passed: checkData.passed !== false,
+        evidence: checkData.evidence || '',
+        recordedAt: new Date().toISOString(),
+      });
+      await db.prepare('UPDATE tasks SET checks_json = ?, updated_at = ? WHERE id = ?')
+        .bind(JSON.stringify(checks), new Date().toISOString(), taskId).run();
+      result = { id: taskId, status: 'checking', checksCount: checks.length };
+    } else if (action === 'note' && db) {
+      const taskId = input.id;
+      const row = await db.prepare('SELECT notes_json FROM tasks WHERE id = ?').bind(taskId).first();
+      const notes = row?.notes_json ? JSON.parse(row.notes_json) : [];
+      notes.push({
+        id: `note-${Date.now()}`,
+        text: input.text || '',
+        kind: input.kind || 'journal',
+        createdAt: new Date().toISOString(),
+      });
+      await db.prepare('UPDATE tasks SET notes_json = ?, updated_at = ? WHERE id = ?')
+        .bind(JSON.stringify(notes), new Date().toISOString(), taskId).run();
+      result = { id: taskId, notesCount: notes.length };
+    } else if (action === 'sync' && db) {
+      const taskId = input.id;
+      const now = new Date().toISOString();
+      const syncResult = JSON.stringify(input.syncData || {});
+      await db.prepare('UPDATE tasks SET status = ?, sync_result_json = ?, updated_at = ? WHERE id = ?')
+        .bind('completed', syncResult, now, taskId).run();
+      result = { id: taskId, status: 'completed' };
+    } else if (action === 'get' && db) {
+      const row = await db.prepare('SELECT * FROM tasks WHERE id = ?').bind(input.id).first();
+      result = row || null;
+    } else if (action === 'list' && db) {
+      const planId = input.planId || input.plan_id;
+      let rows;
+      if (planId) {
+        rows = (await db.prepare('SELECT * FROM tasks WHERE plan_id = ? ORDER BY created_at DESC').bind(planId).all()).results || [];
+      } else {
+        rows = (await db.prepare('SELECT * FROM tasks WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?) ORDER BY created_at DESC').bind(projectId).all()).results || [];
+        if (rows.length === 0) {
+          rows = (await db.prepare('SELECT * FROM tasks ORDER BY created_at DESC').all()).results || [];
+        }
+      }
+      result = rows;
+    } else {
+      result = `Task '${input.id || 'draft'}' action '${action}' synchronized to cloud hub.`;
+    }
   } else if (tool === 'block') {
     const action = input.action || 'list';
     if ((action === 'bind' || action === 'create') && db) {
@@ -536,6 +608,17 @@ export default {
             for (const b of body.blocks || []) {
               await db.prepare('INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
                 .bind(b.id, projectId, b.title || b.id, b.kind || 'service', b.summary || '', b.details || b.body || '', now, now).run();
+
+              const refs = b.artifactRefs || b.artifact_refs || [];
+              if (refs.length > 0) {
+                await db.prepare('DELETE FROM artifact_refs WHERE block_id = ?').bind(b.id).run();
+                for (let i = 0; i < refs.length; i++) {
+                  const r = refs[i];
+                  const refId = r.id || `${b.id}-ref-${i}`;
+                  await db.prepare('INSERT OR REPLACE INTO artifact_refs (id, block_id, path, symbol, start_line, end_line, hash, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                    .bind(refId, b.id, r.path || '', r.symbol || null, r.startLine || r.start_line || null, r.endLine || r.end_line || null, r.hash || '', r.role || 'implementation').run();
+                }
+              }
             }
             for (const c of body.chains || []) {
               const members = JSON.stringify(c.memberIds || c.member_ids || []);
@@ -554,6 +637,28 @@ export default {
             for (const p of body.plans || []) {
               await db.prepare('INSERT OR REPLACE INTO plans (id, project_id, title, priority, status, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
                 .bind(p.id, projectId, p.title || p.id, p.priority || 'normal', p.status || 'active', p.summary || '', now, now).run();
+            }
+            for (const t of body.tasks || []) {
+              const ws = Array.isArray(t.workingSet || t.working_set)
+                ? { files: t.workingSet || t.working_set }
+                : (t.workingSet || t.working_set || {});
+              await db.prepare('INSERT OR REPLACE INTO tasks (id, plan_id, phase_id, title, status, context_slice_json, working_set_json, references_json, baseline_json, notes_json, checks_json, sync_result_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                .bind(
+                  t.id,
+                  t.planId || t.plan_id || 'plan-v2-rebuild',
+                  t.phaseId || t.phase_id || 'P0',
+                  t.title || 'Untitled Task',
+                  t.status || 'draft',
+                  JSON.stringify(t.contextSlice || t.context_slice || {}),
+                  JSON.stringify(ws),
+                  JSON.stringify(t.references || {}),
+                  JSON.stringify(t.baseline || {}),
+                  JSON.stringify(t.notes || []),
+                  JSON.stringify(t.checks || []),
+                  t.syncResult || t.sync_result ? JSON.stringify(t.syncResult || t.sync_result) : null,
+                  t.createdAt || t.created_at || now,
+                  t.updatedAt || t.updated_at || now
+                ).run();
             }
           }
           return new Response(JSON.stringify({ status: 'ok', projectId, syncedAt: now }), { headers: CORS_HEADERS });
@@ -598,9 +703,41 @@ export default {
         try {
           const plans = (await db.prepare('SELECT * FROM plans WHERE project_id = ?').bind(projectId).all()).results || [];
           const blocks = (await db.prepare('SELECT * FROM blocks WHERE project_id = ?').bind(projectId).all()).results || [];
+          const allRefs = (await db.prepare('SELECT * FROM artifact_refs WHERE block_id IN (SELECT id FROM blocks WHERE project_id = ?)').bind(projectId).all()).results || [];
+          const refsByBlock = new Map();
+          for (const r of allRefs) {
+            if (!refsByBlock.has(r.block_id)) refsByBlock.set(r.block_id, []);
+            refsByBlock.get(r.block_id).push({
+              id: r.id,
+              path: r.path,
+              symbol: r.symbol,
+              startLine: r.start_line,
+              endLine: r.end_line,
+              hash: r.hash,
+              role: r.role,
+            });
+          }
           const chains = (await db.prepare('SELECT * FROM chains WHERE project_id = ?').bind(projectId).all()).results || [];
           const links = (await db.prepare('SELECT * FROM links WHERE project_id = ?').bind(projectId).all()).results || [];
           const checkpoints = (await db.prepare('SELECT * FROM checkpoints WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').bind(projectId).all()).results || [];
+          const tasks = (await db.prepare('SELECT * FROM tasks WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').bind(projectId).all()).results || [];
+
+          snapshot.tasks = tasks.map((t) => ({
+            id: t.id,
+            planId: t.plan_id,
+            phaseId: t.phase_id,
+            title: t.title,
+            status: t.status,
+            contextSlice: JSON.parse(t.context_slice_json || '{}'),
+            workingSet: JSON.parse(t.working_set_json || '{}'),
+            references: JSON.parse(t.references_json || '{}'),
+            baseline: JSON.parse(t.baseline_json || '{}'),
+            notes: JSON.parse(t.notes_json || '[]'),
+            checks: JSON.parse(t.checks_json || '[]'),
+            syncResult: t.sync_result_json ? JSON.parse(t.sync_result_json) : null,
+            createdAt: t.created_at,
+            updatedAt: t.updated_at,
+          }));
 
           snapshot.plans = plans.map((p) => ({
             id: p.id,
@@ -638,6 +775,7 @@ export default {
             healthState: 'healthy',
             priority: 'normal',
             revision: 1,
+            artifactRefs: refsByBlock.get(b.id) || [],
           }));
 
           snapshot.chains = chains.map((c) => ({

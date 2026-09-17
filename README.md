@@ -96,8 +96,8 @@ If you are already in an AI coding assistant (Cursor / Codex / Claude Code / Win
 1. **System & Client Inspection**: If on macOS, asks if you want the native Desktop App (`ContextOS.app`) and deploys it automatically.
 2. **Runtime Verification**: Checks for Node.js 22+ (or uses the runtime bundled with ContextOS.app).
 3. **Targeted Precision Injection**: Asks which editors you use (Cursor / Codex / Claude Desktop, etc.) and injects only the selected platforms, eliminating duplicate skill noise.
-4. **Cloud Hub Configuration**: Asks if you want a global Cloudflare Edge Hub for remote sync, and saves credentials securely.
-5. **Project Initialization**: Initializes the current project with your chosen storage mode (local offline by default, or cloud).
+4. **Demand-Driven Collaboration Mode**: Asks if you need solo local development or team collaboration, configuring local SQLite or Cloudflare D1 accordingly.
+5. **Project Initialization**: Initializes the current project and verifies tools.
 
 ---
 
@@ -129,13 +129,13 @@ Add standard stdio MCP configuration to your editor (`mcp.json` or `claude_deskt
 
 ---
 
-## Local Project Centricity & Multi-Project Cloud Isolation
+## Storage Modes: Local & Cloud Collaboration
 
 ContextOS treats the **local workspace project directory** as the absolute source of truth (code reads, AST edits, test runs, and logs always run locally):
 
-- **Local Storage Mode (Default)**: Architecture data is stored in the project's `.contextos/state.sqlite`. 100% offline, private, and zero network dependency.
-- **Cloud Collaboration Mode (Optional)**: Connects to a serverless Cloud Hub (Cloudflare D1 edge database) to share architectural topology and progress across devices.
-  - **Multi-Project Isolation Built-In**: Cloud Hub partitions entities by `projectId`. A single Cloudflare Worker can back all your distinct projects with strict isolation.
+- **Local Storage Mode**: Designed for solo development. Architecture data is stored in the project's `.contextos/state.sqlite`. 100% offline, private, and zero network latency.
+- **Cloud Collaboration Mode**: Designed for team collaboration. Connects to a serverless Cloud Hub (Cloudflare D1 edge database) to synchronize architectural topology and progress across teammates and devices.
+  - **Multi-Project Strict Isolation**: Cloud Hub partitions entities by `projectId`. A single Cloudflare Worker backs multiple independent repositories cleanly.
 - **Lossless Two-Way Switching**: Switch storage modes anytime by prompting your AI:
   - *"Switch current project to cloud collaboration mode"* ➔ Local SQLite graph is pushed to Cloud D1.
   - *"Switch current project back to offline local mode"* ➔ Cloud snapshot is synced back to local SQLite for offline development.
