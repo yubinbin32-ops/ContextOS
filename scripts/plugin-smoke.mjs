@@ -9,13 +9,13 @@ const transport = new StdioClientTransport({
   args: ["plugins/contextos/server/contextos-mcp.mjs"],
   cwd: projectRoot,
 });
-const client = new Client({ name: "contextos-plugin-smoke", version: "2.1.0" });
+const client = new Client({ name: "contextos-plugin-smoke", version: "2.2.0" });
 const packageVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 const pluginVersion = JSON.parse(fs.readFileSync("plugins/contextos/.codex-plugin/plugin.json", "utf8")).version;
 const appVersion = fs.readFileSync("apps/desktop/Resources/Info.plist", "utf8").match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)/)?.[1];
 assert.equal(packageVersion, pluginVersion, "package and plugin versions must match");
 assert.equal(packageVersion, appVersion, "package and desktop app versions must match");
-assert.equal(packageVersion, "2.1.0", "Version must be 2.1.0");
+assert.equal(packageVersion, "2.2.0", "Version must be 2.2.0");
 
 try {
   await client.connect(transport);

@@ -46635,14 +46635,25 @@ var NetworkLayoutEngine = class {
 };
 
 // packages/context/src/markdown-renderer.mjs
-var MarkdownRenderer = class {
-  // Practical Test Hook: OS V2 Active Verification
-  // Practical Test Hook: OS V2 Active Verification
+var MarkdownRenderer = class _MarkdownRenderer {
   static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [] }) {
     const lines = [];
     lines.push(`# ContextOS Project Brief: \`${project.id}\` (rev: ${project.graph_revision || 0})`);
     lines.push(`Root: \`${project.repo_root}\`
 `);
+    lines.push("## System Topology Backbone:");
+    lines.push("```");
+    lines.push("[Client / Apps] \u2500\u2500> [Gateway: MCP / Daemon]");
+    lines.push("                    \u2502");
+    lines.push("                    \u25BC");
+    lines.push("[Application Services: C-D-C-S / Runner]");
+    lines.push("       \u2502");
+    lines.push("       \u25BC");
+    lines.push("[Core Intel & Domain: AST / Invariants]");
+    lines.push("       \u2502");
+    lines.push("       \u25BC");
+    lines.push("[Storage & Infra: SQLite WAL / Git Sync]");
+    lines.push("```\n");
     if (activePlan) {
       lines.push(`## Active Plan: [${activePlan.id}] ${activePlan.title}`);
       lines.push(`- Priority: ${activePlan.priority} | Status: ${activePlan.status}`);
@@ -46757,20 +46768,108 @@ var MarkdownRenderer = class {
     }
     return lines.join("\n");
   }
-  static renderBlock(block) {
+  static getBlockTier(block) {
+    if (block?.tier) return block.tier;
+    const id = (block?.id || "").toLowerCase();
+    const title = (block?.title || "").toLowerCase();
+    if (id.startsWith("block-unassigned") || id.includes("unassigned") || id.includes("dynamic") || block?.kind === "dynamic") {
+      return "Tier 6: Workspace & Dynamic Blocks";
+    }
+    const refs = (block?.artifactRefs || []).filter(Boolean).map((r) => typeof r === "string" ? r : r?.path || "").join(" ").toLowerCase();
+    if (id.includes("desktop") || id.includes("cli") || id.includes("cloud") || id.includes("installer") || id.includes("client") || refs.includes("apps/desktop") || refs.includes("apps/cli") || refs.includes("apps/cloud") || title.includes("desktop") || title.includes("metro map")) {
+      return "Tier 5: Client & Tooling";
+    }
+    if (id.includes("mcp") && !id.includes("code") || id.includes("daemon") || id.includes("protocol") || refs.includes("packages/mcp") || refs.includes("packages/protocol") || refs.includes("apps/daemon") || title.includes("protocol") || title.includes("mcp facade")) {
+      return "Tier 1: Gateway & Protocol Layer";
+    }
+    if (id.includes("lifecycle") || id.includes("command-runner") || id.includes("process-host") || id.includes("coverage-guard") || refs.includes("packages/application") || refs.includes("packages/process-host") || title.includes("lifecycle") || title.includes("command runner") || title.includes("process supervisor") || title.includes("coverage guard")) {
+      return "Tier 2: Application Services";
+    }
+    if (id.includes("code-gateway") || id.includes("code-intel") || id.includes("domain") || id.includes("context") || id.includes("layout") || refs.includes("packages/code-intel") || refs.includes("packages/domain") || refs.includes("packages/context") || refs.includes("packages/layout") || title.includes("ast") || title.includes("domain") || title.includes("context") || title.includes("layout")) {
+      return "Tier 3: Core Intelligence & Domain";
+    }
+    if (id.includes("storage") || id.includes("database") || refs.includes("packages/storage") || refs.includes(".sqlite") || title.includes("sqlite") || title.includes("sync engine") || title.includes("database engine")) {
+      return "Tier 4: Infrastructure & Storage";
+    }
+    return "Tier 6: Workspace & Dynamic Blocks";
+  }
+  static renderBlockList(blocks) {
+    const lines = [`# Architecture Blocks (${blocks.length} total)`];
+    const standardTiers = [
+      "Tier 1: Gateway & Protocol Layer",
+      "Tier 2: Application Services",
+      "Tier 3: Core Intelligence & Domain",
+      "Tier 4: Infrastructure & Storage",
+      "Tier 5: Client & Tooling"
+    ];
+    const grouped = /* @__PURE__ */ new Map();
+    for (const tier of standardTiers) {
+      grouped.set(tier, []);
+    }
+    for (const b of blocks) {
+      const tier = b.tier || _MarkdownRenderer.getBlockTier(b);
+      if (!grouped.has(tier)) {
+        grouped.set(tier, []);
+      }
+      grouped.get(tier).push(b);
+    }
+    for (const [tierName, tierBlocks] of grouped.entries()) {
+      if (tierBlocks.length === 0) continue;
+      lines.push(`
+## ${tierName} (${tierBlocks.length})`);
+      for (const b of tierBlocks) {
+        lines.push(`- **[${b.id}]** ${b.title || b.id} (${b.artifactRefs?.length || 0} code refs)
+  ${b.summary || "No summary available."}`);
+      }
+    }
+    return lines.join("\n");
+  }
+  static renderBlock(block, { inboundLinks = [], outboundLinks = [] } = {}) {
     const lines = [];
-    lines.push(`# Block: [${block.id}] ${block.title} (${block.kind || "service"})`);
+    lines.push(`# Block: [${block.id}] ${block.title || block.id} (${block.kind || "service"})`);
+    const tier = block.tier || _MarkdownRenderer.getBlockTier(block);
+    if (tier) lines.push(`**Tier**: ${tier}`);
     if (block.summary) lines.push(`**Summary**: ${block.summary}`);
     if (block.details) lines.push(`
 ${block.details}`);
+    const safeInbound = inboundLinks || [];
+    const safeOutbound = outboundLinks || [];
+    lines.push("\n## Architecture Neighborhood (\u4E0A\u4E0B\u6E38\u62D3\u6251):");
+    if (safeInbound.length === 0) {
+      lines.push("- \u{1F4E5} **Called by (\u5165\u5EA6)**: *(none / root entrypoint)*");
+    } else {
+      lines.push("- \u{1F4E5} **Called by (\u5165\u5EA6)**:");
+      for (const link of safeInbound) {
+        const reason = link.reason ? ` (${link.reason})` : "";
+        lines.push(`  - \`[${link.from || "unknown"}]\` -[${link.kind || "calls"}]-> this block${reason}`);
+      }
+    }
+    if (safeOutbound.length === 0) {
+      lines.push("- \u{1F4E4} **Calls (\u51FA\u5EA6)**: *(none / terminal node)*");
+    } else {
+      lines.push("- \u{1F4E4} **Calls (\u51FA\u5EA6)**:");
+      for (const link of safeOutbound) {
+        const reason = link.reason ? ` (${link.reason})` : "";
+        lines.push(`  - this block -[${link.kind || "calls"}]-> \`[${link.to || "unknown"}]\`${reason}`);
+      }
+    }
     lines.push("\n## Bound Code Locators:");
     if ((block.artifactRefs || []).length === 0) {
       lines.push("*Warning: No bound code locators.*");
     } else {
       for (const ref of block.artifactRefs) {
-        const range = ref.startLine && ref.endLine ? `[L${ref.startLine}-L${ref.endLine}]` : "";
-        const sym = ref.symbol ? `symbol: \`${ref.symbol}\`` : "";
-        lines.push(`- \`${ref.path}\` ${range} ${sym} (role: ${ref.role}, hash: \`${ref.hash}\`)`);
+        if (!ref) continue;
+        if (typeof ref === "string") {
+          lines.push(`- \`${ref}\``);
+        } else if (typeof ref === "object") {
+          const range = ref.startLine && ref.endLine ? ` [L${ref.startLine}-L${ref.endLine}]` : "";
+          const sym = ref.symbol ? ` symbol: \`${ref.symbol}\`` : "";
+          const role = ref.role ? `role: ${ref.role}` : "";
+          const hash = ref.hash ? `hash: \`${ref.hash}\`` : "";
+          const metaParts = [role, hash].filter(Boolean);
+          const metaStr = metaParts.length > 0 ? ` (${metaParts.join(", ")})` : "";
+          lines.push(`- \`${ref.path || "unknown"}\`${range}${sym}${metaStr}`);
+        }
       }
     }
     if (block.history?.length > 0) {
@@ -46867,7 +46966,21 @@ Members: ${chain.memberIds.join(", ")}`;
         }
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
-        return format === "json" ? block : MarkdownRenderer.renderBlock(block);
+        const allLinks = this.db.listLinks(this.projectId);
+        const inboundLinks = allLinks.filter((l) => l.to === id);
+        const outboundLinks = allLinks.filter((l) => l.from === id);
+        const tier = MarkdownRenderer.getBlockTier(block);
+        if (format === "json") {
+          return {
+            ...block,
+            tier,
+            neighborhood: {
+              inbound: inboundLinks,
+              outbound: outboundLinks
+            }
+          };
+        }
+        return MarkdownRenderer.renderBlock({ ...block, tier }, { inboundLinks, outboundLinks });
       }
       case "reconcile": {
         const res = this.syncEngine.reconcileExternalChange(this.projectId, this.projectRoot);
@@ -46887,6 +47000,7 @@ Members: ${chain.memberIds.join(", ")}`;
       }
       case "create": {
         const created = this.planService.createPlan({ ...planData, projectId: this.projectId });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === "json" ? created : MarkdownRenderer.renderPlan(created);
       }
       case "open": {
@@ -46896,15 +47010,18 @@ Members: ${chain.memberIds.join(", ")}`;
       }
       case "check": {
         const cp = this.planService.checkCheckpoint(id, checkpointId, { passed, evidenceRef });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Checkpoint '${checkpointId}' in Plan '${id}' marked as ${cp.status}.`;
       }
       case "complete": {
         const completed = this.planService.completePlan(id, planData);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === "json" ? completed : `Plan '${id}' completed successfully!
 Summary: ${completed.completedSummary}`;
       }
       case "delete": {
         const deleted = this.planService.deletePlan(id);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === "json" ? { deleted, id } : `Plan '${id}' deleted successfully.`;
       }
       default:
@@ -46970,26 +47087,42 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
     switch (action) {
       case "list": {
         const blocks = this.db.listBlocks(this.projectId);
-        if (format === "json") return blocks;
-        const lines = [`# Architecture Blocks (${blocks.length} total)`];
-        for (const b of blocks) {
-          lines.push(`- **[${b.id}]** ${b.title} (${b.artifactRefs?.length || 0} code refs)
-  ${b.summary}`);
-        }
-        return lines.join("\n");
+        const enriched = blocks.map((b) => ({
+          ...b,
+          tier: MarkdownRenderer.getBlockTier(b)
+        }));
+        if (format === "json") return enriched;
+        return MarkdownRenderer.renderBlockList(enriched);
       }
       case "open": {
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
-        return format === "json" ? block : MarkdownRenderer.renderBlock(block);
+        const allLinks = this.db.listLinks(this.projectId);
+        const inboundLinks = allLinks.filter((l) => l.to === id);
+        const outboundLinks = allLinks.filter((l) => l.from === id);
+        const tier = MarkdownRenderer.getBlockTier(block);
+        if (format === "json") {
+          return {
+            ...block,
+            tier,
+            neighborhood: {
+              inbound: inboundLinks,
+              outbound: outboundLinks
+            }
+          };
+        }
+        return MarkdownRenderer.renderBlock({ ...block, tier }, { inboundLinks, outboundLinks });
       }
       case "search": {
         const queryLower = (query || "").toLowerCase();
         const matches = this.db.listBlocks(this.projectId).filter(
-          (b) => b.title.toLowerCase().includes(queryLower) || b.summary.toLowerCase().includes(queryLower)
-        );
+          (b) => b.title?.toLowerCase().includes(queryLower) || b.summary?.toLowerCase().includes(queryLower)
+        ).map((b) => ({
+          ...b,
+          tier: MarkdownRenderer.getBlockTier(b)
+        }));
         if (format === "json") return matches;
-        return "# Block Search Results\n" + matches.map((b) => `- [${b.id}] ${b.title}: ${b.summary}`).join("\n");
+        return "# Block Search Results\n" + matches.map((b) => `- [${b.id}] (${b.tier}) ${b.title}: ${b.summary || "No summary available."}`).join("\n");
       }
       case "bind": {
         const targetId = id || blockData?.id;
@@ -48119,7 +48252,7 @@ function textResult(content) {
 }
 function createV2Server() {
   const server = new McpServer(
-    { name: "contextos", version: "2.1.0" },
+    { name: "contextos", version: "2.2.0" },
     {
       instructions: "ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub."
     }

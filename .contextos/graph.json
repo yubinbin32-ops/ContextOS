@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "projectId": "contextos",
-  "graphRevision": 109,
-  "exportedAt": "2026-09-17T10:33:37.213Z",
+  "graphRevision": 171,
+  "exportedAt": "2026-09-17T13:04:50.678Z",
   "data": {
     "plans": [
       {
@@ -144,6 +144,130 @@
         "checkpoints": [],
         "createdAt": "2026-09-16T18:56:43.632Z",
         "updatedAt": "2026-09-16T19:23:49.452Z"
+      },
+      {
+        "id": "plan-architecture-cognition",
+        "projectId": "contextos",
+        "title": "AI Architecture Cognition & Topological Readability Enhancement",
+        "priority": "high",
+        "status": "active",
+        "summary": "Enhance AI architectural comprehension and topological readability: 1) Block Layered Taxonomy in block(list); 2) Block Open Micro-Topology Neighborhood in block(open); 3) Compact System Topology Backbone in os_context(brief).",
+        "completedSummary": null,
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-taxonomy",
+            "order": 0,
+            "objective": "Block Layered Taxonomy in block(list)",
+            "scope": "Group blocks into intuitive architectural tiers (Gateway, Application, Core Domain, Storage, Client) in markdown and JSON format.",
+            "deliverables": [
+              "packages/context/src/markdown-renderer.mjs",
+              "packages/mcp/src/v2-service.mjs"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "block(list) groups blocks by tiers",
+              "format=json includes tier metadata"
+            ]
+          },
+          {
+            "id": "phase-micro-topology",
+            "order": 1,
+            "objective": "Block Open Micro-Topology Neighborhood in block(open)",
+            "scope": "Query inbound callers and outbound targets from links database and render Architecture Neighborhood (上下游拓扑).",
+            "deliverables": [
+              "packages/context/src/markdown-renderer.mjs",
+              "packages/mcp/src/v2-service.mjs"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "block(open) renders Called by (入度) and Calls (出度)",
+              "format=json includes neighborhood metadata"
+            ]
+          },
+          {
+            "id": "phase-system-backbone",
+            "order": 2,
+            "objective": "Compact System Topology Backbone in os_context(brief)",
+            "scope": "Embed compact (<80 tokens) ASCII topology backbone into renderBrief for cold-start global context.",
+            "deliverables": [
+              "packages/context/src/markdown-renderer.mjs"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "renderBrief includes ASCII topology backbone",
+              "tokens remain <80 tokens and overall brief <800 tokens"
+            ]
+          },
+          {
+            "id": "phase-verification",
+            "order": 3,
+            "objective": "Full Verification, Test Suite Execution, and Production MCP Bundle Rebuild",
+            "scope": "Run unit tests, e2e lifecycle, comprehensive dev eval, benchmark, and rebuild MCP plugin bundle.",
+            "deliverables": [
+              "packages/context/test/context.test.mjs",
+              "plugins/contextos/server/contextos-mcp.mjs"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "100% test pass rate (48 tests)",
+              "e2e lifecycle succeeds",
+              "comprehensive dev eval passes",
+              "bundle rebuilt"
+            ]
+          }
+        ],
+        "checkpoints": [
+          {
+            "id": "cp-taxonomy-verified",
+            "planId": "plan-architecture-cognition",
+            "phaseId": null,
+            "title": "Block Layered Taxonomy Verified",
+            "criteria": "block(list) renders 5 architectural tiers and format=json contains tier metadata on all blocks",
+            "status": "passed",
+            "evidenceRefs": [],
+            "completedAt": "2026-09-17T12:55:53.904Z"
+          },
+          {
+            "id": "cp-micro-topology-verified",
+            "planId": "plan-architecture-cognition",
+            "phaseId": null,
+            "title": "Block Micro-Topology Neighborhood Verified",
+            "criteria": "block(open) displays inbound callers and outbound targets in single call without invoking chain(links)",
+            "status": "passed",
+            "evidenceRefs": [],
+            "completedAt": "2026-09-17T12:55:53.905Z"
+          },
+          {
+            "id": "cp-system-backbone-verified",
+            "planId": "plan-architecture-cognition",
+            "phaseId": null,
+            "title": "System Topology Backbone in Brief Verified",
+            "criteria": "os_context(brief) contains compact (<80 tokens) ASCII system topology backbone",
+            "status": "passed",
+            "evidenceRefs": [],
+            "completedAt": "2026-09-17T12:55:53.905Z"
+          },
+          {
+            "id": "cp-full-eval-passed",
+            "planId": "plan-architecture-cognition",
+            "phaseId": null,
+            "title": "All Automated Test Suites and Production Rebuild Verified",
+            "criteria": "npm test, npm run benchmark, e2e lifecycle, and comprehensive dev eval pass 100% with no regressions",
+            "status": "passed",
+            "evidenceRefs": [],
+            "completedAt": "2026-09-17T12:55:53.905Z"
+          }
+        ],
+        "createdAt": "2026-09-17T12:55:53.905Z",
+        "updatedAt": "2026-09-17T12:55:53.905Z"
       },
       {
         "id": "plan-v2-rebuild",
@@ -379,18 +503,25 @@
               "receipt-1789640481978-1700dd",
               "receipt-1789640538807-8c84c7",
               "receipt-1789641139183-c57104",
-              "receipt-1789641211226-0e9cc9"
+              "receipt-1789641211226-0e9cc9",
+              "receipt-1789649462001-9adfd5",
+              "receipt-1789649724057-f499bb",
+              "receipt-1789649795713-97aaba",
+              "receipt-1789649860020-3993d8",
+              "receipt-1789650177126-3f2f71",
+              "receipt-1789650224774-e689fa",
+              "receipt-1789650284562-72effd"
             ],
-            "completedAt": "2026-09-17T10:33:32.520Z"
+            "completedAt": "2026-09-17T13:04:45.787Z"
           }
         ],
         "createdAt": "2026-09-14T20:11:41.716Z",
-        "updatedAt": "2026-09-17T10:33:32.523Z"
+        "updatedAt": "2026-09-17T13:04:45.793Z"
       }
     ],
     "tasks": [
       {
-        "id": "task-1789641214905",
+        "id": "task-1789650288396",
         "planId": "plan-v2-rebuild",
         "phaseId": "P8",
         "title": "Real-time Metrics & Code Intelligence Tuning",
@@ -429,530 +560,554 @@
               "mtimeMs": 1789209801000.452,
               "size": 247,
               "hash": "58fde1ebb1f49854",
-              "snapshottedAt": "2026-09-17T10:33:34.908Z"
+              "snapshottedAt": "2026-09-17T13:04:48.399Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/ContentView.swift": {
               "mtimeMs": 1789585696923.9,
               "size": 70384,
               "hash": "daef6c8dee0c0dc4",
-              "snapshottedAt": "2026-09-17T10:33:34.908Z"
+              "snapshottedAt": "2026-09-17T13:04:48.399Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/Theme.swift": {
               "mtimeMs": 1789383880721.2961,
               "size": 4332,
               "hash": "ffb3533219805200",
-              "snapshottedAt": "2026-09-17T10:33:34.908Z"
+              "snapshottedAt": "2026-09-17T13:04:48.399Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/Models.swift": {
               "mtimeMs": 1789583713972.181,
               "size": 12356,
               "hash": "8ee333ad3795d622",
-              "snapshottedAt": "2026-09-17T10:33:34.908Z"
+              "snapshottedAt": "2026-09-17T13:04:48.399Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/GraphCanvasView.swift": {
               "mtimeMs": 1789446491572.0693,
               "size": 34081,
               "hash": "1347a54e53cb1772",
-              "snapshottedAt": "2026-09-17T10:33:34.909Z"
+              "snapshottedAt": "2026-09-17T13:04:48.399Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/CanvasScene.swift": {
               "mtimeMs": 1789383880718.7485,
               "size": 17582,
               "hash": "6b869d3cdd4432f8",
-              "snapshottedAt": "2026-09-17T10:33:34.909Z"
+              "snapshottedAt": "2026-09-17T13:04:48.399Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/NetworkLayoutEngine.swift": {
               "mtimeMs": 1789446491573.8867,
               "size": 30106,
               "hash": "28d392123a50e38e",
-              "snapshottedAt": "2026-09-17T10:33:34.909Z"
+              "snapshottedAt": "2026-09-17T13:04:48.399Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/DetailView.swift": {
               "mtimeMs": 1789383880719.805,
               "size": 80269,
               "hash": "d58c8a7139246316",
-              "snapshottedAt": "2026-09-17T10:33:34.910Z"
+              "snapshottedAt": "2026-09-17T13:04:48.399Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/KnowledgeView.swift": {
               "mtimeMs": 1789446491573.138,
               "size": 14332,
               "hash": "8d7ddb25c76de4ea",
-              "snapshottedAt": "2026-09-17T10:33:34.910Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/MarkdownPage.swift": {
               "mtimeMs": 1789383880720.5786,
               "size": 9404,
               "hash": "218a798485907bcd",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/domain/src/plan.mjs": {
               "mtimeMs": 1789446491590.5474,
               "size": 6900,
               "hash": "24e23a253dcc57ac",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/domain/src/task.mjs": {
               "mtimeMs": 1789640221797.4932,
               "size": 6332,
               "hash": "4bbe596b90c22ded",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/domain/src/block.mjs": {
               "mtimeMs": 1789446491589.7805,
               "size": 2999,
               "hash": "187be3d0fb2e4bfc",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/domain/src/chain.mjs": {
               "mtimeMs": 1789446491589.9026,
               "size": 1947,
               "hash": "f52cf37abfa1abbc",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/domain/src/link.mjs": {
               "mtimeMs": 1789446491590.4038,
               "size": 1967,
               "hash": "b460566d824aa2be",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/domain/src/knowledge.mjs": {
               "mtimeMs": 1789446491590.292,
               "size": 3402,
               "hash": "229b543cf5f0e164",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/domain/src/index.mjs": {
               "mtimeMs": 1789446491590.0254,
               "size": 209,
               "hash": "45b3723ecdb8982f",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/domain/src/invariants.mjs": {
               "mtimeMs": 1789446491590.164,
               "size": 2115,
               "hash": "31d6d87c843bbcb0",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/storage/src/database.mjs": {
               "mtimeMs": 1789446491594.467,
               "size": 17646,
               "hash": "f002e97e47b49f44",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/storage/src/schema.mjs": {
               "mtimeMs": 1789446491594.6873,
               "size": 4039,
               "hash": "a9b73168f080073e",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/storage/src/index.mjs": {
               "mtimeMs": 1789446491594.5747,
               "size": 97,
               "hash": "37dc39bffc96857d",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "packages/storage/src/sync-engine.mjs": {
               "mtimeMs": 1789446491594.8079,
               "size": 5019,
               "hash": "3075f92d97214b12",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift": {
               "mtimeMs": 1789583713972.8838,
               "size": 62116,
               "hash": "242864e5cd165dcf",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.400Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/GraphStore.swift": {
               "mtimeMs": 1789585843568.2334,
               "size": 78219,
               "hash": "89fd314eccf2d4f4",
-              "snapshottedAt": "2026-09-17T10:33:34.911Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "apps/daemon/src/osd.mjs": {
               "mtimeMs": 1789446491570.6199,
               "size": 4213,
               "hash": "11351f091d8c9887",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/protocol/src/ipc.mjs": {
               "mtimeMs": 1789446491594.118,
               "size": 4382,
               "hash": "aac2c8b78cac875b",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/protocol/src/index.mjs": {
               "mtimeMs": 1789446491593.98,
               "size": 27,
               "hash": "2a7e7a9f78117da9",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/code-intel/src/coverage.mjs": {
               "mtimeMs": 1789446491588.3843,
               "size": 1793,
               "hash": "e1f49ec1f4af8a64",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/process-host/src/runner.mjs": {
               "mtimeMs": 1789639482724.662,
               "size": 3146,
               "hash": "0cadb0c9d41a0a95",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/process-host/src/sanitizer.mjs": {
               "mtimeMs": 1789545673304.8938,
               "size": 3067,
               "hash": "3687a08f928b47b0",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/process-host/src/process-manager.mjs": {
               "mtimeMs": 1789639493926.9907,
               "size": 8609,
               "hash": "2af42bdc65fbb7df",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/process-host/src/index.mjs": {
               "mtimeMs": 1789446491593.0674,
               "size": 102,
               "hash": "165ca36bab5fdd3e",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/context/src/markdown-renderer.mjs": {
-              "mtimeMs": 1789636542695.9756,
-              "size": 6482,
-              "hash": "4446a0bfefcd8dbe",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "mtimeMs": 1789650190331.4539,
+              "size": 12648,
+              "hash": "af5768ee3825b9fa",
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/context/src/index.mjs": {
               "mtimeMs": 1789446491589.2837,
               "size": 41,
               "hash": "6b8557f7ad952b90",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/layout/src/network-layout.mjs": {
               "mtimeMs": 1789446491591.3567,
               "size": 3614,
               "hash": "0d66879bdb8bddb1",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/layout/src/index.mjs": {
               "mtimeMs": 1789446491591.2317,
               "size": 38,
               "hash": "bc3c0554a49e22ec",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/application/src/plan-service.mjs": {
               "mtimeMs": 1789446491587.2202,
               "size": 2214,
               "hash": "af28dfa6edf5de90",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/application/src/task-service.mjs": {
               "mtimeMs": 1789641063327.258,
               "size": 17656,
               "hash": "a34ec6fe6eae8203",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/application/src/knowledge-service.mjs": {
               "mtimeMs": 1789446491587.0852,
               "size": 4325,
               "hash": "b751b072441ec364",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/application/src/index.mjs": {
               "mtimeMs": 1789446491586.9524,
               "size": 113,
               "hash": "8829539717742ceb",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift": {
               "mtimeMs": 1789583713972.5269,
               "size": 38427,
               "hash": "3bb5a678092491dd",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "packages/mcp/src/bootstrap-util.mjs": {
               "mtimeMs": 1789639501514.3918,
               "size": 18861,
               "hash": "fc6348076b104cd1",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "scripts/bootstrap.mjs": {
               "mtimeMs": 1789583713976.9438,
               "size": 3827,
               "hash": "61c63d5aa19b6726",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "AI_SETUP.md": {
               "mtimeMs": 1789629884801.511,
               "size": 6770,
               "hash": "52c5625307a6b82f",
-              "snapshottedAt": "2026-09-17T10:33:34.912Z"
+              "snapshottedAt": "2026-09-17T13:04:48.401Z"
             },
             "plugins/contextos/skills/contextos/SKILL.md": {
               "mtimeMs": 1789629897672.8174,
               "size": 23087,
               "hash": "835318ba1be31837",
-              "snapshottedAt": "2026-09-17T10:33:34.913Z"
+              "snapshottedAt": "2026-09-17T13:04:48.402Z"
             },
             "README.md": {
               "mtimeMs": 1789629912789.664,
               "size": 10376,
               "hash": "f44e860604127cb9",
-              "snapshottedAt": "2026-09-17T10:33:34.913Z"
+              "snapshottedAt": "2026-09-17T13:04:48.402Z"
             },
             "packages/mcp/src/v2-server.mjs": {
-              "mtimeMs": 1789639411347.847,
+              "mtimeMs": 1789650132511.3228,
               "size": 24569,
-              "hash": "1921673ebfb850ea",
-              "snapshottedAt": "2026-09-17T10:33:34.913Z"
+              "hash": "64929edf9d4b71a0",
+              "snapshottedAt": "2026-09-17T13:04:48.402Z"
             },
             "worker.js": {
               "mtimeMs": 1789639451674.6987,
               "size": 40232,
               "hash": "c82648ddec486159",
-              "snapshottedAt": "2026-09-17T10:33:34.913Z"
+              "snapshottedAt": "2026-09-17T13:04:48.402Z"
             },
             "plugins/contextos/server/contextos-mcp.mjs": {
-              "mtimeMs": 1789641159414.2534,
-              "size": 1700127,
-              "hash": "9dac3f3806142e13",
-              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+              "mtimeMs": 1789650277180.3882,
+              "size": 1707011,
+              "hash": "d3416411ded105be",
+              "snapshottedAt": "2026-09-17T13:04:48.406Z"
             },
             "packages/mcp/src/cloud-client.mjs": {
               "mtimeMs": 1789586298747.469,
               "size": 4973,
               "hash": "8f99bb4b652e664c",
-              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+              "snapshottedAt": "2026-09-17T13:04:48.406Z"
             },
             "packages/mcp/src/v2-service.mjs": {
-              "mtimeMs": 1789640989508.1284,
-              "size": 24116,
-              "hash": "642f0b8a87ae8a5b",
-              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+              "mtimeMs": 1789650120833.8557,
+              "size": 25493,
+              "hash": "30d8601bf630a796",
+              "snapshottedAt": "2026-09-17T13:04:48.406Z"
             },
             "packages/code-intel/test/code-intel.test.mjs": {
               "mtimeMs": 1789641080736.3633,
               "size": 21540,
               "hash": "f330609f8438b513",
-              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+              "snapshottedAt": "2026-09-17T13:04:48.406Z"
             },
             "scripts/benchmark.mjs": {
               "mtimeMs": 1789638888258.0945,
               "size": 9735,
               "hash": "03a6492e664d19f8",
-              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "scripts/e2e-project-lifecycle.mjs": {
               "mtimeMs": 1789638938560.1682,
               "size": 10005,
               "hash": "03a53ebd40d5640e",
-              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/mcp/test/v2-mcp.test.mjs": {
               "mtimeMs": 1789641053131.335,
               "size": 10191,
               "hash": "849e41d041fb12b2",
-              "snapshottedAt": "2026-09-17T10:33:34.917Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "package-lock.json": {
-              "mtimeMs": 1789639834146.7192,
+              "mtimeMs": 1789646362278.9187,
               "size": 61583,
-              "hash": "ce211ee48ae8a688",
-              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+              "hash": "2b90e9b8118fd4e6",
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "package.json": {
-              "mtimeMs": 1789639834132.717,
+              "mtimeMs": 1789646362277.6868,
               "size": 1972,
-              "hash": "f67ae7f49ff48a6a",
-              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+              "hash": "ffceff88631da8c5",
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/code-intel/src/tree-sitter-parser.mjs": {
               "mtimeMs": 1789640920868.197,
               "size": 46057,
               "hash": "65208b6daa3a87b0",
-              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/application/test/application.test.mjs": {
               "mtimeMs": 1789641088402.6836,
               "size": 11718,
               "hash": "ea9c168c525c58a1",
-              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "scripts/verify-all-features.mjs": {
               "mtimeMs": 1789641122437.253,
               "size": 13580,
               "hash": "65c7bda1e6a34d3b",
-              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "DECISION.md": {
-              "mtimeMs": 1789640430265.6443,
-              "size": 11140,
-              "hash": "ba28c4f77d394e0c",
-              "snapshottedAt": "2026-09-17T10:33:34.918Z"
+              "mtimeMs": 1789649327366.5422,
+              "size": 13224,
+              "hash": "12a3e9029e0b95e4",
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/domain/test/domain.test.mjs": {
               "mtimeMs": 1789446491590.886,
               "size": 6454,
               "hash": "8246148b07cffc3a",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/layout/test/layout.test.mjs": {
               "mtimeMs": 1789446491591.5183,
               "size": 2067,
               "hash": "3c68effaaedbe41a",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/mcp/src/hybrid-service.mjs": {
               "mtimeMs": 1789583713974.2612,
               "size": 3627,
               "hash": "3328513d555c5814",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/mcp/src/server.mjs": {
               "mtimeMs": 1789446491591.8506,
               "size": 79,
               "hash": "604eca120f3fd6dc",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/mcp/src/service.mjs": {
               "mtimeMs": 1789446491592.1646,
               "size": 34,
               "hash": "e71187861ae412c7",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/process-host/test/process-host.test.mjs": {
               "mtimeMs": 1789446491593.6362,
               "size": 2969,
               "hash": "46ce83bf357a3a7c",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "packages/storage/test/storage.test.mjs": {
               "mtimeMs": 1789446491594.983,
               "size": 4704,
               "hash": "349b711f7a33791c",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "apps/cloud/src/index.mjs": {
               "mtimeMs": 1789629744732.3716,
               "size": 14817,
               "hash": "63abec8c6367db5d",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "apps/daemon/test/daemon.test.mjs": {
               "mtimeMs": 1789446491570.8186,
               "size": 2136,
               "hash": "4237c27d1b93fccf",
-              "snapshottedAt": "2026-09-17T10:33:34.919Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "apps/desktop/.build/arm64-apple-macosx/debug/contextos-desktopPackageTests.derived/runner.swift": {
               "mtimeMs": 1789315098991.077,
               "size": 16466,
               "hash": "88fa73d509522c48",
-              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "apps/desktop/.build/arm64-apple-macosx/debug/mdflow-desktopPackageTests.derived/runner.swift": {
               "mtimeMs": 1788508342089.517,
               "size": 16466,
               "hash": "88fa73d509522c48",
-              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "apps/desktop/Package.swift": {
               "mtimeMs": 1789317848853.36,
               "size": 419,
               "hash": "81eabd2ed0fd7feb",
-              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+              "snapshottedAt": "2026-09-17T13:04:48.407Z"
             },
             "apps/desktop/Sources/CSQLite/shim.h": {
               "mtimeMs": 1789209771005.074,
               "size": 21,
               "hash": "b052d8e561e942f9",
-              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/AppUpdater.swift": {
-              "mtimeMs": 1789585970418.7852,
+              "mtimeMs": 1789650141379.173,
               "size": 23936,
-              "hash": "8bd12c33d84efffd",
-              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+              "hash": "131607a5b7f12188",
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "apps/desktop/Sources/ContextOSDesktop/ProjectLocation.swift": {
               "mtimeMs": 1789583713973.1875,
               "size": 4943,
               "hash": "105dd2dec0c922ac",
-              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "apps/desktop/generate_xcodeproj.rb": {
               "mtimeMs": 1789453547171.814,
               "size": 4466,
               "hash": "bb778db3b07ebf47",
-              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "scripts/comprehensive-dev-eval.mjs": {
               "mtimeMs": 1789446491599.5386,
               "size": 15720,
               "hash": "454a00631d593d55",
-              "snapshottedAt": "2026-09-17T10:33:34.920Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "scripts/package-macos.mjs": {
               "mtimeMs": 1789458414348.6338,
               "size": 7494,
               "hash": "b53b0541256f4df9",
-              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "scripts/plugin-smoke.mjs": {
-              "mtimeMs": 1789583713977.0984,
+              "mtimeMs": 1789650138807.14,
               "size": 3313,
-              "hash": "c9b4f89669a2f4d3",
-              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+              "hash": "49c80e8f0391571d",
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "scripts/practical-test.mjs": {
               "mtimeMs": 1789446491600.1907,
               "size": 7090,
               "hash": "d4e0e52f949ea6f3",
-              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "scripts/self-adopt.mjs": {
               "mtimeMs": 1789446491600.337,
               "size": 25575,
               "hash": "bbec63e85ff45f62",
-              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
+            },
+            "packages/context/test/context.test.mjs": {
+              "mtimeMs": 1789650162051.6804,
+              "size": 10930,
+              "hash": "bdcefb3102f6ea22",
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
+            },
+            "apps/desktop/Resources/Info.plist": {
+              "mtimeMs": 1789650127239.9539,
+              "size": 1260,
+              "hash": "ab9ede8e624ff632",
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
+            },
+            "plugins/contextos/.codex-plugin/plugin.json": {
+              "mtimeMs": 1789650123978.5208,
+              "size": 1539,
+              "hash": "6e6a3f0c9537fa82",
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
+            },
+            "server.json": {
+              "mtimeMs": 1789650149191.9856,
+              "size": 912,
+              "hash": "34e75c60c2f0bbdb",
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "packages/code-intel/src/code-tools.mjs": {
               "mtimeMs": 1789639358692.9375,
               "size": 9741,
               "hash": "9df2209f0f728924",
-              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "packages/code-intel/src/language-registry.mjs": {
-              "mtimeMs": 1789641217126.0994,
+              "mtimeMs": 1789650290553.394,
               "size": 45340,
               "hash": "98d1df4a2af93a16",
-              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             },
             "packages/code-intel/src/index.mjs": {
               "mtimeMs": 1789640154439.5732,
               "size": 149,
               "hash": "8cd8c22095ba75fd",
-              "snapshottedAt": "2026-09-17T10:33:34.921Z"
+              "snapshottedAt": "2026-09-17T13:04:48.408Z"
             }
           }
         },
         "notes": [
           {
-            "id": "note-1789641214975-2dxte",
+            "id": "note-1789650288447-2yx7t",
             "text": "Inspected language-registry.mjs; calculateHash verified at line 6.",
             "kind": "journal",
-            "createdAt": "2026-09-17T10:33:34.975Z"
+            "createdAt": "2026-09-17T13:04:48.447Z"
           }
         ],
         "checks": [
           {
-            "id": "check-1789641217153-vq5sx",
-            "receiptId": "receipt-1789641215975-f49eee",
+            "id": "check-1789650290612-rv872",
+            "receiptId": "receipt-1789650289425-e73560",
             "description": "Code-intel tests passed with out-of-context logging",
             "passed": true,
             "evidence": "",
-            "recordedAt": "2026-09-17T10:33:37.153Z"
+            "recordedAt": "2026-09-17T13:04:50.612Z"
           }
         ],
         "syncResult": {
@@ -982,14 +1137,16 @@
             "block-unassigned-task-1789640386382",
             "block-unassigned-task-1789640481226",
             "block-unassigned-task-1789641138055",
+            "block-unassigned-task-1789649723026",
+            "block-unassigned-task-1789650176096",
             "block-code-gateway"
           ],
           "updatedChainIds": [],
           "updatedLinkIds": [],
-          "completedAt": "2026-09-17T10:33:37.185Z"
+          "completedAt": "2026-09-17T13:04:50.647Z"
         },
-        "createdAt": "2026-09-17T10:33:34.905Z",
-        "updatedAt": "2026-09-17T10:33:37.185Z"
+        "createdAt": "2026-09-17T13:04:48.396Z",
+        "updatedAt": "2026-09-17T13:04:50.647Z"
       }
     ],
     "blocks": [
@@ -1075,8 +1232,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-command-runner",
@@ -1120,8 +1277,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-context-envelope",
@@ -1136,7 +1293,7 @@
             "symbol": "MarkdownRenderer",
             "startLine": 6,
             "endLine": 170,
-            "hash": "4446a0bfefcd8dbe",
+            "hash": "af5768ee3825b9fa",
             "role": "implementation"
           },
           {
@@ -1144,7 +1301,7 @@
             "symbol": "MarkdownRenderer.renderBrief",
             "startLine": 9,
             "endLine": 63,
-            "hash": "4446a0bfefcd8dbe",
+            "hash": "af5768ee3825b9fa",
             "role": "implementation"
           },
           {
@@ -1152,7 +1309,7 @@
             "symbol": "MarkdownRenderer.renderPlan",
             "startLine": 65,
             "endLine": 101,
-            "hash": "4446a0bfefcd8dbe",
+            "hash": "af5768ee3825b9fa",
             "role": "implementation"
           },
           {
@@ -1160,7 +1317,7 @@
             "symbol": "MarkdownRenderer.renderTask",
             "startLine": 103,
             "endLine": 142,
-            "hash": "4446a0bfefcd8dbe",
+            "hash": "af5768ee3825b9fa",
             "role": "implementation"
           },
           {
@@ -1173,8 +1330,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-coverage-guard",
@@ -1202,8 +1359,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-daemon-host",
@@ -1287,8 +1444,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-desktop-canvas",
@@ -1396,8 +1553,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-desktop-database",
@@ -1473,8 +1630,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-desktop-inspector",
@@ -1582,8 +1739,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-desktop-installer",
@@ -1643,8 +1800,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-desktop-shell",
@@ -1760,8 +1917,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.644Z",
+        "updatedAt": "2026-09-17T13:04:50.644Z"
       },
       {
         "id": "block-domain-invariants",
@@ -1805,8 +1962,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-domain-models",
@@ -2010,8 +2167,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-layout-engine",
@@ -2047,8 +2204,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-lifecycle-services",
@@ -2164,8 +2321,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-mcp-facades",
@@ -2180,7 +2337,7 @@
             "symbol": "findDefaultProjectRoot",
             "startLine": null,
             "endLine": null,
-            "hash": "1921673ebfb850ea",
+            "hash": "64929edf9d4b71a0",
             "role": "implementation"
           },
           {
@@ -2196,7 +2353,7 @@
             "symbol": "server",
             "startLine": null,
             "endLine": null,
-            "hash": "9dac3f3806142e13",
+            "hash": "d3416411ded105be",
             "role": "implementation"
           },
           {
@@ -2209,8 +2366,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-process-host",
@@ -2262,8 +2419,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-storage-sqlite",
@@ -2323,8 +2480,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-storage-sync",
@@ -2368,8 +2525,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.183Z",
-        "updatedAt": "2026-09-17T10:33:37.183Z"
+        "createdAt": "2026-09-17T13:04:50.645Z",
+        "updatedAt": "2026-09-17T13:04:50.645Z"
       },
       {
         "id": "block-unassigned-task-1789638684511",
@@ -2384,13 +2541,13 @@
             "symbol": "*",
             "startLine": null,
             "endLine": null,
-            "hash": "642f0b8a87ae8a5b",
+            "hash": "30d8601bf630a796",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-unassigned-task-1789638942267",
@@ -2426,8 +2583,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-unassigned-task-1789639560285",
@@ -2447,8 +2604,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-unassigned-task-1789640196222",
@@ -2463,7 +2620,7 @@
             "symbol": "*",
             "startLine": null,
             "endLine": null,
-            "hash": "ce211ee48ae8a688",
+            "hash": "2b90e9b8118fd4e6",
             "role": "implementation"
           },
           {
@@ -2471,7 +2628,7 @@
             "symbol": "*",
             "startLine": null,
             "endLine": null,
-            "hash": "f67ae7f49ff48a6a",
+            "hash": "ffceff88631da8c5",
             "role": "implementation"
           },
           {
@@ -2492,8 +2649,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-unassigned-task-1789640300915",
@@ -2513,8 +2670,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-unassigned-task-1789640386382",
@@ -2534,8 +2691,8 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-unassigned-task-1789640481226",
@@ -2550,13 +2707,13 @@
             "symbol": "*",
             "startLine": null,
             "endLine": null,
-            "hash": "ba28c4f77d394e0c",
+            "hash": "12a3e9029e0b95e4",
             "role": "implementation"
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       },
       {
         "id": "block-unassigned-task-1789641138055",
@@ -2675,7 +2832,7 @@
             "symbol": "*",
             "startLine": null,
             "endLine": null,
-            "hash": "8bd12c33d84efffd",
+            "hash": "131607a5b7f12188",
             "role": "implementation"
           },
           {
@@ -2715,7 +2872,7 @@
             "symbol": "*",
             "startLine": null,
             "endLine": null,
-            "hash": "c9b4f89669a2f4d3",
+            "hash": "49c80e8f0391571d",
             "role": "implementation"
           },
           {
@@ -2736,8 +2893,66 @@
           }
         ],
         "history": [],
-        "createdAt": "2026-09-17T10:33:37.184Z",
-        "updatedAt": "2026-09-17T10:33:37.184Z"
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
+      },
+      {
+        "id": "block-unassigned-task-1789649723026",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (E2E Real Code Writing, Verification & Plan Completion)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: packages/context/test/context.test.mjs",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "packages/context/test/context.test.mjs",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "bdcefb3102f6ea22",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
+      },
+      {
+        "id": "block-unassigned-task-1789650176096",
+        "projectId": "contextos",
+        "title": "Unassigned Working Set (E2E Real Code Writing, Verification & Plan Completion)",
+        "kind": "service",
+        "summary": "Adaptive block for unassigned files: apps/desktop/Resources/Info.plist, plugins/contextos/.codex-plugin/plugin.json, server.json",
+        "details": "Automatically created by ContextOS adaptive coverage gate.",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/Resources/Info.plist",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "ab9ede8e624ff632",
+            "role": "implementation"
+          },
+          {
+            "path": "plugins/contextos/.codex-plugin/plugin.json",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "6e6a3f0c9537fa82",
+            "role": "implementation"
+          },
+          {
+            "path": "server.json",
+            "symbol": "*",
+            "startLine": null,
+            "endLine": null,
+            "hash": "34e75c60c2f0bbdb",
+            "role": "implementation"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-17T13:04:50.646Z",
+        "updatedAt": "2026-09-17T13:04:50.646Z"
       }
     ],
     "chains": [

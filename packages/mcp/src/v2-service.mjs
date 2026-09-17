@@ -99,7 +99,21 @@ export class ContextOSV2Service {
         }
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
-        return format === 'json' ? block : MarkdownRenderer.renderBlock(block);
+        const allLinks = this.db.listLinks(this.projectId);
+        const inboundLinks = allLinks.filter((l) => l.to === id);
+        const outboundLinks = allLinks.filter((l) => l.from === id);
+        const tier = MarkdownRenderer.getBlockTier(block);
+        if (format === 'json') {
+          return {
+            ...block,
+            tier,
+            neighborhood: {
+              inbound: inboundLinks,
+              outbound: outboundLinks,
+            },
+          };
+        }
+        return MarkdownRenderer.renderBlock({ ...block, tier }, { inboundLinks, outboundLinks });
       }
 
       case 'reconcile': {
@@ -124,6 +138,7 @@ export class ContextOSV2Service {
       }
       case 'create': {
         const created = this.planService.createPlan({ ...planData, projectId: this.projectId });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === 'json' ? created : MarkdownRenderer.renderPlan(created);
       }
       case 'open': {
@@ -133,14 +148,17 @@ export class ContextOSV2Service {
       }
       case 'check': {
         const cp = this.planService.checkCheckpoint(id, checkpointId, { passed, evidenceRef });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Checkpoint '${checkpointId}' in Plan '${id}' marked as ${cp.status}.`;
       }
       case 'complete': {
         const completed = this.planService.completePlan(id, planData);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === 'json' ? completed : `Plan '${id}' completed successfully!\nSummary: ${completed.completedSummary}`;
       }
       case 'delete': {
         const deleted = this.planService.deletePlan(id);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === 'json' ? { deleted, id } : `Plan '${id}' deleted successfully.`;
       }
       default:
@@ -209,25 +227,42 @@ export class ContextOSV2Service {
     switch (action) {
       case 'list': {
         const blocks = this.db.listBlocks(this.projectId);
-        if (format === 'json') return blocks;
-        const lines = [`# Architecture Blocks (${blocks.length} total)`];
-        for (const b of blocks) {
-          lines.push(`- **[${b.id}]** ${b.title} (${b.artifactRefs?.length || 0} code refs)\n  ${b.summary}`);
-        }
-        return lines.join('\n');
+        const enriched = blocks.map((b) => ({
+          ...b,
+          tier: MarkdownRenderer.getBlockTier(b),
+        }));
+        if (format === 'json') return enriched;
+        return MarkdownRenderer.renderBlockList(enriched);
       }
       case 'open': {
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
-        return format === 'json' ? block : MarkdownRenderer.renderBlock(block);
+        const allLinks = this.db.listLinks(this.projectId);
+        const inboundLinks = allLinks.filter((l) => l.to === id);
+        const outboundLinks = allLinks.filter((l) => l.from === id);
+        const tier = MarkdownRenderer.getBlockTier(block);
+        if (format === 'json') {
+          return {
+            ...block,
+            tier,
+            neighborhood: {
+              inbound: inboundLinks,
+              outbound: outboundLinks,
+            },
+          };
+        }
+        return MarkdownRenderer.renderBlock({ ...block, tier }, { inboundLinks, outboundLinks });
       }
       case 'search': {
         const queryLower = (query || '').toLowerCase();
         const matches = this.db.listBlocks(this.projectId).filter((b) =>
-          b.title.toLowerCase().includes(queryLower) || b.summary.toLowerCase().includes(queryLower)
-        );
+          b.title?.toLowerCase().includes(queryLower) || b.summary?.toLowerCase().includes(queryLower)
+        ).map((b) => ({
+          ...b,
+          tier: MarkdownRenderer.getBlockTier(b),
+        }));
         if (format === 'json') return matches;
-        return '# Block Search Results\n' + matches.map((b) => `- [${b.id}] ${b.title}: ${b.summary}`).join('\n');
+        return '# Block Search Results\n' + matches.map((b) => `- [${b.id}] (${b.tier}) ${b.title}: ${b.summary || 'No summary available.'}`).join('\n');
       }
       case 'bind': {
         const targetId = id || blockData?.id;
