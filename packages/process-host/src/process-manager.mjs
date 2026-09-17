@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -7,6 +7,55 @@ export class ProcessManager {
   constructor({ projectRoot = process.cwd() } = {}) {
     this.projectRoot = path.resolve(projectRoot);
     this.sessions = new Map();
+    this._healZombieProcesses();
+  }
+
+  _healZombieProcesses() {
+    try {
+      const procFile = path.join(this.projectRoot, '.contextos', 'processes.json');
+      if (!fs.existsSync(procFile)) return;
+      const data = JSON.parse(fs.readFileSync(procFile, 'utf8'));
+      if (!Array.isArray(data)) return;
+
+      let hasChanges = false;
+      for (const item of data) {
+        if (!item || !item.id) continue;
+        const pid = item.pid;
+        let isAlive = false;
+        if (pid) {
+          try {
+            process.kill(pid, 0);
+            isAlive = true;
+          } catch (_) {
+            isAlive = false;
+          }
+        }
+
+        if (isAlive) {
+          this.sessions.set(item.id, {
+            id: item.id,
+            command: item.command,
+            cwd: item.cwd || this.projectRoot,
+            pid: item.pid,
+            pgid: item.pid,
+            status: item.status || 'running',
+            startedAt: item.startedAt || new Date().toISOString(),
+            stoppedAt: null,
+            exitCode: null,
+            port: item.port || null,
+            url: item.url || null,
+            logFile: item.logFile || path.join(this.projectRoot, '.contextos', 'logs', `${item.id}.log`),
+            child: null,
+          });
+        } else {
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        this._persistProcesses();
+      }
+    } catch (_) {}
   }
 
   async startProcess({
@@ -22,11 +71,16 @@ export class ProcessManager {
     const logFile = path.join(logDir, `${sessionId}.log`);
     const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 
-    const child = spawn('/bin/sh', ['-c', command], {
+    const isWin = process.platform === 'win32';
+    const shell = isWin ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
+    const shellArgs = isWin ? ['/d', '/s', '/c', command] : ['-c', command];
+
+    const child = spawn(shell, shellArgs, {
       cwd,
       env,
-      detached: true,
+      detached: !isWin,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsVerbatimArguments: isWin,
     });
 
     const session = {
@@ -151,10 +205,18 @@ export class ProcessManager {
       return this._sessionSummary(session);
     }
 
-    const pgid = session.pgid;
+    const pgid = session.pgid || session.pid;
+    const isWin = process.platform === 'win32';
     try {
-      // Send SIGTERM to entire process group
-      process.kill(-pgid, 'SIGTERM');
+      if (isWin && session.pid) {
+        try {
+          execSync(`taskkill /pid ${session.pid} /T /F`, { stdio: 'ignore' });
+        } catch (_) {
+          process.kill(session.pid, 'SIGTERM');
+        }
+      } else if (pgid) {
+        process.kill(-pgid, 'SIGTERM');
+      }
     } catch (_) {
       try {
         session.child?.kill('SIGTERM');
@@ -164,13 +226,30 @@ export class ProcessManager {
     // Wait for process exit or timeout
     const start = Date.now();
     while (session.status !== 'stopped' && Date.now() - start < graceMs) {
+      if (!session.child && session.pid) {
+        try {
+          process.kill(session.pid, 0);
+        } catch (_) {
+          session.status = 'stopped';
+          session.stoppedAt = new Date().toISOString();
+          break;
+        }
+      }
       await new Promise((r) => setTimeout(r, 100));
     }
 
     // If still not stopped, send SIGKILL
     if (session.status !== 'stopped') {
       try {
-        process.kill(-pgid, 'SIGKILL');
+        if (isWin && session.pid) {
+          try {
+            execSync(`taskkill /pid ${session.pid} /T /F`, { stdio: 'ignore' });
+          } catch (_) {
+            process.kill(session.pid, 'SIGKILL');
+          }
+        } else if (pgid) {
+          process.kill(-pgid, 'SIGKILL');
+        }
       } catch (_) {
         try {
           session.child?.kill('SIGKILL');

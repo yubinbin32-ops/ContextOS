@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { V2Database, SyncEngine } from '../../../packages/storage/src/index.mjs';
 import { PlanService, TaskService, KnowledgeService } from '../src/index.mjs';
 
@@ -157,3 +158,161 @@ test('KnowledgeService manages single Decision and categorized Rules', () => {
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
+
+test('TaskService detects host native modifications via mtime + SHA256 comparison and reconciles workingSet and AST outlines', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-host-mod-test-'));
+  const db = new V2Database(path.join(tempDir, '.contextos', 'state.sqlite'));
+  db.ensureProject('proj-host-mod', tempDir);
+  const syncEngine = new SyncEngine(db);
+  const planService = new PlanService(db);
+  const taskService = new TaskService(db, syncEngine);
+
+  // 1. Create source file on disk
+  const srcDir = path.join(tempDir, 'src');
+  fs.mkdirSync(srcDir, { recursive: true });
+  const serviceFile = path.join(srcDir, 'service.js');
+  const initialContent = 'export class MyService {\n  compute() {\n    return 1;\n  }\n}\n';
+  fs.writeFileSync(serviceFile, initialContent, 'utf8');
+
+  // 2. Create Block covering src/service.js
+  const initialHash = crypto.createHash('sha256').update(initialContent, 'utf8').digest('hex').slice(0, 16);
+  db.saveBlock({
+    id: 'block-service',
+    projectId: 'proj-host-mod',
+    title: 'Service Block',
+    summary: 'Core service implementation',
+    artifactRefs: [
+      {
+        path: 'src/service.js',
+        symbol: 'MyService',
+        hash: initialHash,
+      },
+    ],
+  });
+
+  planService.createPlan({
+    id: 'plan-host-1',
+    projectId: 'proj-host-mod',
+    title: 'Host Modification Plan',
+    phases: [{ id: 'P0', order: 0, status: 'active' }],
+  });
+
+  // 3. Create and activate Task
+  const task = taskService.createTask(
+    {
+      id: 'task-host-1',
+      planId: 'plan-host-1',
+      phaseId: 'P0',
+      title: 'Work on Service',
+      workingSet: {
+        files: ['src/service.js'],
+      },
+    },
+    tempDir
+  );
+
+  taskService.activateTask('task-host-1', tempDir);
+  const activeTask = taskService.getTask('task-host-1');
+  assert.ok(activeTask.baseline.fileSnapshots['src/service.js']);
+  assert.equal(activeTask.baseline.fileSnapshots['src/service.js'].hash, initialHash);
+
+  // 4. Simulate Host Native Modification: external IDE directly edits file on disk
+  await new Promise((r) => setTimeout(r, 50)); // Ensure mtime differs
+  const modifiedContent = 'export class MyService {\n  compute() {\n    return 42;\n  }\n  extra() {\n    return 100;\n  }\n}\n';
+  fs.writeFileSync(serviceFile, modifiedContent, 'utf8');
+
+  // 5. Trigger reconciliation (e.g. taskService.reconcileTask or syncTask)
+  const reconciled = taskService.reconcileTask('task-host-1', tempDir, 'proj-host-mod');
+
+  // Verify file remained/reconciled in workingSet
+  assert.ok(reconciled.workingSet.files.includes('src/service.js'));
+  const newHash = crypto.createHash('sha256').update(modifiedContent, 'utf8').digest('hex').slice(0, 16);
+  assert.equal(reconciled.baseline.fileSnapshots['src/service.js'].hash, newHash);
+  assert.equal(reconciled.baseline.fileSnapshots['src/service.js'].modifiedLocally, true);
+
+  // Verify task note was added
+  assert.ok(reconciled.notes.some((n) => n.text.includes('[Host Native Modification]')));
+
+  // Verify AST outline and locators were refreshed seamlessly
+  assert.ok(reconciled.contextSlice.locators.some((l) => l.symbol === 'MyService.extra'));
+
+  // Verify Block artifactRef hash was updated in DB
+  const updatedBlock = db.getBlock('block-service');
+  assert.equal(updatedBlock.artifactRefs[0].hash, newHash);
+
+  // 6. Verify mtime-only change (touch without content change) does NOT trigger false modification
+  const currentSnapshotHash = reconciled.baseline.fileSnapshots['src/service.js'].hash;
+  const now = new Date(Date.now() + 5000);
+  fs.utimesSync(serviceFile, now, now);
+  const rechecked = taskService.reconcileTask('task-host-1', tempDir, 'proj-host-mod');
+  assert.equal(rechecked.baseline.fileSnapshots['src/service.js'].hash, currentSnapshotHash);
+
+  // 7. Complete Task with checks and sync
+  taskService.addCheck('task-host-1', { description: 'Host modification verified', passed: true });
+  taskService.startChecking('task-host-1');
+  const synced = taskService.syncTask('task-host-1', {
+    blocks: [updatedBlock],
+    projectRoot: tempDir,
+    projectId: 'proj-host-mod',
+  });
+  assert.equal(synced.task.status, 'completed');
+
+  db.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('TaskService handles external file deletion and non-git project modifications', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-ext-mod-'));
+  const db = new V2Database(path.join(tempDir, '.contextos', 'state.sqlite'));
+  db.ensureProject('proj-ext-mod', tempDir);
+  const syncEngine = new SyncEngine(db);
+  const planService = new PlanService(db);
+  const taskService = new TaskService(db, syncEngine);
+
+  // 1. Create file in src/
+  const srcDir = path.join(tempDir, 'src');
+  fs.mkdirSync(srcDir, { recursive: true });
+  const file1 = path.join(srcDir, 'file1.js');
+  fs.writeFileSync(file1, 'export function foo() { return 1; }\n', 'utf8');
+
+  planService.createPlan({
+    id: 'plan-ext-1',
+    projectId: 'proj-ext-mod',
+    title: 'Ext Plan',
+    phases: [{ id: 'P0', order: 0, status: 'active' }],
+  });
+
+  const task = taskService.createTask(
+    {
+      id: 'task-ext-1',
+      planId: 'plan-ext-1',
+      phaseId: 'P0',
+      title: 'Ext Task',
+      workingSet: { files: ['src/file1.js'] },
+    },
+    tempDir
+  );
+
+  taskService.activateTask('task-ext-1', tempDir);
+  assert.ok(taskService.getTask('task-ext-1').baseline.fileSnapshots['src/file1.js']);
+
+  // 2. Simulate external file deletion
+  fs.unlinkSync(file1);
+  const afterDelete = taskService.reconcileTask('task-ext-1', tempDir, 'proj-ext-mod');
+  assert.equal(afterDelete.baseline.fileSnapshots['src/file1.js'], undefined);
+  assert.ok(afterDelete.notes.some((n) => n.text.includes('Detected external deletion')));
+
+  // 3. Simulate creating a new source file in a non-git project directory
+  const file2 = path.join(srcDir, 'handler.py');
+  fs.writeFileSync(file2, 'def handle():\n    return True\n', 'utf8');
+
+  const afterNewFile = taskService.reconcileTask('task-ext-1', tempDir, 'proj-ext-mod');
+  assert.ok(afterNewFile.workingSet.files.includes('src/handler.py'));
+  assert.ok(afterNewFile.baseline.fileSnapshots['src/handler.py']);
+  assert.equal(afterNewFile.baseline.fileSnapshots['src/handler.py'].modifiedLocally, true);
+  assert.ok(afterNewFile.contextSlice.locators.some((l) => l.symbol === 'handle'));
+
+  db.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+

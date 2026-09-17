@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "AI 编码的高精度外骨骼动力装甲：通过 MCP 自动管理上下文，实测减少 90%+ 上下文开销。(High-Precision Powered Exoskeleton for AI Coding: Auto-governs context via MCP, reducing context window waste by 90%+)",
   "license": "MIT",
   "type": "module",
@@ -52,6 +52,8 @@
   "dependencies": {
     "@babel/parser": "^8.0.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "tree-sitter-wasm": "^2.0.1",
+    "tree-sitter-wasms": "^0.1.13",
     "web-tree-sitter": "^0.27.0",
     "zod": "^4.1.5"
   },

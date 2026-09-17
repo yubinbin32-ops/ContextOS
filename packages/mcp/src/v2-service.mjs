@@ -36,16 +36,28 @@ export class ContextOSV2Service {
       case 'brief': {
         const project = this.db.getProject(this.projectId) || { id: this.projectId, repo_root: this.projectRoot };
         const plans = this.db.listPlans(this.projectId);
-        const activePlan = plans.find((p) => p.status === 'active') || plans[0] || null;
-        const tasks = this.db.listTasks(activePlan?.id);
-        const activeTask = tasks.find((t) => ['active', 'checking', 'syncing'].includes(t.status)) || tasks[0] || null;
+        const planIds = new Set(plans.map((p) => p.id));
+        const allTasks = this.db.listTasks();
+        const projectTasks = planIds.size > 0 ? allTasks.filter((t) => planIds.has(t.planId)) : allTasks;
+        const activeTasks = projectTasks.filter((t) => ['active', 'checking', 'syncing'].includes(t.status));
+        const activeTask = activeTasks.length > 0 ? activeTasks[activeTasks.length - 1] : null;
+
+        let activePlan = null;
+        if (activeTask && activeTask.planId) {
+          activePlan = plans.find((p) => p.id === activeTask.planId) || this.db.getPlan(activeTask.planId) || null;
+        }
+        if (!activePlan) {
+          activePlan = plans.find((p) => p.status === 'active') || plans[0] || null;
+        }
+
+        const displayTask = activeTask || (activePlan ? (this.db.listTasks(activePlan.id)[0] || null) : null);
         const processes = this.processManager.listProcesses().filter((p) => p.status === 'running' || p.status === 'ready');
         const recentBlocks = this.db.listBlocks(this.projectId);
 
         if (format === 'json') {
-          return { project, activePlan, activeTask, processes, recentBlocks };
+          return { project, activePlan, activeTask: displayTask, processes, recentBlocks };
         }
-        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask, processes, recentBlocks });
+        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks });
       }
 
       case 'search': {
@@ -140,10 +152,15 @@ export class ContextOSV2Service {
   async task({ action, id, taskData = {}, text, kind, checkData = {}, syncData = {}, format = 'markdown' }) {
     switch (action) {
       case 'create': {
-        const created = this.taskService.createTask(taskData);
+        const created = this.taskService.createTask(taskData, this.projectRoot);
         return format === 'json' ? created : MarkdownRenderer.renderTask(created);
       }
       case 'open': {
+        if (this.projectRoot) {
+          try {
+            this.taskService.reconcileTask(id, this.projectRoot, this.projectId);
+          } catch (_) {}
+        }
         const task = this.db.getTask(id);
         if (!task) throw new Error(`Task '${id}' not found`);
         return format === 'json' ? task : MarkdownRenderer.renderTask(task);
@@ -153,11 +170,12 @@ export class ContextOSV2Service {
         return `Note added to Task '${id}': ${note.text}`;
       }
       case 'check': {
-        const check = this.taskService.addCheck(id, checkData);
+        const check = this.taskService.addCheck(id, checkData, this.projectRoot, this.projectId);
         return `Verification check recorded for Task '${id}': [${check.passed ? 'PASS' : 'FAIL'}] ${check.description}`;
       }
       case 'sync': {
         const result = this.taskService.syncTask(id, {
+          coverageMode: syncData.coverageMode || 'adaptive',
           ...syncData,
           projectRoot: this.projectRoot,
           projectId: this.projectId,
@@ -166,9 +184,15 @@ export class ContextOSV2Service {
           ? result
           : `Task '${id}' completed and synced!\nRevision: ${result.graphRevision}\nBlocks: ${result.syncResult.createdBlockIds.join(', ')}`;
       }
+      case 'reconcile': {
+        const result = this.taskService.reconcileTask(id, this.projectRoot, this.projectId);
+        return format === 'json'
+          ? result
+          : `Task '${id}' reconciled. Working set files: ${(result.workingSet.files || []).join(', ')}`;
+      }
       case 'activate':
       case 'develop': {
-        const activated = this.taskService.activateTask(id);
+        const activated = this.taskService.activateTask(id, this.projectRoot);
         return `Task '${id}' moved to state: ${activated.status}.`;
       }
       case 'resume': {
@@ -317,7 +341,7 @@ export class ContextOSV2Service {
   }
 
   // ================= 6. code =================
-  async code({ action, path: relPath, selector, targetContent, replacementContent, content: rawContent, query, format = 'markdown' }) {
+  async code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, format = 'markdown' }) {
     if (action === 'search' && !relPath) {
       // Global workspace symbol search
       const blocks = this.db.listBlocks(this.projectId);
@@ -349,6 +373,25 @@ export class ContextOSV2Service {
       const initialContent = replacementContent || rawContent || '';
       fs.writeFileSync(fullPath, initialContent, 'utf8');
       const res = CodeTools.create(relPath, initialContent);
+
+      const activeTasks = this.taskService.listTasks?.(this.projectId) || [];
+      const activeTask = activeTasks.find((t) => t.status === 'active');
+      if (activeTask) {
+        this.taskService.addFileToWorkingSet(activeTask.id, relPath);
+        try {
+          const stat = fs.statSync(fullPath);
+          activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
+          activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
+          activeTask.baseline.fileSnapshots[relPath] = {
+            mtimeMs: stat.mtimeMs,
+            size: stat.size,
+            hash: res.newHash,
+            snapshottedAt: new Date().toISOString(),
+          };
+          this.db.saveTask(activeTask);
+        } catch (_) {}
+      }
+
       return {
         filePath: relPath,
         newHash: res.newHash,
@@ -366,17 +409,55 @@ export class ContextOSV2Service {
         return format === 'json' ? res.structure : res.markdown;
       }
       case 'read': {
-        const res = CodeTools.read(relPath, content, selector);
+        const effectiveSelector = selector || (startLine !== undefined || endLine !== undefined ? { startLine, endLine } : null);
+        const res = CodeTools.read(relPath, content, effectiveSelector);
         if (format === 'json') return res;
         return `\`\`\`${path.extname(relPath).slice(1) || 'text'}\n// ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})\n${res.code}\n\`\`\``;
       }
       case 'edit': {
+        let selectorObj = {};
+        if (typeof selector === 'object' && selector !== null) {
+          selectorObj = selector;
+        } else if (typeof selector === 'string') {
+          const rangeMatch = selector.match(/^(?:.*-)?L(\d+)-L(\d+)$/);
+          if (rangeMatch) {
+            selectorObj = {
+              startLine: parseInt(rangeMatch[1], 10),
+              endLine: parseInt(rangeMatch[2], 10),
+            };
+          } else {
+            selectorObj = { symbol: selector };
+          }
+        }
+        const effectiveStartLine = startLine !== undefined ? startLine : selectorObj.startLine;
+        const effectiveEndLine = endLine !== undefined ? endLine : selectorObj.endLine;
         const res = CodeTools.edit(relPath, content, {
+          ...selectorObj,
           targetContent,
           replacementContent,
-          ...(typeof selector === 'object' ? selector : {}),
+          startLine: effectiveStartLine,
+          endLine: effectiveEndLine,
         });
         fs.writeFileSync(fullPath, res.newContent, 'utf8');
+
+        const activeTasks = this.taskService.listTasks?.(this.projectId) || [];
+        const activeTask = activeTasks.find((t) => t.status === 'active');
+        if (activeTask) {
+          this.taskService.addFileToWorkingSet(activeTask.id, relPath);
+          try {
+            const stat = fs.statSync(fullPath);
+            activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
+            activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
+            activeTask.baseline.fileSnapshots[relPath] = {
+              mtimeMs: stat.mtimeMs,
+              size: stat.size,
+              hash: res.newHash,
+              snapshottedAt: new Date().toISOString(),
+            };
+            this.db.saveTask(activeTask);
+          } catch (_) {}
+        }
+
         return {
           filePath: relPath,
           newHash: res.newHash,

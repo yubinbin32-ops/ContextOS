@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as babelParser from '@babel/parser';
+import { TreeSitterParser } from './tree-sitter-parser.mjs';
 
 export function calculateHash(code) {
   return crypto.createHash('sha256').update(code, 'utf8').digest('hex').slice(0, 16);
@@ -15,9 +16,9 @@ export class LanguageRegistry {
       case 'Gemfile':
       case 'Podfile':
       case 'Rakefile':
-        return { name: 'ruby', capability: 'L2' };
+        return { name: 'ruby', capability: 'L3' };
       case 'CMakeLists.txt':
-        return { name: 'cpp', capability: 'L2' };
+        return { name: 'cpp', capability: 'L3' };
     }
 
     // 2. Extension matching (standard primary mechanism in Zed, Cursor, VS Code)
@@ -34,29 +35,29 @@ export class LanguageRegistry {
       case '.py':
         return { name: 'python', capability: 'L3' };
       case '.go':
-        return { name: 'go', capability: 'L2' };
+        return { name: 'go', capability: 'L3' };
       case '.rs':
-        return { name: 'rust', capability: 'L2' };
+        return { name: 'rust', capability: 'L3' };
       case '.swift':
-        return { name: 'swift', capability: 'L2' };
+        return { name: 'swift', capability: 'L3' };
       case '.java':
-        return { name: 'java', capability: 'L2' };
+        return { name: 'java', capability: 'L3' };
       case '.kt':
       case '.kts':
-        return { name: 'kotlin', capability: 'L2' };
+        return { name: 'kotlin', capability: 'L3' };
       case '.c':
       case '.h':
       case '.cpp':
       case '.hpp':
       case '.cc':
       case '.cxx':
-        return { name: 'cpp', capability: 'L2' };
+        return { name: 'cpp', capability: 'L3' };
       case '.cs':
-        return { name: 'csharp', capability: 'L2' };
+        return { name: 'csharp', capability: 'L3' };
       case '.php':
-        return { name: 'php', capability: 'L2' };
+        return { name: 'php', capability: 'L3' };
       case '.rb':
-        return { name: 'ruby', capability: 'L2' };
+        return { name: 'ruby', capability: 'L3' };
     }
 
     // 3. Fallback: Shebang and content sniffing (for extensionless scripts)
@@ -65,10 +66,10 @@ export class LanguageRegistry {
       if (firstLine.startsWith('#!')) {
         if (/python[0-9.]*(\s|$)/.test(firstLine)) return { name: 'python', capability: 'L3' };
         if (/(node|bun|deno)(\s|$)/.test(firstLine)) return { name: 'javascript', capability: 'L3' };
-        if (/ruby(\s|$)/.test(firstLine)) return { name: 'ruby', capability: 'L2' };
-        if (/php(\s|$)/.test(firstLine)) return { name: 'php', capability: 'L2' };
+        if (/ruby(\s|$)/.test(firstLine)) return { name: 'ruby', capability: 'L3' };
+        if (/php(\s|$)/.test(firstLine)) return { name: 'php', capability: 'L3' };
       } else if (firstLine.startsWith('<?php')) {
-        return { name: 'php', capability: 'L2' };
+        return { name: 'php', capability: 'L3' };
       }
     }
 
@@ -81,40 +82,54 @@ export class LanguageRegistry {
   static parseStructure(filePath, content, options = {}) {
     const { name: lang, capability } = this.getLanguage(filePath, content);
     const lines = content.split(/\r?\n/);
-    const symbols = [];
-    const imports = [];
+    let symbols = [];
+    let imports = [];
 
-    if (lang === 'javascript' || lang === 'typescript') {
-      this._parseJsTs(lines, symbols, imports, content);
-    } else if (lang === 'python') {
-      this._parsePython(lines, symbols, imports, content);
-    } else if (lang === 'go') {
-      this._parseGo(lines, symbols, imports, content);
-    } else if (lang === 'rust') {
-      this._parseRust(lines, symbols, imports, content);
-    } else if (lang === 'swift') {
-      this._parseSwift(lines, symbols, imports, content);
-    } else if (lang === 'java') {
-      this._parseJava(lines, symbols, imports, content);
-    } else if (lang === 'kotlin') {
-      this._parseKotlin(lines, symbols, imports, content);
-    } else if (lang === 'cpp') {
-      this._parseCpp(lines, symbols, imports, content);
-    } else if (lang === 'csharp') {
-      this._parseCSharp(lines, symbols, imports, content);
-    } else if (lang === 'php') {
-      this._parsePhp(lines, symbols, imports, content);
-    } else if (lang === 'ruby') {
-      this._parseRuby(lines, symbols, imports, content);
-    } else {
-      // Fallback L1
-      symbols.push({
-        name: path.basename(filePath),
-        kind: 'file',
-        startLine: 1,
-        endLine: Math.max(1, lines.length),
-        hash: calculateHash(content),
-      });
+    // 1. Primary: True multi-language AST parsing via Web-Tree-Sitter
+    let parsedWithTreeSitter = false;
+    if (TreeSitterParser.isLanguageSupported(lang)) {
+      const tsResult = TreeSitterParser.parse(lang, content, lines);
+      if (tsResult && Array.isArray(tsResult.symbols)) {
+        symbols = tsResult.symbols;
+        imports = tsResult.imports || [];
+        parsedWithTreeSitter = true;
+      }
+    }
+
+    // 2. Secondary: Fallback to specialized syntactic / regex parsers if Tree-sitter wasm is not present or failed
+    if (!parsedWithTreeSitter) {
+      if (lang === 'javascript' || lang === 'typescript') {
+        this._parseJsTs(lines, symbols, imports, content);
+      } else if (lang === 'python') {
+        this._parsePython(lines, symbols, imports, content);
+      } else if (lang === 'go') {
+        this._parseGo(lines, symbols, imports, content);
+      } else if (lang === 'rust') {
+        this._parseRust(lines, symbols, imports, content);
+      } else if (lang === 'swift') {
+        this._parseSwift(lines, symbols, imports, content);
+      } else if (lang === 'java') {
+        this._parseJava(lines, symbols, imports, content);
+      } else if (lang === 'kotlin') {
+        this._parseKotlin(lines, symbols, imports, content);
+      } else if (lang === 'cpp') {
+        this._parseCpp(lines, symbols, imports, content);
+      } else if (lang === 'csharp') {
+        this._parseCSharp(lines, symbols, imports, content);
+      } else if (lang === 'php') {
+        this._parsePhp(lines, symbols, imports, content);
+      } else if (lang === 'ruby') {
+        this._parseRuby(lines, symbols, imports, content);
+      } else {
+        // Fallback L1
+        symbols.push({
+          name: path.basename(filePath),
+          kind: 'file',
+          startLine: 1,
+          endLine: Math.max(1, lines.length),
+          hash: calculateHash(content),
+        });
+      }
     }
 
     return {
@@ -122,7 +137,7 @@ export class LanguageRegistry {
       capability,
       imports: options.imports !== false ? imports : [],
       symbols: symbols.filter((s) => {
-        if (options.classes === false && (s.kind === 'class' || s.kind === 'interface' || s.kind === 'struct')) return false;
+        if (options.classes === false && (s.kind === 'class' || s.kind === 'interface' || s.kind === 'struct' || s.kind === 'trait')) return false;
         if (options.functions === false && (s.kind === 'function' || s.kind === 'method')) return false;
         return true;
       }),
@@ -593,7 +608,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       const typeMatch = line.match(/^\s*(?:pub(?:\([^)]+\))?\s+)?(struct|enum|trait)\s+([A-Za-z0-9_]+)/);
       if (typeMatch) {
         const typeKind = typeMatch[1];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findDeclarationOrBraceEnd(lines, i);
         symbols.push({
           name: typeMatch[2],
           kind: typeKind === 'trait' ? 'trait' : typeKind === 'enum' ? 'enum' : 'struct',
@@ -605,20 +620,31 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
 
       // impl MyStruct
-      const implMatch = line.match(/^\s*impl(?:\s+<[^>]+>)?\s+(?:[A-Za-z0-9_]+\s+for\s+)?([A-Za-z0-9_]+)/);
-      if (implMatch) {
-        currentImpl = {
-          name: implMatch[1],
-          startLine: lineNum,
-          endLine: this._findClosingBrace(lines, i),
-        };
+      if (/^\s*impl\b/.test(line)) {
+        let implTarget = null;
+        const forMatch = line.match(/\bfor\s+([A-Za-z0-9_]+)/);
+        if (forMatch) {
+          implTarget = forMatch[1];
+        } else {
+          const directMatch = line.match(/^\s*impl(?:\s*<.*?>)?\s+([A-Za-z0-9_]+)/);
+          if (directMatch) {
+            implTarget = directMatch[1];
+          }
+        }
+        if (implTarget) {
+          currentImpl = {
+            name: implTarget,
+            startLine: lineNum,
+            endLine: this._findClosingBrace(lines, i),
+          };
+        }
       }
 
       // fn inside impl or standalone fn
-      const fnMatch = line.match(/^(?:\s*)(?:pub\s+)?(?:async\s+)?fn\s+([A-Za-z0-9_]+)\s*\(/);
+      const fnMatch = line.match(/^\s*(?:(?:pub(?:\([^)]*\))?|const|async|unsafe|extern(?:\s+"[^"]*")?)\s+)*fn\s+([A-Za-z0-9_]+)\s*(?:<|\()/);
       if (fnMatch) {
         const fnName = fnMatch[1];
-        const endLine = this._findClosingBrace(lines, i);
+        const endLine = this._findDeclarationOrBraceEnd(lines, i);
         const snippet = lines.slice(i, endLine).join('\n');
         if (currentImpl && lineNum <= currentImpl.endLine) {
           symbols.push({
@@ -1086,6 +1112,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     let depth = 0;
     let foundOpen = false;
     let inString = null;
+    let inRawString = false;
     let inLineComment = false;
     let inBlockComment = false;
 
@@ -1109,13 +1136,27 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
           continue;
         }
 
+        // C++ raw string literal R"(...)"
+        if (inRawString) {
+          if (ch === ')' && next === '"') {
+            inRawString = false;
+            j++;
+          }
+          continue;
+        }
+
         // String literal
         if (inString !== null) {
           if (ch === '\\') {
             j++; // Skip escaped char
             continue;
           }
-          if (ch === inString) {
+          if (inString.length === 3) {
+            if (ch === inString[0] && next === inString[0] && line[j + 2] === inString[0]) {
+              inString = null;
+              j += 2;
+            }
+          } else if (ch === inString) {
             inString = null;
           }
           continue;
@@ -1133,6 +1174,32 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
           continue;
         }
 
+        // Check for C++ raw string start R"(
+        if (ch === 'R' && next === '"' && line[j + 2] === '(') {
+          inRawString = true;
+          j += 2;
+          continue;
+        }
+
+        // Check for triple-quote string (Swift / Python: """ or ''')
+        if ((ch === '"' || ch === "'") && next === ch && line[j + 2] === ch) {
+          inString = ch.repeat(3);
+          j += 2;
+          continue;
+        }
+
+        // Check for Rust lifetime identifier (e.g. 'a, 'static, '_)
+        if (ch === "'") {
+          const rest = line.slice(j);
+          const lifetimeMatch = rest.match(/^'([a-zA-Z_][a-zA-Z0-9_]*)/);
+          if (lifetimeMatch) {
+            if (rest[lifetimeMatch[0].length] !== "'") {
+              j += lifetimeMatch[0].length - 1;
+              continue;
+            }
+          }
+        }
+
         // Check for string start
         if (ch === '"' || ch === "'" || ch === '`') {
           inString = ch;
@@ -1144,9 +1211,143 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
           depth++;
           foundOpen = true;
         } else if (ch === '}') {
+          if (!foundOpen) {
+            return i + 1; // 1-indexed line
+          }
           depth--;
           if (foundOpen && depth === 0) {
             return i + 1; // 1-indexed line
+          }
+        }
+      }
+    }
+
+    return lines.length;
+  }
+
+  /**
+   * Declaration- or Brace-Aware End Finder.
+   * If a declaration terminates with a semicolon ';' before any opening brace '{' is found
+   * (e.g. Rust trait methods 'fn work(&self);', tuple structs 'struct Point(f64, f64);', or externs),
+   * it returns the line number of the semicolon.
+   * If an opening brace '{' is found first, it tracks balanced braces to the closing '}'.
+   */
+  static _findDeclarationOrBraceEnd(lines, startIndex) {
+    let depth = 0;
+    let foundOpen = false;
+    let inString = null;
+    let inRawString = false;
+    let inLineComment = false;
+    let inBlockComment = false;
+
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i];
+      inLineComment = false;
+
+      for (let j = 0; j < line.length; j++) {
+        const ch = line[j];
+        const next = j + 1 < line.length ? line[j + 1] : '';
+
+        // Line comment
+        if (inLineComment) break;
+
+        // Block comment
+        if (inBlockComment) {
+          if (ch === '*' && next === '/') {
+            inBlockComment = false;
+            j++;
+          }
+          continue;
+        }
+
+        // C++ raw string literal R"(...)"
+        if (inRawString) {
+          if (ch === ')' && next === '"') {
+            inRawString = false;
+            j++;
+          }
+          continue;
+        }
+
+        // String literal
+        if (inString !== null) {
+          if (ch === '\\') {
+            j++;
+            continue;
+          }
+          if (inString.length === 3) {
+            if (ch === inString[0] && next === inString[0] && line[j + 2] === inString[0]) {
+              inString = null;
+              j += 2;
+            }
+          } else if (ch === inString) {
+            inString = null;
+          }
+          continue;
+        }
+
+        // Check for comment start
+        if (ch === '/' && next === '/') {
+          inLineComment = true;
+          j++;
+          continue;
+        }
+        if (ch === '/' && next === '*') {
+          inBlockComment = true;
+          j++;
+          continue;
+        }
+
+        // Check for C++ raw string start R"(
+        if (ch === 'R' && next === '"' && line[j + 2] === '(') {
+          inRawString = true;
+          j += 2;
+          continue;
+        }
+
+        // Check for triple-quote string (Swift / Python: """ or ''')
+        if ((ch === '"' || ch === "'") && next === ch && line[j + 2] === ch) {
+          inString = ch.repeat(3);
+          j += 2;
+          continue;
+        }
+
+        // Check for Rust lifetime identifier (e.g. 'a, 'static, '_)
+        if (ch === "'") {
+          const rest = line.slice(j);
+          const lifetimeMatch = rest.match(/^'([a-zA-Z_][a-zA-Z0-9_]*)/);
+          if (lifetimeMatch) {
+            if (rest[lifetimeMatch[0].length] !== "'") {
+              j += lifetimeMatch[0].length - 1;
+              continue;
+            }
+          }
+        }
+
+        // Check for string start
+        if (ch === '"' || ch === "'" || ch === '`') {
+          inString = ch;
+          continue;
+        }
+
+        // Semicolon before any opening brace: declaration without body terminates here
+        if (!foundOpen && ch === ';') {
+          return i + 1;
+        }
+
+        // Enclosing block closed before opening brace
+        if (!foundOpen && ch === '}') {
+          return i + 1;
+        }
+
+        // Check for brace
+        if (ch === '{') {
+          depth++;
+          foundOpen = true;
+        } else if (ch === '}') {
+          depth--;
+          if (foundOpen && depth === 0) {
+            return i + 1;
           }
         }
       }
