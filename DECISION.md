@@ -158,3 +158,26 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
 - **Consequences (收益)**:
   - True compiler-grade AST parsing with zero native C++ compiler build dependencies across 14 languages.
   - Full resilience to host IDE direct disk edits with automated working set reconciliation and AST locator re-anchoring.
+
+---
+
+## [DEC-011] Lossless Program Slicing, Virtual Code Folding, and KV-Cache Friendly Tiered Context Architecture
+
+- **Status**: Accepted Roadmap
+- **Context & Mistaken Paths (历史弯路)**:
+  1. Traditional code context ingestion forces AI to read entire 500~2000 line files, rapidly exhausting the 200k~272k window of models like Codex, triggering frequent and costly context compressions and attention degradation.
+  2. Naive line-range or regex-based edits suffer from whitespace mismatch, multiple-occurrence ambiguity, and line-drift across multi-step edits.
+  3. Dynamic rewriting of global session prompts on every turn invalidates LLM KV-cache prefixes, forfeiting the 75%~90% prompt caching discount.
+- **Decision (架构决策)**:
+  1. **Transitive Program Slicing**:
+     - Implement compiler-grade semantic dependency slicing via Tree-sitter: when a target function is requested, extract its definition alongside external type interfaces and callee signatures, delivering high-fidelity context in <300 tokens without dumping full files.
+  2. **Virtual Code Folding & AST Node-Level Patching**:
+     - Fold redundant boilerplate (unrelated imports, license headers, trivial getters/setters) into concise folding pointers.
+     - Implement deterministic AST node-path patching (`code.patch_ast`) with pre-write syntax validation, ensuring zero line-drift and 100% syntactically valid disk writes.
+  3. **KV-Cache Friendly Tiered Context Architecture**:
+     - Tier 1 (Immutable Prefix): Static project metadata, invariant rules, and topological baselines to maximize prompt cache hits.
+     - Tier 2 (Append-Only Journal): Sequential task notes and verification receipts that never re-order or mutate historical prefixes.
+     - Tier 3 (Ephemeral Scratchpad): Task-specific code slices and sanitized error diagnostics discarded upon task completion.
+- **Consequences (收益)**:
+  - Estimated session context consumption reduced by 95%+, keeping typical workflows well within prime token economics.
+  - Near-zero AST edit failures with guaranteed structural validity.
