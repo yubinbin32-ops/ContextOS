@@ -1,10 +1,111 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
+  if (!ruleId || typeof ruleId !== 'string') return null;
+  const cleanId = ruleId.trim();
+  if (!cleanId) return null;
+
+  if (rulesMap instanceof Map && rulesMap.has(cleanId)) {
+    const val = rulesMap.get(cleanId);
+    return {
+      id: cleanId,
+      title: val?.title || cleanId,
+      category: val?.category || 'general',
+    };
+  }
+
+  if (typeof rulesMap === 'object' && rulesMap !== null) {
+    if (rulesMap[cleanId]) {
+      const val = rulesMap[cleanId];
+      return {
+        id: cleanId,
+        title: val?.title || cleanId,
+        category: val?.category || 'general',
+      };
+    }
+    if (typeof rulesMap.getRule === 'function') {
+      const val = rulesMap.getRule(cleanId);
+      if (val) {
+        return {
+          id: cleanId,
+          title: val?.title || cleanId,
+          category: val?.category || 'general',
+        };
+      }
+    }
+  }
+
+  const root = projectRoot || (typeof rulesMap === 'string' ? rulesMap : rulesMap?.projectRoot);
+  if (root && typeof root === 'string') {
+    try {
+      const dotDir = path.join(root, '.contextos', 'rules');
+      const stdDir = path.join(root, 'rules');
+      const rulesDir = fs.existsSync(dotDir) ? dotDir : (fs.existsSync(stdDir) ? stdDir : null);
+      if (rulesDir && fs.existsSync(rulesDir)) {
+        let content = null;
+        const targetFile = path.join(rulesDir, `${cleanId}.md`);
+        if (fs.existsSync(targetFile)) {
+          content = fs.readFileSync(targetFile, 'utf8');
+        } else {
+          const files = fs.readdirSync(rulesDir).filter((f) => f.endsWith('.md'));
+          for (const f of files) {
+            const fc = fs.readFileSync(path.join(rulesDir, f), 'utf8');
+            if (f.replace(/\.md$/, '') === cleanId || fc.includes(`id: ${cleanId}`)) {
+              content = fc;
+              break;
+            }
+          }
+        }
+
+        if (content) {
+          const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+          let title = cleanId;
+          let category = 'general';
+          if (match) {
+            for (const line of match[1].split('\n')) {
+              const m = line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/);
+              if (m) {
+                const k = m[1].trim();
+                const v = m[2].trim();
+                if (k === 'title') title = v;
+                if (k === 'category') category = v;
+              }
+            }
+          } else {
+            const headerMatch = content.match(/^#\s+(.+)$/m);
+            if (headerMatch) title = headerMatch[1].trim();
+          }
+          return { id: cleanId, title, category };
+        }
+      }
+    } catch (_) {}
+  }
+
+  return { id: cleanId, title: cleanId, category: 'general' };
+}
+
+function renderBoundRulesSection(ruleIds, rulesMap = {}, projectRoot = null) {
+  if (!Array.isArray(ruleIds) || ruleIds.length === 0) return [];
+  const lines = [];
+  lines.push('\n## 💡 Bound Rules (按需调阅):');
+  for (const ruleId of ruleIds) {
+    const meta = resolveRuleMeta(ruleId, rulesMap, projectRoot);
+    if (meta) {
+      lines.push(`- \`[${meta.id}]\` **${meta.title}** (category: ${meta.category})`);
+    }
+  }
+  lines.push("> *Tip: Call `knowledge(action: 'rule_open', ruleId: '...')` to inspect full specifications if needed.*");
+  return lines;
+}
+
 /**
  * Progressive L0-L3 Markdown renderer for ContextOS MCP responses.
  * Principle: Return human/AI readable Markdown by default; return JSON only if format === 'json'.
  */
 
 export class MarkdownRenderer {
-  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [] }) {
+  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [], rulesMap = {}, projectRoot = null }) {
     const lines = [];
     lines.push(`# ContextOS Project Brief: \`${project.id}\` (rev: ${project.graph_revision || 0})`);
     lines.push(`Root: \`${project.repo_root}\`\n`);
@@ -48,6 +149,12 @@ export class MarkdownRenderer {
       const notes = activeTask.notes || [];
       if (notes.length > 0) {
         lines.push(`- Latest Note: ${notes[notes.length - 1].text}`);
+      }
+
+      const boundRules = (activeTask.references?.rules || activeTask.rules || []).filter(Boolean);
+      if (boundRules.length > 0) {
+        const root = projectRoot || (typeof rulesMap === 'string' ? rulesMap : rulesMap?.projectRoot);
+        lines.push(...renderBoundRulesSection(boundRules, rulesMap, root));
       }
       lines.push('');
     } else {
@@ -112,11 +219,17 @@ export class MarkdownRenderer {
     return lines.join('\n');
   }
 
-  static renderTask(task) {
+  static renderTask(task, rulesMap = {}) {
     const lines = [];
     lines.push(`# Task: [${task.id}] ${task.title}`);
     lines.push(`- Status: **${task.status}** (Lifecycle: draft -> active -> checking -> syncing -> completed)`);
     lines.push(`- Belongs To: Plan \`${task.planId}\`, Phase \`${task.phaseId}\``);
+
+    const boundRules = (task.references?.rules || task.rules || []).filter(Boolean);
+    if (boundRules.length > 0) {
+      const root = typeof rulesMap === 'string' ? rulesMap : rulesMap?.projectRoot;
+      lines.push(...renderBoundRulesSection(boundRules, rulesMap, root));
+    }
 
     if (task.contextSlice) {
       lines.push('\n## Context Slice:');

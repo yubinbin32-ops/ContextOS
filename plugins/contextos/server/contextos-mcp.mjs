@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path13) {
-      let input = path13;
+    function removeDotSegments(path14) {
+      let input = path14;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3668,8 +3668,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path13 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path13 && path13 !== "/" ? path13 : void 0;
+        const path14 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path14 && path14 !== "/" ? path14 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7181,12 +7181,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name2}"`);
       return f;
     };
-    function addFormats(ajv, list, fs13, exportName) {
+    function addFormats(ajv, list, fs14, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs13[f]);
+        ajv.addFormat(f, fs14[f]);
     }
     module2.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7195,8 +7195,8 @@ var require_dist = __commonJS({
 });
 
 // packages/mcp/src/v2-server.mjs
-import fs12 from "node:fs";
-import path12 from "node:path";
+import fs13 from "node:fs";
+import path13 from "node:path";
 
 // node_modules/zod/v3/helpers/util.js
 var util;
@@ -7572,8 +7572,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path13, errorMaps, issueData } = params;
-  const fullPath = [...path13, ...issueData.path || []];
+  const { data, path: path14, errorMaps, issueData } = params;
+  const fullPath = [...path14, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7688,11 +7688,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path13, key) {
+  constructor(parent, value, path14, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path13;
+    this._path = path14;
     this._key = key;
   }
   get path() {
@@ -11274,10 +11274,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path13) {
-  if (!path13)
+function getElementAtPath(obj, path14) {
+  if (!path14)
     return obj;
-  return path13.reduce((acc, key) => acc?.[key], obj);
+  return path14.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11689,11 +11689,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path13, issues) {
+function prefixIssues(path14, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path13);
+    iss.path.unshift(path14);
     return iss;
   });
 }
@@ -12122,16 +12122,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path13 = []) => {
+  const processError = (error3, path14 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path13, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path14, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path13, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path14, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path13, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path14, ...issue2.path]);
       } else {
-        const fullpath = [...path13, ...issue2.path];
+        const fullpath = [...path14, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -16646,11 +16646,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path13) {
-  if (path13.length === 0) {
+function getDotPath(path14) {
+  if (path14.length === 0) {
     return "object root";
   }
-  return path13.reduce((acc, seg, index) => {
+  return path14.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -23225,8 +23225,8 @@ var StdioServerTransport = class {
 };
 
 // packages/mcp/src/v2-service.mjs
-import path10 from "node:path";
-import fs10 from "node:fs";
+import path11 from "node:path";
+import fs11 from "node:fs";
 
 // packages/storage/src/schema.mjs
 var V2_SQL_SCHEMA = `
@@ -23575,6 +23575,7 @@ var V2Database = class {
     const stmt = this.db.prepare("SELECT * FROM tasks WHERE id = ?");
     const row = stmt.get(taskId);
     if (!row) return null;
+    const references = JSON.parse(row.references_json || "{}");
     return {
       id: row.id,
       planId: row.plan_id,
@@ -23583,7 +23584,8 @@ var V2Database = class {
       status: row.status,
       contextSlice: JSON.parse(row.context_slice_json || "{}"),
       workingSet: JSON.parse(row.working_set_json || "{}"),
-      references: JSON.parse(row.references_json || "{}"),
+      references,
+      rules: references.rules || [],
       baseline: JSON.parse(row.baseline_json || "{}"),
       notes: JSON.parse(row.notes_json || "[]"),
       checks: JSON.parse(row.checks_json || "[]"),
@@ -23595,22 +23597,26 @@ var V2Database = class {
   listTasks(planId) {
     const stmt = planId ? this.db.prepare("SELECT * FROM tasks WHERE plan_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM tasks ORDER BY created_at ASC");
     const rows = planId ? stmt.all(planId) : stmt.all();
-    return rows.map((r) => ({
-      id: r.id,
-      planId: r.plan_id,
-      phaseId: r.phase_id,
-      title: r.title,
-      status: r.status,
-      contextSlice: JSON.parse(r.context_slice_json || "{}"),
-      workingSet: JSON.parse(r.working_set_json || "{}"),
-      references: JSON.parse(r.references_json || "{}"),
-      baseline: JSON.parse(r.baseline_json || "{}"),
-      notes: JSON.parse(r.notes_json || "[]"),
-      checks: JSON.parse(r.checks_json || "[]"),
-      syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at
-    }));
+    return rows.map((r) => {
+      const references = JSON.parse(r.references_json || "{}");
+      return {
+        id: r.id,
+        planId: r.plan_id,
+        phaseId: r.phase_id,
+        title: r.title,
+        status: r.status,
+        contextSlice: JSON.parse(r.context_slice_json || "{}"),
+        workingSet: JSON.parse(r.working_set_json || "{}"),
+        references,
+        rules: references.rules || [],
+        baseline: JSON.parse(r.baseline_json || "{}"),
+        notes: JSON.parse(r.notes_json || "[]"),
+        checks: JSON.parse(r.checks_json || "[]"),
+        syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      };
+    });
   }
   // --- Block & ArtifactRefs ---
   saveBlock(block) {
@@ -24191,6 +24197,8 @@ var Task = class {
     contextSlice = {},
     workingSet = {},
     references = {},
+    rules = [],
+    ruleRefs = [],
     baseline = {},
     notes = [],
     checks = [],
@@ -24223,8 +24231,9 @@ var Task = class {
       symbols: Array.isArray(workingSet.symbols) ? [...workingSet.symbols] : [],
       candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : []
     };
+    const initialRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references.rules) ? references.rules : [];
     this.references = {
-      rules: Array.isArray(references.rules) ? [...references.rules] : [],
+      rules: [...new Set(initialRules.filter((r) => typeof r === "string" && r.trim()))],
       decisionSections: Array.isArray(references.decisionSections) ? [...references.decisionSections] : [],
       blockIds: Array.isArray(references.blockIds) ? [...references.blockIds] : []
     };
@@ -24332,6 +24341,33 @@ var Task = class {
     this.status = "active";
     this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   }
+  get rules() {
+    return this.references.rules;
+  }
+  set rules(newRules) {
+    this.references.rules = Array.isArray(newRules) ? [...new Set(newRules.filter((r) => typeof r === "string" && r.trim()))] : [];
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  bindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== "string") return;
+    const clean = ruleId.trim();
+    if (clean && !this.references.rules.includes(clean)) {
+      this.references.rules.push(clean);
+      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
+  unbindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== "string") return;
+    const clean = ruleId.trim();
+    const idx = this.references.rules.indexOf(clean);
+    if (idx !== -1) {
+      this.references.rules.splice(idx, 1);
+      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
+  setRules(rules) {
+    this.rules = rules;
+  }
   toJSON() {
     return {
       id: this.id,
@@ -24342,6 +24378,7 @@ var Task = class {
       contextSlice: this.contextSlice,
       workingSet: this.workingSet,
       references: this.references,
+      rules: this.references.rules,
       baseline: this.baseline,
       notes: this.notes,
       checks: this.checks,
@@ -24504,20 +24541,47 @@ var PlanService = class {
     decisionRefs = [],
     dependencyRefs = []
   }) {
+    const planId = id || `plan-${Date.now()}`;
+    const instantiatedTasks = [];
+    const normalizedPhases = (phases || []).map((phaseData, index) => {
+      const pData = typeof phaseData.toJSON === "function" ? phaseData.toJSON() : { ...phaseData };
+      pData.id = pData.id || `phase-${index}`;
+      const phaseTasks = Array.isArray(pData.tasks) ? pData.tasks : [];
+      const taskIds = Array.isArray(pData.taskIds) ? [...pData.taskIds] : [];
+      for (const t of phaseTasks) {
+        const tId = t.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!taskIds.includes(tId)) {
+          taskIds.push(tId);
+        }
+        const taskInstance = new Task({
+          ...t,
+          id: tId,
+          planId,
+          phaseId: pData.id,
+          rules: t.rules || t.ruleRefs || t.references?.rules || []
+        });
+        instantiatedTasks.push(taskInstance);
+      }
+      pData.taskIds = taskIds;
+      return pData;
+    });
     const plan = new Plan({
-      id: id || `plan-${Date.now()}`,
+      id: planId,
       projectId,
       title,
       priority,
       status: "active",
       summary,
-      phases,
+      phases: normalizedPhases,
       checkpoints,
       ruleRefs,
       decisionRefs,
       dependencyRefs
     });
     this.db.savePlan(plan.toJSON());
+    for (const t of instantiatedTasks) {
+      this.db.saveTask(t.toJSON());
+    }
     return plan.toJSON();
   }
   getPlan(planId) {
@@ -40384,11 +40448,11 @@ async function Module2(moduleArg = {}) {
   }, "quit_");
   var _scriptName = import.meta.url;
   var scriptDirectory = "";
-  function locateFile(path13) {
+  function locateFile(path14) {
     if (Module["locateFile"]) {
-      return Module["locateFile"](path13, scriptDirectory);
+      return Module["locateFile"](path14, scriptDirectory);
     }
-    return scriptDirectory + path13;
+    return scriptDirectory + path14;
   }
   __name(locateFile, "locateFile");
   var readAsync, readBinary;
@@ -42959,7 +43023,97 @@ function resolveLanguage(langName) {
   }
   return null;
 }
-var TreeSitterParser = class {
+function normalizeCallee(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  let s = raw.trim();
+  if (/[\r\n{}]/.test(s)) return null;
+  while (/(::)?<[^<>]+>/.test(s)) {
+    s = s.replace(/(::)?<[^<>]+>/g, "");
+  }
+  s = s.replace(/^(\$this->|\$this\.|\$this|this\.|self\.|this->)/, "");
+  s = s.replace(/->/g, ".");
+  if (s.includes("(")) {
+    const parts2 = s.split(".");
+    s = parts2[parts2.length - 1].replace(/\(.*$/, "");
+  }
+  s = s.replace(/\s+/g, "");
+  if (!s || s === "function" || s === "func" || s === "lambda" || /^[^a-zA-Z0-9_$:]/.test(s)) {
+    return null;
+  }
+  return s || null;
+}
+var TreeSitterParser = class _TreeSitterParser {
+  static normalizeCallee(raw) {
+    return normalizeCallee(raw);
+  }
+  static extractCalls(bodyNode) {
+    if (!bodyNode) return [];
+    const calls = [];
+    const seen = /* @__PURE__ */ new Set();
+    const NESTED_SCOPES = /* @__PURE__ */ new Set([
+      "arrow_function",
+      "function_expression",
+      "function_declaration",
+      "generator_function_declaration",
+      "function_definition",
+      "lambda",
+      "lambda_expression",
+      "lambda_literal",
+      "func_literal",
+      "closure_expression",
+      "anonymous_function",
+      "anonymous_function_expression",
+      "anonymous_method_expression",
+      "anonymous_class_body",
+      "local_function_statement"
+    ]);
+    const CALL_TYPES = /* @__PURE__ */ new Set([
+      "call_expression",
+      "call",
+      "method_invocation",
+      "invocation_expression",
+      "function_call_expression",
+      "member_call_expression",
+      "scoped_call_expression",
+      "method_call"
+    ]);
+    function walk(node2, isRoot = false) {
+      if (!node2) return;
+      if (!isRoot && NESTED_SCOPES.has(node2.type)) {
+        return;
+      }
+      if (CALL_TYPES.has(node2.type)) {
+        let rawCallee = null;
+        if (node2.type === "method_invocation" || node2.type === "member_call_expression") {
+          const obj = node2.childForFieldName("object");
+          const name2 = node2.childForFieldName("name");
+          rawCallee = obj && name2 ? `${obj.text}.${name2.text}` : name2 ? name2.text : node2.text;
+        } else {
+          const fnNode = node2.childForFieldName("function") || node2.childForFieldName("callee") || node2.childForFieldName("called_expression") || node2.childForFieldName("name");
+          if (fnNode && !NESTED_SCOPES.has(fnNode.type)) {
+            rawCallee = fnNode.text;
+          } else if (node2.namedChildren.length > 0) {
+            const first = node2.namedChild(0);
+            if (first && !first.type.includes("argument") && !first.type.includes("param") && !NESTED_SCOPES.has(first.type)) {
+              rawCallee = first.text;
+            }
+          }
+        }
+        if (rawCallee) {
+          const normalized = normalizeCallee(rawCallee);
+          if (normalized && !seen.has(normalized)) {
+            seen.add(normalized);
+            calls.push(normalized);
+          }
+        }
+      }
+      for (const child of node2.namedChildren) {
+        walk(child, false);
+      }
+    }
+    walk(bodyNode, true);
+    return calls;
+  }
   static isLanguageSupported(lang) {
     return Boolean(resolveLanguage(lang));
   }
@@ -43123,6 +43277,8 @@ var TreeSitterParser = class {
                 const { startLine: ms, endLine: me } = getLines(m);
                 const rawParams = m.childForFieldName("parameters")?.text || "()";
                 const sigParams = rawParams.replace(/\s+/g, " ");
+                const mBody = m.childForFieldName("body") || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${className}.${mName}`,
                   shortName: mName,
@@ -43131,7 +43287,8 @@ var TreeSitterParser = class {
                   signature: `${mName}${sigParams}`,
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43143,6 +43300,8 @@ var TreeSitterParser = class {
                   const { startLine: ms, endLine: me } = getLines(m);
                   const rawParams = val.childForFieldName("parameters")?.text || "()";
                   const sigParams = rawParams.replace(/\s+/g, " ");
+                  const fBody = val.childForFieldName("body") || val;
+                  const calls = _TreeSitterParser.extractCalls(fBody);
                   const mSym = {
                     name: `${className}.${mName}`,
                     shortName: mName,
@@ -43151,7 +43310,8 @@ var TreeSitterParser = class {
                     signature: `${mName}${sigParams}`,
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43167,6 +43327,8 @@ var TreeSitterParser = class {
             const { startLine, endLine } = getLines(target);
             const rawParams = target.childForFieldName("parameters")?.text || "()";
             const sigParams = rawParams.replace(/\s+/g, " ");
+            const body2 = target.childForFieldName("body") || target;
+            const calls = _TreeSitterParser.extractCalls(body2);
             symbols.push({
               name: fnName,
               shortName: fnName,
@@ -43174,7 +43336,8 @@ var TreeSitterParser = class {
               signature: `${fnName}${sigParams}`,
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
           continue;
@@ -43188,6 +43351,8 @@ var TreeSitterParser = class {
                 const { startLine, endLine } = getLines(target);
                 const rawParams = val.childForFieldName("parameters")?.text || "()";
                 const sigParams = rawParams.replace(/\s+/g, " ");
+                const fBody = val.childForFieldName("body") || val;
+                const calls = _TreeSitterParser.extractCalls(fBody);
                 symbols.push({
                   name: varName,
                   shortName: varName,
@@ -43195,7 +43360,8 @@ var TreeSitterParser = class {
                   signature: `${varName}${sigParams}`,
                   startLine,
                   endLine,
-                  hash: getSliceHash(lines, startLine, endLine)
+                  hash: getSliceHash(lines, startLine, endLine),
+                  calls
                 });
               }
             }
@@ -43257,6 +43423,8 @@ var TreeSitterParser = class {
               if (mName) {
                 const { startLine: ms } = getLines(mOuter);
                 const { endLine: me } = getLines(mTarget);
+                const mBody = mTarget.childForFieldName("body") || mTarget;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${className}.${mName}`,
                   shortName: mName,
@@ -43264,7 +43432,8 @@ var TreeSitterParser = class {
                   kind: "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43277,13 +43446,16 @@ var TreeSitterParser = class {
         if (fnName) {
           const { startLine } = getLines(outerNode);
           const { endLine } = getLines(target);
+          const body2 = target.childForFieldName("body") || target;
+          const calls = _TreeSitterParser.extractCalls(body2);
           symbols.push({
             name: fnName,
             shortName: fnName,
             kind: "function",
             startLine,
             endLine,
-            hash: getSliceHash(lines, startLine, endLine)
+            hash: getSliceHash(lines, startLine, endLine),
+            calls
           });
         }
       }
@@ -43350,25 +43522,36 @@ var TreeSitterParser = class {
         const rcvrNode = child.childForFieldName("receiver");
         const rcvrName = findTypeIdentifier(rcvrNode) || "Receiver";
         const { startLine, endLine } = getLines(child);
-        symbols.push({
+        const body2 = child.childForFieldName("body") || child;
+        const calls = _TreeSitterParser.extractCalls(body2);
+        const mSym = {
           name: `${rcvrName}.${name2}`,
           shortName: name2,
           containerName: rcvrName,
           kind: "method",
           startLine,
           endLine,
-          hash: getSliceHash(lines, startLine, endLine)
-        });
+          hash: getSliceHash(lines, startLine, endLine),
+          calls
+        };
+        symbols.push(mSym);
+        const parentType = symbols.find((s) => s.name === rcvrName && (s.kind === "struct" || s.kind === "interface"));
+        if (parentType && Array.isArray(parentType.methods)) {
+          parentType.methods.push(mSym);
+        }
       } else if (child.type === "function_declaration") {
         const name2 = child.childForFieldName("name")?.text;
         const { startLine, endLine } = getLines(child);
+        const body2 = child.childForFieldName("body") || child;
+        const calls = _TreeSitterParser.extractCalls(body2);
         symbols.push({
           name: name2,
           shortName: name2,
           kind: "function",
           startLine,
           endLine,
-          hash: getSliceHash(lines, startLine, endLine)
+          hash: getSliceHash(lines, startLine, endLine),
+          calls
         });
       }
     }
@@ -43415,6 +43598,8 @@ var TreeSitterParser = class {
               if (m.type === "function_signature_item" || m.type === "function_item") {
                 const fnName = m.childForFieldName("name")?.text;
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.childForFieldName("body") || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: fnName,
                   shortName: fnName,
@@ -43422,7 +43607,8 @@ var TreeSitterParser = class {
                   kind: "function",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 traitSym.methods.push(mSym);
@@ -43438,7 +43624,8 @@ var TreeSitterParser = class {
             kind: "struct",
             startLine,
             endLine,
-            hash: getSliceHash(lines, startLine, endLine)
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
           });
         } else if (child.type === "enum_item") {
           const name2 = child.childForFieldName("name")?.text;
@@ -43461,28 +43648,39 @@ var TreeSitterParser = class {
               if (m.type === "function_item") {
                 const fnName = m.childForFieldName("name")?.text;
                 const { startLine: ms, endLine: me } = getLines(m);
-                symbols.push({
+                const mBody = m.childForFieldName("body") || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
+                const mSym = {
                   name: `${targetName}.${fnName}`,
                   shortName: fnName,
                   containerName: targetName,
                   kind: "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
-                });
+                  hash: getSliceHash(lines, ms, me),
+                  calls
+                };
+                symbols.push(mSym);
+                const parentStruct = symbols.find((s) => s.name === targetName && (s.kind === "struct" || s.kind === "trait"));
+                if (parentStruct && Array.isArray(parentStruct.methods)) {
+                  parentStruct.methods.push(mSym);
+                }
               }
             }
           }
         } else if (child.type === "function_item") {
           const fnName = child.childForFieldName("name")?.text;
           const { startLine, endLine } = getLines(child);
+          const body2 = child.childForFieldName("body") || child;
+          const calls = _TreeSitterParser.extractCalls(body2);
           symbols.push({
             name: fnName,
             shortName: fnName,
             kind: "function",
             startLine,
             endLine,
-            hash: getSliceHash(lines, startLine, endLine)
+            hash: getSliceHash(lines, startLine, endLine),
+            calls
           });
         }
       }
@@ -43527,6 +43725,8 @@ var TreeSitterParser = class {
               const fnName = fnId?.text;
               if (fnName) {
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.childForFieldName("body") || m.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${typeName}.${fnName}`,
                   shortName: fnName,
@@ -43534,7 +43734,8 @@ var TreeSitterParser = class {
                   kind: "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43543,6 +43744,8 @@ var TreeSitterParser = class {
               const varMatch = m.text.match(/var\s+([A-Za-z0-9_]+)/);
               if (varMatch && varMatch[1] === "body") {
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${typeName}.body`,
                   shortName: "body",
@@ -43550,7 +43753,8 @@ var TreeSitterParser = class {
                   kind: "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43563,13 +43767,16 @@ var TreeSitterParser = class {
         const fnName = fnId?.text;
         if (fnName) {
           const { startLine, endLine } = getLines(child);
+          const body2 = child.childForFieldName("body") || child.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || child;
+          const calls = _TreeSitterParser.extractCalls(body2);
           symbols.push({
             name: fnName,
             shortName: fnName,
             kind: "function",
             startLine,
             endLine,
-            hash: getSliceHash(lines, startLine, endLine)
+            hash: getSliceHash(lines, startLine, endLine),
+            calls
           });
         }
       }
@@ -43610,14 +43817,17 @@ var TreeSitterParser = class {
                 const mName = m.childForFieldName("name")?.text;
                 if (!mName) continue;
                 const { startLine: ms, endLine: me } = getLines(m);
+                const bodyNode = m.childForFieldName("body") || m;
+                const calls = _TreeSitterParser.extractCalls(bodyNode);
                 const mSym = {
                   name: `${name2}.${mName}`,
                   shortName: mName,
                   containerName: name2,
-                  kind: "method",
+                  kind: m.type === "constructor_declaration" ? "constructor" : "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43666,6 +43876,8 @@ var TreeSitterParser = class {
                 const fnName = fnId?.text;
                 if (fnName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const mBody = m.childForFieldName("body") || m.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || m;
+                  const calls = _TreeSitterParser.extractCalls(mBody);
                   const mSym = {
                     name: `${name2}.${fnName}`,
                     shortName: fnName,
@@ -43673,7 +43885,8 @@ var TreeSitterParser = class {
                     kind: "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43688,13 +43901,16 @@ var TreeSitterParser = class {
           const fnName = fnId?.text;
           if (fnName) {
             const { startLine, endLine } = getLines(child);
+            const body2 = child.childForFieldName("body") || child.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || child;
+            const calls = _TreeSitterParser.extractCalls(body2);
             symbols.push({
               name: fnName,
               shortName: fnName,
               kind: "function",
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
         }
@@ -43760,6 +43976,8 @@ var TreeSitterParser = class {
                 const cleanName = findIdentifier(declarator);
                 if (cleanName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName("body") || m;
+                  const calls = _TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name2}::${cleanName}`,
                     shortName: cleanName,
@@ -43767,7 +43985,8 @@ var TreeSitterParser = class {
                     kind: "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43780,13 +43999,16 @@ var TreeSitterParser = class {
           const fnName = findIdentifier(declarator);
           if (fnName) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName("body") || child;
+            const calls = _TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name: fnName,
               shortName: fnName,
               kind: "function",
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
         }
@@ -43841,14 +44063,17 @@ var TreeSitterParser = class {
                 const mName = m.childForFieldName("name")?.text;
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName("body") || m;
+                  const calls = _TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name2}.${mName}`,
                     shortName: mName,
                     containerName: name2,
-                    kind: "method",
+                    kind: m.type === "constructor_declaration" ? "constructor" : "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43897,6 +44122,8 @@ var TreeSitterParser = class {
                 const mName = m.childForFieldName("name")?.text;
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName("body") || m;
+                  const calls = _TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name2}::${mName}`,
                     shortName: mName,
@@ -43904,7 +44131,8 @@ var TreeSitterParser = class {
                     kind: "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43916,13 +44144,16 @@ var TreeSitterParser = class {
           const name2 = child.childForFieldName("name")?.text;
           if (name2) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName("body") || child;
+            const calls = _TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name: name2,
               shortName: name2,
               kind: "function",
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
         } else {
@@ -43968,6 +44199,8 @@ var TreeSitterParser = class {
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
                   const sep = m.type === "singleton_method" ? "." : "#";
+                  const bodyNode = m.childForFieldName("body") || m;
+                  const calls = _TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name2}${sep}${mName}`,
                     shortName: mName,
@@ -43975,7 +44208,8 @@ var TreeSitterParser = class {
                     kind: "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43989,13 +44223,16 @@ var TreeSitterParser = class {
           const name2 = child.childForFieldName("name")?.text;
           if (name2) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName("body") || child;
+            const calls = _TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name: name2,
               shortName: name2,
               kind: "function",
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
         }
@@ -45230,19 +45467,31 @@ var CodeTools = class {
     }
     if (structure.symbols.length > 0) {
       lines.push("\n### Symbols:");
+      const renderedMethodKeys = /* @__PURE__ */ new Set();
+      const CONTAINER_KINDS = /* @__PURE__ */ new Set(["class", "struct", "trait", "interface", "extension", "impl", "record", "object", "enum"]);
       for (const sym of structure.symbols) {
-        if (sym.kind === "class") {
-          lines.push(`- **class** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
+        const isContainer = CONTAINER_KINDS.has(sym.kind) || Array.isArray(sym.methods) && sym.methods.length > 0;
+        if (isContainer) {
+          lines.push(`- **${sym.kind}** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
           if (sym.methods && sym.methods.length > 0) {
             for (const m of sym.methods) {
+              renderedMethodKeys.add(`${m.name}:${m.startLine}:${m.endLine}`);
               const displaySig = m.signature ? m.signature : m.name;
-              lines.push(`  - **method** \`${displaySig}\` [L${m.startLine}-L${m.endLine}] (hash: \`${m.hash}\`)`);
+              const callsSuffix = m.calls && m.calls.length > 0 ? ` -> calls: [${m.calls.join(", ")}]` : "";
+              lines.push(`  - **method** \`${displaySig}\` [L${m.startLine}-L${m.endLine}] (hash: \`${m.hash}\`)${callsSuffix}`);
             }
           }
+        } else if (renderedMethodKeys.has(`${sym.name}:${sym.startLine}:${sym.endLine}`)) {
+          continue;
         } else if (sym.kind === "function") {
           const displaySig = sym.signature ? sym.signature : sym.name;
-          lines.push(`- **func** \`${displaySig}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
-        } else if (sym.kind !== "method") {
+          const callsSuffix = sym.calls && sym.calls.length > 0 ? ` -> calls: [${sym.calls.join(", ")}]` : "";
+          lines.push(`- **func** \`${displaySig}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)${callsSuffix}`);
+        } else if (sym.kind === "method" || sym.kind === "constructor") {
+          const displaySig = sym.signature ? sym.signature : sym.name;
+          const callsSuffix = sym.calls && sym.calls.length > 0 ? ` -> calls: [${sym.calls.join(", ")}]` : "";
+          lines.push(`- **method** \`${displaySig}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)${callsSuffix}`);
+        } else {
           lines.push(`- **${sym.kind}** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
         }
       }
@@ -45759,17 +46008,20 @@ var TaskService = class {
       }
     }
   }
-  createTask({
-    id,
-    planId,
-    phaseId,
-    title,
-    status = "draft",
-    contextSlice = {},
-    workingSet = {},
-    references = {},
-    baseline = {}
-  }, projectRoot = null) {
+  createTask(taskData = {}, projectRoot = null) {
+    const {
+      id,
+      planId,
+      phaseId,
+      title,
+      status = "draft",
+      contextSlice = {},
+      workingSet = {},
+      references = {},
+      rules,
+      ruleRefs,
+      baseline = {}
+    } = taskData;
     const task = new Task({
       id: id || `task-${Date.now()}`,
       planId,
@@ -45779,11 +46031,57 @@ var TaskService = class {
       contextSlice,
       workingSet,
       references,
+      rules: rules || ruleRefs || references?.rules || [],
       baseline
     });
     if (projectRoot && fs6.existsSync(projectRoot)) {
       this._initializeFileSnapshots(task, projectRoot);
     }
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+  bindRule(taskId, ruleId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const task = new Task(raw);
+    task.bindRule(ruleId);
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+  unbindRule(taskId, ruleId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const task = new Task(raw);
+    task.unbindRule(ruleId);
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+  updateTask(taskId, taskData = {}) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const updated = { ...raw };
+    if (taskData.title !== void 0) updated.title = taskData.title;
+    if (taskData.status !== void 0) updated.status = taskData.status;
+    if (taskData.contextSlice) {
+      updated.contextSlice = { ...raw.contextSlice, ...taskData.contextSlice };
+    }
+    if (taskData.workingSet) {
+      updated.workingSet = { ...raw.workingSet, ...taskData.workingSet };
+    }
+    if (taskData.references) {
+      updated.references = { ...raw.references, ...taskData.references };
+    }
+    if (taskData.rules !== void 0 || taskData.ruleRefs !== void 0) {
+      const incomingRules = taskData.rules !== void 0 ? taskData.rules : taskData.ruleRefs;
+      const cleanRules = Array.isArray(incomingRules) ? [...incomingRules] : [];
+      updated.rules = cleanRules;
+      updated.references = updated.references || {};
+      updated.references.rules = cleanRules;
+    }
+    if (taskData.notes) updated.notes = taskData.notes;
+    if (taskData.checks) updated.checks = taskData.checks;
+    const task = new Task(updated);
+    task.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     this.db.saveTask(task.toJSON());
     return task.toJSON();
   }
@@ -46635,8 +46933,102 @@ var NetworkLayoutEngine = class {
 };
 
 // packages/context/src/markdown-renderer.mjs
+import fs10 from "node:fs";
+import path10 from "node:path";
+function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
+  if (!ruleId || typeof ruleId !== "string") return null;
+  const cleanId = ruleId.trim();
+  if (!cleanId) return null;
+  if (rulesMap instanceof Map && rulesMap.has(cleanId)) {
+    const val = rulesMap.get(cleanId);
+    return {
+      id: cleanId,
+      title: val?.title || cleanId,
+      category: val?.category || "general"
+    };
+  }
+  if (typeof rulesMap === "object" && rulesMap !== null) {
+    if (rulesMap[cleanId]) {
+      const val = rulesMap[cleanId];
+      return {
+        id: cleanId,
+        title: val?.title || cleanId,
+        category: val?.category || "general"
+      };
+    }
+    if (typeof rulesMap.getRule === "function") {
+      const val = rulesMap.getRule(cleanId);
+      if (val) {
+        return {
+          id: cleanId,
+          title: val?.title || cleanId,
+          category: val?.category || "general"
+        };
+      }
+    }
+  }
+  const root = projectRoot || (typeof rulesMap === "string" ? rulesMap : rulesMap?.projectRoot);
+  if (root && typeof root === "string") {
+    try {
+      const dotDir = path10.join(root, ".contextos", "rules");
+      const stdDir = path10.join(root, "rules");
+      const rulesDir = fs10.existsSync(dotDir) ? dotDir : fs10.existsSync(stdDir) ? stdDir : null;
+      if (rulesDir && fs10.existsSync(rulesDir)) {
+        let content = null;
+        const targetFile = path10.join(rulesDir, `${cleanId}.md`);
+        if (fs10.existsSync(targetFile)) {
+          content = fs10.readFileSync(targetFile, "utf8");
+        } else {
+          const files = fs10.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+          for (const f of files) {
+            const fc = fs10.readFileSync(path10.join(rulesDir, f), "utf8");
+            if (f.replace(/\.md$/, "") === cleanId || fc.includes(`id: ${cleanId}`)) {
+              content = fc;
+              break;
+            }
+          }
+        }
+        if (content) {
+          const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+          let title = cleanId;
+          let category = "general";
+          if (match) {
+            for (const line of match[1].split("\n")) {
+              const m = line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/);
+              if (m) {
+                const k = m[1].trim();
+                const v = m[2].trim();
+                if (k === "title") title = v;
+                if (k === "category") category = v;
+              }
+            }
+          } else {
+            const headerMatch = content.match(/^#\s+(.+)$/m);
+            if (headerMatch) title = headerMatch[1].trim();
+          }
+          return { id: cleanId, title, category };
+        }
+      }
+    } catch (_) {
+    }
+  }
+  return { id: cleanId, title: cleanId, category: "general" };
+}
+function renderBoundRulesSection(ruleIds, rulesMap = {}, projectRoot = null) {
+  if (!Array.isArray(ruleIds) || ruleIds.length === 0) return [];
+  const lines = [];
+  lines.push("\n## \u{1F4A1} Bound Rules (\u6309\u9700\u8C03\u9605):");
+  for (const ruleId of ruleIds) {
+    const meta2 = resolveRuleMeta(ruleId, rulesMap, projectRoot);
+    if (meta2) {
+      lines.push(`- \`[${meta2.id}]\` **${meta2.title}** (category: ${meta2.category})`);
+    }
+  }
+  lines.push("> *Tip: Call `knowledge(action: 'rule_open', ruleId: '...')` to inspect full specifications if needed.*");
+  return lines;
+}
 var MarkdownRenderer = class _MarkdownRenderer {
-  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [] }) {
+  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [], rulesMap = {}, projectRoot = null }) {
     const lines = [];
     lines.push(`# ContextOS Project Brief: \`${project.id}\` (rev: ${project.graph_revision || 0})`);
     lines.push(`Root: \`${project.repo_root}\`
@@ -46678,6 +47070,11 @@ var MarkdownRenderer = class _MarkdownRenderer {
       const notes = activeTask.notes || [];
       if (notes.length > 0) {
         lines.push(`- Latest Note: ${notes[notes.length - 1].text}`);
+      }
+      const boundRules = (activeTask.references?.rules || activeTask.rules || []).filter(Boolean);
+      if (boundRules.length > 0) {
+        const root = projectRoot || (typeof rulesMap === "string" ? rulesMap : rulesMap?.projectRoot);
+        lines.push(...renderBoundRulesSection(boundRules, rulesMap, root));
       }
       lines.push("");
     } else {
@@ -46733,11 +47130,16 @@ var MarkdownRenderer = class _MarkdownRenderer {
     }
     return lines.join("\n");
   }
-  static renderTask(task) {
+  static renderTask(task, rulesMap = {}) {
     const lines = [];
     lines.push(`# Task: [${task.id}] ${task.title}`);
     lines.push(`- Status: **${task.status}** (Lifecycle: draft -> active -> checking -> syncing -> completed)`);
     lines.push(`- Belongs To: Plan \`${task.planId}\`, Phase \`${task.phaseId}\``);
+    const boundRules = (task.references?.rules || task.rules || []).filter(Boolean);
+    if (boundRules.length > 0) {
+      const root = typeof rulesMap === "string" ? rulesMap : rulesMap?.projectRoot;
+      lines.push(...renderBoundRulesSection(boundRules, rulesMap, root));
+    }
     if (task.contextSlice) {
       lines.push("\n## Context Slice:");
       if (task.contextSlice.objective) lines.push(`- **Objective**: ${task.contextSlice.objective}`);
@@ -46885,9 +47287,9 @@ ${block.details}`);
 // packages/mcp/src/v2-service.mjs
 var ContextOSV2Service = class {
   constructor({ projectRoot = process.cwd(), projectId = "contextos" } = {}) {
-    this.projectRoot = path10.resolve(projectRoot);
+    this.projectRoot = path11.resolve(projectRoot);
     this.projectId = projectId;
-    const dbPath2 = path10.join(this.projectRoot, ".contextos", "state.sqlite");
+    const dbPath2 = path11.join(this.projectRoot, ".contextos", "state.sqlite");
     this.db = new V2Database(dbPath2);
     this.db.ensureProject(this.projectId, this.projectRoot);
     this.syncEngine = new SyncEngine(this.db);
@@ -46925,7 +47327,7 @@ var ContextOSV2Service = class {
         if (format === "json") {
           return { project, activePlan, activeTask: displayTask, processes, recentBlocks };
         }
-        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks });
+        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks, projectRoot: this.projectRoot });
       }
       case "search": {
         const queryLower = (query || "").toLowerCase();
@@ -47029,11 +47431,14 @@ Summary: ${completed.completedSummary}`;
     }
   }
   // ================= 3. task =================
-  async task({ action, id, taskData = {}, text, kind, checkData = {}, syncData = {}, format = "markdown" }) {
+  async task({ action, id, taskData = {}, ruleId, rules, text, kind, checkData = {}, syncData = {}, format = "markdown" }) {
     switch (action) {
       case "create": {
-        const created = this.taskService.createTask(taskData, this.projectRoot);
-        return format === "json" ? created : MarkdownRenderer.renderTask(created);
+        const payload = { ...taskData };
+        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
+        if (rules && !payload.rules) payload.rules = rules;
+        const created = this.taskService.createTask(payload, this.projectRoot);
+        return format === "json" ? created : MarkdownRenderer.renderTask(created, { projectRoot: this.projectRoot });
       }
       case "open": {
         if (this.projectRoot) {
@@ -47044,7 +47449,23 @@ Summary: ${completed.completedSummary}`;
         }
         const task = this.db.getTask(id);
         if (!task) throw new Error(`Task '${id}' not found`);
-        return format === "json" ? task : MarkdownRenderer.renderTask(task);
+        return format === "json" ? task : MarkdownRenderer.renderTask(task, { projectRoot: this.projectRoot });
+      }
+      case "bind_rule": {
+        const targetRule = ruleId || taskData?.ruleId || text;
+        if (!targetRule) throw new Error("ruleId is required to bind a rule");
+        const updated = this.taskService.bindRule(id, targetRule);
+        return format === "json" ? updated : `Rule '${targetRule}' bound to Task '${id}'.`;
+      }
+      case "unbind_rule": {
+        const targetRule = ruleId || taskData?.ruleId || text;
+        if (!targetRule) throw new Error("ruleId is required to unbind a rule");
+        const updated = this.taskService.unbindRule(id, targetRule);
+        return format === "json" ? updated : `Rule '${targetRule}' unbound from Task '${id}'.`;
+      }
+      case "update": {
+        const updated = this.taskService.updateTask(id, taskData);
+        return format === "json" ? updated : MarkdownRenderer.renderTask(updated, { projectRoot: this.projectRoot });
       }
       case "note": {
         const note = this.taskService.addNote(id, { text, kind });
@@ -47256,18 +47677,18 @@ Members: ${chain.memberIds.join(", ")}`;
       return lines.join("\n");
     }
     if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
-    const fullPath = path10.resolve(this.projectRoot, relPath);
+    const fullPath = path11.resolve(this.projectRoot, relPath);
     if (action === "create") {
-      fs10.mkdirSync(path10.dirname(fullPath), { recursive: true });
+      fs11.mkdirSync(path11.dirname(fullPath), { recursive: true });
       const initialContent = replacementContent || rawContent || "";
-      fs10.writeFileSync(fullPath, initialContent, "utf8");
+      fs11.writeFileSync(fullPath, initialContent, "utf8");
       const res = CodeTools.create(relPath, initialContent);
       const activeTasks = this.taskService.listTasks?.(this.projectId) || [];
       const activeTask = activeTasks.find((t) => t.status === "active");
       if (activeTask) {
         this.taskService.addFileToWorkingSet(activeTask.id, relPath);
         try {
-          const stat = fs10.statSync(fullPath);
+          const stat = fs11.statSync(fullPath);
           activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
           activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
           activeTask.baseline.fileSnapshots[relPath] = {
@@ -47287,8 +47708,8 @@ Members: ${chain.memberIds.join(", ")}`;
         message: `File '${relPath}' created successfully with AST anchors initialized.`
       };
     }
-    if (!fs10.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
-    const content = fs10.readFileSync(fullPath, "utf8");
+    if (!fs11.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
+    const content = fs11.readFileSync(fullPath, "utf8");
     switch (action) {
       case "outline": {
         const res = CodeTools.outline(relPath, content);
@@ -47298,7 +47719,7 @@ Members: ${chain.memberIds.join(", ")}`;
         const effectiveSelector = selector || (startLine !== void 0 || endLine !== void 0 ? { startLine, endLine } : null);
         const res = CodeTools.read(relPath, content, effectiveSelector);
         if (format === "json") return res;
-        return `\`\`\`${path10.extname(relPath).slice(1) || "text"}
+        return `\`\`\`${path11.extname(relPath).slice(1) || "text"}
 // ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})
 ${res.code}
 \`\`\``;
@@ -47327,13 +47748,13 @@ ${res.code}
           startLine: effectiveStartLine,
           endLine: effectiveEndLine
         });
-        fs10.writeFileSync(fullPath, res.newContent, "utf8");
+        fs11.writeFileSync(fullPath, res.newContent, "utf8");
         const activeTasks = this.taskService.listTasks?.(this.projectId) || [];
         const activeTask = activeTasks.find((t) => t.status === "active");
         if (activeTask) {
           this.taskService.addFileToWorkingSet(activeTask.id, relPath);
           try {
-            const stat = fs10.statSync(fullPath);
+            const stat = fs11.statSync(fullPath);
             activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
             activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
             activeTask.baseline.fileSnapshots[relPath] = {
@@ -47378,7 +47799,7 @@ ${res.code}
   }
   // ================= 7. run_command =================
   async runCommand({ command, cwd, maxChars = 1500, timeoutMs = 6e4 }) {
-    const targetCwd = cwd ? path10.resolve(this.projectRoot, cwd) : this.projectRoot;
+    const targetCwd = cwd ? path11.resolve(this.projectRoot, cwd) : this.projectRoot;
     return runCommand({
       command,
       cwd: targetCwd,
@@ -47690,8 +48111,8 @@ ${localBrief}` : localBrief;
 };
 
 // packages/mcp/src/bootstrap-util.mjs
-import fs11 from "node:fs";
-import path11 from "node:path";
+import fs12 from "node:fs";
+import path12 from "node:path";
 import os from "node:os";
 import { execSync as execSync4 } from "node:child_process";
 var HOME = os.homedir();
@@ -47702,22 +48123,22 @@ function resolveNodeExecutable() {
   if (isWin) {
     const programFiles = process.env.ProgramFiles || "C:\\Program Files";
     const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
-    const localAppData = process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local");
-    const appData = process.env.APPDATA || path11.join(HOME, "AppData\\Roaming");
+    const localAppData = process.env.LOCALAPPDATA || path12.join(HOME, "AppData\\Local");
+    const appData = process.env.APPDATA || path12.join(HOME, "AppData\\Roaming");
     candidates.push(
-      path11.join(programFiles, "nodejs\\node.exe"),
-      path11.join(programFilesX86, "nodejs\\node.exe"),
-      path11.join(appData, "nvm\\current\\node.exe"),
-      path11.join(localAppData, "Programs\\node\\node.exe"),
-      path11.join(localAppData, "ContextOS\\bin\\node.exe")
+      path12.join(programFiles, "nodejs\\node.exe"),
+      path12.join(programFilesX86, "nodejs\\node.exe"),
+      path12.join(appData, "nvm\\current\\node.exe"),
+      path12.join(localAppData, "Programs\\node\\node.exe"),
+      path12.join(localAppData, "ContextOS\\bin\\node.exe")
     );
   } else if (isMac) {
     candidates.push(
       "/Applications/ContextOS.app/Contents/Resources/bin/node",
-      path11.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
+      path12.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
       "/opt/homebrew/bin/node",
       "/usr/local/bin/node",
-      path11.join(HOME, ".nvm/current/bin/node"),
+      path12.join(HOME, ".nvm/current/bin/node"),
       "/usr/bin/node"
     );
   } else {
@@ -47725,15 +48146,15 @@ function resolveNodeExecutable() {
       "/usr/bin/node",
       "/usr/local/bin/node",
       "/snap/bin/node",
-      path11.join(HOME, ".nvm/current/bin/node"),
-      path11.join(HOME, ".local/share/nvm/current/bin/node"),
-      path11.join(HOME, ".local/bin/node")
+      path12.join(HOME, ".nvm/current/bin/node"),
+      path12.join(HOME, ".local/share/nvm/current/bin/node"),
+      path12.join(HOME, ".local/bin/node")
     );
   }
   for (const candidate of candidates) {
-    if (candidate && fs11.existsSync(candidate)) {
+    if (candidate && fs12.existsSync(candidate)) {
       try {
-        fs11.accessSync(candidate, fs11.constants.X_OK);
+        fs12.accessSync(candidate, fs12.constants.X_OK);
         return candidate;
       } catch (_) {
       }
@@ -47746,33 +48167,33 @@ function resolveCodexExecutable() {
   const isMac = process.platform === "darwin";
   const candidates = [];
   if (isWin) {
-    const localAppData = process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local");
+    const localAppData = process.env.LOCALAPPDATA || path12.join(HOME, "AppData\\Local");
     candidates.push(
-      path11.join(localAppData, "Programs\\Codex\\codex.exe"),
-      path11.join(HOME, ".cargo\\bin\\codex.exe")
+      path12.join(localAppData, "Programs\\Codex\\codex.exe"),
+      path12.join(HOME, ".cargo\\bin\\codex.exe")
     );
   } else if (isMac) {
     candidates.push(
       "/Applications/Codex.app/Contents/Resources/codex",
       "/Applications/ChatGPT.app/Contents/Resources/codex",
-      path11.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
+      path12.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
       "/opt/homebrew/bin/codex",
       "/usr/local/bin/codex",
-      path11.join(HOME, ".cargo/bin/codex"),
-      path11.join(HOME, ".local/bin/codex")
+      path12.join(HOME, ".cargo/bin/codex"),
+      path12.join(HOME, ".local/bin/codex")
     );
   } else {
     candidates.push(
       "/usr/bin/codex",
       "/usr/local/bin/codex",
-      path11.join(HOME, ".cargo/bin/codex"),
-      path11.join(HOME, ".local/bin/codex")
+      path12.join(HOME, ".cargo/bin/codex"),
+      path12.join(HOME, ".local/bin/codex")
     );
   }
   for (const c of candidates) {
-    if (c && fs11.existsSync(c)) {
+    if (c && fs12.existsSync(c)) {
       try {
-        fs11.accessSync(c, fs11.constants.X_OK);
+        fs12.accessSync(c, fs12.constants.X_OK);
         return c;
       } catch (_) {
       }
@@ -47781,41 +48202,41 @@ function resolveCodexExecutable() {
   return null;
 }
 function deployCanonicalServer(sourceScriptPath = null) {
-  const canonicalDir = path11.join(HOME, ".contextos", "server");
-  const canonicalScript = path11.join(canonicalDir, "contextos-mcp.mjs");
-  fs11.mkdirSync(canonicalDir, { recursive: true });
+  const canonicalDir = path12.join(HOME, ".contextos", "server");
+  const canonicalScript = path12.join(canonicalDir, "contextos-mcp.mjs");
+  fs12.mkdirSync(canonicalDir, { recursive: true });
   const candidates = [
     sourceScriptPath,
     "/Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs",
-    path11.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
+    path12.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
   ].filter(Boolean);
-  const found = candidates.find((p) => fs11.existsSync(p));
+  const found = candidates.find((p) => fs12.existsSync(p));
   if (found && found !== canonicalScript) {
-    fs11.copyFileSync(found, canonicalScript);
+    fs12.copyFileSync(found, canonicalScript);
   }
   return canonicalScript;
 }
 function copyDirectoryRecursive(src, dest) {
-  if (!fs11.existsSync(src)) return;
-  fs11.mkdirSync(dest, { recursive: true });
-  const entries = fs11.readdirSync(src, { withFileTypes: true });
+  if (!fs12.existsSync(src)) return;
+  fs12.mkdirSync(dest, { recursive: true });
+  const entries = fs12.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
-    const srcPath = path11.join(src, entry.name);
-    const destPath = path11.join(dest, entry.name);
+    const srcPath = path12.join(src, entry.name);
+    const destPath = path12.join(dest, entry.name);
     if (entry.isDirectory()) {
       copyDirectoryRecursive(srcPath, destPath);
     } else {
-      fs11.copyFileSync(srcPath, destPath);
+      fs12.copyFileSync(srcPath, destPath);
     }
   }
 }
 function configureJsonMcp({ configPath, serverScript, nodePath, env = null, version: version2 = "2.1.0" }) {
-  const dir = path11.dirname(configPath);
-  fs11.mkdirSync(dir, { recursive: true });
+  const dir = path12.dirname(configPath);
+  fs12.mkdirSync(dir, { recursive: true });
   let json = {};
-  if (fs11.existsSync(configPath)) {
+  if (fs12.existsSync(configPath)) {
     try {
-      json = JSON.parse(fs11.readFileSync(configPath, "utf8"));
+      json = JSON.parse(fs12.readFileSync(configPath, "utf8"));
     } catch (_) {
       json = {};
     }
@@ -47832,13 +48253,13 @@ function configureJsonMcp({ configPath, serverScript, nodePath, env = null, vers
     delete serverEntry.env;
   }
   json.mcpServers.contextos = serverEntry;
-  fs11.writeFileSync(configPath, JSON.stringify(json, null, 2) + "\n", "utf8");
+  fs12.writeFileSync(configPath, JSON.stringify(json, null, 2) + "\n", "utf8");
   return true;
 }
 function configureTomlCodex({ configPath, serverScript, nodePath, env = null }) {
-  const dir = path11.dirname(configPath);
-  fs11.mkdirSync(dir, { recursive: true });
-  let content = fs11.existsSync(configPath) ? fs11.readFileSync(configPath, "utf8") : "";
+  const dir = path12.dirname(configPath);
+  fs12.mkdirSync(dir, { recursive: true });
+  let content = fs12.existsSync(configPath) ? fs12.readFileSync(configPath, "utf8") : "";
   const sectionHeader = "[mcp_servers.contextos]";
   const startIndex = content.indexOf(sectionHeader);
   if (startIndex !== -1) {
@@ -47866,36 +48287,36 @@ args = ["--no-warnings=ExperimentalWarning", "${safeServerScript}"]
 `;
     }
   }
-  fs11.writeFileSync(configPath, (content + tomlBlock).trim() + "\n", "utf8");
+  fs12.writeFileSync(configPath, (content + tomlBlock).trim() + "\n", "utf8");
 }
 function cleanTomlCodex({ configPath }) {
-  if (!fs11.existsSync(configPath)) return;
-  let content = fs11.readFileSync(configPath, "utf8");
+  if (!fs12.existsSync(configPath)) return;
+  let content = fs12.readFileSync(configPath, "utf8");
   const regex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
   content = content.replace(regex, "");
-  fs11.writeFileSync(configPath, content.trim() + "\n", "utf8");
+  fs12.writeFileSync(configPath, content.trim() + "\n", "utf8");
 }
 function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
-  const userPluginsContextOS = path11.join(HOME, "plugins", "contextos");
-  const personalMarketplaceDir = path11.join(HOME, ".agents", "plugins");
-  const personalMarketplaceURL = path11.join(personalMarketplaceDir, "marketplace.json");
-  const codexConfigURL = path11.join(HOME, ".codex", "config.toml");
-  if (pluginSource && fs11.existsSync(pluginSource)) {
+  const userPluginsContextOS = path12.join(HOME, "plugins", "contextos");
+  const personalMarketplaceDir = path12.join(HOME, ".agents", "plugins");
+  const personalMarketplaceURL = path12.join(personalMarketplaceDir, "marketplace.json");
+  const codexConfigURL = path12.join(HOME, ".codex", "config.toml");
+  if (pluginSource && fs12.existsSync(pluginSource)) {
     try {
-      fs11.rmSync(userPluginsContextOS, { recursive: true, force: true });
+      fs12.rmSync(userPluginsContextOS, { recursive: true, force: true });
     } catch (_) {
     }
     copyDirectoryRecursive(pluginSource, userPluginsContextOS);
-  } else if (!fs11.existsSync(userPluginsContextOS)) {
-    fs11.mkdirSync(path11.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
-    fs11.mkdirSync(path11.join(userPluginsContextOS, "server"), { recursive: true });
-    fs11.copyFileSync(serverScript, path11.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
+  } else if (!fs12.existsSync(userPluginsContextOS)) {
+    fs12.mkdirSync(path12.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
+    fs12.mkdirSync(path12.join(userPluginsContextOS, "server"), { recursive: true });
+    fs12.copyFileSync(serverScript, path12.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
   }
-  fs11.mkdirSync(personalMarketplaceDir, { recursive: true });
+  fs12.mkdirSync(personalMarketplaceDir, { recursive: true });
   let marketplaces = [];
-  if (fs11.existsSync(personalMarketplaceURL)) {
+  if (fs12.existsSync(personalMarketplaceURL)) {
     try {
-      const parsed = JSON.parse(fs11.readFileSync(personalMarketplaceURL, "utf8"));
+      const parsed = JSON.parse(fs12.readFileSync(personalMarketplaceURL, "utf8"));
       marketplaces = Array.isArray(parsed) ? parsed : [parsed];
     } catch (_) {
     }
@@ -47914,7 +48335,7 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   };
   const filtered = marketplaces.filter((m) => m.name !== "personal");
   filtered.push(personalEntry);
-  fs11.writeFileSync(
+  fs12.writeFileSync(
     personalMarketplaceURL,
     JSON.stringify(filtered.length === 1 ? filtered[0] : filtered, null, 2) + "\n",
     "utf8"
@@ -47944,23 +48365,23 @@ function detectInstalledPlatforms() {
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
   const platforms = [];
-  const localAppData = isWin ? process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local") : "";
-  const appData = isWin ? process.env.APPDATA || path11.join(HOME, "AppData\\Roaming") : "";
+  const localAppData = isWin ? process.env.LOCALAPPDATA || path12.join(HOME, "AppData\\Local") : "";
+  const appData = isWin ? process.env.APPDATA || path12.join(HOME, "AppData\\Roaming") : "";
   let claudeConfigPath = "";
   if (isMac) {
-    claudeConfigPath = path11.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
+    claudeConfigPath = path12.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
   } else if (isWin) {
-    claudeConfigPath = path11.join(appData, "Claude\\claude_desktop_config.json");
+    claudeConfigPath = path12.join(appData, "Claude\\claude_desktop_config.json");
   } else {
-    claudeConfigPath = path11.join(HOME, ".config/Claude/claude_desktop_config.json");
+    claudeConfigPath = path12.join(HOME, ".config/Claude/claude_desktop_config.json");
   }
   let claudeAppExists = false;
   if (isMac) {
-    claudeAppExists = fs11.existsSync("/Applications/Claude.app") || fs11.existsSync(path11.join(HOME, "Applications/Claude.app")) || fs11.existsSync(path11.dirname(claudeConfigPath));
+    claudeAppExists = fs12.existsSync("/Applications/Claude.app") || fs12.existsSync(path12.join(HOME, "Applications/Claude.app")) || fs12.existsSync(path12.dirname(claudeConfigPath));
   } else if (isWin) {
-    claudeAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Claude\\Claude.exe")) || fs11.existsSync(path11.dirname(claudeConfigPath));
+    claudeAppExists = fs12.existsSync(path12.join(localAppData, "Programs\\Claude\\Claude.exe")) || fs12.existsSync(path12.dirname(claudeConfigPath));
   } else {
-    claudeAppExists = fs11.existsSync("/usr/bin/claude") || fs11.existsSync("/snap/bin/claude") || fs11.existsSync(path11.dirname(claudeConfigPath));
+    claudeAppExists = fs12.existsSync("/usr/bin/claude") || fs12.existsSync("/snap/bin/claude") || fs12.existsSync(path12.dirname(claudeConfigPath));
   }
   platforms.push({
     id: "claude",
@@ -47969,71 +48390,71 @@ function detectInstalledPlatforms() {
     configPath: claudeConfigPath,
     type: "json"
   });
-  const cursorDir = path11.join(HOME, ".cursor");
+  const cursorDir = path12.join(HOME, ".cursor");
   let cursorAppExists = false;
   if (isMac) {
-    cursorAppExists = fs11.existsSync("/Applications/Cursor.app") || fs11.existsSync(path11.join(HOME, "Applications/Cursor.app")) || fs11.existsSync(cursorDir);
+    cursorAppExists = fs12.existsSync("/Applications/Cursor.app") || fs12.existsSync(path12.join(HOME, "Applications/Cursor.app")) || fs12.existsSync(cursorDir);
   } else if (isWin) {
-    cursorAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\cursor\\Cursor.exe")) || fs11.existsSync(cursorDir);
+    cursorAppExists = fs12.existsSync(path12.join(localAppData, "Programs\\cursor\\Cursor.exe")) || fs12.existsSync(cursorDir);
   } else {
-    cursorAppExists = fs11.existsSync("/usr/bin/cursor") || fs11.existsSync("/opt/Cursor/cursor") || fs11.existsSync(path11.join(HOME, ".local/share/cursor")) || fs11.existsSync(cursorDir);
+    cursorAppExists = fs12.existsSync("/usr/bin/cursor") || fs12.existsSync("/opt/Cursor/cursor") || fs12.existsSync(path12.join(HOME, ".local/share/cursor")) || fs12.existsSync(cursorDir);
   }
   platforms.push({
     id: "cursor",
     name: "Cursor",
     isInstalled: cursorAppExists,
-    configPath: path11.join(cursorDir, "mcp.json"),
-    skillPath: path11.join(cursorDir, "skills", "contextos"),
+    configPath: path12.join(cursorDir, "mcp.json"),
+    skillPath: path12.join(cursorDir, "skills", "contextos"),
     type: "json"
   });
-  const geminiDir = path11.join(HOME, ".gemini/config");
+  const geminiDir = path12.join(HOME, ".gemini/config");
   let antigravityAppExists = false;
   if (isMac) {
-    antigravityAppExists = fs11.existsSync("/Applications/Antigravity.app") || fs11.existsSync(path11.join(HOME, "Applications/Antigravity.app")) || fs11.existsSync(geminiDir);
+    antigravityAppExists = fs12.existsSync("/Applications/Antigravity.app") || fs12.existsSync(path12.join(HOME, "Applications/Antigravity.app")) || fs12.existsSync(geminiDir);
   } else if (isWin) {
-    antigravityAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Antigravity\\Antigravity.exe")) || fs11.existsSync(geminiDir);
+    antigravityAppExists = fs12.existsSync(path12.join(localAppData, "Programs\\Antigravity\\Antigravity.exe")) || fs12.existsSync(geminiDir);
   } else {
-    antigravityAppExists = fs11.existsSync("/usr/bin/antigravity") || fs11.existsSync(path11.join(HOME, ".local/share/antigravity")) || fs11.existsSync(geminiDir);
+    antigravityAppExists = fs12.existsSync("/usr/bin/antigravity") || fs12.existsSync(path12.join(HOME, ".local/share/antigravity")) || fs12.existsSync(geminiDir);
   }
   platforms.push({
     id: "antigravity",
     name: "Antigravity",
     isInstalled: antigravityAppExists,
-    configPath: path11.join(geminiDir, "mcp_config.json"),
-    skillPath: path11.join(geminiDir, "skills", "contextos"),
+    configPath: path12.join(geminiDir, "mcp_config.json"),
+    skillPath: path12.join(geminiDir, "skills", "contextos"),
     type: "json"
   });
-  const opencodeDir = path11.join(HOME, ".config/opencode");
+  const opencodeDir = path12.join(HOME, ".config/opencode");
   let opencodeAppExists = false;
   if (isMac) {
-    opencodeAppExists = fs11.existsSync("/Applications/OpenCode.app") || fs11.existsSync(path11.join(HOME, "Applications/OpenCode.app")) || fs11.existsSync(opencodeDir);
+    opencodeAppExists = fs12.existsSync("/Applications/OpenCode.app") || fs12.existsSync(path12.join(HOME, "Applications/OpenCode.app")) || fs12.existsSync(opencodeDir);
   } else if (isWin) {
-    opencodeAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\OpenCode\\OpenCode.exe")) || fs11.existsSync(opencodeDir);
+    opencodeAppExists = fs12.existsSync(path12.join(localAppData, "Programs\\OpenCode\\OpenCode.exe")) || fs12.existsSync(opencodeDir);
   } else {
-    opencodeAppExists = fs11.existsSync("/usr/bin/opencode") || fs11.existsSync(path11.join(HOME, ".local/share/opencode")) || fs11.existsSync(opencodeDir);
+    opencodeAppExists = fs12.existsSync("/usr/bin/opencode") || fs12.existsSync(path12.join(HOME, ".local/share/opencode")) || fs12.existsSync(opencodeDir);
   }
   platforms.push({
     id: "opencode",
     name: "OpenCode",
     isInstalled: opencodeAppExists,
-    configPath: path11.join(opencodeDir, "mcp.json"),
-    skillPath: path11.join(opencodeDir, "skills", "contextos"),
+    configPath: path12.join(opencodeDir, "mcp.json"),
+    skillPath: path12.join(opencodeDir, "skills", "contextos"),
     type: "json"
   });
-  const codexDir = path11.join(HOME, ".codex");
+  const codexDir = path12.join(HOME, ".codex");
   let codexAppExists = false;
   if (isMac) {
-    codexAppExists = fs11.existsSync("/Applications/ChatGPT.app") || fs11.existsSync("/Applications/Codex.app") || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+    codexAppExists = fs12.existsSync("/Applications/ChatGPT.app") || fs12.existsSync("/Applications/Codex.app") || fs12.existsSync(codexDir) || fs12.existsSync(path12.join(HOME, ".agents/plugins"));
   } else if (isWin) {
-    codexAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Codex\\Codex.exe")) || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+    codexAppExists = fs12.existsSync(path12.join(localAppData, "Programs\\Codex\\Codex.exe")) || fs12.existsSync(codexDir) || fs12.existsSync(path12.join(HOME, ".agents/plugins"));
   } else {
-    codexAppExists = fs11.existsSync("/usr/bin/codex") || fs11.existsSync(path11.join(HOME, ".local/bin/codex")) || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+    codexAppExists = fs12.existsSync("/usr/bin/codex") || fs12.existsSync(path12.join(HOME, ".local/bin/codex")) || fs12.existsSync(codexDir) || fs12.existsSync(path12.join(HOME, ".agents/plugins"));
   }
   platforms.push({
     id: "codex",
     name: "Codex",
     isInstalled: codexAppExists,
-    configPath: path11.join(codexDir, "config.toml"),
+    configPath: path12.join(codexDir, "config.toml"),
     type: "codex-plugin"
   });
   return platforms;
@@ -48063,7 +48484,7 @@ function syncAllPlatforms({
       modified.push(resultName);
       continue;
     }
-    if (platform.skillPath && skillSource && fs11.existsSync(skillSource)) {
+    if (platform.skillPath && skillSource && fs12.existsSync(skillSource)) {
       copyDirectoryRecursive(skillSource, platform.skillPath);
     }
     if (platform.type === "json") {
@@ -48081,10 +48502,10 @@ function syncAllPlatforms({
     const shouldSyncAntigravity = !selectedPlatforms || selectedPlatforms.includes("antigravity");
     const shouldSyncOpencode = !selectedPlatforms || selectedPlatforms.includes("opencode");
     if (shouldSyncCursor) {
-      const wsCursor = path11.join(targetRoot, ".cursor");
-      if (fs11.existsSync(wsCursor)) {
+      const wsCursor = path12.join(targetRoot, ".cursor");
+      if (fs12.existsSync(wsCursor)) {
         configureJsonMcp({
-          configPath: path11.join(wsCursor, "mcp.json"),
+          configPath: path12.join(wsCursor, "mcp.json"),
           serverScript,
           nodePath,
           env
@@ -48093,10 +48514,10 @@ function syncAllPlatforms({
       }
     }
     if (shouldSyncAntigravity) {
-      const wsAgents = path11.join(targetRoot, ".agents");
-      if (fs11.existsSync(wsAgents)) {
+      const wsAgents = path12.join(targetRoot, ".agents");
+      if (fs12.existsSync(wsAgents)) {
         configureJsonMcp({
-          configPath: path11.join(wsAgents, "mcp_config.json"),
+          configPath: path12.join(wsAgents, "mcp_config.json"),
           serverScript,
           nodePath,
           env
@@ -48105,10 +48526,10 @@ function syncAllPlatforms({
       }
     }
     if (shouldSyncOpencode) {
-      const wsOpencode = path11.join(targetRoot, ".opencode");
-      if (fs11.existsSync(wsOpencode)) {
+      const wsOpencode = path12.join(targetRoot, ".opencode");
+      if (fs12.existsSync(wsOpencode)) {
         configureJsonMcp({
-          configPath: path11.join(wsOpencode, "mcp.json"),
+          configPath: path12.join(wsOpencode, "mcp.json"),
           serverScript,
           nodePath,
           env
@@ -48120,25 +48541,25 @@ function syncAllPlatforms({
   return modified;
 }
 function getGlobalCloudConfig() {
-  const globalCloudPath = path11.join(HOME, ".contextos", "cloud.json");
-  if (fs11.existsSync(globalCloudPath)) {
+  const globalCloudPath = path12.join(HOME, ".contextos", "cloud.json");
+  if (fs12.existsSync(globalCloudPath)) {
     try {
-      return JSON.parse(fs11.readFileSync(globalCloudPath, "utf8"));
+      return JSON.parse(fs12.readFileSync(globalCloudPath, "utf8"));
     } catch (_) {
     }
   }
   return null;
 }
 function saveGlobalCloudConfig({ cloudUrl, token }) {
-  const dotContextos = path11.join(HOME, ".contextos");
-  fs11.mkdirSync(dotContextos, { recursive: true });
-  const globalCloudPath = path11.join(dotContextos, "cloud.json");
+  const dotContextos = path12.join(HOME, ".contextos");
+  fs12.mkdirSync(dotContextos, { recursive: true });
+  const globalCloudPath = path12.join(dotContextos, "cloud.json");
   const config2 = {
     cloudUrl: cloudUrl ? cloudUrl.replace(/\/+$/, "") : "",
     token: token || "",
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  fs11.writeFileSync(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", "utf8");
+  fs12.writeFileSync(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", "utf8");
   return config2;
 }
 function initProjectWorkspace({
@@ -48148,13 +48569,13 @@ function initProjectWorkspace({
   token = "",
   projectId = "contextos"
 }) {
-  const dotContextos = path11.join(projectRoot, ".contextos");
-  fs11.mkdirSync(dotContextos, { recursive: true });
-  const projectJsonPath = path11.join(dotContextos, "project.json");
+  const dotContextos = path12.join(projectRoot, ".contextos");
+  fs12.mkdirSync(dotContextos, { recursive: true });
+  const projectJsonPath = path12.join(dotContextos, "project.json");
   let existing = {};
-  if (fs11.existsSync(projectJsonPath)) {
+  if (fs12.existsSync(projectJsonPath)) {
     try {
-      existing = JSON.parse(fs11.readFileSync(projectJsonPath, "utf8"));
+      existing = JSON.parse(fs12.readFileSync(projectJsonPath, "utf8"));
     } catch (_) {
     }
   }
@@ -48175,24 +48596,24 @@ function initProjectWorkspace({
     delete projectConfig.cloudUrl;
     delete projectConfig.token;
   }
-  fs11.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n", "utf8");
+  fs12.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n", "utf8");
   return projectConfig;
 }
 
 // packages/mcp/src/v2-server.mjs
 var serviceCache = /* @__PURE__ */ new Map();
 function findDefaultProjectRoot() {
-  if (process.env.CONTEXTOS_PROJECT_ROOT && fs12.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
+  if (process.env.CONTEXTOS_PROJECT_ROOT && fs13.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
     return process.env.CONTEXTOS_PROJECT_ROOT;
   }
   let cur = process.cwd();
-  while (cur && cur !== path12.dirname(cur)) {
-    if (fs12.existsSync(path12.join(cur, ".contextos")) || fs12.existsSync(path12.join(cur, ".git")) || fs12.existsSync(path12.join(cur, "package.json"))) {
+  while (cur && cur !== path13.dirname(cur)) {
+    if (fs13.existsSync(path13.join(cur, ".contextos")) || fs13.existsSync(path13.join(cur, ".git")) || fs13.existsSync(path13.join(cur, "package.json"))) {
       return cur;
     }
-    cur = path12.dirname(cur);
+    cur = path13.dirname(cur);
   }
-  if (cur && (fs12.existsSync(path12.join(cur, ".contextos")) || fs12.existsSync(path12.join(cur, ".git")) || fs12.existsSync(path12.join(cur, "package.json")))) {
+  if (cur && (fs13.existsSync(path13.join(cur, ".contextos")) || fs13.existsSync(path13.join(cur, ".git")) || fs13.existsSync(path13.join(cur, "package.json")))) {
     return cur;
   }
   return process.cwd();
@@ -48203,10 +48624,10 @@ function getService(projectRoot) {
   let cloudUrl = null;
   let token = null;
   let projectId = "contextos";
-  const projJsonPath = path12.join(root, ".contextos", "project.json");
-  if (fs12.existsSync(projJsonPath)) {
+  const projJsonPath = path13.join(root, ".contextos", "project.json");
+  if (fs13.existsSync(projJsonPath)) {
     try {
-      const proj = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
+      const proj = JSON.parse(fs13.readFileSync(projJsonPath, "utf8"));
       if (proj.id) projectId = proj.id;
       if (proj.storage === "cloud" || proj.isCloud === true) {
         mode = "cloud";
@@ -48301,9 +48722,11 @@ function createV2Server() {
     {
       description: "C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.",
       inputSchema: {
-        action: _enum(["create", "open", "note", "check", "sync", "resume", "activate", "develop"]),
+        action: _enum(["create", "open", "note", "check", "sync", "resume", "activate", "develop", "bind_rule", "unbind_rule", "update"]),
         id: string2().optional(),
         taskData: record(any()).optional(),
+        ruleId: string2().optional(),
+        rules: array(string2()).optional(),
         text: string2().optional(),
         kind: string2().optional(),
         checkData: record(any()).optional(),
@@ -48496,8 +48919,8 @@ function createV2Server() {
           };
           if (resolvedToken) env.CONTEXTOS_CLOUD_TOKEN = resolvedToken;
         }
-        const skillSource = path12.join(findDefaultProjectRoot(), "plugins", "contextos", "skills", "contextos");
-        const pluginSource = path12.join(findDefaultProjectRoot(), "plugins", "contextos");
+        const skillSource = path13.join(findDefaultProjectRoot(), "plugins", "contextos", "skills", "contextos");
+        const pluginSource = path13.join(findDefaultProjectRoot(), "plugins", "contextos");
         const modified = syncAllPlatforms({
           serverScript,
           nodePath,
@@ -48529,11 +48952,11 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
       const root = input.projectRoot || findDefaultProjectRoot();
       const nodePath = resolveNodeExecutable();
       let nodeVer = process.version;
-      const projJsonPath = path12.join(root, ".contextos", "project.json");
+      const projJsonPath = path13.join(root, ".contextos", "project.json");
       let projectConfig = null;
-      if (fs12.existsSync(projJsonPath)) {
+      if (fs13.existsSync(projJsonPath)) {
         try {
-          projectConfig = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
+          projectConfig = JSON.parse(fs13.readFileSync(projJsonPath, "utf8"));
         } catch (_) {
         }
       }
@@ -48584,12 +49007,12 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
     },
     async (input) => {
       const root = input.projectRoot || findDefaultProjectRoot();
-      const dotContextos = path12.join(root, ".contextos");
-      const projJsonPath = path12.join(dotContextos, "project.json");
+      const dotContextos = path13.join(root, ".contextos");
+      const projJsonPath = path13.join(dotContextos, "project.json");
       let proj = {};
-      if (fs12.existsSync(projJsonPath)) {
+      if (fs13.existsSync(projJsonPath)) {
         try {
-          proj = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
+          proj = JSON.parse(fs13.readFileSync(projJsonPath, "utf8"));
         } catch (_) {
         }
       }
@@ -48602,7 +49025,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
           throw new Error("Switching to cloud requires a cloudUrl. Provide cloudUrl or configure global credentials via ~/.contextos/cloud.json.");
         }
         let localSnapshot = { blocks: [], chains: [], links: [], plans: [], tasks: [] };
-        if (fs12.existsSync(dbPath)) {
+        if (fs13.existsSync(dbPath)) {
           try {
             const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
             const blocks = localService.db.listBlocks(pid);
@@ -48626,7 +49049,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         proj.cloudUrl = resolvedCloudUrl.replace(/\/+$/, "");
         if (resolvedToken) proj.token = resolvedToken;
         proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        fs12.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+        fs13.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
         for (const k of Array.from(serviceCache.keys())) {
           if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
             try {
@@ -48721,7 +49144,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         delete proj.cloudUrl;
         delete proj.token;
         proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        fs12.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+        fs13.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
         for (const k of Array.from(serviceCache.keys())) {
           if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
             try {

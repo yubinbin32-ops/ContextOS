@@ -250,3 +250,42 @@ test('Categorized Rule model', () => {
   const customCatRule = new Rule({ id: 'custom', title: 'Custom Rule', category: 'any-flexible-category' });
   assert.equal(customCatRule.category, 'any-flexible-category');
 });
+
+test('Task explicit rule binding, lifecycle, and toJSON serialization', () => {
+  const task = new Task({
+    id: 'task-rules-test',
+    planId: 'plan-1',
+    phaseId: 'P0',
+    title: 'Test Rule Binding',
+    rules: ['rule-surgical-code-editing'],
+  });
+
+  assert.deepEqual(task.rules, ['rule-surgical-code-editing']);
+  assert.deepEqual(task.references.rules, ['rule-surgical-code-editing']);
+
+  // Bind rule
+  task.bindRule('rule-product-contract');
+  assert.deepEqual(task.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+
+  // Duplicate bind is a no-op
+  task.bindRule('rule-product-contract');
+  assert.equal(task.rules.length, 2);
+
+  // Unbind rule
+  task.unbindRule('rule-surgical-code-editing');
+  assert.deepEqual(task.rules, ['rule-product-contract']);
+
+  // Set rules
+  task.setRules(['rule-command-sessions', 'rule-out-of-context-commands']);
+  assert.deepEqual(task.rules, ['rule-command-sessions', 'rule-out-of-context-commands']);
+
+  // Setter
+  task.rules = ['rule-ui-aesthetic-precision'];
+  assert.deepEqual(task.rules, ['rule-ui-aesthetic-precision']);
+  assert.deepEqual(task.references.rules, ['rule-ui-aesthetic-precision']);
+
+  // Serialization to JSON
+  const json = task.toJSON();
+  assert.deepEqual(json.rules, ['rule-ui-aesthetic-precision']);
+  assert.deepEqual(json.references.rules, ['rule-ui-aesthetic-precision']);
+});

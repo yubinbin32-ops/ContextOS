@@ -57,7 +57,7 @@ export class ContextOSV2Service {
         if (format === 'json') {
           return { project, activePlan, activeTask: displayTask, processes, recentBlocks };
         }
-        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks });
+        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks, projectRoot: this.projectRoot });
       }
 
       case 'search': {
@@ -167,11 +167,14 @@ export class ContextOSV2Service {
   }
 
   // ================= 3. task =================
-  async task({ action, id, taskData = {}, text, kind, checkData = {}, syncData = {}, format = 'markdown' }) {
+  async task({ action, id, taskData = {}, ruleId, rules, text, kind, checkData = {}, syncData = {}, format = 'markdown' }) {
     switch (action) {
       case 'create': {
-        const created = this.taskService.createTask(taskData, this.projectRoot);
-        return format === 'json' ? created : MarkdownRenderer.renderTask(created);
+        const payload = { ...taskData };
+        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
+        if (rules && !payload.rules) payload.rules = rules;
+        const created = this.taskService.createTask(payload, this.projectRoot);
+        return format === 'json' ? created : MarkdownRenderer.renderTask(created, { projectRoot: this.projectRoot });
       }
       case 'open': {
         if (this.projectRoot) {
@@ -181,7 +184,23 @@ export class ContextOSV2Service {
         }
         const task = this.db.getTask(id);
         if (!task) throw new Error(`Task '${id}' not found`);
-        return format === 'json' ? task : MarkdownRenderer.renderTask(task);
+        return format === 'json' ? task : MarkdownRenderer.renderTask(task, { projectRoot: this.projectRoot });
+      }
+      case 'bind_rule': {
+        const targetRule = ruleId || taskData?.ruleId || text;
+        if (!targetRule) throw new Error('ruleId is required to bind a rule');
+        const updated = this.taskService.bindRule(id, targetRule);
+        return format === 'json' ? updated : `Rule '${targetRule}' bound to Task '${id}'.`;
+      }
+      case 'unbind_rule': {
+        const targetRule = ruleId || taskData?.ruleId || text;
+        if (!targetRule) throw new Error('ruleId is required to unbind a rule');
+        const updated = this.taskService.unbindRule(id, targetRule);
+        return format === 'json' ? updated : `Rule '${targetRule}' unbound from Task '${id}'.`;
+      }
+      case 'update': {
+        const updated = this.taskService.updateTask(id, taskData);
+        return format === 'json' ? updated : MarkdownRenderer.renderTask(updated, { projectRoot: this.projectRoot });
       }
       case 'note': {
         const note = this.taskService.addNote(id, { text, kind });

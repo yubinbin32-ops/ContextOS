@@ -233,6 +233,7 @@ export class V2Database {
     const stmt = this.db.prepare('SELECT * FROM tasks WHERE id = ?');
     const row = stmt.get(taskId);
     if (!row) return null;
+    const references = JSON.parse(row.references_json || '{}');
     return {
       id: row.id,
       planId: row.plan_id,
@@ -241,7 +242,8 @@ export class V2Database {
       status: row.status,
       contextSlice: JSON.parse(row.context_slice_json || '{}'),
       workingSet: JSON.parse(row.working_set_json || '{}'),
-      references: JSON.parse(row.references_json || '{}'),
+      references,
+      rules: references.rules || [],
       baseline: JSON.parse(row.baseline_json || '{}'),
       notes: JSON.parse(row.notes_json || '[]'),
       checks: JSON.parse(row.checks_json || '[]'),
@@ -256,22 +258,26 @@ export class V2Database {
       ? this.db.prepare('SELECT * FROM tasks WHERE plan_id = ? ORDER BY created_at ASC')
       : this.db.prepare('SELECT * FROM tasks ORDER BY created_at ASC');
     const rows = planId ? stmt.all(planId) : stmt.all();
-    return rows.map((r) => ({
-      id: r.id,
-      planId: r.plan_id,
-      phaseId: r.phase_id,
-      title: r.title,
-      status: r.status,
-      contextSlice: JSON.parse(r.context_slice_json || '{}'),
-      workingSet: JSON.parse(r.working_set_json || '{}'),
-      references: JSON.parse(r.references_json || '{}'),
-      baseline: JSON.parse(r.baseline_json || '{}'),
-      notes: JSON.parse(r.notes_json || '[]'),
-      checks: JSON.parse(r.checks_json || '[]'),
-      syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }));
+    return rows.map((r) => {
+      const references = JSON.parse(r.references_json || '{}');
+      return {
+        id: r.id,
+        planId: r.plan_id,
+        phaseId: r.phase_id,
+        title: r.title,
+        status: r.status,
+        contextSlice: JSON.parse(r.context_slice_json || '{}'),
+        workingSet: JSON.parse(r.working_set_json || '{}'),
+        references,
+        rules: references.rules || [],
+        baseline: JSON.parse(r.baseline_json || '{}'),
+        notes: JSON.parse(r.notes_json || '[]'),
+        checks: JSON.parse(r.checks_json || '[]'),
+        syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      };
+    });
   }
 
   // --- Block & ArtifactRefs ---

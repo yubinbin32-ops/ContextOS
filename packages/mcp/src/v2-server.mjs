@@ -163,9 +163,11 @@ export function createV2Server() {
     {
       description: 'C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.',
       inputSchema: {
-        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume', 'activate', 'develop']),
+        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume', 'activate', 'develop', 'bind_rule', 'unbind_rule', 'update']),
         id: z.string().optional(),
         taskData: z.record(z.any()).optional(),
+        ruleId: z.string().optional(),
+        rules: z.array(z.string()).optional(),
         text: z.string().optional(),
         kind: z.string().optional(),
         checkData: z.record(z.any()).optional(),

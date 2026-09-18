@@ -76,7 +76,7 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
   const updatedCode = fs.readFileSync(dummyFile, 'utf8');
   assert.ok(updatedCode.includes('return x + 50'));
 
-  // 5. task: create, note, check, and sync
+  // 5. task: create, bind_rule, unbind_rule, update, note, check, and sync
   const task = await service.task({
     action: 'create',
     taskData: {
@@ -85,10 +85,45 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
       phaseId: 'P0',
       title: 'Implement sample.js',
       workingSet: { files: ['sample.js'] },
+      rules: ['rule-test'],
     },
     format: 'json',
   });
   assert.equal(task.id, 'task-v2-1');
+  assert.deepEqual(task.rules, ['rule-test']);
+
+  // Bind additional rule
+  const taskBindRes = await service.task({
+    action: 'bind_rule',
+    id: 'task-v2-1',
+    ruleId: 'rule-test-extra',
+    format: 'json',
+  });
+  assert.ok(taskBindRes.rules.includes('rule-test-extra'));
+
+  // Unbind rule
+  const unbindRes = await service.task({
+    action: 'unbind_rule',
+    id: 'task-v2-1',
+    ruleId: 'rule-test-extra',
+    format: 'json',
+  });
+  assert.equal(unbindRes.rules.includes('rule-test-extra'), false);
+  assert.ok(unbindRes.rules.includes('rule-test'));
+
+  // Update task title
+  const updatedTask = await service.task({
+    action: 'update',
+    id: 'task-v2-1',
+    taskData: { title: 'Implement sample.js with rules' },
+    format: 'json',
+  });
+  assert.equal(updatedTask.title, 'Implement sample.js with rules');
+
+  // Verify task open renders Bound Rules section in Markdown
+  const taskMarkdown = await service.task({ action: 'open', id: 'task-v2-1' });
+  assert.ok(taskMarkdown.includes('Bound Rules (按需调阅)'));
+  assert.ok(taskMarkdown.includes('rule-test'));
 
   await service.task({ action: 'note', id: 'task-v2-1', text: 'Implemented sample.js' });
   await service.task({

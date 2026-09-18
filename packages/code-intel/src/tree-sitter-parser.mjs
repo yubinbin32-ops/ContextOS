@@ -125,7 +125,128 @@ function resolveLanguage(langName) {
   return null;
 }
 
+export function normalizeCallee(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  let s = raw.trim();
+
+  // If it contains newlines or braces, it's an anonymous function/closure literal, not a symbol
+  if (/[\r\n{}]/.test(s)) return null;
+
+  // Strip generic type parameters: parse<T>, parse::<T>, foo<A, B> -> parse, foo
+  while (/(::)?<[^<>]+>/.test(s)) {
+    s = s.replace(/(::)?<[^<>]+>/g, '');
+  }
+
+  // Normalize instance receivers: this., self., $this., $this->, this->
+  s = s.replace(/^(\$this->|\$this\.|\$this|this\.|self\.|this->)/, '');
+
+  // Normalize arrow notation to dot (e.g. PHP/C++: db->save -> db.save)
+  s = s.replace(/->/g, '.');
+
+  // Strip any leftover call parentheses if present from chaining: foo().bar -> bar
+  if (s.includes('(')) {
+    const parts = s.split('.');
+    s = parts[parts.length - 1].replace(/\(.*$/, '');
+  }
+
+  // Strip whitespace
+  s = s.replace(/\s+/g, '');
+
+  // Reject anonymous keywords, empty strings, or strings not starting with valid identifier chars
+  if (!s || s === 'function' || s === 'func' || s === 'lambda' || /^[^a-zA-Z0-9_$:]/.test(s)) {
+    return null;
+  }
+
+  return s || null;
+}
+
 export class TreeSitterParser {
+  static normalizeCallee(raw) {
+    return normalizeCallee(raw);
+  }
+
+  static extractCalls(bodyNode) {
+    if (!bodyNode) return [];
+    const calls = [];
+    const seen = new Set();
+
+    const NESTED_SCOPES = new Set([
+      'arrow_function',
+      'function_expression',
+      'function_declaration',
+      'generator_function_declaration',
+      'function_definition',
+      'lambda',
+      'lambda_expression',
+      'lambda_literal',
+      'func_literal',
+      'closure_expression',
+      'anonymous_function',
+      'anonymous_function_expression',
+      'anonymous_method_expression',
+      'anonymous_class_body',
+      'local_function_statement',
+    ]);
+
+    const CALL_TYPES = new Set([
+      'call_expression',
+      'call',
+      'method_invocation',
+      'invocation_expression',
+      'function_call_expression',
+      'member_call_expression',
+      'scoped_call_expression',
+      'method_call',
+    ]);
+
+    function walk(node, isRoot = false) {
+      if (!node) return;
+
+      if (!isRoot && NESTED_SCOPES.has(node.type)) {
+        // Isolate nested function scopes: do not descend into inner function bodies
+        return;
+      }
+
+      if (CALL_TYPES.has(node.type)) {
+        let rawCallee = null;
+        if (node.type === 'method_invocation' || node.type === 'member_call_expression') {
+          const obj = node.childForFieldName('object');
+          const name = node.childForFieldName('name');
+          rawCallee = obj && name ? `${obj.text}.${name.text}` : (name ? name.text : node.text);
+        } else {
+          const fnNode =
+            node.childForFieldName('function') ||
+            node.childForFieldName('callee') ||
+            node.childForFieldName('called_expression') ||
+            node.childForFieldName('name');
+          if (fnNode && !NESTED_SCOPES.has(fnNode.type)) {
+            rawCallee = fnNode.text;
+          } else if (node.namedChildren.length > 0) {
+            const first = node.namedChild(0);
+            if (first && !first.type.includes('argument') && !first.type.includes('param') && !NESTED_SCOPES.has(first.type)) {
+              rawCallee = first.text;
+            }
+          }
+        }
+
+        if (rawCallee) {
+          const normalized = normalizeCallee(rawCallee);
+          if (normalized && !seen.has(normalized)) {
+            seen.add(normalized);
+            calls.push(normalized);
+          }
+        }
+      }
+
+      for (const child of node.namedChildren) {
+        walk(child, false);
+      }
+    }
+
+    walk(bodyNode, true);
+    return calls;
+  }
+
   static isLanguageSupported(lang) {
     return Boolean(resolveLanguage(lang));
   }
@@ -302,6 +423,8 @@ export class TreeSitterParser {
                 const { startLine: ms, endLine: me } = getLines(m);
                 const rawParams = m.childForFieldName('parameters')?.text || '()';
                 const sigParams = rawParams.replace(/\s+/g, ' ');
+                const mBody = m.childForFieldName('body') || m;
+                const calls = TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${className}.${mName}`,
                   shortName: mName,
@@ -311,6 +434,7 @@ export class TreeSitterParser {
                   startLine: ms,
                   endLine: me,
                   hash: getSliceHash(lines, ms, me),
+                  calls,
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -326,6 +450,8 @@ export class TreeSitterParser {
                   const { startLine: ms, endLine: me } = getLines(m);
                   const rawParams = val.childForFieldName('parameters')?.text || '()';
                   const sigParams = rawParams.replace(/\s+/g, ' ');
+                  const fBody = val.childForFieldName('body') || val;
+                  const calls = TreeSitterParser.extractCalls(fBody);
                   const mSym = {
                     name: `${className}.${mName}`,
                     shortName: mName,
@@ -335,6 +461,7 @@ export class TreeSitterParser {
                     startLine: ms,
                     endLine: me,
                     hash: getSliceHash(lines, ms, me),
+                    calls,
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -351,6 +478,8 @@ export class TreeSitterParser {
             const { startLine, endLine } = getLines(target);
             const rawParams = target.childForFieldName('parameters')?.text || '()';
             const sigParams = rawParams.replace(/\s+/g, ' ');
+            const body = target.childForFieldName('body') || target;
+            const calls = TreeSitterParser.extractCalls(body);
             symbols.push({
               name: fnName,
               shortName: fnName,
@@ -359,6 +488,7 @@ export class TreeSitterParser {
               startLine,
               endLine,
               hash: getSliceHash(lines, startLine, endLine),
+              calls,
             });
           }
           continue;
@@ -373,6 +503,8 @@ export class TreeSitterParser {
                 const { startLine, endLine } = getLines(target);
                 const rawParams = val.childForFieldName('parameters')?.text || '()';
                 const sigParams = rawParams.replace(/\s+/g, ' ');
+                const fBody = val.childForFieldName('body') || val;
+                const calls = TreeSitterParser.extractCalls(fBody);
                 symbols.push({
                   name: varName,
                   shortName: varName,
@@ -381,6 +513,7 @@ export class TreeSitterParser {
                   startLine,
                   endLine,
                   hash: getSliceHash(lines, startLine, endLine),
+                  calls,
                 });
               }
             }
@@ -450,6 +583,8 @@ export class TreeSitterParser {
               if (mName) {
                 const { startLine: ms } = getLines(mOuter);
                 const { endLine: me } = getLines(mTarget);
+                const mBody = mTarget.childForFieldName('body') || mTarget;
+                const calls = TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${className}.${mName}`,
                   shortName: mName,
@@ -458,6 +593,7 @@ export class TreeSitterParser {
                   startLine: ms,
                   endLine: me,
                   hash: getSliceHash(lines, ms, me),
+                  calls,
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -470,6 +606,8 @@ export class TreeSitterParser {
         if (fnName) {
           const { startLine } = getLines(outerNode);
           const { endLine } = getLines(target);
+          const body = target.childForFieldName('body') || target;
+          const calls = TreeSitterParser.extractCalls(body);
           symbols.push({
             name: fnName,
             shortName: fnName,
@@ -477,6 +615,7 @@ export class TreeSitterParser {
             startLine,
             endLine,
             hash: getSliceHash(lines, startLine, endLine),
+            calls,
           });
         }
       }
@@ -546,7 +685,9 @@ export class TreeSitterParser {
         const rcvrNode = child.childForFieldName('receiver');
         const rcvrName = findTypeIdentifier(rcvrNode) || 'Receiver';
         const { startLine, endLine } = getLines(child);
-        symbols.push({
+        const body = child.childForFieldName('body') || child;
+        const calls = TreeSitterParser.extractCalls(body);
+        const mSym = {
           name: `${rcvrName}.${name}`,
           shortName: name,
           containerName: rcvrName,
@@ -554,10 +695,18 @@ export class TreeSitterParser {
           startLine,
           endLine,
           hash: getSliceHash(lines, startLine, endLine),
-        });
+          calls,
+        };
+        symbols.push(mSym);
+        const parentType = symbols.find((s) => s.name === rcvrName && (s.kind === 'struct' || s.kind === 'interface'));
+        if (parentType && Array.isArray(parentType.methods)) {
+          parentType.methods.push(mSym);
+        }
       } else if (child.type === 'function_declaration') {
         const name = child.childForFieldName('name')?.text;
         const { startLine, endLine } = getLines(child);
+        const body = child.childForFieldName('body') || child;
+        const calls = TreeSitterParser.extractCalls(body);
         symbols.push({
           name,
           shortName: name,
@@ -565,6 +714,7 @@ export class TreeSitterParser {
           startLine,
           endLine,
           hash: getSliceHash(lines, startLine, endLine),
+          calls,
         });
       }
     }
@@ -612,6 +762,8 @@ export class TreeSitterParser {
               if (m.type === 'function_signature_item' || m.type === 'function_item') {
                 const fnName = m.childForFieldName('name')?.text;
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.childForFieldName('body') || m;
+                const calls = TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: fnName,
                   shortName: fnName,
@@ -620,6 +772,7 @@ export class TreeSitterParser {
                   startLine: ms,
                   endLine: me,
                   hash: getSliceHash(lines, ms, me),
+                  calls,
                 };
                 symbols.push(mSym);
                 traitSym.methods.push(mSym);
@@ -636,6 +789,7 @@ export class TreeSitterParser {
             startLine,
             endLine,
             hash: getSliceHash(lines, startLine, endLine),
+            methods: [],
           });
         } else if (child.type === 'enum_item') {
           const name = child.childForFieldName('name')?.text;
@@ -658,7 +812,9 @@ export class TreeSitterParser {
               if (m.type === 'function_item') {
                 const fnName = m.childForFieldName('name')?.text;
                 const { startLine: ms, endLine: me } = getLines(m);
-                symbols.push({
+                const mBody = m.childForFieldName('body') || m;
+                const calls = TreeSitterParser.extractCalls(mBody);
+                const mSym = {
                   name: `${targetName}.${fnName}`,
                   shortName: fnName,
                   containerName: targetName,
@@ -666,13 +822,21 @@ export class TreeSitterParser {
                   startLine: ms,
                   endLine: me,
                   hash: getSliceHash(lines, ms, me),
-                });
+                  calls,
+                };
+                symbols.push(mSym);
+                const parentStruct = symbols.find((s) => s.name === targetName && (s.kind === 'struct' || s.kind === 'trait'));
+                if (parentStruct && Array.isArray(parentStruct.methods)) {
+                  parentStruct.methods.push(mSym);
+                }
               }
             }
           }
         } else if (child.type === 'function_item') {
           const fnName = child.childForFieldName('name')?.text;
           const { startLine, endLine } = getLines(child);
+          const body = child.childForFieldName('body') || child;
+          const calls = TreeSitterParser.extractCalls(body);
           symbols.push({
             name: fnName,
             shortName: fnName,
@@ -680,6 +844,7 @@ export class TreeSitterParser {
             startLine,
             endLine,
             hash: getSliceHash(lines, startLine, endLine),
+            calls,
           });
         }
       }
@@ -733,6 +898,8 @@ export class TreeSitterParser {
               const fnName = fnId?.text;
               if (fnName) {
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.childForFieldName('body') || m.namedChildren.find((c) => c.type.includes('body') || c.type.includes('block')) || m;
+                const calls = TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${typeName}.${fnName}`,
                   shortName: fnName,
@@ -741,6 +908,7 @@ export class TreeSitterParser {
                   startLine: ms,
                   endLine: me,
                   hash: getSliceHash(lines, ms, me),
+                  calls,
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -749,6 +917,8 @@ export class TreeSitterParser {
               const varMatch = m.text.match(/var\s+([A-Za-z0-9_]+)/);
               if (varMatch && varMatch[1] === 'body') {
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.namedChildren.find((c) => c.type.includes('body') || c.type.includes('block')) || m;
+                const calls = TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${typeName}.body`,
                   shortName: 'body',
@@ -757,6 +927,7 @@ export class TreeSitterParser {
                   startLine: ms,
                   endLine: me,
                   hash: getSliceHash(lines, ms, me),
+                  calls,
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -769,6 +940,8 @@ export class TreeSitterParser {
         const fnName = fnId?.text;
         if (fnName) {
           const { startLine, endLine } = getLines(child);
+          const body = child.childForFieldName('body') || child.namedChildren.find((c) => c.type.includes('body') || c.type.includes('block')) || child;
+          const calls = TreeSitterParser.extractCalls(body);
           symbols.push({
             name: fnName,
             shortName: fnName,
@@ -776,6 +949,7 @@ export class TreeSitterParser {
             startLine,
             endLine,
             hash: getSliceHash(lines, startLine, endLine),
+            calls,
           });
         }
       }
@@ -824,14 +998,17 @@ export class TreeSitterParser {
                 const mName = m.childForFieldName('name')?.text;
                 if (!mName) continue;
                 const { startLine: ms, endLine: me } = getLines(m);
+                const bodyNode = m.childForFieldName('body') || m;
+                const calls = TreeSitterParser.extractCalls(bodyNode);
                 const mSym = {
                   name: `${name}.${mName}`,
                   shortName: mName,
                   containerName: name,
-                  kind: 'method',
+                  kind: m.type === 'constructor_declaration' ? 'constructor' : 'method',
                   startLine: ms,
                   endLine: me,
                   hash: getSliceHash(lines, ms, me),
+                  calls,
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -891,6 +1068,8 @@ export class TreeSitterParser {
                 const fnName = fnId?.text;
                 if (fnName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const mBody = m.childForFieldName('body') || m.namedChildren.find((c) => c.type.includes('body') || c.type.includes('block')) || m;
+                  const calls = TreeSitterParser.extractCalls(mBody);
                   const mSym = {
                     name: `${name}.${fnName}`,
                     shortName: fnName,
@@ -899,6 +1078,7 @@ export class TreeSitterParser {
                     startLine: ms,
                     endLine: me,
                     hash: getSliceHash(lines, ms, me),
+                    calls,
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -913,6 +1093,8 @@ export class TreeSitterParser {
           const fnName = fnId?.text;
           if (fnName) {
             const { startLine, endLine } = getLines(child);
+            const body = child.childForFieldName('body') || child.namedChildren.find((c) => c.type.includes('body') || c.type.includes('block')) || child;
+            const calls = TreeSitterParser.extractCalls(body);
             symbols.push({
               name: fnName,
               shortName: fnName,
@@ -920,6 +1102,7 @@ export class TreeSitterParser {
               startLine,
               endLine,
               hash: getSliceHash(lines, startLine, endLine),
+              calls,
             });
           }
         }
@@ -991,6 +1174,8 @@ export class TreeSitterParser {
                 const cleanName = findIdentifier(declarator);
                 if (cleanName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName('body') || m;
+                  const calls = TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name}::${cleanName}`,
                     shortName: cleanName,
@@ -999,6 +1184,7 @@ export class TreeSitterParser {
                     startLine: ms,
                     endLine: me,
                     hash: getSliceHash(lines, ms, me),
+                    calls,
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -1011,6 +1197,8 @@ export class TreeSitterParser {
           const fnName = findIdentifier(declarator);
           if (fnName) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName('body') || child;
+            const calls = TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name: fnName,
               shortName: fnName,
@@ -1018,6 +1206,7 @@ export class TreeSitterParser {
               startLine,
               endLine,
               hash: getSliceHash(lines, startLine, endLine),
+              calls,
             });
           }
         }
@@ -1080,14 +1269,17 @@ export class TreeSitterParser {
                 const mName = m.childForFieldName('name')?.text;
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName('body') || m;
+                  const calls = TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name}.${mName}`,
                     shortName: mName,
                     containerName: name,
-                    kind: 'method',
+                    kind: m.type === 'constructor_declaration' ? 'constructor' : 'method',
                     startLine: ms,
                     endLine: me,
                     hash: getSliceHash(lines, ms, me),
+                    calls,
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -1144,6 +1336,8 @@ export class TreeSitterParser {
                 const mName = m.childForFieldName('name')?.text;
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName('body') || m;
+                  const calls = TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name}::${mName}`,
                     shortName: mName,
@@ -1152,6 +1346,7 @@ export class TreeSitterParser {
                     startLine: ms,
                     endLine: me,
                     hash: getSliceHash(lines, ms, me),
+                    calls,
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -1163,6 +1358,8 @@ export class TreeSitterParser {
           const name = child.childForFieldName('name')?.text;
           if (name) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName('body') || child;
+            const calls = TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name,
               shortName: name,
@@ -1170,6 +1367,7 @@ export class TreeSitterParser {
               startLine,
               endLine,
               hash: getSliceHash(lines, startLine, endLine),
+              calls,
             });
           }
         } else {
@@ -1217,6 +1415,8 @@ export class TreeSitterParser {
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
                   const sep = m.type === 'singleton_method' ? '.' : '#';
+                  const bodyNode = m.childForFieldName('body') || m;
+                  const calls = TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name}${sep}${mName}`,
                     shortName: mName,
@@ -1225,6 +1425,7 @@ export class TreeSitterParser {
                     startLine: ms,
                     endLine: me,
                     hash: getSliceHash(lines, ms, me),
+                    calls,
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -1238,6 +1439,8 @@ export class TreeSitterParser {
           const name = child.childForFieldName('name')?.text;
           if (name) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName('body') || child;
+            const calls = TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name,
               shortName: name,
@@ -1245,6 +1448,7 @@ export class TreeSitterParser {
               startLine,
               endLine,
               hash: getSliceHash(lines, startLine, endLine),
+              calls,
             });
           }
         }

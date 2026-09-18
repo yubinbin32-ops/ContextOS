@@ -24,6 +24,8 @@ export class Task {
     contextSlice = {},
     workingSet = {},
     references = {},
+    rules = [],
+    ruleRefs = [],
     baseline = {},
     notes = [],
     checks = [],
@@ -60,8 +62,14 @@ export class Task {
       candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : [],
     };
 
+    const initialRules = Array.isArray(rules)
+      ? rules
+      : (Array.isArray(ruleRefs)
+        ? ruleRefs
+        : (Array.isArray(references.rules) ? references.rules : []));
+
     this.references = {
-      rules: Array.isArray(references.rules) ? [...references.rules] : [],
+      rules: [...new Set(initialRules.filter((r) => typeof r === 'string' && r.trim()))],
       decisionSections: Array.isArray(references.decisionSections) ? [...references.decisionSections] : [],
       blockIds: Array.isArray(references.blockIds) ? [...references.blockIds] : [],
     };
@@ -182,6 +190,40 @@ export class Task {
     this.updatedAt = new Date().toISOString();
   }
 
+  get rules() {
+    return this.references.rules;
+  }
+
+  set rules(newRules) {
+    this.references.rules = Array.isArray(newRules)
+      ? [...new Set(newRules.filter((r) => typeof r === 'string' && r.trim()))]
+      : [];
+    this.updatedAt = new Date().toISOString();
+  }
+
+  bindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== 'string') return;
+    const clean = ruleId.trim();
+    if (clean && !this.references.rules.includes(clean)) {
+      this.references.rules.push(clean);
+      this.updatedAt = new Date().toISOString();
+    }
+  }
+
+  unbindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== 'string') return;
+    const clean = ruleId.trim();
+    const idx = this.references.rules.indexOf(clean);
+    if (idx !== -1) {
+      this.references.rules.splice(idx, 1);
+      this.updatedAt = new Date().toISOString();
+    }
+  }
+
+  setRules(rules) {
+    this.rules = rules;
+  }
+
   toJSON() {
     return {
       id: this.id,
@@ -192,6 +234,7 @@ export class Task {
       contextSlice: this.contextSlice,
       workingSet: this.workingSet,
       references: this.references,
+      rules: this.references.rules,
       baseline: this.baseline,
       notes: this.notes,
       checks: this.checks,

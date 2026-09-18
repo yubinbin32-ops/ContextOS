@@ -268,17 +268,21 @@ export class TaskService {
     }
   }
 
-  createTask({
-    id,
-    planId,
-    phaseId,
-    title,
-    status = 'draft',
-    contextSlice = {},
-    workingSet = {},
-    references = {},
-    baseline = {},
-  }, projectRoot = null) {
+  createTask(taskData = {}, projectRoot = null) {
+    const {
+      id,
+      planId,
+      phaseId,
+      title,
+      status = 'draft',
+      contextSlice = {},
+      workingSet = {},
+      references = {},
+      rules,
+      ruleRefs,
+      baseline = {},
+    } = taskData;
+
     const task = new Task({
       id: id || `task-${Date.now()}`,
       planId,
@@ -288,6 +292,7 @@ export class TaskService {
       contextSlice,
       workingSet,
       references,
+      rules: rules || ruleRefs || references?.rules || [],
       baseline,
     });
 
@@ -295,6 +300,56 @@ export class TaskService {
       this._initializeFileSnapshots(task, projectRoot);
     }
 
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+
+  bindRule(taskId, ruleId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const task = new Task(raw);
+    task.bindRule(ruleId);
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+
+  unbindRule(taskId, ruleId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const task = new Task(raw);
+    task.unbindRule(ruleId);
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+
+  updateTask(taskId, taskData = {}) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+
+    const updated = { ...raw };
+    if (taskData.title !== undefined) updated.title = taskData.title;
+    if (taskData.status !== undefined) updated.status = taskData.status;
+    if (taskData.contextSlice) {
+      updated.contextSlice = { ...raw.contextSlice, ...taskData.contextSlice };
+    }
+    if (taskData.workingSet) {
+      updated.workingSet = { ...raw.workingSet, ...taskData.workingSet };
+    }
+    if (taskData.references) {
+      updated.references = { ...raw.references, ...taskData.references };
+    }
+    if (taskData.rules !== undefined || taskData.ruleRefs !== undefined) {
+      const incomingRules = taskData.rules !== undefined ? taskData.rules : taskData.ruleRefs;
+      const cleanRules = Array.isArray(incomingRules) ? [...incomingRules] : [];
+      updated.rules = cleanRules;
+      updated.references = updated.references || {};
+      updated.references.rules = cleanRules;
+    }
+    if (taskData.notes) updated.notes = taskData.notes;
+    if (taskData.checks) updated.checks = taskData.checks;
+
+    const task = new Task(updated);
+    task.updatedAt = new Date().toISOString();
     this.db.saveTask(task.toJSON());
     return task.toJSON();
   }

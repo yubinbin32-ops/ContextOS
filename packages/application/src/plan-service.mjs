@@ -1,4 +1,4 @@
-import { Plan, Phase, PlanCheckpoint, assertPlanCanBeCompleted } from '../../../packages/domain/src/index.mjs';
+import { Plan, Phase, Task, PlanCheckpoint, assertPlanCanBeCompleted } from '../../../packages/domain/src/index.mjs';
 
 export class PlanService {
   constructor(db) {
@@ -17,14 +17,41 @@ export class PlanService {
     decisionRefs = [],
     dependencyRefs = [],
   }) {
+    const planId = id || `plan-${Date.now()}`;
+    const instantiatedTasks = [];
+
+    const normalizedPhases = (phases || []).map((phaseData, index) => {
+      const pData = typeof phaseData.toJSON === 'function' ? phaseData.toJSON() : { ...phaseData };
+      pData.id = pData.id || `phase-${index}`;
+      const phaseTasks = Array.isArray(pData.tasks) ? pData.tasks : [];
+      const taskIds = Array.isArray(pData.taskIds) ? [...pData.taskIds] : [];
+
+      for (const t of phaseTasks) {
+        const tId = t.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!taskIds.includes(tId)) {
+          taskIds.push(tId);
+        }
+        const taskInstance = new Task({
+          ...t,
+          id: tId,
+          planId,
+          phaseId: pData.id,
+          rules: t.rules || t.ruleRefs || t.references?.rules || [],
+        });
+        instantiatedTasks.push(taskInstance);
+      }
+      pData.taskIds = taskIds;
+      return pData;
+    });
+
     const plan = new Plan({
-      id: id || `plan-${Date.now()}`,
+      id: planId,
       projectId,
       title,
       priority,
       status: 'active',
       summary,
-      phases,
+      phases: normalizedPhases,
       checkpoints,
       ruleRefs,
       decisionRefs,
@@ -32,6 +59,9 @@ export class PlanService {
     });
 
     this.db.savePlan(plan.toJSON());
+    for (const t of instantiatedTasks) {
+      this.db.saveTask(t.toJSON());
+    }
     return plan.toJSON();
   }
 

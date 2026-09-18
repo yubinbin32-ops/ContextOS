@@ -316,3 +316,100 @@ test('TaskService handles external file deletion and non-git project modificatio
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('TaskService manages explicit rule bindings and task updates', () => {
+  const db = new V2Database(':memory:');
+  db.ensureProject('proj-rule-test', '/tmp');
+  const syncEngine = new SyncEngine(db);
+  const planService = new PlanService(db);
+  const taskService = new TaskService(db, syncEngine);
+
+  planService.createPlan({
+    id: 'plan-rule-test',
+    projectId: 'proj-rule-test',
+    title: 'Rule Test Plan',
+    phases: [{ id: 'P0', order: 0, status: 'active' }],
+  });
+
+  const task = taskService.createTask({
+    id: 'task-app-rule',
+    planId: 'plan-rule-test',
+    phaseId: 'P0',
+    projectId: 'proj-rule-test',
+    title: 'Rule Test Task',
+    rules: ['rule-surgical-code-editing'],
+  });
+
+  assert.deepEqual(task.rules, ['rule-surgical-code-editing']);
+
+  // Bind rule
+  const bound = taskService.bindRule('task-app-rule', 'rule-product-contract');
+  assert.deepEqual(bound.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+  // Verify persistence in DB
+  const retrieved1 = taskService.getTask('task-app-rule');
+  assert.deepEqual(retrieved1.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+
+  // Unbind rule
+  const unbound = taskService.unbindRule('task-app-rule', 'rule-surgical-code-editing');
+  assert.deepEqual(unbound.rules, ['rule-product-contract']);
+  const retrieved2 = taskService.getTask('task-app-rule');
+  assert.deepEqual(retrieved2.rules, ['rule-product-contract']);
+
+  // Update task
+  const updated = taskService.updateTask('task-app-rule', {
+    title: 'Updated Rule Test Task',
+    rules: ['rule-ui-aesthetic-precision', 'rule-command-sessions'],
+  });
+  assert.equal(updated.title, 'Updated Rule Test Task');
+  assert.deepEqual(updated.rules, ['rule-ui-aesthetic-precision', 'rule-command-sessions']);
+
+  db.close();
+});
+
+test('PlanService instantiates and persists embedded tasks with rules in createPlan', () => {
+  const db = new V2Database(':memory:');
+  db.ensureProject('proj-plan-tasks', '/tmp');
+  const planService = new PlanService(db);
+
+  const plan = planService.createPlan({
+    id: 'plan-with-tasks',
+    projectId: 'proj-plan-tasks',
+    title: 'Plan with embedded tasks',
+    phases: [
+      {
+        id: 'phase-p0',
+        name: 'Phase 0 - Foundation',
+        order: 0,
+        tasks: [
+          {
+            id: 'task-auto-1',
+            title: 'Setup Domain Entities',
+            rules: ['rule-product-contract', 'rule-surgical-code-editing'],
+          },
+          {
+            id: 'task-auto-2',
+            title: 'Setup Service Layer',
+            rules: ['rule-out-of-context-commands'],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(plan.phases.length, 1);
+  assert.deepEqual(plan.phases[0].taskIds, ['task-auto-1', 'task-auto-2']);
+
+  // Verify tasks were persisted to DB with bound rules
+  const t1 = db.getTask('task-auto-1');
+  assert.ok(t1);
+  assert.equal(t1.title, 'Setup Domain Entities');
+  assert.deepEqual(t1.rules, ['rule-product-contract', 'rule-surgical-code-editing']);
+
+  const t2 = db.getTask('task-auto-2');
+  assert.ok(t2);
+  assert.equal(t2.title, 'Setup Service Layer');
+  assert.deepEqual(t2.rules, ['rule-out-of-context-commands']);
+
+  db.close();
+});
+
+
