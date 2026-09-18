@@ -107,7 +107,7 @@ function textResult(content) {
 
 export function createV2Server() {
   const server = new McpServer(
-    { name: 'contextos', version: '2.2.1' },
+    { name: 'contextos', version: '2.2.2' },
     {
       instructions:
         'ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub.',
