@@ -152,8 +152,8 @@ export function normalizeCallee(raw) {
   // Strip whitespace
   s = s.replace(/\s+/g, '');
 
-  // Reject anonymous keywords, empty strings, or strings not starting with valid identifier chars
-  if (!s || s === 'function' || s === 'func' || s === 'lambda' || /^[^a-zA-Z0-9_$:]/.test(s)) {
+  // Reject anonymous keywords, empty strings, bare receivers, or strings not starting with valid identifier chars
+  if (!s || s === 'function' || s === 'func' || s === 'lambda' || s === 'self' || s === 'this' || s === '$this' || /^[^a-zA-Z0-9_$:]/.test(s)) {
     return null;
   }
 
@@ -176,11 +176,20 @@ export class TreeSitterParser {
       'function_declaration',
       'generator_function_declaration',
       'function_definition',
+      'function_item',
+      'method_declaration',
+      'method_definition',
+      'method',
+      'class_declaration',
+      'class_definition',
+      'class_specifier',
+      'struct_specifier',
       'lambda',
       'lambda_expression',
       'lambda_literal',
       'func_literal',
       'closure_expression',
+      'do_block',
       'anonymous_function',
       'anonymous_function_expression',
       'anonymous_method_expression',
@@ -213,6 +222,10 @@ export class TreeSitterParser {
           const obj = node.childForFieldName('object');
           const name = node.childForFieldName('name');
           rawCallee = obj && name ? `${obj.text}.${name.text}` : (name ? name.text : node.text);
+        } else if (node.type === 'call' && (node.childForFieldName('receiver') || node.childForFieldName('method'))) {
+          const receiver = node.childForFieldName('receiver');
+          const method = node.childForFieldName('method');
+          rawCallee = receiver && method ? `${receiver.text}.${method.text}` : (method ? method.text : (receiver ? receiver.text : node.text));
         } else {
           const fnNode =
             node.childForFieldName('function') ||
@@ -300,6 +313,20 @@ export class TreeSitterParser {
           break;
         default:
           return null;
+      }
+
+      // Link any container methods to container symbols regardless of declaration order
+      for (const sym of symbols) {
+        if (sym.containerName && (sym.kind === 'method' || sym.kind === 'constructor' || sym.kind === 'function')) {
+          const container = symbols.find(
+            (s) => s.name === sym.containerName && (s.kind === 'struct' || s.kind === 'class' || s.kind === 'trait' || s.kind === 'interface')
+          );
+          if (container && Array.isArray(container.methods)) {
+            if (!container.methods.some((m) => m.name === sym.name && m.startLine === sym.startLine)) {
+              container.methods.push(sym);
+            }
+          }
+        }
       }
 
       return { symbols, imports };

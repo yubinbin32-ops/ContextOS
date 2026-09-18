@@ -187,19 +187,22 @@ export class ContextOSV2Service {
         return format === 'json' ? task : MarkdownRenderer.renderTask(task, { projectRoot: this.projectRoot });
       }
       case 'bind_rule': {
-        const targetRule = ruleId || taskData?.ruleId || text;
+        const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
         if (!targetRule) throw new Error('ruleId is required to bind a rule');
         const updated = this.taskService.bindRule(id, targetRule);
         return format === 'json' ? updated : `Rule '${targetRule}' bound to Task '${id}'.`;
       }
       case 'unbind_rule': {
-        const targetRule = ruleId || taskData?.ruleId || text;
+        const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
         if (!targetRule) throw new Error('ruleId is required to unbind a rule');
         const updated = this.taskService.unbindRule(id, targetRule);
         return format === 'json' ? updated : `Rule '${targetRule}' unbound from Task '${id}'.`;
       }
       case 'update': {
-        const updated = this.taskService.updateTask(id, taskData);
+        const payload = { ...taskData };
+        if (rules && payload.rules === undefined) payload.rules = rules;
+        if (ruleId && payload.ruleId === undefined) payload.ruleId = ruleId;
+        const updated = this.taskService.updateTask(id, payload);
         return format === 'json' ? updated : MarkdownRenderer.renderTask(updated, { projectRoot: this.projectRoot });
       }
       case 'note': {

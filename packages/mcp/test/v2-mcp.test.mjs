@@ -111,19 +111,22 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
   assert.equal(unbindRes.rules.includes('rule-test-extra'), false);
   assert.ok(unbindRes.rules.includes('rule-test'));
 
-  // Update task title
+  // Update task title and rules via top-level parameters
   const updatedTask = await service.task({
     action: 'update',
     id: 'task-v2-1',
     taskData: { title: 'Implement sample.js with rules' },
+    rules: ['rule-test', 'rule-product-contract'],
     format: 'json',
   });
   assert.equal(updatedTask.title, 'Implement sample.js with rules');
+  assert.deepEqual(updatedTask.rules, ['rule-test', 'rule-product-contract']);
 
   // Verify task open renders Bound Rules section in Markdown
   const taskMarkdown = await service.task({ action: 'open', id: 'task-v2-1' });
   assert.ok(taskMarkdown.includes('Bound Rules (按需调阅)'));
   assert.ok(taskMarkdown.includes('rule-test'));
+  assert.ok(taskMarkdown.includes('rule-product-contract'));
 
   await service.task({ action: 'note', id: 'task-v2-1', text: 'Implemented sample.js' });
   await service.task({

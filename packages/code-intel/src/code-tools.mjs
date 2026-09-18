@@ -22,6 +22,13 @@ export class CodeTools {
     if (structure.symbols.length > 0) {
       lines.push('\n### Symbols:');
       const renderedMethodKeys = new Set();
+      for (const sym of structure.symbols) {
+        if (Array.isArray(sym.methods)) {
+          for (const m of sym.methods) {
+            renderedMethodKeys.add(`${m.name}:${m.startLine}:${m.endLine}`);
+          }
+        }
+      }
       const CONTAINER_KINDS = new Set(['class', 'struct', 'trait', 'interface', 'extension', 'impl', 'record', 'object', 'enum']);
 
       for (const sym of structure.symbols) {
@@ -30,14 +37,13 @@ export class CodeTools {
           lines.push(`- **${sym.kind}** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
           if (sym.methods && sym.methods.length > 0) {
             for (const m of sym.methods) {
-              renderedMethodKeys.add(`${m.name}:${m.startLine}:${m.endLine}`);
               const displaySig = m.signature ? m.signature : m.name;
               const callsSuffix = m.calls && m.calls.length > 0 ? ` -> calls: [${m.calls.join(', ')}]` : '';
               lines.push(`  - **method** \`${displaySig}\` [L${m.startLine}-L${m.endLine}] (hash: \`${m.hash}\`)${callsSuffix}`);
             }
           }
         } else if (renderedMethodKeys.has(`${sym.name}:${sym.startLine}:${sym.endLine}`)) {
-          // Skip methods or constructors that were already rendered under their container
+          // Skip methods or constructors that are rendered under their container
           continue;
         } else if (sym.kind === 'function') {
           const displaySig = sym.signature ? sym.signature : sym.name;

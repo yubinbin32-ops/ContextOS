@@ -283,6 +283,12 @@ export class TaskService {
       baseline = {},
     } = taskData;
 
+    const taskRules = Array.isArray(rules)
+      ? rules
+      : (Array.isArray(ruleRefs)
+        ? ruleRefs
+        : (Array.isArray(references?.rules) ? references.rules : []));
+
     const task = new Task({
       id: id || `task-${Date.now()}`,
       planId,
@@ -292,7 +298,7 @@ export class TaskService {
       contextSlice,
       workingSet,
       references,
-      rules: rules || ruleRefs || references?.rules || [],
+      rules: taskRules,
       baseline,
     });
 
@@ -338,13 +344,22 @@ export class TaskService {
     if (taskData.references) {
       updated.references = { ...raw.references, ...taskData.references };
     }
-    if (taskData.rules !== undefined || taskData.ruleRefs !== undefined) {
-      const incomingRules = taskData.rules !== undefined ? taskData.rules : taskData.ruleRefs;
+
+    const incomingRules = taskData.rules !== undefined
+      ? taskData.rules
+      : (taskData.ruleRefs !== undefined
+        ? taskData.ruleRefs
+        : (taskData.references?.rules !== undefined ? taskData.references.rules : undefined));
+
+    if (incomingRules !== undefined) {
       const cleanRules = Array.isArray(incomingRules) ? [...incomingRules] : [];
       updated.rules = cleanRules;
       updated.references = updated.references || {};
       updated.references.rules = cleanRules;
+    } else {
+      updated.rules = updated.references?.rules || raw.rules || [];
     }
+
     if (taskData.notes) updated.notes = taskData.notes;
     if (taskData.checks) updated.checks = taskData.checks;
 

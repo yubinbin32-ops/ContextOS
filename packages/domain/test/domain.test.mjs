@@ -288,4 +288,26 @@ test('Task explicit rule binding, lifecycle, and toJSON serialization', () => {
   const json = task.toJSON();
   assert.deepEqual(json.rules, ['rule-ui-aesthetic-precision']);
   assert.deepEqual(json.references.rules, ['rule-ui-aesthetic-precision']);
+
+  // Preserves rules when only references.rules is passed (e.g. from storage/DB)
+  const taskFromRefs = new Task({
+    id: 'task-from-refs',
+    planId: 'plan-1',
+    phaseId: 'P0',
+    title: 'Test From Refs',
+    references: { rules: ['rule-surgical-code-editing', 'rule-product-contract'] },
+  });
+  assert.deepEqual(taskFromRefs.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+  assert.deepEqual(taskFromRefs.references.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+
+  // Supports ruleRefs alias
+  const taskFromRuleRefs = new Task({
+    id: 'task-from-rulerefs',
+    planId: 'plan-1',
+    phaseId: 'P0',
+    title: 'Test From ruleRefs',
+    ruleRefs: ['rule-command-sessions'],
+  });
+  assert.deepEqual(taskFromRuleRefs.rules, ['rule-command-sessions']);
 });
+

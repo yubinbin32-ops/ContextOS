@@ -6,6 +6,8 @@ function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
   const cleanId = ruleId.trim();
   if (!cleanId) return null;
 
+  const root = projectRoot || (typeof rulesMap === 'string' ? rulesMap : rulesMap?.projectRoot) || process.cwd();
+
   if (rulesMap instanceof Map && rulesMap.has(cleanId)) {
     const val = rulesMap.get(cleanId);
     return {
@@ -25,7 +27,9 @@ function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
       };
     }
     if (typeof rulesMap.getRule === 'function') {
-      const val = rulesMap.getRule(cleanId);
+      const val = rulesMap.getRule.length >= 2
+        ? rulesMap.getRule(root, cleanId)
+        : (rulesMap.getRule(cleanId) || (root ? rulesMap.getRule(root, cleanId) : null));
       if (val) {
         return {
           id: cleanId,
@@ -35,8 +39,6 @@ function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
       }
     }
   }
-
-  const root = projectRoot || (typeof rulesMap === 'string' ? rulesMap : rulesMap?.projectRoot);
   if (root && typeof root === 'string') {
     try {
       const dotDir = path.join(root, '.contextos', 'rules');

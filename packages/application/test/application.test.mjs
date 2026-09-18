@@ -362,6 +362,13 @@ test('TaskService manages explicit rule bindings and task updates', () => {
   assert.equal(updated.title, 'Updated Rule Test Task');
   assert.deepEqual(updated.rules, ['rule-ui-aesthetic-precision', 'rule-command-sessions']);
 
+  // Update task using references.rules object
+  const updatedViaRefs = taskService.updateTask('task-app-rule', {
+    references: { rules: ['rule-cdcs-workflow'] },
+  });
+  assert.deepEqual(updatedViaRefs.rules, ['rule-cdcs-workflow']);
+  assert.deepEqual(updatedViaRefs.references.rules, ['rule-cdcs-workflow']);
+
   db.close();
 });
 
@@ -390,13 +397,14 @@ test('PlanService instantiates and persists embedded tasks with rules in createP
             title: 'Setup Service Layer',
             rules: ['rule-out-of-context-commands'],
           },
+          'task-auto-string-id',
         ],
       },
     ],
   });
 
   assert.equal(plan.phases.length, 1);
-  assert.deepEqual(plan.phases[0].taskIds, ['task-auto-1', 'task-auto-2']);
+  assert.deepEqual(plan.phases[0].taskIds, ['task-auto-1', 'task-auto-2', 'task-auto-string-id']);
 
   // Verify tasks were persisted to DB with bound rules
   const t1 = db.getTask('task-auto-1');
@@ -409,7 +417,12 @@ test('PlanService instantiates and persists embedded tasks with rules in createP
   assert.equal(t2.title, 'Setup Service Layer');
   assert.deepEqual(t2.rules, ['rule-out-of-context-commands']);
 
+  const t3 = db.getTask('task-auto-string-id');
+  assert.ok(t3);
+  assert.equal(t3.id, 'task-auto-string-id');
+
   db.close();
 });
+
 
 

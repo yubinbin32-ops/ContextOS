@@ -27,16 +27,18 @@ export class PlanService {
       const taskIds = Array.isArray(pData.taskIds) ? [...pData.taskIds] : [];
 
       for (const t of phaseTasks) {
-        const tId = t.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const tObj = typeof t === 'string' ? { id: t, title: t } : t;
+        const tId = tObj.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         if (!taskIds.includes(tId)) {
           taskIds.push(tId);
         }
         const taskInstance = new Task({
-          ...t,
+          ...tObj,
           id: tId,
           planId,
           phaseId: pData.id,
-          rules: t.rules || t.ruleRefs || t.references?.rules || [],
+          title: tObj.title || tId,
+          rules: tObj.rules ?? tObj.ruleRefs ?? tObj.references?.rules ?? [],
         });
         instantiatedTasks.push(taskInstance);
       }

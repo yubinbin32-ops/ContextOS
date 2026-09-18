@@ -24197,8 +24197,8 @@ var Task = class {
     contextSlice = {},
     workingSet = {},
     references = {},
-    rules = [],
-    ruleRefs = [],
+    rules = null,
+    ruleRefs = null,
     baseline = {},
     notes = [],
     checks = [],
@@ -24231,11 +24231,11 @@ var Task = class {
       symbols: Array.isArray(workingSet.symbols) ? [...workingSet.symbols] : [],
       candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : []
     };
-    const initialRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references.rules) ? references.rules : [];
+    const initialRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references?.rules) ? references.rules : [];
     this.references = {
       rules: [...new Set(initialRules.filter((r) => typeof r === "string" && r.trim()))],
-      decisionSections: Array.isArray(references.decisionSections) ? [...references.decisionSections] : [],
-      blockIds: Array.isArray(references.blockIds) ? [...references.blockIds] : []
+      decisionSections: Array.isArray(references?.decisionSections) ? [...references.decisionSections] : [],
+      blockIds: Array.isArray(references?.blockIds) ? [...references.blockIds] : []
     };
     this.baseline = {
       gitHead: baseline.gitHead || null,
@@ -24549,16 +24549,18 @@ var PlanService = class {
       const phaseTasks = Array.isArray(pData.tasks) ? pData.tasks : [];
       const taskIds = Array.isArray(pData.taskIds) ? [...pData.taskIds] : [];
       for (const t of phaseTasks) {
-        const tId = t.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const tObj = typeof t === "string" ? { id: t, title: t } : t;
+        const tId = tObj.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         if (!taskIds.includes(tId)) {
           taskIds.push(tId);
         }
         const taskInstance = new Task({
-          ...t,
+          ...tObj,
           id: tId,
           planId,
           phaseId: pData.id,
-          rules: t.rules || t.ruleRefs || t.references?.rules || []
+          title: tObj.title || tId,
+          rules: tObj.rules ?? tObj.ruleRefs ?? tObj.references?.rules ?? []
         });
         instantiatedTasks.push(taskInstance);
       }
@@ -43037,7 +43039,7 @@ function normalizeCallee(raw) {
     s = parts2[parts2.length - 1].replace(/\(.*$/, "");
   }
   s = s.replace(/\s+/g, "");
-  if (!s || s === "function" || s === "func" || s === "lambda" || /^[^a-zA-Z0-9_$:]/.test(s)) {
+  if (!s || s === "function" || s === "func" || s === "lambda" || s === "self" || s === "this" || s === "$this" || /^[^a-zA-Z0-9_$:]/.test(s)) {
     return null;
   }
   return s || null;
@@ -43056,11 +43058,20 @@ var TreeSitterParser = class _TreeSitterParser {
       "function_declaration",
       "generator_function_declaration",
       "function_definition",
+      "function_item",
+      "method_declaration",
+      "method_definition",
+      "method",
+      "class_declaration",
+      "class_definition",
+      "class_specifier",
+      "struct_specifier",
       "lambda",
       "lambda_expression",
       "lambda_literal",
       "func_literal",
       "closure_expression",
+      "do_block",
       "anonymous_function",
       "anonymous_function_expression",
       "anonymous_method_expression",
@@ -43088,6 +43099,10 @@ var TreeSitterParser = class _TreeSitterParser {
           const obj = node2.childForFieldName("object");
           const name2 = node2.childForFieldName("name");
           rawCallee = obj && name2 ? `${obj.text}.${name2.text}` : name2 ? name2.text : node2.text;
+        } else if (node2.type === "call" && (node2.childForFieldName("receiver") || node2.childForFieldName("method"))) {
+          const receiver = node2.childForFieldName("receiver");
+          const method = node2.childForFieldName("method");
+          rawCallee = receiver && method ? `${receiver.text}.${method.text}` : method ? method.text : receiver ? receiver.text : node2.text;
         } else {
           const fnNode = node2.childForFieldName("function") || node2.childForFieldName("callee") || node2.childForFieldName("called_expression") || node2.childForFieldName("name");
           if (fnNode && !NESTED_SCOPES.has(fnNode.type)) {
@@ -43164,6 +43179,18 @@ var TreeSitterParser = class _TreeSitterParser {
           break;
         default:
           return null;
+      }
+      for (const sym of symbols) {
+        if (sym.containerName && (sym.kind === "method" || sym.kind === "constructor" || sym.kind === "function")) {
+          const container = symbols.find(
+            (s) => s.name === sym.containerName && (s.kind === "struct" || s.kind === "class" || s.kind === "trait" || s.kind === "interface")
+          );
+          if (container && Array.isArray(container.methods)) {
+            if (!container.methods.some((m) => m.name === sym.name && m.startLine === sym.startLine)) {
+              container.methods.push(sym);
+            }
+          }
+        }
       }
       return { symbols, imports };
     } catch (_) {
@@ -45468,6 +45495,13 @@ var CodeTools = class {
     if (structure.symbols.length > 0) {
       lines.push("\n### Symbols:");
       const renderedMethodKeys = /* @__PURE__ */ new Set();
+      for (const sym of structure.symbols) {
+        if (Array.isArray(sym.methods)) {
+          for (const m of sym.methods) {
+            renderedMethodKeys.add(`${m.name}:${m.startLine}:${m.endLine}`);
+          }
+        }
+      }
       const CONTAINER_KINDS = /* @__PURE__ */ new Set(["class", "struct", "trait", "interface", "extension", "impl", "record", "object", "enum"]);
       for (const sym of structure.symbols) {
         const isContainer = CONTAINER_KINDS.has(sym.kind) || Array.isArray(sym.methods) && sym.methods.length > 0;
@@ -45475,7 +45509,6 @@ var CodeTools = class {
           lines.push(`- **${sym.kind}** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
           if (sym.methods && sym.methods.length > 0) {
             for (const m of sym.methods) {
-              renderedMethodKeys.add(`${m.name}:${m.startLine}:${m.endLine}`);
               const displaySig = m.signature ? m.signature : m.name;
               const callsSuffix = m.calls && m.calls.length > 0 ? ` -> calls: [${m.calls.join(", ")}]` : "";
               lines.push(`  - **method** \`${displaySig}\` [L${m.startLine}-L${m.endLine}] (hash: \`${m.hash}\`)${callsSuffix}`);
@@ -46022,6 +46055,7 @@ var TaskService = class {
       ruleRefs,
       baseline = {}
     } = taskData;
+    const taskRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references?.rules) ? references.rules : [];
     const task = new Task({
       id: id || `task-${Date.now()}`,
       planId,
@@ -46031,7 +46065,7 @@ var TaskService = class {
       contextSlice,
       workingSet,
       references,
-      rules: rules || ruleRefs || references?.rules || [],
+      rules: taskRules,
       baseline
     });
     if (projectRoot && fs6.existsSync(projectRoot)) {
@@ -46071,12 +46105,14 @@ var TaskService = class {
     if (taskData.references) {
       updated.references = { ...raw.references, ...taskData.references };
     }
-    if (taskData.rules !== void 0 || taskData.ruleRefs !== void 0) {
-      const incomingRules = taskData.rules !== void 0 ? taskData.rules : taskData.ruleRefs;
+    const incomingRules = taskData.rules !== void 0 ? taskData.rules : taskData.ruleRefs !== void 0 ? taskData.ruleRefs : taskData.references?.rules !== void 0 ? taskData.references.rules : void 0;
+    if (incomingRules !== void 0) {
       const cleanRules = Array.isArray(incomingRules) ? [...incomingRules] : [];
       updated.rules = cleanRules;
       updated.references = updated.references || {};
       updated.references.rules = cleanRules;
+    } else {
+      updated.rules = updated.references?.rules || raw.rules || [];
     }
     if (taskData.notes) updated.notes = taskData.notes;
     if (taskData.checks) updated.checks = taskData.checks;
@@ -46939,6 +46975,7 @@ function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
   if (!ruleId || typeof ruleId !== "string") return null;
   const cleanId = ruleId.trim();
   if (!cleanId) return null;
+  const root = projectRoot || (typeof rulesMap === "string" ? rulesMap : rulesMap?.projectRoot) || process.cwd();
   if (rulesMap instanceof Map && rulesMap.has(cleanId)) {
     const val = rulesMap.get(cleanId);
     return {
@@ -46957,7 +46994,7 @@ function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
       };
     }
     if (typeof rulesMap.getRule === "function") {
-      const val = rulesMap.getRule(cleanId);
+      const val = rulesMap.getRule.length >= 2 ? rulesMap.getRule(root, cleanId) : rulesMap.getRule(cleanId) || (root ? rulesMap.getRule(root, cleanId) : null);
       if (val) {
         return {
           id: cleanId,
@@ -46967,7 +47004,6 @@ function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
       }
     }
   }
-  const root = projectRoot || (typeof rulesMap === "string" ? rulesMap : rulesMap?.projectRoot);
   if (root && typeof root === "string") {
     try {
       const dotDir = path10.join(root, ".contextos", "rules");
@@ -47452,19 +47488,22 @@ Summary: ${completed.completedSummary}`;
         return format === "json" ? task : MarkdownRenderer.renderTask(task, { projectRoot: this.projectRoot });
       }
       case "bind_rule": {
-        const targetRule = ruleId || taskData?.ruleId || text;
+        const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
         if (!targetRule) throw new Error("ruleId is required to bind a rule");
         const updated = this.taskService.bindRule(id, targetRule);
         return format === "json" ? updated : `Rule '${targetRule}' bound to Task '${id}'.`;
       }
       case "unbind_rule": {
-        const targetRule = ruleId || taskData?.ruleId || text;
+        const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
         if (!targetRule) throw new Error("ruleId is required to unbind a rule");
         const updated = this.taskService.unbindRule(id, targetRule);
         return format === "json" ? updated : `Rule '${targetRule}' unbound from Task '${id}'.`;
       }
       case "update": {
-        const updated = this.taskService.updateTask(id, taskData);
+        const payload = { ...taskData };
+        if (rules && payload.rules === void 0) payload.rules = rules;
+        if (ruleId && payload.ruleId === void 0) payload.ruleId = ruleId;
+        const updated = this.taskService.updateTask(id, payload);
         return format === "json" ? updated : MarkdownRenderer.renderTask(updated, { projectRoot: this.projectRoot });
       }
       case "note": {

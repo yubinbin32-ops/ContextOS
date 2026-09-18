@@ -781,4 +781,74 @@ func (s *Server) Start() {
   assert.equal(constructorMatches, 1);
   assert.ok(jsOutline.markdown.includes('-> calls: [setup]'));
   assert.ok(jsOutline.markdown.includes('-> calls: [init]'));
+
+  // Go method declared BEFORE struct definition in file order
+  const goOutOfOrderCode = `package main
+func (s *Server) Start() {
+    bind()
+    listen()
+}
+type Server struct {}
+`;
+  const goOutOfOrderOutline = CodeTools.outline('server_order.go', goOutOfOrderCode);
+  assert.ok(goOutOfOrderOutline.markdown.includes('- **struct** `Server`'));
+  assert.ok(goOutOfOrderOutline.markdown.includes('  - **method** `Server.Start`'));
+  assert.ok(goOutOfOrderOutline.markdown.includes('-> calls: [bind, listen]'));
+  // Ensure Start is not rendered twice
+  const startMatches = (goOutOfOrderOutline.markdown.match(/Server\.Start/g) || []).length;
+  assert.equal(startMatches, 1);
+
+  // Ruby method with receiver and nested block isolation
+  const rubyCode = `def process
+  self.db.save(record)
+  [1, 2].each do |x|
+    inner_worker(x)
+  end
+  notify()
+end
+`;
+  const rubyRes = TreeSitterParser.parse('ruby', rubyCode, rubyCode.split('\n'));
+  const procMethod = rubyRes.symbols.find((s) => s.name === 'process');
+  assert.ok(procMethod);
+  assert.ok(procMethod.calls.includes('db.save'));
+  assert.ok(procMethod.calls.includes('notify'));
+  // Bare 'self' must NOT be in calls
+  assert.equal(procMethod.calls.includes('self'), false);
+  // Nested do_block must NOT leak into process calls
+  assert.equal(procMethod.calls.includes('inner_worker'), false);
+
+  // Rust nested helper function isolation
+  const rustNestedCode = `fn compute() {
+    setup();
+    fn local_helper() {
+        nested_call();
+    }
+    teardown();
+}
+`;
+  const rustNestedRes = TreeSitterParser.parse('rust', rustNestedCode, rustNestedCode.split('\n'));
+  const compSym = rustNestedRes.symbols.find((s) => s.name === 'compute');
+  assert.ok(compSym);
+  assert.ok(compSym.calls.includes('setup'));
+  assert.ok(compSym.calls.includes('teardown'));
+  assert.equal(compSym.calls.includes('nested_call'), false);
+
+  // JS nested class method isolation
+  const jsNestedClassCode = `function runPipeline() {
+    init();
+    class LocalWorker {
+      work() {
+        doSecretWork();
+      }
+    }
+    finish();
+}
+`;
+  const jsNestedRes = TreeSitterParser.parse('javascript', jsNestedClassCode, jsNestedClassCode.split('\n'));
+  const pipeSym = jsNestedRes.symbols.find((s) => s.name === 'runPipeline');
+  assert.ok(pipeSym);
+  assert.ok(pipeSym.calls.includes('init'));
+  assert.ok(pipeSym.calls.includes('finish'));
+  assert.equal(pipeSym.calls.includes('doSecretWork'), false);
 });
+

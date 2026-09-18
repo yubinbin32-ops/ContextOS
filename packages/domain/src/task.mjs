@@ -24,8 +24,8 @@ export class Task {
     contextSlice = {},
     workingSet = {},
     references = {},
-    rules = [],
-    ruleRefs = [],
+    rules = null,
+    ruleRefs = null,
     baseline = {},
     notes = [],
     checks = [],
@@ -66,12 +66,12 @@ export class Task {
       ? rules
       : (Array.isArray(ruleRefs)
         ? ruleRefs
-        : (Array.isArray(references.rules) ? references.rules : []));
+        : (Array.isArray(references?.rules) ? references.rules : []));
 
     this.references = {
       rules: [...new Set(initialRules.filter((r) => typeof r === 'string' && r.trim()))],
-      decisionSections: Array.isArray(references.decisionSections) ? [...references.decisionSections] : [],
-      blockIds: Array.isArray(references.blockIds) ? [...references.blockIds] : [],
+      decisionSections: Array.isArray(references?.decisionSections) ? [...references.decisionSections] : [],
+      blockIds: Array.isArray(references?.blockIds) ? [...references.blockIds] : [],
     };
 
     this.baseline = {
