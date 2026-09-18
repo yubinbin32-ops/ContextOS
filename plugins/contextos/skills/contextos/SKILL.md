@@ -196,7 +196,7 @@ ContextOS 仓库已内置并严格强制以下核心规则，智能体在相应�
    - 上下文仅保留结构化 Receipt 回执（Receipt ID、耗时、ExitCode 与关键故障堆栈），用于填入 `task(check)`。
 3. **`rule-command-sessions`（长期守护进程与一次性命令可见可控规约）**：
    - 一次性命令与构建严格经由 `run_command`；持续运行的 Server、Watcher、Worker 必须通过 `process` 托管；
-   - App 左侧栏与 Web 面板实时渲染常驻命令 HUD（展示 PID、端口、运行状态及日志入口），支持用户一键终止，严禁后台僵尸残留。
+   - 原生 App 界面实时渲染常驻命令 HUD（展示 PID、端口、运行状态及日志入口），支持用户一键终止；在无 UI 的纯插件环境中由 AI 自觉自闭环管理，严禁后台僵尸残留。
 4. **`rule-surgical-code-editing`（编译器级 AST 手术刀读写规约）**：
    - 严禁全量通读文件；通过 `code(outline)` 掌握结构与 2-Hop 调用拓扑（Callees）；
    - 通过 `code(read, selector)` 精确提取目标符号，通过 `code(edit)` 原位替换并自动重锚。
@@ -258,9 +258,9 @@ ContextOS 对 `category` 保持开放，常见分类如：
 ```json
 {
   "action": "decision_write",
-  "sectionId": "DEC-012",
-  "sectionTitle": "双模原生 Metro HTML 可视化面板与 2-Hop AST 调用拓扑引擎",
-  "content": "### 1. 背景\n早期 Web/Worker 面板设计脱离原生桌面 App 视觉规约，且 AST 大纲仅提供孤立符号行号。\n\n### 2. 决策\n统一采用 Metro Map 路线图设计语言构建双模 HTML 仪表盘，并在 AST 大纲中注入直接调用者关系拓扑（2-Hop Call Graph）。\n\n### 3. 原因与替代方案取舍\n纯文本 landing page 缺乏系统层次直观性，全量提取调用图开销过大；轻量级 2-Hop 提取配合 Metro Map 达到性能与可读性最佳均衡。\n\n### 4. 影响与后果\n云端与本地大屏全面实现 100% 视觉同构，开发者与智能体均可一目了然把握系统调用流向。"
+  "sectionId": "DEC-011",
+  "sectionTitle": "代码大纲引入 2-Hop 调用拓扑与显式任务规则绑定",
+  "content": "### 1. 背景\nAST 符号大纲过去仅提供孤立符号与起止行号，缺乏调用流向感知；且规则系统缺乏与任务生命周期的强绑定，导致规则难以被智能体渐进式发现。\n\n### 2. 决策\n在 Tree-sitter AST 大纲提取中引入轻量级直接调用拓扑（2-Hop Call Graph），并在 Task 创建与执行生命周期中建立显式规则绑定。\n\n### 3. 原因与替代方案取舍\n全量提取跨文件全调用图在超大项目中开销过大且容易膨胀；局部 2-Hop 调用链配合任务关联规则在零额外性能负担下达到极佳上下文精准度。\n\n### 4. 影响与后果\n智能体在单次代码大纲调用中即可获悉函数调用流向，并在任务上下文中获得针对性规约指引，彻底消除盲目全量读取。"
 }
 ```
 
@@ -310,7 +310,7 @@ ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文
 - **长时服务用 `process.start`**：仅当开发过程中需要持续监听文件变动（如 `npm run test:watch`、`tsc --watch`）或启动本地 API/Web 预览服务时，才使用 `process(action: "start", command: "...")`。
 
 ### 2. 启动前防冲突探测
-在启动新的常驻服务之前，若该服务可能占用固定端口（如 `:3000`、`:4004`）：
+在启动新的常驻服务之前，若该服务可能占用固定端口（如 `:3000`、`:8080`）：
 1. 先调用 `process(action: "list")` 盘点当前已有的活跃进程；
 2. 若发现同类型或可能产生端口冲突的老旧进程，先调用 `process(action: "stop", id: "...")` 释放旧服务；
 3. 再调用 `process(action: "start")` 启动新服务，避免抛出 `EADDRINUSE` 端口占用错误。
@@ -340,9 +340,9 @@ ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文
 
 ---
 
-## 八、UI/UX 可视化与精密工程面板设计规约
+## 八、UI/UX 可视化与原生桌面端设计规约
 
-任何涉及 ContextOS 相关的 UI 渲染、Web 可视化大屏、以及桌面端适配，**必须 100% 遵循 `.contextos/rules/rule-ui-aesthetic-precision.md` 规约**，严禁使用粗糙无序的通用卡片堆叠！
+任何涉及 ContextOS 原生 macOS/iOS 桌面端客户端（`ContextOS.app`）的 UI 渲染与视图设计，**必须 100% 遵循 `.contextos/rules/rule-ui-aesthetic-precision.md` 规约**，严禁使用粗糙无序的通用卡片堆叠！
 
 ### 1. 视觉基调与 iOS 克制工作台 (Restraint Aesthetics)
 - **纯白与极浅冷灰工作台**：主画布与操作区使用坚实纯白背景（`#FFFFFF` / `#FBFBFD`），外边框与分割线使用 0.5pt/1pt 超精细单像素发丝线（`#E5E5EA`）。
@@ -379,26 +379,5 @@ ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文
 ### 5. 常驻命令进程监视器 (Running Process Supervisor)
 位于界面左下角（Bottom-Left Floating HUD）：
 - 标题 `RUNNING PROCESSES` + 数量角标；
-- 实时展示后台守护进程（PID、绑定的端口号如 `:4004`、绿/灰状态圆点、一键停止按钮）；
+- 实时展示后台守护进程（PID、绑定的端口号如 `:8080`、绿/灰状态圆点、一键停止按钮）；
 - 若无常驻服务则展示 `● 暂无运行中的长期任务`。
-
----
-
-## 九、双模（Cloudflare Worker & 本地 MCP Web）可视化面板规范
-
-ContextOS 实现了 Cloudflare Edge 与 Local MCP Web 的完全同构支持。
-
-### 1. 云端中枢大屏 (Cloudflare Edge Worker)
-- **访问入口**：`GET /` 与 `GET /dashboard`。
-- **数据源**：直连 Cloudflare D1 (Edge SQLite)。
-- **核心功能**：展示全局 Metro Map 架构大屏、实时渲染系统站点拓扑、提供 Cursor/Windsurf/Claude 的 SSE 配置代码块以及 ContextOS Desktop 连接指引。
-
-### 2. 本地 MCP 实时大屏 (`contextos web`)
-- **启动方式**：执行 `contextos web [port]`（默认 4004 端口）或 `npx contextos web`。
-- **数据源**：直读当前工作区 `.contextos/state.sqlite` 与 `.contextos/processes.json`。
-- **实时同步**：前端支持轻量级轮询 `/api/v2/snapshot`，当本地执行 C-D-C-S `task(sync)` 时，浏览器大屏毫秒级自动重绘。
-
-### 3. 本地离线快速调阅与页面渲染
-当开发者需要调阅当前项目页面时：
-- 可通过本地脚本自动生成 `dist/dashboard.html`；
-- 在 macOS 上直接执行 `open dist/dashboard.html`，无需任何外部服务器依赖即可离线审阅高精密 Metro 路线图！
