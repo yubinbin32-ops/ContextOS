@@ -32,12 +32,18 @@ struct ProjectLocation {
     }
 
     static func isValidProjectRoot(_ root: URL) -> Bool {
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: root.path, isDirectory: &isDir), isDir.boolValue else {
+            return false
+        }
+        let dotDir = root.appending(path: ".contextos")
         let descriptorURL = root.appending(path: ".contextos/project.json")
         let graphURL = root.appending(path: ".contextos/graph.json")
         let stateDb = root.appending(path: ".contextos/state.sqlite")
         let legacyDb = root.appending(path: ".contextos/contextos.sqlite")
         let fm = FileManager.default
-        return fm.fileExists(atPath: descriptorURL.path) ||
+        return fm.fileExists(atPath: dotDir.path) ||
+               fm.fileExists(atPath: descriptorURL.path) ||
                fm.fileExists(atPath: graphURL.path) ||
                fm.fileExists(atPath: stateDb.path) ||
                fm.fileExists(atPath: legacyDb.path)
@@ -93,9 +99,25 @@ struct ProjectLocation {
             }
             candidate.deleteLastPathComponent()
         }
-        throw CocoaError(.fileNoSuchFile, userInfo: [
-            NSLocalizedDescriptionKey: "No .contextos/project.json found. Open ContextOS from a registered project."
-        ])
+
+        // Auto-initialize project at target directory if opened directly
+        let targetRoot = root.standardizedFileURL
+        let dotDir = targetRoot.appending(path: ".contextos")
+        try? FileManager.default.createDirectory(at: dotDir, withIntermediateDirectories: true)
+        let projId = targetRoot.lastPathComponent.lowercased().replacingOccurrences(of: " ", with: "-")
+        let descriptor = ProjectDescriptor(id: projId, name: targetRoot.lastPathComponent, schemaVersion: 2)
+        let descriptorURL = dotDir.appending(path: "project.json")
+        if let encoded = try? JSONEncoder().encode(descriptor) {
+            try? encoded.write(to: descriptorURL)
+        }
+        let stateDb = dotDir.appending(path: "state.sqlite")
+        let location = ProjectLocation(
+            root: targetRoot,
+            descriptor: descriptor,
+            database: stateDb
+        )
+        remember(location)
+        return location
     }
 
     static func recentProjects() -> [RecentProject] {
@@ -114,11 +136,13 @@ struct ProjectLocation {
         let projects = recentProjects().filter { $0.path != path }
         if let data = try? JSONEncoder().encode(projects) {
             UserDefaults.standard.set(data, forKey: recentProjectsKey)
+            UserDefaults.standard.synchronize()
         }
     }
 
     static func clearAll() {
         UserDefaults.standard.removeObject(forKey: recentProjectsKey)
+        UserDefaults.standard.synchronize()
     }
 
     private static func remember(_ location: ProjectLocation) {
@@ -131,6 +155,7 @@ struct ProjectLocation {
         if projects.count > 10 { projects.removeLast(projects.count - 10) }
         if let data = try? JSONEncoder().encode(projects) {
             UserDefaults.standard.set(data, forKey: recentProjectsKey)
+            UserDefaults.standard.synchronize()
         }
     }
 }

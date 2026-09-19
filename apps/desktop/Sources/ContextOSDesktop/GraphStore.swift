@@ -125,23 +125,38 @@ final class GraphStore: ObservableObject {
     private func loadProject(at url: URL) {
         do {
             let resolvedLocation = try ProjectLocation.resolve(startingAt: url)
-            let resolvedDatabase = try ProjectDatabase(location: resolvedLocation)
-            let next = try resolvedDatabase.loadSnapshot()
             saveCurrentProjectViewState()
-            database?.close()
             location = resolvedLocation
-            database = resolvedDatabase
-            databaseIdentity = resolvedDatabase.fileIdentity
             recentProjects = ProjectLocation.recentProjects()
-            withAnimation(.smooth(duration: 0.24)) {
-                snapshot = next
-                snapshotPresentationID = UUID()
-                restoreProjectViewState(for: next.project.id)
-                recentlyChangedRefs.removeAll()
-                errorMessage = nil
+
+            do {
+                let resolvedDatabase = try ProjectDatabase(location: resolvedLocation)
+                let next = try resolvedDatabase.loadSnapshot()
+                database?.close()
+                database = resolvedDatabase
+                databaseIdentity = resolvedDatabase.fileIdentity
+                withAnimation(.smooth(duration: 0.24)) {
+                    snapshot = next
+                    snapshotPresentationID = UUID()
+                    restoreProjectViewState(for: next.project.id)
+                    recentlyChangedRefs.removeAll()
+                    errorMessage = nil
+                }
+                startLiveUpdates()
+                if let focusTarget { requestFocus(focusTarget) }
+            } catch {
+                database?.close()
+                database = nil
+                databaseIdentity = nil
+                withAnimation(.smooth(duration: 0.24)) {
+                    snapshot = .empty(name: resolvedLocation.descriptor.name, root: resolvedLocation.root.path)
+                    snapshotPresentationID = UUID()
+                    restoreProjectViewState(for: resolvedLocation.descriptor.id)
+                    recentlyChangedRefs.removeAll()
+                    errorMessage = nil
+                }
+                Self.log(error, context: resolvedLocation.database.path)
             }
-            startLiveUpdates()
-            if let focusTarget { requestFocus(focusTarget) }
         } catch {
             errorMessage = error.localizedDescription
             Self.log(error, context: url.path)

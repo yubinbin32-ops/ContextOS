@@ -16,13 +16,14 @@ execSync('npm run plugin:build', { cwd: repoRoot, stdio: 'inherit' });
 
 // 2. Build Swift Desktop App in release mode
 console.log('🔨 Step 2/5: Compiling Swift Desktop App (release mode)...');
-const releaseBinaryPath = path.join(repoRoot, 'apps/desktop/.build/arm64-apple-macosx/release/contextos-desktop');
+execSync('swift build --package-path apps/desktop -c release', { cwd: repoRoot, stdio: 'inherit' });
+const swiftBinDir = execSync('swift build --package-path apps/desktop -c release --show-bin-path', { cwd: repoRoot, encoding: 'utf8' }).trim();
+const releaseBinaryPath = path.join(swiftBinDir, 'contextos-desktop');
 if (!fs.existsSync(releaseBinaryPath)) {
-  execSync('swift build --package-path apps/desktop -c release', { cwd: repoRoot, stdio: 'inherit' });
-} else {
-  console.log(`   Found existing release binary (${(fs.statSync(releaseBinaryPath).size / 1024 / 1024).toFixed(2)} MB). Re-verifying...`);
-  execSync('swift build --package-path apps/desktop -c release', { cwd: repoRoot, stdio: 'inherit' });
+  throw new Error(`Compiled desktop binary not found at: ${releaseBinaryPath}`);
 }
+console.log(`   Compiled fresh release binary (${(fs.statSync(releaseBinaryPath).size / 1024 / 1024).toFixed(2)} MB) at ${releaseBinaryPath}`);
+
 
 // 2.5 Ensure standalone Node runtime is ready
 console.log('📦 Step 2.5/5: Preparing bundled standalone Node runtime...');
