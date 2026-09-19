@@ -487,17 +487,19 @@ export class TaskService {
       if (coverageMode === 'adaptive') {
         let unassignedBlock = resolvedBlocks.find(
           (b) => b.id === 'block-unassigned' || b.id === `block-unassigned-${task.id}`
-        );
+        ) || this.db.getBlock('block-unassigned');
         if (!unassignedBlock) {
           unassignedBlock = {
-            id: `block-unassigned-${task.id}`,
+            id: 'block-unassigned',
             projectId: projectId || raw.projectId || 'contextos',
-            title: `Unassigned Working Set (${task.title})`,
+            title: 'Workspace Unassigned Staging',
             summary: `Adaptive block for unassigned files: ${coverageReport.uncoveredList.join(', ')}`,
             details: 'Automatically created by ContextOS adaptive coverage gate.',
-            kind: 'unassigned',
+            kind: 'dynamic',
             artifactRefs: [],
           };
+          resolvedBlocks.push(unassignedBlock);
+        } else if (!resolvedBlocks.some((b) => b.id === unassignedBlock.id)) {
           resolvedBlocks.push(unassignedBlock);
         }
         for (const filePath of coverageReport.uncoveredList) {

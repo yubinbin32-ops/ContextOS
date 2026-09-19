@@ -978,7 +978,7 @@ struct DetailView: View {
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(ContextOSTheme.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                .background(ContextOSTheme.cardBackground, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(ContextOSTheme.hairline, lineWidth: 1))
 
                 HStack(spacing: 8) {

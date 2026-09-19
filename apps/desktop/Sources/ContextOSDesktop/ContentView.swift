@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject private var store = GraphStore()
@@ -57,6 +58,28 @@ struct ContentView: View {
         .onChange(of: store.projectRoot) { _, _ in closeDocument() }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenKnowledgeDocument"))) { event in
             if let id = event.userInfo?["id"] as? String { openDocument(id, nil) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ChooseProject"))) { _ in
+            store.chooseProject()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenSpecificProject"))) { notif in
+            if let path = notif.userInfo?["path"] as? String {
+                store.openProject(RecentProject(path: path, name: URL(fileURLWithPath: path).lastPathComponent))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RecentProjectsChanged"))) { _ in
+            store.refreshRecentProjects()
+        }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            guard let provider = providers.first else { return false }
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                if let url = url {
+                    DispatchQueue.main.async {
+                        store.openKnowledgeProject(at: url)
+                    }
+                }
+            }
+            return true
         }
         .onOpenURL { url in
             guard url.scheme == "contextos" else { return }
@@ -242,27 +265,6 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 7) {
             let isCloudProject = store.snapshot.project.name.contains("(Cloud)") || store.projectRoot.contains(".contextos/cloud_projects")
             HStack(alignment: .center, spacing: 6) {
-                Text(store.snapshot.project.name)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundStyle(ContextOSTheme.ink)
-                    .lineLimit(1)
-                if isCloudProject {
-                    HStack(spacing: 4) {
-                        Image(systemName: "cloud.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(ContextOSTheme.focus)
-                        Button {
-                            Task { await store.refreshCloudProject() }
-                        } label: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(ContextOSTheme.focus)
-                        }
-                        .buttonStyle(.plain)
-                        .help(store.activeLocale == "zh-Hans" ? "从云端中枢拉取最新图谱" : "Sync latest graph from cloud")
-                    }
-                }
-                Spacer()
                 Menu {
                     if !store.recentProjects.isEmpty {
                         Section(store.text("recentProjects")) {
@@ -299,11 +301,43 @@ struct ContentView: View {
                     }
                     Button(store.text("openProject")) { store.chooseProject() }
                 } label: {
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(ContextOSTheme.muted)
-                        .frame(width: 24, height: 24)
+                    HStack(spacing: 6) {
+                        Image(systemName: isCloudProject ? "cloud.fill" : "folder.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(ContextOSTheme.focus)
+                        Text(store.snapshot.project.name)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(ContextOSTheme.ink)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(ContextOSTheme.muted)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(ContextOSTheme.cardBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(ContextOSTheme.hairline, lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .help(store.activeLocale == "zh-Hans" ? "点击切换项目或查看最近项目 (⌘O 打开)" : "Click to switch project or view recents (⌘O to open)")
+
+                if isCloudProject {
+                    Button {
+                        Task { await store.refreshCloudProject() }
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(ContextOSTheme.focus)
+                    }
+                    .buttonStyle(.plain)
+                    .help(store.activeLocale == "zh-Hans" ? "从云端中枢拉取最新图谱" : "Sync latest graph from cloud")
+                }
+                Spacer()
             }
 
             let totalCps = store.totalCheckpointsCount

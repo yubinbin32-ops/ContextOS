@@ -183,6 +183,10 @@ final class GraphStore: ObservableObject {
         self.recentProjects = []
     }
 
+    func refreshRecentProjects() {
+        self.recentProjects = ProjectLocation.recentProjects()
+    }
+
     func refreshCloudProject() async {
         guard let location = self.location else { return }
         let descriptorURL = location.root.appending(path: ".contextos/project.json")

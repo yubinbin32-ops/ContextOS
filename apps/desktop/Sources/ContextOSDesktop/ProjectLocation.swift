@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 struct ProjectLocation {
@@ -145,6 +146,10 @@ struct ProjectLocation {
         UserDefaults.standard.synchronize()
     }
 
+    static var activeLocale: String {
+        UserDefaults.standard.string(forKey: "contextos.language") ?? (Locale.current.language.languageCode?.identifier == "zh" ? "zh-Hans" : "en")
+    }
+
     private static func remember(_ location: ProjectLocation) {
         let current = RecentProject(path: location.root.path, name: location.descriptor.name)
         var projects = recentProjects().filter { $0.path != current.path }
@@ -156,6 +161,9 @@ struct ProjectLocation {
         if let data = try? JSONEncoder().encode(projects) {
             UserDefaults.standard.set(data, forKey: recentProjectsKey)
             UserDefaults.standard.synchronize()
+        }
+        DispatchQueue.main.async {
+            NSDocumentController.shared.noteNewRecentDocumentURL(location.root)
         }
     }
 }

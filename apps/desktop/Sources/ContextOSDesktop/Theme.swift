@@ -2,13 +2,55 @@ import AppKit
 import SwiftUI
 
 enum ContextOSTheme {
-    // AppKit semantic colors resolve dynamically against the window's
-    // active appearance, so light/dark mode and system themes update cleanly.
-    static var canvas: Color { Color(nsColor: NSColor.controlBackgroundColor) }
-    static var surface: Color { Color(nsColor: NSColor.windowBackgroundColor) }
+    // Dynamic modern semantic colors supporting both Light and Dark modes
+    static func dynamicColor(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
+            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+            return match == .darkAqua ? dark : light
+        }))
+    }
+
+    // Modern crisp canvas: clean subtle slate in light mode, deep sleek slate in dark mode
+    static var canvas: Color {
+        dynamicColor(
+            light: NSColor(srgbRed: 0.965, green: 0.970, blue: 0.978, alpha: 1.0), // #F6F7FA
+            dark: NSColor(srgbRed: 0.055, green: 0.063, blue: 0.082, alpha: 1.0)   // #0E1015
+        )
+    }
+
+    // Modern surface (sidebar, headers, drawers): clean elevated background
+    static var surface: Color {
+        dynamicColor(
+            light: NSColor(srgbRed: 0.945, green: 0.952, blue: 0.962, alpha: 1.0), // #F1F3F6
+            dark: NSColor(srgbRed: 0.082, green: 0.094, blue: 0.122, alpha: 1.0)   // #15181F
+        )
+    }
+
+    // Card background: pure crisp white in light mode, rich elevated card in dark mode
+    static var cardBackground: Color {
+        dynamicColor(
+            light: NSColor.white,                                                  // #FFFFFF
+            dark: NSColor(srgbRed: 0.114, green: 0.129, blue: 0.165, alpha: 1.0)   // #1D212A
+        )
+    }
+
+    static var cardGhostBackground: Color {
+        dynamicColor(
+            light: NSColor(srgbRed: 0.98, green: 0.98, blue: 0.99, alpha: 0.72),
+            dark: NSColor(srgbRed: 0.09, green: 0.10, blue: 0.13, alpha: 0.72)
+        )
+    }
+
     static var ink: Color { Color(nsColor: NSColor.labelColor) }
     static var muted: Color { Color(nsColor: NSColor.secondaryLabelColor) }
-    static var hairline: Color { Color(nsColor: NSColor.separatorColor) }
+
+    static var hairline: Color {
+        dynamicColor(
+            light: NSColor(srgbRed: 0.880, green: 0.895, blue: 0.915, alpha: 1.0), // #E0E4EA
+            dark: NSColor(srgbRed: 0.170, green: 0.190, blue: 0.240, alpha: 1.0)   // #2B303D
+        )
+    }
+
     static var focus: Color { Color(nsColor: NSColor.controlAccentColor) }
     static var success: Color { Color(nsColor: NSColor.systemGreen) }
     static var pending: Color { Color(nsColor: NSColor.systemOrange) }
