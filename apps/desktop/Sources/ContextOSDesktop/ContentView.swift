@@ -315,12 +315,11 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(ContextOSTheme.cardBackground, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .background(ContextOSTheme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .stroke(ContextOSTheme.hairline, lineWidth: 1)
                     )
-                    .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)

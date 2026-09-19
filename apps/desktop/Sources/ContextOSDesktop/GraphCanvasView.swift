@@ -471,7 +471,7 @@ struct GraphCanvasView: View {
             .padding(11)
             .frame(width: scene.cardSize.width, height: scene.cardSize.height, alignment: .topLeading)
             .background(
-                shape.fill(isGhost ? ContextOSTheme.cardGhostBackground : ContextOSTheme.cardBackground)
+                shape.fill(isGhost ? ContextOSTheme.surface.opacity(0.72) : ContextOSTheme.surface)
                     .overlay(alignment: .leading) {
                         Rectangle()
                             .fill(typeColor)
@@ -481,14 +481,14 @@ struct GraphCanvasView: View {
                     }
                     .overlay(
                         shape.stroke(
-                            changed ? ContextOSTheme.focus : selected ? typeColor : (isGhost ? typeColor.opacity(0.35) : ContextOSTheme.hairline),
+                            changed ? ContextOSTheme.focus : selected ? typeColor : typeColor.opacity(isGhost ? 0.38 : 0.28),
                             style: StrokeStyle(
-                                lineWidth: changed ? 3 : selected ? 2 : 1.0,
+                                lineWidth: changed ? 3 : selected ? 2 : 1.1,
                                 dash: isGhost ? [5, 3] : []
                             )
                         )
                     )
-                    .shadow(color: Color.black.opacity(selected ? 0.12 : (isGhost ? 0.02 : 0.06)), radius: selected ? 10 : 4, y: selected ? 4 : 2)
+                    .shadow(color: Color.black.opacity(selected ? 0.10 : 0.045), radius: selected ? 10 : 4, y: 2)
             )
         }
         .buttonStyle(.plain)

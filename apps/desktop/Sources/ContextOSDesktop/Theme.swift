@@ -2,56 +2,13 @@ import AppKit
 import SwiftUI
 
 enum ContextOSTheme {
-    // Dynamic modern semantic colors supporting both Light and Dark modes
-    static func dynamicColor(light: NSColor, dark: NSColor) -> Color {
-        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
-            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
-            return match == .darkAqua ? dark : light
-        }))
-    }
-
-    // Pure white canvas in light mode, sleek dark in dark mode
-    static var canvas: Color {
-        dynamicColor(
-            light: NSColor.white,                                                  // #FFFFFF Pure White
-            dark: NSColor(white: 0.10, alpha: 1.0)                                 // Deep Dark
-        )
-    }
-
-    // Pure white surface (sidebar, headers, drawers)
-    static var surface: Color {
-        dynamicColor(
-            light: NSColor.white,                                                  // #FFFFFF Pure White
-            dark: NSColor(white: 0.13, alpha: 1.0)                                 // Elevated Dark
-        )
-    }
-
-    // Pure crisp white card background
-    static var cardBackground: Color {
-        dynamicColor(
-            light: NSColor.white,                                                  // #FFFFFF Pure White
-            dark: NSColor(white: 0.17, alpha: 1.0)                                 // Card Dark
-        )
-    }
-
-    static var cardGhostBackground: Color {
-        dynamicColor(
-            light: NSColor.white.withAlphaComponent(0.82),
-            dark: NSColor(white: 0.13, alpha: 0.82)
-        )
-    }
-
+    // AppKit semantic colors resolve dynamically against the window's
+    // active appearance, so light/dark mode and system themes update cleanly.
+    static var canvas: Color { Color(nsColor: NSColor.controlBackgroundColor) }
+    static var surface: Color { Color(nsColor: NSColor.windowBackgroundColor) }
     static var ink: Color { Color(nsColor: NSColor.labelColor) }
     static var muted: Color { Color(nsColor: NSColor.secondaryLabelColor) }
-
-    // Pure neutral light hairline border (strictly 0% saturation / zero blue tint)
-    static var hairline: Color {
-        dynamicColor(
-            light: NSColor(white: 0.89, alpha: 1.0),                               // #E3E3E3 Neutral Light Gray
-            dark: NSColor(white: 0.25, alpha: 1.0)                                 // #404040
-        )
-    }
-
+    static var hairline: Color { Color(nsColor: NSColor.separatorColor) }
     static var focus: Color { Color(nsColor: NSColor.controlAccentColor) }
     static var success: Color { Color(nsColor: NSColor.systemGreen) }
     static var pending: Color { Color(nsColor: NSColor.systemOrange) }
