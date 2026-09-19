@@ -39,6 +39,7 @@ graph TD
        ```
      * 若用户选择 `1`：
        * AI 自动下载最新的 `ContextOS.app.zip` 并解压部署至 `/Applications/ContextOS.app`（或用户应用目录）。
+       * （提示用户：若首次打开提示未受信任的开发者拦截，可前往“系统设置 ➔ 隐私与安全性”点击“仍要打开”，或按住 Control 点击应用选择“打开”即可）。
      * 若用户选择 `2`：直接进入 Step 1。
    * 若操作系统为 **Windows / Linux**：
      * 跳过桌面端提示，直接进入 Step 1。

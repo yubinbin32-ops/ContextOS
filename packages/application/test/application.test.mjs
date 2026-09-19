@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { V2Database, SyncEngine } from '../../../packages/storage/src/index.mjs';
+import { calculateTreeHash } from '../../../packages/code-intel/src/index.mjs';
 import { PlanService, TaskService, KnowledgeService } from '../src/index.mjs';
 
 test('PlanService manages plan lifecycle and checkpoints', () => {
@@ -44,6 +45,102 @@ test('PlanService manages plan lifecycle and checkpoints', () => {
   db.close();
 });
 
+test('Task sync covers source and dependency tree bindings without an artifact ledger', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-tree-binding-'));
+  const db = new V2Database(path.join(tempDir, '.contextos', 'state.sqlite'));
+  db.ensureProject('proj-tree-binding', tempDir);
+  const syncEngine = new SyncEngine(db);
+  const planService = new PlanService(db);
+  const taskService = new TaskService(db, syncEngine);
+
+  const sourcePath = path.join(tempDir, 'src', 'feature.mjs');
+  const dependencyPath = path.join(tempDir, 'node_modules', 'runtime', 'index.js');
+  const manifestPath = path.join(tempDir, 'package-lock.json');
+  fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+  fs.mkdirSync(path.dirname(dependencyPath), { recursive: true });
+  const sourceText = 'export function feature() { return 42; }\n';
+  const manifestText = '{"name":"fixture","lockfileVersion":3}\n';
+  fs.writeFileSync(sourcePath, sourceText, 'utf8');
+  fs.writeFileSync(dependencyPath, 'module.exports = true;\n', 'utf8');
+  fs.writeFileSync(manifestPath, manifestText, 'utf8');
+
+  planService.createPlan({
+    id: 'plan-tree-binding',
+    projectId: 'proj-tree-binding',
+    title: 'Tree Binding Flow',
+    phases: [{ id: 'P0', order: 0, status: 'active' }],
+  });
+
+  taskService.createTask(
+    {
+      id: 'task-tree-binding',
+      planId: 'plan-tree-binding',
+      phaseId: 'P0',
+      title: 'Bind dependency tree',
+      workingSet: {
+        files: ['src/feature.mjs', 'node_modules/runtime/index.js'],
+      },
+    },
+    tempDir
+  );
+  taskService.activateTask('task-tree-binding', tempDir);
+  taskService.addCheck('task-tree-binding', {
+    description: 'Tree binding validated',
+    passed: true,
+    evidence: 'manual dependency boundary validation',
+  });
+  taskService.startChecking('task-tree-binding');
+
+  const sourceHash = crypto.createHash('sha256').update(sourceText).digest('hex').slice(0, 16);
+  const manifestHash = crypto.createHash('sha256').update(manifestText).digest('hex').slice(0, 16);
+  const syncResult = taskService.syncTask('task-tree-binding', {
+    projectId: 'proj-tree-binding',
+    projectRoot: tempDir,
+    blocks: [
+      {
+        id: 'block-feature-tree',
+        projectId: 'proj-tree-binding',
+        title: 'Feature implementation',
+        artifactRefs: [
+          {
+            path: 'src/feature.mjs',
+            symbol: 'feature',
+            anchorKind: 'symbol',
+            hash: sourceHash,
+          },
+        ],
+      },
+      {
+        id: 'block-node-dependencies',
+        projectId: 'proj-tree-binding',
+        title: 'Node dependencies',
+        kind: 'dependency',
+        artifactRefs: [
+          {
+            path: 'node_modules',
+            anchorKind: 'tree',
+            hashMode: 'manifest',
+            manifest: 'package-lock.json',
+            hash: manifestHash,
+            role: 'dependency',
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(syncResult.task.status, 'completed');
+  assert.equal(syncResult.syncResult.coverage.coveragePercent, 100);
+  assert.equal(db.getBlock('block-unassigned'), null);
+  const artifactTables = db.db.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('artifact_records', 'artifact_links', 'build_runs')"
+  ).all();
+  assert.deepEqual(artifactTables, []);
+
+  db.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test('TaskService enforces C-D-C-S flow and coverage gate', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-app-test-'));
   const db = new V2Database(path.join(tempDir, '.contextos', 'state.sqlite'));
@@ -72,7 +169,11 @@ test('TaskService enforces C-D-C-S flow and coverage gate', () => {
   assert.equal(task.status, 'draft');
   taskService.activateTask('task-app-1');
   taskService.addNote('task-app-1', { text: 'Started coding feature X' });
-  taskService.addCheck('task-app-1', { description: 'Unit tests passing', passed: true });
+  taskService.addCheck('task-app-1', {
+    description: 'Unit tests passing',
+    passed: true,
+    evidence: 'manual test receipt',
+  });
   taskService.startChecking('task-app-1');
 
   // 1. Attempt sync WITHOUT covering src/feature.js in blocks: MUST FAIL!
@@ -238,7 +339,9 @@ test('TaskService detects host native modifications via mtime + SHA256 compariso
 
   // Verify Block artifactRef hash was updated in DB
   const updatedBlock = db.getBlock('block-service');
-  assert.equal(updatedBlock.artifactRefs[0].hash, newHash);
+  const serviceSymbol = reconciled.contextSlice.locators.find((locator) => locator.symbol === 'MyService');
+  assert.ok(serviceSymbol);
+  assert.equal(updatedBlock.artifactRefs[0].hash, serviceSymbol.hash);
 
   // 6. Verify mtime-only change (touch without content change) does NOT trigger false modification
   const currentSnapshotHash = reconciled.baseline.fileSnapshots['src/service.js'].hash;
@@ -248,7 +351,11 @@ test('TaskService detects host native modifications via mtime + SHA256 compariso
   assert.equal(rechecked.baseline.fileSnapshots['src/service.js'].hash, currentSnapshotHash);
 
   // 7. Complete Task with checks and sync
-  taskService.addCheck('task-host-1', { description: 'Host modification verified', passed: true });
+  taskService.addCheck('task-host-1', {
+    description: 'Host modification verified',
+    passed: true,
+    evidence: 'manual host reconciliation',
+  });
   taskService.startChecking('task-host-1');
   const synced = taskService.syncTask('task-host-1', {
     blocks: [updatedBlock],
@@ -259,6 +366,65 @@ test('TaskService detects host native modifications via mtime + SHA256 compariso
 
   db.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('Tree binding hashes content directories and dependency manifests deterministically', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-tree-hash-'));
+  const resources = path.join(tempDir, 'resources');
+  fs.mkdirSync(resources, { recursive: true });
+  fs.writeFileSync(path.join(resources, 'a.txt'), 'a\n', 'utf8');
+  fs.writeFileSync(path.join(resources, 'b.txt'), 'b\n', 'utf8');
+
+  const first = calculateTreeHash(tempDir, 'resources', { hashMode: 'content' });
+  fs.writeFileSync(path.join(resources, 'b.txt'), 'changed\n', 'utf8');
+  const second = calculateTreeHash(tempDir, 'resources', { hashMode: 'content' });
+  assert.notEqual(first.hash, second.hash);
+
+  fs.mkdirSync(path.join(tempDir, 'node_modules', 'runtime'), { recursive: true });
+  fs.writeFileSync(path.join(tempDir, 'node_modules', 'runtime', 'index.js'), 'module.exports = 1;\n', 'utf8');
+  fs.writeFileSync(path.join(tempDir, 'package-lock.json'), '{"lockfileVersion":3}\n', 'utf8');
+  const manifestFirst = calculateTreeHash(tempDir, 'node_modules', {
+    hashMode: 'manifest',
+    manifest: 'package-lock.json',
+  });
+  fs.writeFileSync(path.join(tempDir, 'node_modules', 'runtime', 'index.js'), 'module.exports = 2;\n', 'utf8');
+  const manifestSecond = calculateTreeHash(tempDir, 'node_modules', {
+    hashMode: 'manifest',
+    manifest: 'package-lock.json',
+  });
+  assert.equal(manifestFirst.hash, manifestSecond.hash);
+  assert.equal(manifestSecond.manifest, 'package-lock.json');
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('PlanService repairs passed and stale active plans', () => {
+  const db = new V2Database(':memory:');
+  db.ensureProject('proj-plan-hygiene', '/tmp/plan-hygiene');
+  const plans = new PlanService(db);
+
+  plans.createPlan({
+    id: 'plan-passed',
+    projectId: 'proj-plan-hygiene',
+    title: 'Passed Plan',
+    phases: [{ id: 'P0', status: 'completed' }],
+    checkpoints: [{ id: 'cp-passed', title: 'Passed', status: 'passed' }],
+  });
+  const stale = plans.createPlan({
+    id: 'plan-stale',
+    projectId: 'proj-plan-hygiene',
+    title: 'Stale Plan',
+    phases: [{ id: 'P0', status: 'pending' }],
+  });
+  stale.updatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  db.savePlan(stale);
+
+  const result = plans.repairStateHygiene('proj-plan-hygiene', { staleMs: 60 * 60 * 1000 });
+  assert.equal(result.changed, 2);
+  assert.equal(db.getPlan('plan-passed').status, 'completed');
+  assert.equal(db.getPlan('plan-stale').status, 'archived');
+
+  db.close();
 });
 
 test('TaskService handles external file deletion and non-git project modifications', async () => {
@@ -316,3 +482,110 @@ test('TaskService handles external file deletion and non-git project modificatio
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('TaskService manages explicit rule bindings and task updates', () => {
+  const db = new V2Database(':memory:');
+  db.ensureProject('proj-rule-test', '/tmp');
+  const syncEngine = new SyncEngine(db);
+  const planService = new PlanService(db);
+  const taskService = new TaskService(db, syncEngine);
+
+  planService.createPlan({
+    id: 'plan-rule-test',
+    projectId: 'proj-rule-test',
+    title: 'Rule Test Plan',
+    phases: [{ id: 'P0', order: 0, status: 'active' }],
+  });
+
+  const task = taskService.createTask({
+    id: 'task-app-rule',
+    planId: 'plan-rule-test',
+    phaseId: 'P0',
+    projectId: 'proj-rule-test',
+    title: 'Rule Test Task',
+    rules: ['rule-surgical-code-editing'],
+  });
+
+  assert.deepEqual(task.rules, ['rule-surgical-code-editing']);
+
+  // Bind rule
+  const bound = taskService.bindRule('task-app-rule', 'rule-product-contract');
+  assert.deepEqual(bound.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+  // Verify persistence in DB
+  const retrieved1 = taskService.getTask('task-app-rule');
+  assert.deepEqual(retrieved1.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+
+  // Unbind rule
+  const unbound = taskService.unbindRule('task-app-rule', 'rule-surgical-code-editing');
+  assert.deepEqual(unbound.rules, ['rule-product-contract']);
+  const retrieved2 = taskService.getTask('task-app-rule');
+  assert.deepEqual(retrieved2.rules, ['rule-product-contract']);
+
+  // Update task
+  const updated = taskService.updateTask('task-app-rule', {
+    title: 'Updated Rule Test Task',
+    rules: ['rule-ui-aesthetic-precision', 'rule-command-sessions'],
+  });
+  assert.equal(updated.title, 'Updated Rule Test Task');
+  assert.deepEqual(updated.rules, ['rule-ui-aesthetic-precision', 'rule-command-sessions']);
+
+  // Update task using references.rules object
+  const updatedViaRefs = taskService.updateTask('task-app-rule', {
+    references: { rules: ['rule-cdcs-workflow'] },
+  });
+  assert.deepEqual(updatedViaRefs.rules, ['rule-cdcs-workflow']);
+  assert.deepEqual(updatedViaRefs.references.rules, ['rule-cdcs-workflow']);
+
+  db.close();
+});
+
+test('PlanService instantiates and persists embedded tasks with rules in createPlan', () => {
+  const db = new V2Database(':memory:');
+  db.ensureProject('proj-plan-tasks', '/tmp');
+  const planService = new PlanService(db);
+
+  const plan = planService.createPlan({
+    id: 'plan-with-tasks',
+    projectId: 'proj-plan-tasks',
+    title: 'Plan with embedded tasks',
+    phases: [
+      {
+        id: 'phase-p0',
+        name: 'Phase 0 - Foundation',
+        order: 0,
+        tasks: [
+          {
+            id: 'task-auto-1',
+            title: 'Setup Domain Entities',
+            rules: ['rule-product-contract', 'rule-surgical-code-editing'],
+          },
+          {
+            id: 'task-auto-2',
+            title: 'Setup Service Layer',
+            rules: ['rule-out-of-context-commands'],
+          },
+          'task-auto-string-id',
+        ],
+      },
+    ],
+  });
+
+  assert.equal(plan.phases.length, 1);
+  assert.deepEqual(plan.phases[0].taskIds, ['task-auto-1', 'task-auto-2', 'task-auto-string-id']);
+
+  // Verify tasks were persisted to DB with bound rules
+  const t1 = db.getTask('task-auto-1');
+  assert.ok(t1);
+  assert.equal(t1.title, 'Setup Domain Entities');
+  assert.deepEqual(t1.rules, ['rule-product-contract', 'rule-surgical-code-editing']);
+
+  const t2 = db.getTask('task-auto-2');
+  assert.ok(t2);
+  assert.equal(t2.title, 'Setup Service Layer');
+  assert.deepEqual(t2.rules, ['rule-out-of-context-commands']);
+
+  const t3 = db.getTask('task-auto-string-id');
+  assert.ok(t3);
+  assert.equal(t3.id, 'task-auto-string-id');
+
+  db.close();
+});

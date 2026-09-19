@@ -25,7 +25,7 @@
 ## 它带来的核心开发变化
 
 ### 1. 架构化身地铁路线图 (Metro Map)
-Block 描述真实的物理代码能力（杜绝虚空 Ghost Block）。Chain 代表水平平行的地铁铁轨，带类型的 Link 形成正交的跨线换乘。AI 一眼看清系统骨架，无需盲读代码。
+Block 绑定真实文件、AST 符号或目录树（杜绝虚空 Ghost Block）。依赖与资源目录使用单个有界 tree 锚点，不再逐文件记账；Chain 代表水平平行的地铁铁轨，带类型的 Link 形成正交的跨线换乘。AI 一眼看清系统骨架，无需盲读代码。
 
 ![功能链与精确 AST 代码定位](assets/path-impact.png)
 
@@ -33,7 +33,7 @@ Block 描述真实的物理代码能力（杜绝虚空 Ghost Block）。Chain �
 开发严格按照 **Create（创建任务）→ Develop（手术刀开发）→ Check（验证沉淀）→ Sync（原子写回）** 节拍流转。任务携带上下文切片与中间思考，并在 Sync 时触发 **100% 工作区覆盖率门禁**。
 
 ### 3. 命令运行出舱脱敏 (Out-of-Context Execution)
-`run_command` 剥离 ANSI 终端控制符与敏感密钥，全量原始日志存盘于 `.contextos/logs/`，仅向上下文返回精简回执（Receipt），削减 98% 以上的终端输出噪声。
+`run_command` 剥离 ANSI 终端控制符与敏感密钥，全量**脱敏后**日志存盘于 `.contextos/logs/`，仅向上下文返回精简回执（Receipt），削减 98% 以上的终端输出噪声。
 
 ### 4. 代码工具手术刀级读写 (Surgical Code Engineering)
 集成编译器级真 AST 引擎（原生支持 JS/TS/JSX/TSX、Python、Swift、Java、Kotlin、C/C++、C#、Go、Rust、PHP、Ruby 等 10+ 种主流语言），支持 VS Code 风格全局符号搜索、大纲审视、方法级抽取和补丁式精准写盘并自动重锚。
@@ -80,6 +80,12 @@ graph TD
 3. App 会自动将 MCP 配置及对应运行路径注入编辑器。**配置完成后，你可以随时关闭桌面 App，平时无需保持开启**。
 4. 在编辑器对话中只需一句话唤醒 ContextOS 协作：
    > **“把这个方案写入 ContextOS 后开始执行”** 或 **“查看 ContextOS 继续开发”**
+
+> [!IMPORTANT]
+> **首次在 macOS 打开提示“无法打开”或“已拦截未受信任的开发者”？**
+> 由于独立开源软件尚未加入苹果付费开发者签名公证，macOS Gatekeeper 安全机制会在首次双击启动时弹出风险拦截提示。这是 macOS 的正常保护机制，**仅需在首次启动时放行一次即可**：
+> - **方式一（系统设置放行 · 推荐）**：打开 macOS **“系统设置” (System Settings) ➔ “隐私与安全性” (Privacy & Security)**，向下滑动到“安全性”栏目，在“已拦截 ContextOS.app”旁边点击 **“仍要打开” (Open Anyway)** 并确认。
+> - **方式二（快捷右键打开）**：在“访达”（Finder）的“应用程序”中找到 `ContextOS`，按住 **Control 键点按（或右键）** 应用图标，在右键菜单中点击 **“打开”**，并在二次弹出的警告窗中点击 **“打开”**。
 
 ![一键同步编辑器和 MCP](assets/settings-sync.png)
 

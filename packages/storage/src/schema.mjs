@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS projects (
   repo_root TEXT NOT NULL,
   graph_revision INTEGER NOT NULL DEFAULT 0,
   exported_at TEXT,
-  schema_version INTEGER NOT NULL DEFAULT 2
+  schema_version INTEGER NOT NULL DEFAULT 3
 );
 
 CREATE TABLE IF NOT EXISTS plans (
@@ -81,10 +81,13 @@ CREATE TABLE IF NOT EXISTS artifact_refs (
   block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
   path TEXT NOT NULL,
   symbol TEXT,
+  anchor_kind TEXT NOT NULL DEFAULT 'symbol',
   start_line INTEGER,
   end_line INTEGER,
   hash TEXT NOT NULL DEFAULT '',
-  role TEXT NOT NULL DEFAULT 'implementation'
+  role TEXT NOT NULL DEFAULT 'implementation',
+  hash_mode TEXT,
+  manifest TEXT
 );
 
 CREATE TABLE IF NOT EXISTS chains (
@@ -122,7 +125,7 @@ CREATE TABLE IF NOT EXISTS command_receipts (
   summary TEXT NOT NULL DEFAULT '',
   errors_json TEXT NOT NULL DEFAULT '[]',
   warnings_json TEXT NOT NULL DEFAULT '[]',
-  artifacts_json TEXT NOT NULL DEFAULT '[]',
+  changed_paths_json TEXT NOT NULL DEFAULT '[]',
   log_handle TEXT,
   created_at TEXT NOT NULL
 );
@@ -130,5 +133,15 @@ CREATE TABLE IF NOT EXISTS command_receipts (
 CREATE TABLE IF NOT EXISTS sync_state (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS graph_outbox (
+  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  base_revision INTEGER NOT NULL,
+  target_revision INTEGER NOT NULL,
+  payload_hash TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 `;

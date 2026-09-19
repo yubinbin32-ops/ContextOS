@@ -18,10 +18,12 @@ export async function runCommand({
   const logDir = path.join(projectRoot, '.contextos', 'logs');
   fs.mkdirSync(logDir, { recursive: true });
   const logFile = path.join(logDir, `${receiptId}.log`);
+  const maxCaptureChars = 10_000_000;
 
   return new Promise((resolve) => {
     let stdoutData = '';
     let stderrData = '';
+    let captureTruncated = false;
     let killedByTimeout = false;
 
     const isWin = process.platform === 'win32';
@@ -32,6 +34,7 @@ export async function runCommand({
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: !isWin,
       windowsVerbatimArguments: isWin,
     });
 
@@ -44,26 +47,42 @@ export async function runCommand({
           child.kill('SIGKILL');
         }
       } else {
-        child.kill('SIGKILL');
+        try {
+          if (child.pid) process.kill(-child.pid, 'SIGKILL');
+          else child.kill('SIGKILL');
+        } catch (_) {
+          child.kill('SIGKILL');
+        }
       }
     }, timeoutMs);
 
     child.stdout.on('data', (chunk) => {
-      stdoutData += chunk.toString('utf8');
+      if (stdoutData.length >= maxCaptureChars) {
+        captureTruncated = true;
+        return;
+      }
+      stdoutData += chunk.toString('utf8').slice(0, maxCaptureChars - stdoutData.length);
     });
 
     child.stderr.on('data', (chunk) => {
-      stderrData += chunk.toString('utf8');
+      if (stderrData.length >= maxCaptureChars) {
+        captureTruncated = true;
+        return;
+      }
+      stderrData += chunk.toString('utf8').slice(0, maxCaptureChars - stderrData.length);
     });
 
     child.on('close', (code, signal) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
-      const rawOutput = stdoutData + (stderrData ? `\n--- STDERR ---\n${stderrData}` : '');
+      const rawOutput =
+        stdoutData +
+        (stderrData ? `\n--- STDERR ---\n${stderrData}` : '') +
+        (captureTruncated ? '\n--- CAPTURE TRUNCATED ---\n' : '');
 
       // Persist raw full log out-of-context
       try {
-        fs.writeFileSync(logFile, rawOutput, 'utf8');
+        fs.writeFileSync(logFile, redactSecrets(rawOutput), 'utf8');
       } catch (_) {}
 
       const exitCode = killedByTimeout ? 124 : (code !== null ? code : 1);

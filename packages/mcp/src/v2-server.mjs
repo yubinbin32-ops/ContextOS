@@ -15,6 +15,7 @@ import {
   getGlobalCloudConfig,
   saveGlobalCloudConfig,
 } from './bootstrap-util.mjs';
+import { runAdminCli } from './admin-cli.mjs';
 
 const serviceCache = new Map();
 
@@ -61,7 +62,7 @@ function getService(projectRoot) {
         mode = 'cloud';
         const globalCloud = getGlobalCloudConfig();
         cloudUrl = proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
-        token = proj.token || proj.cloudToken || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
+        token = globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
       } else if (proj.storage === 'local' || proj.isCloud === false) {
         mode = 'local';
       }
@@ -107,7 +108,7 @@ function textResult(content) {
 
 export function createV2Server() {
   const server = new McpServer(
-    { name: 'contextos', version: '2.1.0' },
+    { name: 'contextos', version: '2.3.0' },
     {
       instructions:
         'ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub.',
@@ -163,13 +164,20 @@ export function createV2Server() {
     {
       description: 'C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.',
       inputSchema: {
-        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume', 'activate', 'develop']),
+        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume', 'activate', 'develop', 'bind_rule', 'unbind_rule', 'update', 'probe', 'graduate_probe', 'reconcile']),
         id: z.string().optional(),
         taskData: z.record(z.any()).optional(),
+        ruleId: z.string().optional(),
+        rules: z.array(z.string()).optional(),
         text: z.string().optional(),
         kind: z.string().optional(),
         checkData: z.record(z.any()).optional(),
         syncData: z.record(z.any()).optional(),
+        hypothesis: z.string().optional(),
+        script: z.string().optional(),
+        findings: z.string().optional(),
+        targetBlockId: z.string().optional(),
+        files: z.array(z.string()).optional(),
         format: z.enum(['markdown', 'json']).default('markdown'),
         projectRoot: z.string().optional(),
       },
@@ -185,10 +193,15 @@ export function createV2Server() {
   server.registerTool(
     'block',
     {
-      description: 'Manage code functional Blocks. Blocks MUST bind to real code artifacts; ghost blocks are strictly rejected.',
+      description: 'Manage code functional Blocks. Blocks bind to real files, AST symbols, or directory trees; ghost blocks are rejected. Use bind_auto for symbols and dependency/resource directories.',
       inputSchema: {
-        action: z.enum(['list', 'open', 'search', 'bind', 'delete']),
+        action: z.enum(['list', 'open', 'search', 'bind', 'bind_auto', 'delete']),
         id: z.string().optional(),
+        path: z.string().optional(),
+        paths: z.array(z.string()).optional(),
+        symbols: z.array(z.string()).optional(),
+        hashMode: z.enum(['content', 'manifest']).optional(),
+        manifest: z.string().optional(),
         query: z.string().optional(),
         blockData: z.record(z.any()).optional(),
         format: z.enum(['markdown', 'json']).default('markdown'),
@@ -425,8 +438,8 @@ export function createV2Server() {
       if (mode.startsWith('cloud') && cloudUrl !== 'N/A') {
         try {
           const res = await fetch(`${cloudUrl.replace(/\/+$/, '')}/api/v2/health`, {
-            headers: projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN
-              ? { Authorization: `Bearer ${projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` }
+          headers: globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN
+              ? { Authorization: `Bearer ${globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` }
               : {},
           });
           cloudHealth = res.ok ? '🟢 Connected (200 OK)' : `🔴 HTTP ${res.status}`;
@@ -480,7 +493,7 @@ export function createV2Server() {
 
       const globalCloud = getGlobalCloudConfig();
       const resolvedCloudUrl = input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL;
-      const resolvedToken = input.token || proj.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN;
+      const resolvedToken = input.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN;
       const pid = input.projectId || proj.id || 'contextos';
 
       if (input.targetMode === 'cloud') {
@@ -515,7 +528,8 @@ export function createV2Server() {
         proj.storage = 'cloud';
         proj.isCloud = true;
         proj.cloudUrl = resolvedCloudUrl.replace(/\/+$/, '');
-        if (resolvedToken) proj.token = resolvedToken;
+        delete proj.token;
+        delete proj.cloudToken;
         proj.updatedAt = new Date().toISOString();
         fs.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + '\n', 'utf8');
 
@@ -604,7 +618,9 @@ export function createV2Server() {
               localService.close();
             }
           } catch (e) {
-            console.warn('[ContextOS Switch] Could not pull cloud snapshot before switching to local:', e.message);
+            throw new Error(
+              `Cannot switch to local because the cloud snapshot could not be pulled: ${e.message}`
+            );
           }
         }
 
@@ -635,10 +651,17 @@ export function createV2Server() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const server = createV2Server();
-  const transport = new StdioServerTransport();
-  server.connect(transport).catch((err) => {
-    console.error('Fatal MCP Server error:', err);
-    process.exit(1);
-  });
+  const cliArgs = process.argv.slice(2);
+  if (cliArgs.length > 0) {
+    runAdminCli(cliArgs).then((code) => {
+      process.exitCode = code;
+    });
+  } else {
+    const server = createV2Server();
+    const transport = new StdioServerTransport();
+    server.connect(transport).catch((err) => {
+      console.error('Fatal MCP Server error:', err);
+      process.exit(1);
+    });
+  }
 }

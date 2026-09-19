@@ -17,6 +17,7 @@ assets/截屏*.png
 
 # Local process handshake (never canonical project knowledge)
 .contextos/runtime.json*
+.contextos/project.lock/
 *.xcuserstate
 .cache/
 .wrangler/

@@ -7,28 +7,47 @@ export class ArtifactRef {
   constructor({
     path,
     symbol = null,
+    anchorKind = symbol ? 'symbol' : 'file',
     startLine = null,
     endLine = null,
     hash = '',
     role = 'implementation',
+    hashMode = null,
+    manifest = null,
   }) {
     if (!path || typeof path !== 'string') throw new Error('ArtifactRef requires a valid string path');
+    if (!['symbol', 'file', 'tree'].includes(anchorKind)) {
+      throw new Error(`ArtifactRef requires a valid anchorKind, received '${anchorKind}'`);
+    }
+    const resolvedHashMode = anchorKind === 'tree' ? hashMode || (manifest ? 'manifest' : 'content') : null;
+    if (resolvedHashMode && !['content', 'manifest'].includes(resolvedHashMode)) {
+      throw new Error(`ArtifactRef requires a valid tree hashMode, received '${resolvedHashMode}'`);
+    }
+    if (anchorKind === 'tree' && resolvedHashMode === 'manifest' && !manifest) {
+      throw new Error('ArtifactRef tree manifest anchors require a manifest path');
+    }
     this.path = path;
-    this.symbol = symbol;
-    this.startLine = startLine !== null ? Number(startLine) : null;
-    this.endLine = endLine !== null ? Number(endLine) : null;
+    this.symbol = anchorKind === 'tree' ? null : symbol;
+    this.anchorKind = anchorKind;
+    this.startLine = anchorKind === 'tree' || startLine === null ? null : Number(startLine);
+    this.endLine = anchorKind === 'tree' || endLine === null ? null : Number(endLine);
     this.hash = hash;
     this.role = role;
+    this.hashMode = resolvedHashMode;
+    this.manifest = anchorKind === 'tree' ? manifest : null;
   }
 
   toJSON() {
     return {
       path: this.path,
       symbol: this.symbol,
+      anchorKind: this.anchorKind,
       startLine: this.startLine,
       endLine: this.endLine,
       hash: this.hash,
       role: this.role,
+      hashMode: this.hashMode,
+      manifest: this.manifest,
     };
   }
 }

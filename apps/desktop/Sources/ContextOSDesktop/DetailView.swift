@@ -810,7 +810,7 @@ struct DetailView: View {
                 HStack {
                     sectionLabel(store.text("files").uppercased())
                     Spacer()
-                    Text(store.activeLocale == "zh-Hans" ? "AST 门面映射" : "AST Facade Anchors")
+                    Text(store.activeLocale == "zh-Hans" ? "代码与目录绑定" : "Code & Directory Bindings")
                         .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
                         .foregroundStyle(ContextOSTheme.focus)
                 }
@@ -820,7 +820,7 @@ struct DetailView: View {
                             store.revealSource(source)
                         } label: {
                             HStack(alignment: .top, spacing: 9) {
-                                Image(systemName: source.symbol != nil ? "curlybraces" : "doc.text")
+                                Image(systemName: source.anchorKind == "tree" ? "folder" : (source.symbol != nil ? "curlybraces" : "doc.text"))
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundStyle(source.symbol != nil ? ContextOSTheme.focus : ContextOSTheme.ink)
                                 VStack(alignment: .leading, spacing: 3) {
@@ -841,6 +841,12 @@ struct DetailView: View {
                                         Text(symbol)
                                             .font(.system(size: 10, weight: .medium, design: .monospaced))
                                             .foregroundStyle(ContextOSTheme.focus)
+                                    } else if source.anchorKind == "tree" {
+                                        Text(source.hashMode == "manifest" && source.manifest != nil
+                                             ? "TREE · MANIFEST \(source.manifest ?? "")"
+                                             : "TREE · CONTENT")
+                                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                                            .foregroundStyle(ContextOSTheme.pending)
                                     } else {
                                         Text(source.role)
                                             .font(.system(size: 10, design: .monospaced))
@@ -857,7 +863,7 @@ struct DetailView: View {
                         }
                         .buttonStyle(.plain)
 
-                        if let start = source.startLine, let end = source.endLine {
+                        if source.anchorKind != "tree", let start = source.startLine, let end = source.endLine {
                             let lineCount = max(1, end - start + 1)
                             let sliceTokens = lineCount * 7
                             HStack(spacing: 6) {

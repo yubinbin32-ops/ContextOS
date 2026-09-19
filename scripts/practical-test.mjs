@@ -57,8 +57,10 @@ async function runPracticalDevelopmentTest() {
   const editResult = await service.code({
     action: 'edit',
     path: targetRelPath,
-    targetContent: '  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [] }) {',
-    replacementContent: `  ${marker}\n  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [] }) {`,
+    targetContent:
+      '  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [], rulesMap = {}, projectRoot = null, nextAction: nextActionOverride = null }) {',
+    replacementContent:
+      `  ${marker}\n  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [], rulesMap = {}, projectRoot = null, nextAction: nextActionOverride = null }) {`,
   });
 
   assert.ok(editResult.newHash, 'New symbol hash must be computed');

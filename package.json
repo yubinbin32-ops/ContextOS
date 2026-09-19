@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "AI 编码的高精度外骨骼动力装甲：通过 MCP 自动管理上下文，实测减少 90%+ 上下文开销。(High-Precision Powered Exoskeleton for AI Coding: Auto-governs context via MCP, reducing context window waste by 90%+)",
   "license": "MIT",
   "type": "module",
@@ -42,6 +42,7 @@
   "scripts": {
     "mcp": "node packages/mcp/src/server.mjs",
     "test": "node --test packages/*/test/*.test.mjs apps/*/test/*.test.mjs",
+    "verify": "npm test && npm run plugin:verify && node scripts/manual-tree-bindings.mjs && npm run desktop:build",
     "benchmark": "node scripts/benchmark.mjs",
     "plugin:build": "esbuild packages/mcp/src/server.mjs --bundle --platform=node --format=esm --target=node22 --outfile=plugins/contextos/server/contextos-mcp.mjs",
     "plugin:verify": "npm run plugin:build && node scripts/plugin-smoke.mjs",

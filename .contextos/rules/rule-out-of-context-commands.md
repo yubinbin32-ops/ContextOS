@@ -1,7 +1,12 @@
-# Out-of-Context Command Execution
+---
 id: rule-out-of-context-commands
+title: Out-of-Context Command Execution
 category: performance
+priority: critical
 summary: Run build and test commands through out-of-context runner to preserve conversation tokens.
+---
+
+# Out-of-Context Command Execution
 
 ## Best Practice
 1. Use run_command for tests, builds, and scripts.

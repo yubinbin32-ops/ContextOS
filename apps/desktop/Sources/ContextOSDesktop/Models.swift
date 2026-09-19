@@ -278,9 +278,13 @@ struct SourceReference: Identifiable, Equatable {
     let id: String
     let blockId: String
     let path: String
+    let anchorKind: String
     let startLine: Int?
     let endLine: Int?
     let symbol: String?
+    let hash: String
+    let hashMode: String?
+    let manifest: String?
     let role: String
     let gitCommit: String?
 }
@@ -499,4 +503,3 @@ struct RunningProcessItem: Identifiable, Equatable, Codable {
         status == "running"
     }
 }
-

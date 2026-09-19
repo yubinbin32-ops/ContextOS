@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -9,13 +10,28 @@ const transport = new StdioClientTransport({
   args: ["plugins/contextos/server/contextos-mcp.mjs"],
   cwd: projectRoot,
 });
-const client = new Client({ name: "contextos-plugin-smoke", version: "2.1.0" });
+const client = new Client({ name: "contextos-plugin-smoke", version: "2.3.0" });
 const packageVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 const pluginVersion = JSON.parse(fs.readFileSync("plugins/contextos/.codex-plugin/plugin.json", "utf8")).version;
 const appVersion = fs.readFileSync("apps/desktop/Resources/Info.plist", "utf8").match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)/)?.[1];
 assert.equal(packageVersion, pluginVersion, "package and plugin versions must match");
 assert.equal(packageVersion, appVersion, "package and desktop app versions must match");
-assert.equal(packageVersion, "2.1.0", "Version must be 2.1.0");
+assert.equal(packageVersion, "2.3.0", "Version must be 2.3.0");
+const skillPath = path.join(
+  "plugins",
+  "contextos",
+  "skills",
+  "contextos",
+  "SKILL.md"
+);
+assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");
+const skillText = fs.readFileSync(skillPath, "utf8");
+assert.ok(skillText.includes("12 大核心 Facade 工具全景与参数规范"), "Skill must retain the comprehensive tool guide");
+assert.ok(skillText.includes("### 5. `run_command`"), "Skill must document run_command usage");
+assert.ok(skillText.includes("### 7. `block`"), "Skill must document Block bindings");
+assert.ok(skillText.includes('anchorKind: "tree"'), "Skill must document directory tree bindings");
+const skillToolSections = skillText.match(/^### \d+\. `/gm)?.length ?? 0;
+assert.equal(skillToolSections, 12, "Skill must retain one section for every MCP tool");
 
 try {
   await client.connect(transport);
@@ -31,10 +47,15 @@ try {
     "run_command",
     "process",
     "knowledge",
+    "contextos_init",
+    "contextos_doctor",
+    "contextos_switch",
   ];
   for (const tool of expectedTools) {
     assert.ok(names.has(tool), `missing MCP tool: ${tool}`);
   }
+  assert.equal(names.size, expectedTools.length, "unexpected MCP tool count");
+  assert.equal(expectedTools.length, 12, "plugin smoke must cover all core and administrative tools");
 
   // 1. Test os_context
   const briefRes = await client.callTool({
@@ -71,7 +92,7 @@ try {
   assert.ok(runText.includes("[REDACTED_GITHUB_TOKEN]"), "secret not redacted");
 
 
-  // 5. Test knowledge
+  // 6. Test knowledge
   const rulesRes = await client.callTool({
     name: "knowledge",
     arguments: { action: "rule_list" },

@@ -25,7 +25,7 @@ With ContextOS, the AI sheds the deadweight and lets the **MCP protocol auto-gov
 ## What changes in daily development?
 
 ### 1. Architecture becomes a Metro Map
-Blocks describe real, verified code modules (zero ghost blocks allowed). Chains represent horizontal subway rails, and typed Links connect transfer stations orthogonally. The agent understands the big picture without touching the code.
+Blocks bind to real files, AST symbols, or directory trees (zero ghost blocks allowed). Dependency and resource directories use one bounded tree anchor instead of per-file bookkeeping; Chains represent horizontal subway rails, and typed Links connect transfer stations orthogonally. The agent understands the big picture without touching the code.
 
 ![Feature Path with Exact Code Locations](assets/path-impact.png)
 
@@ -33,7 +33,7 @@ Blocks describe real, verified code modules (zero ghost blocks allowed). Chains 
 Work flows strictly through **Create → Develop → Check → Sync**. Tasks carry an explicit context slice, intermediate development notes, and sandboxed test checks, completing with an atomic sync that enforces a 100% workspace code coverage gate.
 
 ### 3. Commands run out-of-context
-`run_command` strips ANSI noise, redacts secrets, saves full raw logs into `.contextos/logs/`, and returns a compact receipt with critical error diagnostics, reducing terminal noise by over 98%.
+`run_command` strips ANSI noise, redacts secrets, saves the full sanitized log into `.contextos/logs/`, and returns a compact receipt with critical error diagnostics, reducing terminal noise by over 98%.
 
 ### 4. Code tools operate surgically
 Multi-language AST engines (compiler-grade parsing for JS/TS/JSX/TSX, Python, Swift, Java, Kotlin, C/C++, C#, Go, Rust, PHP, Ruby) allow VS Code-style symbol search, outline inspection, and surgical reading/editing with automatic symbol re-anchoring.
@@ -80,6 +80,12 @@ Download the package matching your environment from [GitHub Releases](https://gi
 3. The App injects the ContextOS MCP configuration and unique Skills directly into your editors. **Once configured, you can close the desktop App; it does NOT need to stay running.**
 4. In your AI coding chat, simply activate ContextOS:
    > *"Write this proposal into ContextOS and start execution"* or *"Inspect ContextOS and resume development"*
+
+> [!IMPORTANT]
+> **First-time launch on macOS shows "Cannot be opened" or "Unidentified Developer"?**
+> ContextOS is an open-source tool without Apple's paid developer certificate notarization. macOS Gatekeeper will block it on first launch by default. You only need to allow it once:
+> - **Method 1 (System Settings · Recommended)**: Open macOS **System Settings ➔ Privacy & Security**, scroll down to the "Security" section, and click **Open Anyway** next to "ContextOS was blocked". Enter your password to confirm.
+> - **Method 2 (Control-Click Shortcut)**: In Finder, open `/Applications`, hold **Control and click (or right-click)** `ContextOS.app`, select **Open** from the context menu, and click **Open** in the confirmation dialog.
 
 ![One-click editor and MCP synchronization](assets/settings-sync.png)
 

@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import { ContextOSV2Service } from '../src/v2-service.mjs';
 import { createV2Server } from '../src/v2-server.mjs';
 
-test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
+test('ContextOSV2Service executes core facades end-to-end', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-v2-mcp-test-'));
   const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'v2-test' });
 
@@ -76,7 +76,7 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
   const updatedCode = fs.readFileSync(dummyFile, 'utf8');
   assert.ok(updatedCode.includes('return x + 50'));
 
-  // 5. task: create, note, check, and sync
+  // 5. task: create, bind_rule, unbind_rule, update, note, check, and sync
   const task = await service.task({
     action: 'create',
     taskData: {
@@ -85,16 +85,72 @@ test('ContextOSV2Service executes all 9 facades end-to-end', async () => {
       phaseId: 'P0',
       title: 'Implement sample.js',
       workingSet: { files: ['sample.js'] },
+      rules: ['rule-test'],
     },
     format: 'json',
   });
   assert.equal(task.id, 'task-v2-1');
+  assert.deepEqual(task.rules, ['rule-test']);
+
+  // Bind additional rule
+  const taskBindRes = await service.task({
+    action: 'bind_rule',
+    id: 'task-v2-1',
+    ruleId: 'rule-test-extra',
+    format: 'json',
+  });
+  assert.ok(taskBindRes.rules.includes('rule-test-extra'));
+
+  // Unbind rule
+  const unbindRes = await service.task({
+    action: 'unbind_rule',
+    id: 'task-v2-1',
+    ruleId: 'rule-test-extra',
+    format: 'json',
+  });
+  assert.equal(unbindRes.rules.includes('rule-test-extra'), false);
+  assert.ok(unbindRes.rules.includes('rule-test'));
+
+  // Update task title and rules via top-level parameters
+  const updatedTask = await service.task({
+    action: 'update',
+    id: 'task-v2-1',
+    taskData: { title: 'Implement sample.js with rules' },
+    rules: ['rule-test', 'rule-product-contract'],
+    format: 'json',
+  });
+  assert.equal(updatedTask.title, 'Implement sample.js with rules');
+  assert.deepEqual(updatedTask.rules, ['rule-test', 'rule-product-contract']);
+
+  // Verify task open renders Bound Rules section in Markdown
+  const taskMarkdown = await service.task({ action: 'open', id: 'task-v2-1' });
+  assert.ok(taskMarkdown.includes('Bound Rules (按需调阅)'));
+  assert.ok(taskMarkdown.includes('rule-test'));
+  assert.ok(taskMarkdown.includes('rule-product-contract'));
+
+  await assert.rejects(
+    () =>
+      service.task({
+        action: 'check',
+        id: 'task-v2-1',
+        checkData: {
+          receiptId: 'receipt-does-not-exist',
+          description: 'Invalid receipt',
+          passed: true,
+        },
+      }),
+    /not found/
+  );
 
   await service.task({ action: 'note', id: 'task-v2-1', text: 'Implemented sample.js' });
   await service.task({
     action: 'check',
     id: 'task-v2-1',
-    checkData: { description: 'Code compiled and tested', passed: true },
+    checkData: {
+      description: 'Code compiled and tested',
+      passed: true,
+      evidence: 'manual MCP smoke validation',
+    },
   });
 
   // Advance to checking before sync
@@ -203,6 +259,45 @@ test('createV2Server registers all 12 tools', () => {
   assert.equal(expectedTools.length, 12);
 });
 
+test('dependency directories bind as tree anchors and run_command stores a receipt only', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-tree-mcp-'));
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'tree-mcp' });
+  fs.mkdirSync(path.join(tempDir, 'node_modules', 'runtime'), { recursive: true });
+  fs.writeFileSync(path.join(tempDir, 'node_modules/runtime/index.js'), 'module.exports = true;\n', 'utf8');
+  fs.writeFileSync(path.join(tempDir, 'package-lock.json'), '{"lockfileVersion":3}\n', 'utf8');
+
+  const result = await service.block({
+    action: 'bind_auto',
+    id: 'block-node-dependencies',
+    path: 'node_modules',
+    hashMode: 'manifest',
+    manifest: 'package-lock.json',
+    blockData: { kind: 'dependency', title: 'Node Dependencies' },
+    format: 'json',
+  });
+  assert.equal(result.block.artifactRefs[0].anchorKind, 'tree');
+  assert.equal(result.block.artifactRefs[0].manifest, 'package-lock.json');
+
+  const receipt = await service.runCommand({ command: 'echo "receipt only"' });
+  assert.equal(receipt.exitCode, 0);
+  assert.equal(receipt.buildRun, undefined);
+  assert.ok(service.db.getCommandReceipt(receipt.id));
+
+  service.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('code operations reject paths outside the project root', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-path-test-'));
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'path-test' });
+  await assert.rejects(
+    () => service.code({ action: 'read', path: '../outside.js' }),
+    /outside project root/
+  );
+  service.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test('global cloud config management and selective platforms filtering', async () => {
   const { saveGlobalCloudConfig, getGlobalCloudConfig, syncAllPlatforms } = await import('../src/bootstrap-util.mjs');
 
@@ -260,11 +355,12 @@ test('initProjectWorkspace guarantees local vs cloud isolation', async () => {
   assert.equal(cloudConfig.storage, 'cloud');
   assert.equal(cloudConfig.isCloud, true);
   assert.equal(cloudConfig.cloudUrl, 'https://contextos-cloud.example.workers.dev');
-  assert.equal(cloudConfig.token, 'secret-token-123');
+  assert.equal(cloudConfig.token, undefined);
 
   const readCloud = JSON.parse(fs.readFileSync(path.join(tempDir, '.contextos', 'project.json'), 'utf8'));
   assert.equal(readCloud.storage, 'cloud');
   assert.equal(readCloud.isCloud, true);
+  assert.equal(readCloud.token, undefined);
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
@@ -294,3 +390,167 @@ test('HybridContextOSService runs local commands and handles cloud fallback grac
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('P0-P1: Smart auto-binding, sync physical gate, resumption anchor, and probe mode', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-p0p1-test-'));
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'p0p1-test' });
+
+  // 1. Resumption Anchor in osContext brief
+  const briefMd = await service.osContext({ action: 'brief', format: 'markdown' });
+  assert.ok(briefMd.includes('ContextOS Resumption Anchor'));
+  assert.ok(briefMd.includes('NEXT MANDATORY ACTION'));
+
+  const briefJson = await service.osContext({ action: 'brief', format: 'json' });
+  assert.ok(briefJson.resumptionAnchor);
+  assert.ok(briefJson.resumptionAnchor.nextMandatoryAction);
+
+  // 2. Create Plan & Task
+  const plan = await service.plan({
+    action: 'create',
+    planData: {
+      id: 'plan-probe-1',
+      title: 'Probe Test Plan',
+      phases: [{ id: 'P1', order: 0, status: 'active' }],
+    },
+    format: 'json',
+  });
+
+  const task = await service.task({
+    action: 'create',
+    taskData: {
+      id: 'task-probe-1',
+      planId: plan.id,
+      phaseId: 'P1',
+      title: 'Reverse Engineering Task',
+    },
+    format: 'json',
+  });
+
+  // 3. Task Probe Mode
+  const probeRes = await service.task({
+    action: 'probe',
+    id: task.id,
+    taskData: {
+      hypothesis: 'Verify vertex stride 80 bytes',
+      script: 'scratch/probe.py',
+      findings: 'Confirmed offset 48 contains UV coords',
+    },
+    format: 'json',
+  });
+  assert.equal(probeRes.taskId, task.id);
+  assert.equal(probeRes.probe.hypothesis, 'Verify vertex stride 80 bytes');
+
+  // Verify task notes recorded probe
+  const taskAfterProbe = await service.task({ action: 'open', id: task.id, format: 'json' });
+  assert.ok(taskAfterProbe.notes.some((n) => n.kind === 'probe'));
+
+  // 4. Create sample code files for bind_auto
+  const sampleSwift = path.join(tempDir, 'Renderer.swift');
+  fs.writeFileSync(sampleSwift, `
+import Foundation
+
+public class SceneRenderer {
+    public func render() {}
+}
+
+public struct VertexLayout {
+    public var stride: Int
+}
+`, 'utf8');
+
+  // Create initial block
+  await service.block({
+    action: 'bind',
+    id: 'block-renderer',
+    blockData: {
+      title: 'Metal Renderer',
+      summary: 'Handles GPU rendering',
+      artifactRefs: [],
+    },
+  });
+
+  // 5. Test Smart Auto-Binding (bind_auto)
+  const autoBindRes = await service.block({
+    action: 'bind_auto',
+    id: 'block-renderer',
+    path: 'Renderer.swift',
+    format: 'json',
+  });
+
+  assert.equal(autoBindRes.block.id, 'block-renderer');
+  assert.ok(autoBindRes.addedRefs.length >= 2);
+  const symbols = autoBindRes.addedRefs.map((r) => r.symbol);
+  assert.ok(symbols.includes('SceneRenderer'));
+  assert.ok(symbols.includes('VertexLayout'));
+  for (const ref of autoBindRes.addedRefs) {
+    assert.ok(ref.hash && ref.hash.length > 0);
+    assert.ok(ref.symbol && ref.symbol.length > 0);
+  }
+
+  // 6. Test Task Graduate Probe (promotes probe file and auto-binds to block)
+  const gradRes = await service.task({
+    action: 'graduate_probe',
+    id: task.id,
+    taskData: {
+      targetBlockId: 'block-renderer',
+      files: ['Renderer.swift'],
+    },
+    format: 'json',
+  });
+  assert.deepEqual(gradRes.graduatedFiles, ['Renderer.swift']);
+  assert.equal(gradRes.targetBlockId, 'block-renderer');
+
+  // 7. Physical Gate Test on task(sync):
+  // 7a. Try syncing with a block that has an unanchored ref (empty symbol or hash): MUST THROW!
+  await service.block({
+    action: 'bind',
+    id: 'block-unanchored',
+    blockData: {
+      title: 'Unanchored Block',
+      artifactRefs: [{ path: 'Renderer.swift', symbol: '', hash: '' }],
+    },
+  });
+
+  await service.task({ action: 'activate', id: task.id });
+  await service.task({
+    action: 'check',
+    id: task.id,
+    checkData: {
+      description: 'Render test',
+      passed: true,
+      evidence: 'manual render verification',
+    },
+  });
+
+  await assert.rejects(
+    async () => {
+      await service.task({
+        action: 'sync',
+        id: task.id,
+        syncData: {
+          blocks: ['block-unanchored'],
+        },
+      });
+    },
+    /Invariant 1 Violation: Block 'block-unanchored' contains unanchored artifactRef/
+  );
+
+  // 7b. Repair the unanchored block using bind_auto, then sync: MUST SUCCEED!
+  await service.block({
+    action: 'bind_auto',
+    id: 'block-unanchored',
+    path: 'Renderer.swift',
+  });
+
+  const syncSuccess = await service.task({
+    action: 'sync',
+    id: task.id,
+    syncData: {
+      blocks: ['block-renderer', 'block-unanchored'],
+    },
+    format: 'json',
+  });
+  assert.equal(syncSuccess.task.status, 'completed');
+
+  service.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});

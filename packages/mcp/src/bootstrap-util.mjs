@@ -539,7 +539,7 @@ export function initProjectWorkspace({
   projectRoot = process.cwd(),
   mode = 'local',
   cloudUrl = '',
-  token = '',
+  token: _token = '',
   projectId = 'contextos',
 }) {
   const dotContextos = path.join(projectRoot, '.contextos');
@@ -563,10 +563,11 @@ export function initProjectWorkspace({
     createdAt: existing.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+  delete projectConfig.token;
+  delete projectConfig.cloudToken;
 
   if (isCloud) {
     if (cloudUrl) projectConfig.cloudUrl = cloudUrl.replace(/\/+$/, '');
-    if (token) projectConfig.token = token;
   } else {
     delete projectConfig.cloudUrl;
     delete projectConfig.token;

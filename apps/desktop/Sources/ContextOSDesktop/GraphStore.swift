@@ -125,23 +125,38 @@ final class GraphStore: ObservableObject {
     private func loadProject(at url: URL) {
         do {
             let resolvedLocation = try ProjectLocation.resolve(startingAt: url)
-            let resolvedDatabase = try ProjectDatabase(location: resolvedLocation)
-            let next = try resolvedDatabase.loadSnapshot()
             saveCurrentProjectViewState()
-            database?.close()
             location = resolvedLocation
-            database = resolvedDatabase
-            databaseIdentity = resolvedDatabase.fileIdentity
             recentProjects = ProjectLocation.recentProjects()
-            withAnimation(.smooth(duration: 0.24)) {
-                snapshot = next
-                snapshotPresentationID = UUID()
-                restoreProjectViewState(for: next.project.id)
-                recentlyChangedRefs.removeAll()
-                errorMessage = nil
+
+            do {
+                let resolvedDatabase = try ProjectDatabase(location: resolvedLocation)
+                let next = try resolvedDatabase.loadSnapshot()
+                database?.close()
+                database = resolvedDatabase
+                databaseIdentity = resolvedDatabase.fileIdentity
+                withAnimation(.smooth(duration: 0.24)) {
+                    snapshot = next
+                    snapshotPresentationID = UUID()
+                    restoreProjectViewState(for: next.project.id)
+                    recentlyChangedRefs.removeAll()
+                    errorMessage = nil
+                }
+                startLiveUpdates()
+                if let focusTarget { requestFocus(focusTarget) }
+            } catch {
+                database?.close()
+                database = nil
+                databaseIdentity = nil
+                withAnimation(.smooth(duration: 0.24)) {
+                    snapshot = .empty(name: resolvedLocation.descriptor.name, root: resolvedLocation.root.path)
+                    snapshotPresentationID = UUID()
+                    restoreProjectViewState(for: resolvedLocation.descriptor.id)
+                    recentlyChangedRefs.removeAll()
+                    errorMessage = nil
+                }
+                Self.log(error, context: resolvedLocation.database.path)
             }
-            startLiveUpdates()
-            if let focusTarget { requestFocus(focusTarget) }
         } catch {
             errorMessage = error.localizedDescription
             Self.log(error, context: url.path)
@@ -163,6 +178,15 @@ final class GraphStore: ObservableObject {
         }
     }
 
+    func clearRecentProjects() {
+        ProjectLocation.clearAll()
+        self.recentProjects = []
+    }
+
+    func refreshRecentProjects() {
+        self.recentProjects = ProjectLocation.recentProjects()
+    }
+
     func refreshCloudProject() async {
         guard let location = self.location else { return }
         let descriptorURL = location.root.appending(path: ".contextos/project.json")
@@ -173,7 +197,12 @@ final class GraphStore: ObservableObject {
               let serverURL = URL(string: cloudUrlStr) else { return }
 
         let projectId = json["id"] as? String ?? location.descriptor.id
-        let token = json["token"] as? String
+        var token: String?
+        let globalCloudURL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".contextos/cloud.json")
+        if let globalData = try? Data(contentsOf: globalCloudURL),
+           let globalJSON = (try? JSONSerialization.jsonObject(with: globalData)) as? [String: Any] {
+            token = globalJSON["token"] as? String
+        }
 
         if var comps = URLComponents(url: serverURL.appending(path: "api/v2/snapshot"), resolvingAgainstBaseURL: false) {
             comps.queryItems = [URLQueryItem(name: "projectId", value: projectId)]
@@ -294,7 +323,10 @@ final class GraphStore: ObservableObject {
           start_line INTEGER,
           end_line INTEGER,
           hash TEXT NOT NULL DEFAULT '',
-          role TEXT NOT NULL DEFAULT 'implementation'
+          role TEXT NOT NULL DEFAULT 'implementation',
+          anchor_kind TEXT NOT NULL DEFAULT 'symbol',
+          hash_mode TEXT,
+          manifest TEXT
         );
 
         CREATE TABLE IF NOT EXISTS chains (
@@ -943,7 +975,7 @@ final class GraphStore: ObservableObject {
                 }.value
                 guard !Task.isCancelled else { return }
                 self?.sourcePollingError = failure
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(15))
             }
         }
     }

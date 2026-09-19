@@ -11,22 +11,53 @@ export class SyncEngine {
     this.db = db;
   }
 
-  exportGraphToJson(projectId, projectRoot) {
+  _lastExportedHash(projectId) {
+    return (
+      this.db.getSyncState(`last_exported_hash:${projectId}`) ||
+      this.db.getSyncState('last_exported_hash')
+    );
+  }
+
+  _buildGraph(projectId, graphRevision) {
     const project = this.db.getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found in database`);
 
     const plans = this.db.listPlans(projectId).sort((a, b) => a.id.localeCompare(b.id));
-    const tasks = this.db.listTasks().sort((a, b) => a.id.localeCompare(b.id));
+    const planIds = new Set(plans.map((plan) => plan.id));
+    const tasks = this.db
+      .listTasks()
+      .filter((task) => planIds.has(task.planId))
+      .map((task) => ({
+        id: task.id,
+        planId: task.planId,
+        phaseId: task.phaseId,
+        title: task.title,
+        status: task.status,
+        contextSlice: {
+          objective: task.contextSlice?.objective || '',
+          constraints: task.contextSlice?.constraints || [],
+          references: task.contextSlice?.references || [],
+          nextSteps: task.contextSlice?.nextSteps || [],
+          openQuestions: task.contextSlice?.openQuestions || [],
+        },
+        workingSet: task.workingSet || {},
+        references: task.references || {},
+        rules: task.rules || task.references?.rules || [],
+        notes: task.notes || [],
+        checks: task.checks || [],
+        syncResult: task.syncResult || null,
+        createdAt: task.createdAt,
+        updatedAt: task.updatedAt,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id));
     const blocks = this.db.listBlocks(projectId).sort((a, b) => a.id.localeCompare(b.id));
     const chains = this.db.listChains(projectId).sort((a, b) => a.id.localeCompare(b.id));
     const links = this.db.listLinks(projectId).sort((a, b) => a.id.localeCompare(b.id));
 
-    const newRevision = (project.graph_revision || 0) + 1;
-
     const graph = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       projectId,
-      graphRevision: newRevision,
+      graphRevision,
       exportedAt: new Date().toISOString(),
       data: {
         plans,
@@ -38,24 +69,102 @@ export class SyncEngine {
     };
 
     const jsonText = JSON.stringify(graph, null, 2) + '\n';
-    const sha256 = calculateSha256(jsonText);
+    return {
+      project,
+      graph,
+      jsonText,
+      sha256: calculateSha256(jsonText),
+    };
+  }
 
+  _writeGraphFile(projectRoot, jsonText) {
     const targetDir = path.join(projectRoot, '.contextos');
     fs.mkdirSync(targetDir, { recursive: true });
     const targetFile = path.join(targetDir, 'graph.json');
-    const tempFile = path.join(targetDir, `graph.json.tmp.${Date.now()}`);
+    const tempFile = path.join(targetDir, `graph.json.tmp.${process.pid}.${Date.now()}`);
+    let fd = null;
+    try {
+      fd = fs.openSync(tempFile, 'w');
+      fs.writeFileSync(fd, jsonText, 'utf8');
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+      fd = null;
+      fs.renameSync(tempFile, targetFile);
+      return targetFile;
+    } catch (err) {
+      if (fd !== null) {
+        try {
+          fs.closeSync(fd);
+        } catch (_) {}
+      }
+      try {
+        fs.rmSync(tempFile, { force: true });
+      } catch (_) {}
+      throw err;
+    }
+  }
 
-    fs.writeFileSync(tempFile, jsonText, 'utf8');
-    fs.renameSync(tempFile, targetFile);
+  flushGraphOutbox(projectId, projectRoot) {
+    const outbox = this.db.getGraphOutbox(projectId);
+    if (!outbox) return null;
 
-    this.db.setGraphRevision(projectId, newRevision);
-    this.db.setSyncState('last_exported_hash', sha256);
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project ${projectId} not found in database`);
+    if ((project.graph_revision || 0) !== outbox.baseRevision) {
+      if ((project.graph_revision || 0) >= outbox.targetRevision) {
+        this.db.deleteGraphOutbox(projectId);
+        return {
+          graphRevision: project.graph_revision,
+          sha256: this._lastExportedHash(projectId),
+          targetFile: path.join(projectRoot, '.contextos', 'graph.json'),
+        };
+      }
+      throw new Error(
+        `Graph export revision conflict for '${projectId}': database=${project.graph_revision}, base=${outbox.baseRevision}`
+      );
+    }
 
+    const targetFile = this._writeGraphFile(projectRoot, outbox.payloadJson);
+    const actualSha256 = calculateSha256(fs.readFileSync(targetFile, 'utf8'));
+    if (actualSha256 !== outbox.payloadHash) {
+      throw new Error(`Graph export hash verification failed for '${projectId}'`);
+    }
+
+    this.db.setGraphExported(projectId, outbox.targetRevision, outbox.payloadHash);
     return {
-      graphRevision: newRevision,
-      sha256,
+      graphRevision: outbox.targetRevision,
+      sha256: outbox.payloadHash,
       targetFile,
     };
+  }
+
+  recoverGraphOutbox(projectId, projectRoot) {
+    const result = this.flushGraphOutbox(projectId, projectRoot);
+    return result
+      ? { recovered: true, ...result }
+      : { recovered: false };
+  }
+
+  queueGraphToJson(projectId) {
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project ${projectId} not found in database`);
+
+    const targetRevision = (project.graph_revision || 0) + 1;
+    const payload = this._buildGraph(projectId, targetRevision);
+    return this.db.saveGraphOutbox({
+      projectId,
+      baseRevision: project.graph_revision || 0,
+      targetRevision,
+      payloadHash: payload.sha256,
+      payloadJson: payload.jsonText,
+    });
+  }
+
+  exportGraphToJson(projectId, projectRoot) {
+    this.flushGraphOutbox(projectId, projectRoot);
+    this.queueGraphToJson(projectId);
+
+    return this.flushGraphOutbox(projectId, projectRoot);
   }
 
   importGraphFromJson(jsonText, projectRoot) {
@@ -87,10 +196,13 @@ export class SyncEngine {
           role: ref.role || 'implementation',
         });
       }
-      blocks = blocks.map((b) => ({
-        ...b,
-        artifactRefs: b.artifactRefs || refsByBlock.get(b.id) || [{ path: 'legacy.js' }],
-      }));
+      blocks = blocks.map((b) => {
+        const refs = b.artifactRefs || refsByBlock.get(b.id);
+        if (!Array.isArray(refs) || refs.length === 0) {
+          throw new Error(`Ghost Block rejected during graph import: Block '${b.id}' has no artifactRefs.`);
+        }
+        return { ...b, artifactRefs: refs };
+      });
     }
 
     // Execute atomic replace of active projection
@@ -104,12 +216,17 @@ export class SyncEngine {
       db.db.prepare('DELETE FROM chains WHERE project_id = ?').run(projectId);
       db.db.prepare('DELETE FROM links WHERE project_id = ?').run(projectId);
 
-      for (const plan of data.plans || []) {
+      const plans = data.plans || [];
+      const planIds = new Set(plans.map((plan) => plan.id));
+
+      for (const plan of plans) {
         db.savePlan({ ...plan, projectId });
       }
 
       for (const task of data.tasks || []) {
-        db.saveTask(task);
+        const planId = task.planId || task.plan_id;
+        if (!planIds.has(planId)) continue;
+        db.saveTask({ ...task, planId, phaseId: task.phaseId || task.phase_id || 'P0' });
       }
 
       for (const block of blocks) {
@@ -117,24 +234,26 @@ export class SyncEngine {
       }
 
       for (const chain of data.chains || []) {
-        db.saveChain(chain);
+        db.saveChain({ ...chain, projectId });
       }
 
       for (const link of data.links || []) {
-        db.saveLink(link);
+        db.saveLink({ ...link, projectId });
       }
 
-      db.setSyncState('last_exported_hash', sha256);
+      db.setGraphExported(projectId, graphRevision, sha256);
     });
 
     return {
-      projectId: graph.projectId,
-      graphRevision: graph.graphRevision,
+      projectId,
+      graphRevision,
       sha256,
     };
   }
 
   reconcileExternalChange(projectId, projectRoot) {
+    this.recoverGraphOutbox(projectId, projectRoot);
+
     const targetFile = path.join(projectRoot, '.contextos', 'graph.json');
     if (!fs.existsSync(targetFile)) {
       return { changed: false, reason: 'File does not exist' };
@@ -142,13 +261,43 @@ export class SyncEngine {
 
     const jsonText = fs.readFileSync(targetFile, 'utf8');
     const currentSha256 = calculateSha256(jsonText);
-    const lastHash = this.db.getSyncState('last_exported_hash');
+    const lastHash = this._lastExportedHash(projectId);
 
     if (currentSha256 === lastHash) {
       return { changed: false, reason: 'Hash identical to last export' };
     }
 
-    // External change detected! (e.g. Git rollback, checkout, or external edit)
+    let graph;
+    try {
+      graph = JSON.parse(jsonText);
+    } catch (err) {
+      throw new Error(`Invalid JSON syntax in graph: ${err.message}`);
+    }
+
+    const project = this.db.getProject(projectId);
+    const currentRevision = project?.graph_revision || 0;
+    const incomingRevision = graph.graphRevision || graph.project?.graphRevision || 0;
+
+    if (incomingRevision < currentRevision) {
+      return {
+        changed: false,
+        conflict: true,
+        reason: `Refusing stale graph rollback: graph revision ${incomingRevision} is older than database revision ${currentRevision}`,
+        graphRevision: incomingRevision,
+        databaseRevision: currentRevision,
+      };
+    }
+
+    if (incomingRevision === currentRevision) {
+      return {
+        changed: false,
+        conflict: true,
+        reason: `Graph revision ${incomingRevision} diverged without a newer revision`,
+        graphRevision: incomingRevision,
+        databaseRevision: currentRevision,
+      };
+    }
+
     const importResult = this.importGraphFromJson(jsonText, projectRoot);
     return {
       changed: true,

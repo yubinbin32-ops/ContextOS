@@ -14,6 +14,15 @@ Evidence levels range from weakest to strongest:
 
 A passed gate requires evidence level at least as strong as its `requiredEvidenceLevel`.
 
+## Working Set Coverage Gate
+
+Task sync validates every file in the working set against real Block bindings:
+
+- Source symbols and files require exact `symbol` or `file` anchors.
+- First-party resource directories may use one `tree` anchor with `hashMode: "content"`.
+- Dependency or vendor directories may use one `tree` anchor with `hashMode: "manifest"` and a lockfile/manifest path.
+- Generated build outputs are not graph entities; inspect `run_command` receipts and `.contextos/logs` when provenance is needed.
+
 ## Checkpoint Topologies
 
 1. **Atomic Checkpoint**:

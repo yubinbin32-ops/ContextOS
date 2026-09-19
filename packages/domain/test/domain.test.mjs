@@ -250,3 +250,117 @@ test('Categorized Rule model', () => {
   const customCatRule = new Rule({ id: 'custom', title: 'Custom Rule', category: 'any-flexible-category' });
   assert.equal(customCatRule.category, 'any-flexible-category');
 });
+
+test('Task explicit rule binding, lifecycle, and toJSON serialization', () => {
+  const task = new Task({
+    id: 'task-rules-test',
+    planId: 'plan-1',
+    phaseId: 'P0',
+    title: 'Test Rule Binding',
+    rules: ['rule-surgical-code-editing'],
+  });
+
+  assert.deepEqual(task.rules, ['rule-surgical-code-editing']);
+  assert.deepEqual(task.references.rules, ['rule-surgical-code-editing']);
+
+  // Bind rule
+  task.bindRule('rule-product-contract');
+  assert.deepEqual(task.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+
+  // Duplicate bind is a no-op
+  task.bindRule('rule-product-contract');
+  assert.equal(task.rules.length, 2);
+
+  // Unbind rule
+  task.unbindRule('rule-surgical-code-editing');
+  assert.deepEqual(task.rules, ['rule-product-contract']);
+
+  // Set rules
+  task.setRules(['rule-command-sessions', 'rule-out-of-context-commands']);
+  assert.deepEqual(task.rules, ['rule-command-sessions', 'rule-out-of-context-commands']);
+
+  // Setter
+  task.rules = ['rule-ui-aesthetic-precision'];
+  assert.deepEqual(task.rules, ['rule-ui-aesthetic-precision']);
+  assert.deepEqual(task.references.rules, ['rule-ui-aesthetic-precision']);
+
+  // Serialization to JSON
+  const json = task.toJSON();
+  assert.deepEqual(json.rules, ['rule-ui-aesthetic-precision']);
+  assert.deepEqual(json.references.rules, ['rule-ui-aesthetic-precision']);
+
+  // Preserves rules when only references.rules is passed (e.g. from storage/DB)
+  const taskFromRefs = new Task({
+    id: 'task-from-refs',
+    planId: 'plan-1',
+    phaseId: 'P0',
+    title: 'Test From Refs',
+    references: { rules: ['rule-surgical-code-editing', 'rule-product-contract'] },
+  });
+  assert.deepEqual(taskFromRefs.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+  assert.deepEqual(taskFromRefs.references.rules, ['rule-surgical-code-editing', 'rule-product-contract']);
+
+  // Supports ruleRefs alias
+  const taskFromRuleRefs = new Task({
+    id: 'task-from-rulerefs',
+    planId: 'plan-1',
+    phaseId: 'P0',
+    title: 'Test From ruleRefs',
+    ruleRefs: ['rule-command-sessions'],
+  });
+  assert.deepEqual(taskFromRuleRefs.rules, ['rule-command-sessions']);
+});
+
+test('File anchor invariant accepts hashes without a symbol and rejects placeholders', () => {
+  const fileBlock = new Block({
+    id: 'block-file-anchor',
+    projectId: 'proj-1',
+    title: 'Packaging',
+    artifactRefs: [
+      new ArtifactRef({
+        path: 'app/Info.plist',
+        anchorKind: 'file',
+        hash: 'abc123',
+      }),
+    ],
+  });
+  assertBlockHasRealCode(fileBlock);
+
+  assert.throws(
+    () =>
+      assertBlockHasRealCode({
+        id: 'block-placeholder',
+        artifactRefs: [{ path: 'build/Info.plist', symbol: '*', anchorKind: 'file', hash: 'untracked' }],
+      }),
+    /contains unanchored artifactRef/
+  );
+});
+
+test('Directory anchors preserve manifest provenance and cover descendant files', () => {
+  const dependencyRef = new ArtifactRef({
+    path: 'node_modules',
+    anchorKind: 'tree',
+    hashMode: 'manifest',
+    manifest: 'package-lock.json',
+    hash: 'lock-hash',
+    role: 'dependency',
+  });
+  const block = new Block({
+    id: 'block-node-dependencies',
+    projectId: 'proj-1',
+    title: 'Node Dependencies',
+    kind: 'dependency',
+    artifactRefs: [dependencyRef],
+  });
+
+  assertBlockHasRealCode(block);
+  assert.equal(dependencyRef.symbol, null);
+  assert.equal(dependencyRef.hashMode, 'manifest');
+  assert.equal(dependencyRef.manifest, 'package-lock.json');
+
+  const coverage = checkTaskCoverage(
+    { workingSet: { files: ['node_modules/runtime/index.js', 'src/app.mjs'] } },
+    [block]
+  );
+  assert.deepEqual(coverage.uncoveredFiles, ['src/app.mjs']);
+});

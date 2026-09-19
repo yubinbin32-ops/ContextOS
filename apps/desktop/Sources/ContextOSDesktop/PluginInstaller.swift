@@ -38,7 +38,7 @@ enum PluginInstaller {
         var errorDescription: String? { output }
     }
 
-    static let fallbackVersion = "0.4.1"
+    static let fallbackVersion = "2.3.0"
 
     static var canonicalServerDirectoryURL: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser

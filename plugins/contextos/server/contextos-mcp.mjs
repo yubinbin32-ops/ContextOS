@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path13) {
-      let input = path13;
+    function removeDotSegments(path17) {
+      let input = path17;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3668,8 +3668,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path13 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path13 && path13 !== "/" ? path13 : void 0;
+        const path17 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path17 && path17 !== "/" ? path17 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7181,12 +7181,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name2}"`);
       return f;
     };
-    function addFormats(ajv, list, fs13, exportName) {
+    function addFormats(ajv, list, fs17, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs13[f]);
+        ajv.addFormat(f, fs17[f]);
     }
     module2.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7195,8 +7195,8 @@ var require_dist = __commonJS({
 });
 
 // packages/mcp/src/v2-server.mjs
-import fs12 from "node:fs";
-import path12 from "node:path";
+import fs16 from "node:fs";
+import path16 from "node:path";
 
 // node_modules/zod/v3/helpers/util.js
 var util;
@@ -7572,8 +7572,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path13, errorMaps, issueData } = params;
-  const fullPath = [...path13, ...issueData.path || []];
+  const { data, path: path17, errorMaps, issueData } = params;
+  const fullPath = [...path17, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7688,11 +7688,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path13, key) {
+  constructor(parent, value, path17, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path13;
+    this._path = path17;
     this._key = key;
   }
   get path() {
@@ -11274,10 +11274,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path13) {
-  if (!path13)
+function getElementAtPath(obj, path17) {
+  if (!path17)
     return obj;
-  return path13.reduce((acc, key) => acc?.[key], obj);
+  return path17.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11689,11 +11689,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path13, issues) {
+function prefixIssues(path17, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path13);
+    iss.path.unshift(path17);
     return iss;
   });
 }
@@ -12122,16 +12122,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path13 = []) => {
+  const processError = (error3, path17 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path13, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path17, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path13, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path17, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path13, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path17, ...issue2.path]);
       } else {
-        const fullpath = [...path13, ...issue2.path];
+        const fullpath = [...path17, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -16646,11 +16646,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path13) {
-  if (path13.length === 0) {
+function getDotPath(path17) {
+  if (path17.length === 0) {
     return "object root";
   }
-  return path13.reduce((acc, seg, index) => {
+  return path17.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -23225,8 +23225,9 @@ var StdioServerTransport = class {
 };
 
 // packages/mcp/src/v2-service.mjs
-import path10 from "node:path";
-import fs10 from "node:fs";
+import path13 from "node:path";
+import fs13 from "node:fs";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 // packages/storage/src/schema.mjs
 var V2_SQL_SCHEMA = `
@@ -23235,7 +23236,7 @@ CREATE TABLE IF NOT EXISTS projects (
   repo_root TEXT NOT NULL,
   graph_revision INTEGER NOT NULL DEFAULT 0,
   exported_at TEXT,
-  schema_version INTEGER NOT NULL DEFAULT 2
+  schema_version INTEGER NOT NULL DEFAULT 3
 );
 
 CREATE TABLE IF NOT EXISTS plans (
@@ -23312,10 +23313,13 @@ CREATE TABLE IF NOT EXISTS artifact_refs (
   block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
   path TEXT NOT NULL,
   symbol TEXT,
+  anchor_kind TEXT NOT NULL DEFAULT 'symbol',
   start_line INTEGER,
   end_line INTEGER,
   hash TEXT NOT NULL DEFAULT '',
-  role TEXT NOT NULL DEFAULT 'implementation'
+  role TEXT NOT NULL DEFAULT 'implementation',
+  hash_mode TEXT,
+  manifest TEXT
 );
 
 CREATE TABLE IF NOT EXISTS chains (
@@ -23353,7 +23357,7 @@ CREATE TABLE IF NOT EXISTS command_receipts (
   summary TEXT NOT NULL DEFAULT '',
   errors_json TEXT NOT NULL DEFAULT '[]',
   warnings_json TEXT NOT NULL DEFAULT '[]',
-  artifacts_json TEXT NOT NULL DEFAULT '[]',
+  changed_paths_json TEXT NOT NULL DEFAULT '[]',
   log_handle TEXT,
   created_at TEXT NOT NULL
 );
@@ -23361,6 +23365,16 @@ CREATE TABLE IF NOT EXISTS command_receipts (
 CREATE TABLE IF NOT EXISTS sync_state (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS graph_outbox (
+  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  base_revision INTEGER NOT NULL,
+  target_revision INTEGER NOT NULL,
+  payload_hash TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 `;
 
@@ -23375,23 +23389,123 @@ var V2Database = class {
       fs2.mkdirSync(path.dirname(filePath), { recursive: true });
     }
     this.db = new DatabaseSync(filePath);
+    this.transactionDepth = 0;
     this.init();
   }
   init() {
     this.db.exec("PRAGMA journal_mode = WAL;");
+    this.db.exec("PRAGMA busy_timeout = 5000;");
     this.db.exec("PRAGMA foreign_keys = ON;");
     this.db.exec(V2_SQL_SCHEMA);
+    this._ensureSchemaMigrations();
+  }
+  _ensureSchemaMigrations() {
+    const refColumns = this.db.prepare("PRAGMA table_info(artifact_refs)").all();
+    if (!refColumns.some((column) => column.name === "anchor_kind")) {
+      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN anchor_kind TEXT NOT NULL DEFAULT 'symbol';");
+    }
+    if (!refColumns.some((column) => column.name === "hash_mode")) {
+      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN hash_mode TEXT;");
+    }
+    if (!refColumns.some((column) => column.name === "manifest")) {
+      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN manifest TEXT;");
+    }
+    this.db.exec(`
+      UPDATE artifact_refs
+      SET anchor_kind = 'file'
+      WHERE anchor_kind = 'symbol'
+        AND (symbol IS NULL OR TRIM(symbol) = '')
+    `);
+    const receiptColumns = this.db.prepare("PRAGMA table_info(command_receipts)").all();
+    if (!receiptColumns.some((column) => column.name === "changed_paths_json")) {
+      this.db.exec("ALTER TABLE command_receipts ADD COLUMN changed_paths_json TEXT NOT NULL DEFAULT '[]';");
+    }
+    if (receiptColumns.some((column) => column.name === "artifacts_json")) {
+      this.db.exec(`
+        UPDATE command_receipts
+        SET changed_paths_json = artifacts_json
+        WHERE changed_paths_json = '[]' AND artifacts_json != '[]'
+      `);
+    }
+    this.db.exec(`
+      DROP TABLE IF EXISTS artifact_links;
+      DROP TABLE IF EXISTS artifact_records;
+      DROP TABLE IF EXISTS build_runs;
+      UPDATE projects SET schema_version = 3;
+    `);
   }
   transaction(fn) {
-    this.db.exec("BEGIN TRANSACTION;");
+    if (this.transactionDepth > 0) {
+      this.transactionDepth += 1;
+      try {
+        return fn(this);
+      } finally {
+        this.transactionDepth -= 1;
+      }
+    }
+    this.db.exec("BEGIN IMMEDIATE;");
+    this.transactionDepth = 1;
     try {
       const result = fn(this);
       this.db.exec("COMMIT;");
+      this.transactionDepth = 0;
       return result;
     } catch (err2) {
-      this.db.exec("ROLLBACK;");
+      try {
+        this.db.exec("ROLLBACK;");
+      } finally {
+        this.transactionDepth = 0;
+      }
       throw err2;
     }
+  }
+  setGraphExported(projectId, revision, sha256, exportedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+    this.transaction((db) => {
+      db.db.prepare("UPDATE projects SET graph_revision = ?, exported_at = ? WHERE id = ?").run(revision, exportedAt, projectId);
+      db.setSyncState(`last_exported_hash:${projectId}`, sha256);
+      db.db.prepare("DELETE FROM graph_outbox WHERE project_id = ?").run(projectId);
+    });
+  }
+  getGraphOutbox(projectId) {
+    const row = this.db.prepare("SELECT * FROM graph_outbox WHERE project_id = ?").get(projectId);
+    if (!row) return null;
+    return {
+      projectId: row.project_id,
+      baseRevision: row.base_revision,
+      targetRevision: row.target_revision,
+      payloadHash: row.payload_hash,
+      payloadJson: row.payload_json,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+  saveGraphOutbox(entry) {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const stmt = this.db.prepare(`
+      INSERT INTO graph_outbox (
+        project_id, base_revision, target_revision, payload_hash, payload_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        base_revision = excluded.base_revision,
+        target_revision = excluded.target_revision,
+        payload_hash = excluded.payload_hash,
+        payload_json = excluded.payload_json,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      entry.projectId,
+      entry.baseRevision,
+      entry.targetRevision,
+      entry.payloadHash,
+      entry.payloadJson,
+      entry.createdAt || now,
+      now
+    );
+    return this.getGraphOutbox(entry.projectId);
+  }
+  deleteGraphOutbox(projectId) {
+    this.db.prepare("DELETE FROM graph_outbox WHERE project_id = ?").run(projectId);
+    return true;
   }
   close() {
     this.db.close();
@@ -23405,7 +23519,7 @@ var V2Database = class {
     const existing = this.getProject(projectId);
     if (existing) return existing;
     const stmt = this.db.prepare(
-      "INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, 0, ?, 2)"
+      "INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, 0, ?, 3)"
     );
     stmt.run(projectId, repoRoot, (/* @__PURE__ */ new Date()).toISOString());
     return this.getProject(projectId);
@@ -23426,12 +23540,27 @@ var V2Database = class {
   }
   // --- Plan ---
   savePlan(plan) {
+    return this.transaction((db) => db._savePlan(plan));
+  }
+  _savePlan(plan) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO plans (
+      INSERT INTO plans (
         id, project_id, title, priority, status, summary, completed_summary,
         history_ref, rule_refs_json, decision_refs_json, dependency_refs_json,
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        priority = excluded.priority,
+        status = excluded.status,
+        summary = excluded.summary,
+        completed_summary = excluded.completed_summary,
+        history_ref = excluded.history_ref,
+        rule_refs_json = excluded.rule_refs_json,
+        decision_refs_json = excluded.decision_refs_json,
+        dependency_refs_json = excluded.dependency_refs_json,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       plan.id,
@@ -23539,20 +23668,35 @@ var V2Database = class {
     return rows.map((r) => this.getPlan(r.id));
   }
   deletePlan(planId) {
-    this.db.prepare("DELETE FROM checkpoints WHERE plan_id = ?").run(planId);
-    this.db.prepare("DELETE FROM phases WHERE plan_id = ?").run(planId);
-    this.db.prepare("DELETE FROM tasks WHERE plan_id = ?").run(planId);
-    const result = this.db.prepare("DELETE FROM plans WHERE id = ?").run(planId);
-    return result.changes > 0;
+    return this.transaction((db) => {
+      db.db.prepare("DELETE FROM checkpoints WHERE plan_id = ?").run(planId);
+      db.db.prepare("DELETE FROM phases WHERE plan_id = ?").run(planId);
+      db.db.prepare("DELETE FROM tasks WHERE plan_id = ?").run(planId);
+      const result = db.db.prepare("DELETE FROM plans WHERE id = ?").run(planId);
+      return result.changes > 0;
+    });
   }
   // --- Task ---
   saveTask(task) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO tasks (
+      INSERT INTO tasks (
         id, plan_id, phase_id, title, status, context_slice_json,
         working_set_json, references_json, baseline_json, notes_json,
         checks_json, sync_result_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        plan_id = excluded.plan_id,
+        phase_id = excluded.phase_id,
+        title = excluded.title,
+        status = excluded.status,
+        context_slice_json = excluded.context_slice_json,
+        working_set_json = excluded.working_set_json,
+        references_json = excluded.references_json,
+        baseline_json = excluded.baseline_json,
+        notes_json = excluded.notes_json,
+        checks_json = excluded.checks_json,
+        sync_result_json = excluded.sync_result_json,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       task.id,
@@ -23575,6 +23719,7 @@ var V2Database = class {
     const stmt = this.db.prepare("SELECT * FROM tasks WHERE id = ?");
     const row = stmt.get(taskId);
     if (!row) return null;
+    const references = JSON.parse(row.references_json || "{}");
     return {
       id: row.id,
       planId: row.plan_id,
@@ -23583,7 +23728,8 @@ var V2Database = class {
       status: row.status,
       contextSlice: JSON.parse(row.context_slice_json || "{}"),
       workingSet: JSON.parse(row.working_set_json || "{}"),
-      references: JSON.parse(row.references_json || "{}"),
+      references,
+      rules: references.rules || [],
       baseline: JSON.parse(row.baseline_json || "{}"),
       notes: JSON.parse(row.notes_json || "[]"),
       checks: JSON.parse(row.checks_json || "[]"),
@@ -23595,29 +23741,44 @@ var V2Database = class {
   listTasks(planId) {
     const stmt = planId ? this.db.prepare("SELECT * FROM tasks WHERE plan_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM tasks ORDER BY created_at ASC");
     const rows = planId ? stmt.all(planId) : stmt.all();
-    return rows.map((r) => ({
-      id: r.id,
-      planId: r.plan_id,
-      phaseId: r.phase_id,
-      title: r.title,
-      status: r.status,
-      contextSlice: JSON.parse(r.context_slice_json || "{}"),
-      workingSet: JSON.parse(r.working_set_json || "{}"),
-      references: JSON.parse(r.references_json || "{}"),
-      baseline: JSON.parse(r.baseline_json || "{}"),
-      notes: JSON.parse(r.notes_json || "[]"),
-      checks: JSON.parse(r.checks_json || "[]"),
-      syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at
-    }));
+    return rows.map((r) => {
+      const references = JSON.parse(r.references_json || "{}");
+      return {
+        id: r.id,
+        planId: r.plan_id,
+        phaseId: r.phase_id,
+        title: r.title,
+        status: r.status,
+        contextSlice: JSON.parse(r.context_slice_json || "{}"),
+        workingSet: JSON.parse(r.working_set_json || "{}"),
+        references,
+        rules: references.rules || [],
+        baseline: JSON.parse(r.baseline_json || "{}"),
+        notes: JSON.parse(r.notes_json || "[]"),
+        checks: JSON.parse(r.checks_json || "[]"),
+        syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      };
+    });
   }
   // --- Block & ArtifactRefs ---
   saveBlock(block) {
+    return this.transaction((db) => db._saveBlock(block));
+  }
+  _saveBlock(block) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO blocks (
+      INSERT INTO blocks (
         id, project_id, title, kind, summary, details, history_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        kind = excluded.kind,
+        summary = excluded.summary,
+        details = excluded.details,
+        history_json = excluded.history_json,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       block.id,
@@ -23634,8 +23795,8 @@ var V2Database = class {
     deleteRefs.run(block.id);
     const insertRef = this.db.prepare(`
       INSERT INTO artifact_refs (
-        id, block_id, path, symbol, start_line, end_line, hash, role
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, block_id, path, symbol, anchor_kind, start_line, end_line, hash, role, hash_mode, manifest
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const refs = block.artifactRefs || block.artifact_refs || [];
     for (let i2 = 0; i2 < refs.length; i2++) {
@@ -23645,10 +23806,13 @@ var V2Database = class {
         block.id,
         ref.path,
         ref.symbol || null,
+        ref.anchorKind || (ref.symbol ? "symbol" : "file"),
         ref.startLine || ref.start_line || null,
         ref.endLine || ref.end_line || null,
         ref.hash || "",
-        ref.role || "implementation"
+        ref.role || "implementation",
+        ref.hashMode || ref.hash_mode || null,
+        ref.manifest || null
       );
     }
   }
@@ -23660,10 +23824,13 @@ var V2Database = class {
     const refs = refsStmt.all(blockId).map((r) => ({
       path: r.path,
       symbol: r.symbol,
+      anchorKind: r.anchor_kind || (r.symbol ? "symbol" : "file"),
       startLine: r.start_line,
       endLine: r.end_line,
       hash: r.hash,
-      role: r.role
+      role: r.role,
+      hashMode: r.hash_mode || null,
+      manifest: r.manifest || null
     }));
     return {
       id: row.id,
@@ -23701,9 +23868,17 @@ var V2Database = class {
   // --- Chain ---
   saveChain(chain) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO chains (
+      INSERT INTO chains (
         id, project_id, title, summary, kind, member_ids_json, metadata_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        summary = excluded.summary,
+        kind = excluded.kind,
+        member_ids_json = excluded.member_ids_json,
+        metadata_json = excluded.metadata_json,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       chain.id,
@@ -23756,9 +23931,19 @@ var V2Database = class {
   // --- Link ---
   saveLink(link) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO links (
+      INSERT INTO links (
         id, project_id, from_id, to_id, kind, provenance, confidence, reason, revision, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        from_id = excluded.from_id,
+        to_id = excluded.to_id,
+        kind = excluded.kind,
+        provenance = excluded.provenance,
+        confidence = excluded.confidence,
+        reason = excluded.reason,
+        revision = excluded.revision,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       link.id || `${link.from || link.source_id}->${link.to || link.target_id}`,
@@ -23791,6 +23976,23 @@ var V2Database = class {
       updatedAt: r.updated_at
     }));
   }
+  getLink(linkId) {
+    const row = this.db.prepare("SELECT * FROM links WHERE id = ?").get(linkId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      from: row.from_id,
+      to: row.to_id,
+      kind: row.kind,
+      provenance: row.provenance,
+      confidence: row.confidence,
+      reason: row.reason,
+      revision: row.revision,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
   deleteLink(linkId) {
     const stmt = this.db.prepare("DELETE FROM links WHERE id = ?");
     stmt.run(linkId);
@@ -23804,9 +24006,19 @@ var V2Database = class {
   // --- Command Receipts ---
   saveCommandReceipt(receipt) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO command_receipts (
-        id, command, cwd, exit_code, duration_ms, summary, errors_json, warnings_json, artifacts_json, log_handle, created_at
+      INSERT INTO command_receipts (
+        id, command, cwd, exit_code, duration_ms, summary, errors_json, warnings_json, changed_paths_json, log_handle, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        command = excluded.command,
+        cwd = excluded.cwd,
+        exit_code = excluded.exit_code,
+        duration_ms = excluded.duration_ms,
+        summary = excluded.summary,
+        errors_json = excluded.errors_json,
+        warnings_json = excluded.warnings_json,
+        changed_paths_json = excluded.changed_paths_json,
+        log_handle = excluded.log_handle
     `);
     stmt.run(
       receipt.id,
@@ -23817,7 +24029,7 @@ var V2Database = class {
       receipt.summary || "",
       JSON.stringify(receipt.errors || []),
       JSON.stringify(receipt.warnings || []),
-      JSON.stringify(receipt.artifacts || []),
+      JSON.stringify(receipt.changedPaths || []),
       receipt.logHandle || null,
       receipt.createdAt || (/* @__PURE__ */ new Date()).toISOString()
     );
@@ -23835,7 +24047,7 @@ var V2Database = class {
       summary: row.summary,
       errors: JSON.parse(row.errors_json || "[]"),
       warnings: JSON.parse(row.warnings_json || "[]"),
-      artifacts: JSON.parse(row.artifacts_json || "[]"),
+      changedPaths: JSON.parse(row.changed_paths_json || "[]"),
       logHandle: row.log_handle,
       createdAt: row.created_at
     };
@@ -23853,19 +24065,43 @@ var SyncEngine = class {
   constructor(db) {
     this.db = db;
   }
-  exportGraphToJson(projectId, projectRoot) {
+  _lastExportedHash(projectId) {
+    return this.db.getSyncState(`last_exported_hash:${projectId}`) || this.db.getSyncState("last_exported_hash");
+  }
+  _buildGraph(projectId, graphRevision) {
     const project = this.db.getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found in database`);
     const plans = this.db.listPlans(projectId).sort((a, b) => a.id.localeCompare(b.id));
-    const tasks = this.db.listTasks().sort((a, b) => a.id.localeCompare(b.id));
+    const planIds = new Set(plans.map((plan) => plan.id));
+    const tasks = this.db.listTasks().filter((task) => planIds.has(task.planId)).map((task) => ({
+      id: task.id,
+      planId: task.planId,
+      phaseId: task.phaseId,
+      title: task.title,
+      status: task.status,
+      contextSlice: {
+        objective: task.contextSlice?.objective || "",
+        constraints: task.contextSlice?.constraints || [],
+        references: task.contextSlice?.references || [],
+        nextSteps: task.contextSlice?.nextSteps || [],
+        openQuestions: task.contextSlice?.openQuestions || []
+      },
+      workingSet: task.workingSet || {},
+      references: task.references || {},
+      rules: task.rules || task.references?.rules || [],
+      notes: task.notes || [],
+      checks: task.checks || [],
+      syncResult: task.syncResult || null,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    })).sort((a, b) => a.id.localeCompare(b.id));
     const blocks = this.db.listBlocks(projectId).sort((a, b) => a.id.localeCompare(b.id));
     const chains = this.db.listChains(projectId).sort((a, b) => a.id.localeCompare(b.id));
     const links = this.db.listLinks(projectId).sort((a, b) => a.id.localeCompare(b.id));
-    const newRevision = (project.graph_revision || 0) + 1;
     const graph = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       projectId,
-      graphRevision: newRevision,
+      graphRevision,
       exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
       data: {
         plans,
@@ -23876,20 +24112,92 @@ var SyncEngine = class {
       }
     };
     const jsonText = JSON.stringify(graph, null, 2) + "\n";
-    const sha256 = calculateSha256(jsonText);
+    return {
+      project,
+      graph,
+      jsonText,
+      sha256: calculateSha256(jsonText)
+    };
+  }
+  _writeGraphFile(projectRoot, jsonText) {
     const targetDir = path2.join(projectRoot, ".contextos");
     fs3.mkdirSync(targetDir, { recursive: true });
     const targetFile = path2.join(targetDir, "graph.json");
-    const tempFile = path2.join(targetDir, `graph.json.tmp.${Date.now()}`);
-    fs3.writeFileSync(tempFile, jsonText, "utf8");
-    fs3.renameSync(tempFile, targetFile);
-    this.db.setGraphRevision(projectId, newRevision);
-    this.db.setSyncState("last_exported_hash", sha256);
+    const tempFile = path2.join(targetDir, `graph.json.tmp.${process.pid}.${Date.now()}`);
+    let fd = null;
+    try {
+      fd = fs3.openSync(tempFile, "w");
+      fs3.writeFileSync(fd, jsonText, "utf8");
+      fs3.fsyncSync(fd);
+      fs3.closeSync(fd);
+      fd = null;
+      fs3.renameSync(tempFile, targetFile);
+      return targetFile;
+    } catch (err2) {
+      if (fd !== null) {
+        try {
+          fs3.closeSync(fd);
+        } catch (_) {
+        }
+      }
+      try {
+        fs3.rmSync(tempFile, { force: true });
+      } catch (_) {
+      }
+      throw err2;
+    }
+  }
+  flushGraphOutbox(projectId, projectRoot) {
+    const outbox = this.db.getGraphOutbox(projectId);
+    if (!outbox) return null;
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project ${projectId} not found in database`);
+    if ((project.graph_revision || 0) !== outbox.baseRevision) {
+      if ((project.graph_revision || 0) >= outbox.targetRevision) {
+        this.db.deleteGraphOutbox(projectId);
+        return {
+          graphRevision: project.graph_revision,
+          sha256: this._lastExportedHash(projectId),
+          targetFile: path2.join(projectRoot, ".contextos", "graph.json")
+        };
+      }
+      throw new Error(
+        `Graph export revision conflict for '${projectId}': database=${project.graph_revision}, base=${outbox.baseRevision}`
+      );
+    }
+    const targetFile = this._writeGraphFile(projectRoot, outbox.payloadJson);
+    const actualSha256 = calculateSha256(fs3.readFileSync(targetFile, "utf8"));
+    if (actualSha256 !== outbox.payloadHash) {
+      throw new Error(`Graph export hash verification failed for '${projectId}'`);
+    }
+    this.db.setGraphExported(projectId, outbox.targetRevision, outbox.payloadHash);
     return {
-      graphRevision: newRevision,
-      sha256,
+      graphRevision: outbox.targetRevision,
+      sha256: outbox.payloadHash,
       targetFile
     };
+  }
+  recoverGraphOutbox(projectId, projectRoot) {
+    const result = this.flushGraphOutbox(projectId, projectRoot);
+    return result ? { recovered: true, ...result } : { recovered: false };
+  }
+  queueGraphToJson(projectId) {
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project ${projectId} not found in database`);
+    const targetRevision = (project.graph_revision || 0) + 1;
+    const payload = this._buildGraph(projectId, targetRevision);
+    return this.db.saveGraphOutbox({
+      projectId,
+      baseRevision: project.graph_revision || 0,
+      targetRevision,
+      payloadHash: payload.sha256,
+      payloadJson: payload.jsonText
+    });
+  }
+  exportGraphToJson(projectId, projectRoot) {
+    this.flushGraphOutbox(projectId, projectRoot);
+    this.queueGraphToJson(projectId);
+    return this.flushGraphOutbox(projectId, projectRoot);
   }
   importGraphFromJson(jsonText, projectRoot) {
     let graph;
@@ -23917,10 +24225,13 @@ var SyncEngine = class {
           role: ref.role || "implementation"
         });
       }
-      blocks = blocks.map((b) => ({
-        ...b,
-        artifactRefs: b.artifactRefs || refsByBlock.get(b.id) || [{ path: "legacy.js" }]
-      }));
+      blocks = blocks.map((b) => {
+        const refs = b.artifactRefs || refsByBlock.get(b.id);
+        if (!Array.isArray(refs) || refs.length === 0) {
+          throw new Error(`Ghost Block rejected during graph import: Block '${b.id}' has no artifactRefs.`);
+        }
+        return { ...b, artifactRefs: refs };
+      });
     }
     this.db.transaction((db) => {
       db.ensureProject(projectId, projectRoot);
@@ -23929,39 +24240,71 @@ var SyncEngine = class {
       db.db.prepare("DELETE FROM blocks WHERE project_id = ?").run(projectId);
       db.db.prepare("DELETE FROM chains WHERE project_id = ?").run(projectId);
       db.db.prepare("DELETE FROM links WHERE project_id = ?").run(projectId);
-      for (const plan of data.plans || []) {
+      const plans = data.plans || [];
+      const planIds = new Set(plans.map((plan) => plan.id));
+      for (const plan of plans) {
         db.savePlan({ ...plan, projectId });
       }
       for (const task of data.tasks || []) {
-        db.saveTask(task);
+        const planId = task.planId || task.plan_id;
+        if (!planIds.has(planId)) continue;
+        db.saveTask({ ...task, planId, phaseId: task.phaseId || task.phase_id || "P0" });
       }
       for (const block of blocks) {
         db.saveBlock({ ...block, projectId });
       }
       for (const chain of data.chains || []) {
-        db.saveChain(chain);
+        db.saveChain({ ...chain, projectId });
       }
       for (const link of data.links || []) {
-        db.saveLink(link);
+        db.saveLink({ ...link, projectId });
       }
-      db.setSyncState("last_exported_hash", sha256);
+      db.setGraphExported(projectId, graphRevision, sha256);
     });
     return {
-      projectId: graph.projectId,
-      graphRevision: graph.graphRevision,
+      projectId,
+      graphRevision,
       sha256
     };
   }
   reconcileExternalChange(projectId, projectRoot) {
+    this.recoverGraphOutbox(projectId, projectRoot);
     const targetFile = path2.join(projectRoot, ".contextos", "graph.json");
     if (!fs3.existsSync(targetFile)) {
       return { changed: false, reason: "File does not exist" };
     }
     const jsonText = fs3.readFileSync(targetFile, "utf8");
     const currentSha256 = calculateSha256(jsonText);
-    const lastHash = this.db.getSyncState("last_exported_hash");
+    const lastHash = this._lastExportedHash(projectId);
     if (currentSha256 === lastHash) {
       return { changed: false, reason: "Hash identical to last export" };
+    }
+    let graph;
+    try {
+      graph = JSON.parse(jsonText);
+    } catch (err2) {
+      throw new Error(`Invalid JSON syntax in graph: ${err2.message}`);
+    }
+    const project = this.db.getProject(projectId);
+    const currentRevision = project?.graph_revision || 0;
+    const incomingRevision = graph.graphRevision || graph.project?.graphRevision || 0;
+    if (incomingRevision < currentRevision) {
+      return {
+        changed: false,
+        conflict: true,
+        reason: `Refusing stale graph rollback: graph revision ${incomingRevision} is older than database revision ${currentRevision}`,
+        graphRevision: incomingRevision,
+        databaseRevision: currentRevision
+      };
+    }
+    if (incomingRevision === currentRevision) {
+      return {
+        changed: false,
+        conflict: true,
+        reason: `Graph revision ${incomingRevision} diverged without a newer revision`,
+        graphRevision: incomingRevision,
+        databaseRevision: currentRevision
+      };
     }
     const importResult = this.importGraphFromJson(jsonText, projectRoot);
     return {
@@ -23971,6 +24314,124 @@ var SyncEngine = class {
     };
   }
 };
+
+// packages/storage/src/project-lock.mjs
+import crypto2 from "node:crypto";
+import fs4 from "node:fs";
+import path3 from "node:path";
+var LOCK_DIR_NAME = "project.lock";
+function lockPath(projectRoot) {
+  return path3.join(path3.resolve(projectRoot), ".contextos", LOCK_DIR_NAME);
+}
+function readOwner(lockDir) {
+  try {
+    return JSON.parse(fs4.readFileSync(path3.join(lockDir, "owner.json"), "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err2) {
+    return err2.code === "EPERM";
+  }
+}
+function isStale(lockDir, owner, staleMs) {
+  const createdAt = owner?.createdAt ? Date.parse(owner.createdAt) : NaN;
+  let stat = null;
+  try {
+    stat = fs4.statSync(lockDir);
+  } catch (_) {
+    return true;
+  }
+  const timestamp = Number.isFinite(createdAt) ? createdAt : stat?.mtimeMs || 0;
+  if (!timestamp || Date.now() - timestamp <= staleMs) return false;
+  if (owner?.pid && processIsAlive(owner.pid)) return false;
+  return true;
+}
+function removeLockDirectory(lockDir) {
+  try {
+    fs4.rmSync(lockDir, { recursive: true, force: true });
+  } catch (_) {
+  }
+}
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+function inspectProjectWriteLock(projectRoot) {
+  const lockDir = lockPath(projectRoot);
+  if (!fs4.existsSync(lockDir)) return null;
+  const owner = readOwner(lockDir);
+  let stat;
+  try {
+    stat = fs4.statSync(lockDir);
+  } catch (_) {
+    return null;
+  }
+  return {
+    path: lockDir,
+    owner,
+    ageMs: Date.now() - stat.mtimeMs,
+    alive: owner?.pid ? processIsAlive(owner.pid) : false
+  };
+}
+async function withProjectWriteLock(projectRoot, callback, { timeoutMs = 15e3, staleMs = 6e4, label = "write" } = {}) {
+  const absoluteRoot = path3.resolve(projectRoot);
+  const lockDir = lockPath(absoluteRoot);
+  const token = crypto2.randomBytes(12).toString("hex");
+  const startedAt = Date.now();
+  const owner = {
+    token,
+    pid: process.pid,
+    label,
+    projectRoot: absoluteRoot,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  fs4.mkdirSync(path3.dirname(lockDir), { recursive: true });
+  while (true) {
+    try {
+      fs4.mkdirSync(lockDir);
+      fs4.writeFileSync(path3.join(lockDir, "owner.json"), JSON.stringify(owner, null, 2) + "\n", "utf8");
+      break;
+    } catch (err2) {
+      if (err2.code !== "EEXIST") throw err2;
+      const currentOwner = readOwner(lockDir);
+      if (isStale(lockDir, currentOwner, staleMs)) {
+        const staleDir = `${lockDir}.stale-${token}-${Date.now()}`;
+        try {
+          fs4.renameSync(lockDir, staleDir);
+          removeLockDirectory(staleDir);
+          continue;
+        } catch (_) {
+        }
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        const holder = currentOwner ? `pid=${currentOwner.pid || "unknown"} label=${currentOwner.label || "unknown"}` : "unknown holder";
+        throw new Error(`Project write lock timeout in ${label}: ${holder}`);
+      }
+      await sleep(40);
+    }
+  }
+  const release = () => {
+    const currentOwner = readOwner(lockDir);
+    if (currentOwner?.token !== token) return;
+    const releasedDir = `${lockDir}.released-${token}`;
+    try {
+      fs4.renameSync(lockDir, releasedDir);
+      removeLockDirectory(releasedDir);
+    } catch (_) {
+      removeLockDirectory(lockDir);
+    }
+  };
+  try {
+    return await callback();
+  } finally {
+    release();
+  }
+}
 
 // packages/domain/src/plan.mjs
 var PLAN_PRIORITIES = ["critical", "high", "normal", "low"];
@@ -24191,6 +24652,8 @@ var Task = class {
     contextSlice = {},
     workingSet = {},
     references = {},
+    rules = null,
+    ruleRefs = null,
     baseline = {},
     notes = [],
     checks = [],
@@ -24221,18 +24684,21 @@ var Task = class {
     this.workingSet = {
       files: Array.isArray(workingSet.files) ? [...workingSet.files] : [],
       symbols: Array.isArray(workingSet.symbols) ? [...workingSet.symbols] : [],
-      candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : []
+      candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : [],
+      scopeDirs: Array.isArray(workingSet.scopeDirs) ? [...workingSet.scopeDirs] : []
     };
+    const initialRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references?.rules) ? references.rules : [];
     this.references = {
-      rules: Array.isArray(references.rules) ? [...references.rules] : [],
-      decisionSections: Array.isArray(references.decisionSections) ? [...references.decisionSections] : [],
-      blockIds: Array.isArray(references.blockIds) ? [...references.blockIds] : []
+      rules: [...new Set(initialRules.filter((r) => typeof r === "string" && r.trim()))],
+      decisionSections: Array.isArray(references?.decisionSections) ? [...references.decisionSections] : [],
+      blockIds: Array.isArray(references?.blockIds) ? [...references.blockIds] : []
     };
     this.baseline = {
       gitHead: baseline.gitHead || null,
       dirtyHash: baseline.dirtyHash || null,
       indexRevision: baseline.indexRevision || 0,
-      fileSnapshots: baseline.fileSnapshots ? { ...baseline.fileSnapshots } : {}
+      fileSnapshots: baseline.fileSnapshots ? { ...baseline.fileSnapshots } : {},
+      initializedAt: baseline.initializedAt || null
     };
     this.notes = Array.isArray(notes) ? [...notes] : [];
     this.checks = Array.isArray(checks) ? [...checks] : [];
@@ -24295,6 +24761,12 @@ var Task = class {
     if (this.status !== "checking") {
       throw new Error(`Cannot transition to syncing from state: ${this.status}. Must be active or checking.`);
     }
+    const verifiedChecks = this.checks.filter(
+      (check) => check.passed && (check.receiptId || String(check.evidence || "").trim())
+    );
+    if (verifiedChecks.length === 0) {
+      throw new Error("Cannot sync task without at least one passing check backed by a receipt or evidence.");
+    }
     const failedChecks = this.checks.filter((c) => !c.passed);
     if (failedChecks.length > 0) {
       throw new Error(`Cannot sync task with ${failedChecks.length} failed checks`);
@@ -24332,6 +24804,33 @@ var Task = class {
     this.status = "active";
     this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   }
+  get rules() {
+    return this.references.rules;
+  }
+  set rules(newRules) {
+    this.references.rules = Array.isArray(newRules) ? [...new Set(newRules.filter((r) => typeof r === "string" && r.trim()))] : [];
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  bindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== "string") return;
+    const clean = ruleId.trim();
+    if (clean && !this.references.rules.includes(clean)) {
+      this.references.rules.push(clean);
+      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
+  unbindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== "string") return;
+    const clean = ruleId.trim();
+    const idx = this.references.rules.indexOf(clean);
+    if (idx !== -1) {
+      this.references.rules.splice(idx, 1);
+      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
+  setRules(rules) {
+    this.rules = rules;
+  }
   toJSON() {
     return {
       id: this.id,
@@ -24342,6 +24841,7 @@ var Task = class {
       contextSlice: this.contextSlice,
       workingSet: this.workingSet,
       references: this.references,
+      rules: this.references.rules,
       baseline: this.baseline,
       notes: this.notes,
       checks: this.checks,
@@ -24476,6 +24976,25 @@ function assertBlockHasRealCode(block) {
       { blockId: block.id }
     );
   }
+  for (const ref of block.artifactRefs) {
+    if (!ref.path || typeof ref.path !== "string" || !ref.path.trim()) {
+      throw new InvariantViolationError(
+        `Invariant 1 Violation: Block '${block.id}' contains an artifactRef without a valid path.`,
+        { blockId: block.id, ref }
+      );
+    }
+    const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
+    const hasSymbol = typeof ref.symbol === "string" && ref.symbol.trim().length > 0;
+    const hasHash = typeof ref.hash === "string" && ref.hash.trim().length > 0;
+    const hasPlaceholder = ref.symbol === "*" || ref.hash === "untracked";
+    const isValidAnchor = hasHash && !hasPlaceholder && (anchorKind !== "symbol" || hasSymbol) && (anchorKind !== "tree" || (ref.hashMode === "manifest" ? Boolean(ref.manifest) : true));
+    if (!isValidAnchor) {
+      throw new InvariantViolationError(
+        `Invariant 1 Violation: Block '${block.id}' contains unanchored artifactRef for '${ref.path}' (anchorKind: '${anchorKind}', symbol: '${ref.symbol || ""}', hash: '${ref.hash || ""}'). Symbol anchors require 'symbol' and 'hash'; file/tree anchors require 'hash'; manifest tree anchors require 'manifest'. Run 'block(action: "bind_auto", id: "${block.id}", path: "${ref.path}")' to automatically extract anchors before sync.`,
+        { blockId: block.id, ref }
+      );
+    }
+  }
 }
 function assertPlanCanBeCompleted(plan) {
   const failedOrPending = (plan.checkpoints || []).filter((cp) => cp.status !== "passed");
@@ -24504,20 +25023,49 @@ var PlanService = class {
     decisionRefs = [],
     dependencyRefs = []
   }) {
+    const planId = id || `plan-${Date.now()}`;
+    const instantiatedTasks = [];
+    const normalizedPhases = (phases || []).map((phaseData, index) => {
+      const pData = typeof phaseData.toJSON === "function" ? phaseData.toJSON() : { ...phaseData };
+      pData.id = pData.id || `phase-${index}`;
+      const phaseTasks = Array.isArray(pData.tasks) ? pData.tasks : [];
+      const taskIds = Array.isArray(pData.taskIds) ? [...pData.taskIds] : [];
+      for (const t of phaseTasks) {
+        const tObj = typeof t === "string" ? { id: t, title: t } : t;
+        const tId = tObj.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!taskIds.includes(tId)) {
+          taskIds.push(tId);
+        }
+        const taskInstance = new Task({
+          ...tObj,
+          id: tId,
+          planId,
+          phaseId: pData.id,
+          title: tObj.title || tId,
+          rules: tObj.rules ?? tObj.ruleRefs ?? tObj.references?.rules ?? []
+        });
+        instantiatedTasks.push(taskInstance);
+      }
+      pData.taskIds = taskIds;
+      return pData;
+    });
     const plan = new Plan({
-      id: id || `plan-${Date.now()}`,
+      id: planId,
       projectId,
       title,
       priority,
       status: "active",
       summary,
-      phases,
+      phases: normalizedPhases,
       checkpoints,
       ruleRefs,
       decisionRefs,
       dependencyRefs
     });
     this.db.savePlan(plan.toJSON());
+    for (const t of instantiatedTasks) {
+      this.db.saveTask(t.toJSON());
+    }
     return plan.toJSON();
   }
   getPlan(planId) {
@@ -24525,6 +25073,35 @@ var PlanService = class {
   }
   listPlans(projectId) {
     return this.db.listPlans(projectId);
+  }
+  repairStateHygiene(projectId, { staleMs = 6 * 60 * 60 * 1e3 } = {}) {
+    const changedPlanIds = [];
+    const now = Date.now();
+    for (const rawPlan of this.db.listPlans(projectId)) {
+      if (rawPlan.status !== "active") continue;
+      const tasks = this.db.listTasks(rawPlan.id);
+      const hasActiveTask = tasks.some(
+        (task) => ["active", "checking", "syncing"].includes(task.status)
+      );
+      if (hasActiveTask) continue;
+      const updatedAt = Date.parse(rawPlan.updatedAt || "");
+      const stale = Number.isFinite(updatedAt) && now - updatedAt > staleMs;
+      const allCheckpointsPassed = rawPlan.checkpoints.length > 0 && rawPlan.checkpoints.every((checkpoint) => checkpoint.status === "passed");
+      if (allCheckpointsPassed) {
+        rawPlan.status = "completed";
+        rawPlan.completedSummary = rawPlan.completedSummary || "Auto-completed because all checkpoints passed and no active task remains.";
+        rawPlan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        this.db.savePlan(rawPlan);
+        changedPlanIds.push(rawPlan.id);
+      } else if (stale) {
+        rawPlan.status = "archived";
+        rawPlan.completedSummary = rawPlan.completedSummary || "Archived by state hygiene because no active task remained for the stale plan.";
+        rawPlan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        this.db.savePlan(rawPlan);
+        changedPlanIds.push(rawPlan.id);
+      }
+    }
+    return { changed: changedPlanIds.length, changedPlanIds };
   }
   addCheckpoint(planId, checkpointData) {
     const rawPlan = this.db.getPlan(planId);
@@ -24555,6 +25132,12 @@ var PlanService = class {
     assertPlanCanBeCompleted(plan);
     plan.complete({ completedSummary: completedSummary || plan.summary, historyRef });
     this.db.savePlan(plan.toJSON());
+    for (const rawTask of this.db.listTasks(planId)) {
+      if (rawTask.status === "completed") continue;
+      const task = new Task(rawTask);
+      task.block(`Plan '${planId}' completed before this task reached sync.`);
+      this.db.saveTask(task.toJSON());
+    }
     return plan.toJSON();
   }
   deletePlan(planId) {
@@ -24563,14 +25146,14 @@ var PlanService = class {
 };
 
 // packages/application/src/task-service.mjs
-import fs6 from "node:fs";
-import path6 from "node:path";
-import crypto4 from "node:crypto";
-import { execSync } from "node:child_process";
+import fs8 from "node:fs";
+import path8 from "node:path";
+import crypto6 from "node:crypto";
+import { execFileSync as execFileSync2 } from "node:child_process";
 
 // packages/code-intel/src/language-registry.mjs
-import crypto3 from "node:crypto";
-import path4 from "node:path";
+import crypto4 from "node:crypto";
+import path5 from "node:path";
 import { execFileSync } from "node:child_process";
 
 // node_modules/@babel/parser/lib/index.js
@@ -38800,9 +39383,9 @@ function getParserClass(pluginsMap) {
 }
 
 // packages/code-intel/src/tree-sitter-parser.mjs
-import fs4 from "node:fs";
-import path3 from "node:path";
-import crypto2 from "node:crypto";
+import fs5 from "node:fs";
+import path4 from "node:path";
+import crypto3 from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
@@ -40384,11 +40967,11 @@ async function Module2(moduleArg = {}) {
   }, "quit_");
   var _scriptName = import.meta.url;
   var scriptDirectory = "";
-  function locateFile(path13) {
+  function locateFile(path17) {
     if (Module["locateFile"]) {
-      return Module["locateFile"](path13, scriptDirectory);
+      return Module["locateFile"](path17, scriptDirectory);
     }
-    return scriptDirectory + path13;
+    return scriptDirectory + path17;
   }
   __name(locateFile, "locateFile");
   var readAsync, readBinary;
@@ -42851,7 +43434,7 @@ var Query = class {
 
 // packages/code-intel/src/tree-sitter-parser.mjs
 function calculateHash(code2) {
-  return crypto2.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
+  return crypto3.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
 }
 function getLines(node2) {
   const startLine = node2.startPosition.row + 1;
@@ -42937,19 +43520,19 @@ function resolveLanguage(langName) {
   if (loadedLanguages.has(normalized)) {
     return loadedLanguages.get(normalized);
   }
-  const currentDir = path3.dirname(fileURLToPath(import.meta.url));
+  const currentDir = path4.dirname(fileURLToPath(import.meta.url));
   const candidatePaths = [
-    path3.join(currentDir, "..", "grammars", `tree-sitter-${normalized}.wasm`),
-    path3.join(currentDir, "..", "..", "..", "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
-    path3.join(process.cwd(), "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
-    path3.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`),
-    path3.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized === "csharp" ? "c_sharp" : normalized, `tree-sitter-${normalized === "csharp" ? "c_sharp" : normalized}.wasm`),
-    path3.join(process.cwd(), "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`)
+    path4.join(currentDir, "..", "grammars", `tree-sitter-${normalized}.wasm`),
+    path4.join(currentDir, "..", "..", "..", "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
+    path4.join(process.cwd(), "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
+    path4.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`),
+    path4.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized === "csharp" ? "c_sharp" : normalized, `tree-sitter-${normalized === "csharp" ? "c_sharp" : normalized}.wasm`),
+    path4.join(process.cwd(), "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`)
   ];
   for (const p of candidatePaths) {
-    if (fs4.existsSync(p)) {
+    if (fs5.existsSync(p)) {
       try {
-        const buf = fs4.readFileSync(p);
+        const buf = fs5.readFileSync(p);
         const lang = Language.loadSync(new WebAssembly.Module(buf));
         loadedLanguages.set(normalized, lang);
         return lang;
@@ -42959,7 +43542,110 @@ function resolveLanguage(langName) {
   }
   return null;
 }
-var TreeSitterParser = class {
+function normalizeCallee(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  let s = raw.trim();
+  if (/[\r\n{}]/.test(s)) return null;
+  while (/(::)?<[^<>]+>/.test(s)) {
+    s = s.replace(/(::)?<[^<>]+>/g, "");
+  }
+  s = s.replace(/^(\$this->|\$this\.|\$this|this\.|self\.|this->)/, "");
+  s = s.replace(/->/g, ".");
+  if (s.includes("(")) {
+    const parts2 = s.split(".");
+    s = parts2[parts2.length - 1].replace(/\(.*$/, "");
+  }
+  s = s.replace(/\s+/g, "");
+  if (!s || s === "function" || s === "func" || s === "lambda" || s === "self" || s === "this" || s === "$this" || /^[^a-zA-Z0-9_$:]/.test(s)) {
+    return null;
+  }
+  return s || null;
+}
+var TreeSitterParser = class _TreeSitterParser {
+  static normalizeCallee(raw) {
+    return normalizeCallee(raw);
+  }
+  static extractCalls(bodyNode) {
+    if (!bodyNode) return [];
+    const calls = [];
+    const seen = /* @__PURE__ */ new Set();
+    const NESTED_SCOPES = /* @__PURE__ */ new Set([
+      "arrow_function",
+      "function_expression",
+      "function_declaration",
+      "generator_function_declaration",
+      "function_definition",
+      "function_item",
+      "method_declaration",
+      "method_definition",
+      "method",
+      "class_declaration",
+      "class_definition",
+      "class_specifier",
+      "struct_specifier",
+      "lambda",
+      "lambda_expression",
+      "lambda_literal",
+      "func_literal",
+      "closure_expression",
+      "do_block",
+      "anonymous_function",
+      "anonymous_function_expression",
+      "anonymous_method_expression",
+      "anonymous_class_body",
+      "local_function_statement"
+    ]);
+    const CALL_TYPES = /* @__PURE__ */ new Set([
+      "call_expression",
+      "call",
+      "method_invocation",
+      "invocation_expression",
+      "function_call_expression",
+      "member_call_expression",
+      "scoped_call_expression",
+      "method_call"
+    ]);
+    function walk(node2, isRoot = false) {
+      if (!node2) return;
+      if (!isRoot && NESTED_SCOPES.has(node2.type)) {
+        return;
+      }
+      if (CALL_TYPES.has(node2.type)) {
+        let rawCallee = null;
+        if (node2.type === "method_invocation" || node2.type === "member_call_expression") {
+          const obj = node2.childForFieldName("object");
+          const name2 = node2.childForFieldName("name");
+          rawCallee = obj && name2 ? `${obj.text}.${name2.text}` : name2 ? name2.text : node2.text;
+        } else if (node2.type === "call" && (node2.childForFieldName("receiver") || node2.childForFieldName("method"))) {
+          const receiver = node2.childForFieldName("receiver");
+          const method = node2.childForFieldName("method");
+          rawCallee = receiver && method ? `${receiver.text}.${method.text}` : method ? method.text : receiver ? receiver.text : node2.text;
+        } else {
+          const fnNode = node2.childForFieldName("function") || node2.childForFieldName("callee") || node2.childForFieldName("called_expression") || node2.childForFieldName("name");
+          if (fnNode && !NESTED_SCOPES.has(fnNode.type)) {
+            rawCallee = fnNode.text;
+          } else if (node2.namedChildren.length > 0) {
+            const first = node2.namedChild(0);
+            if (first && !first.type.includes("argument") && !first.type.includes("param") && !NESTED_SCOPES.has(first.type)) {
+              rawCallee = first.text;
+            }
+          }
+        }
+        if (rawCallee) {
+          const normalized = normalizeCallee(rawCallee);
+          if (normalized && !seen.has(normalized)) {
+            seen.add(normalized);
+            calls.push(normalized);
+          }
+        }
+      }
+      for (const child of node2.namedChildren) {
+        walk(child, false);
+      }
+    }
+    walk(bodyNode, true);
+    return calls;
+  }
   static isLanguageSupported(lang) {
     return Boolean(resolveLanguage(lang));
   }
@@ -43010,6 +43696,18 @@ var TreeSitterParser = class {
           break;
         default:
           return null;
+      }
+      for (const sym of symbols) {
+        if (sym.containerName && (sym.kind === "method" || sym.kind === "constructor" || sym.kind === "function")) {
+          const container = symbols.find(
+            (s) => s.name === sym.containerName && (s.kind === "struct" || s.kind === "class" || s.kind === "trait" || s.kind === "interface")
+          );
+          if (container && Array.isArray(container.methods)) {
+            if (!container.methods.some((m) => m.name === sym.name && m.startLine === sym.startLine)) {
+              container.methods.push(sym);
+            }
+          }
+        }
       }
       return { symbols, imports };
     } catch (_) {
@@ -43123,6 +43821,8 @@ var TreeSitterParser = class {
                 const { startLine: ms, endLine: me } = getLines(m);
                 const rawParams = m.childForFieldName("parameters")?.text || "()";
                 const sigParams = rawParams.replace(/\s+/g, " ");
+                const mBody = m.childForFieldName("body") || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${className}.${mName}`,
                   shortName: mName,
@@ -43131,7 +43831,8 @@ var TreeSitterParser = class {
                   signature: `${mName}${sigParams}`,
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43143,6 +43844,8 @@ var TreeSitterParser = class {
                   const { startLine: ms, endLine: me } = getLines(m);
                   const rawParams = val.childForFieldName("parameters")?.text || "()";
                   const sigParams = rawParams.replace(/\s+/g, " ");
+                  const fBody = val.childForFieldName("body") || val;
+                  const calls = _TreeSitterParser.extractCalls(fBody);
                   const mSym = {
                     name: `${className}.${mName}`,
                     shortName: mName,
@@ -43151,7 +43854,8 @@ var TreeSitterParser = class {
                     signature: `${mName}${sigParams}`,
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43167,6 +43871,8 @@ var TreeSitterParser = class {
             const { startLine, endLine } = getLines(target);
             const rawParams = target.childForFieldName("parameters")?.text || "()";
             const sigParams = rawParams.replace(/\s+/g, " ");
+            const body2 = target.childForFieldName("body") || target;
+            const calls = _TreeSitterParser.extractCalls(body2);
             symbols.push({
               name: fnName,
               shortName: fnName,
@@ -43174,7 +43880,8 @@ var TreeSitterParser = class {
               signature: `${fnName}${sigParams}`,
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
           continue;
@@ -43188,6 +43895,8 @@ var TreeSitterParser = class {
                 const { startLine, endLine } = getLines(target);
                 const rawParams = val.childForFieldName("parameters")?.text || "()";
                 const sigParams = rawParams.replace(/\s+/g, " ");
+                const fBody = val.childForFieldName("body") || val;
+                const calls = _TreeSitterParser.extractCalls(fBody);
                 symbols.push({
                   name: varName,
                   shortName: varName,
@@ -43195,7 +43904,8 @@ var TreeSitterParser = class {
                   signature: `${varName}${sigParams}`,
                   startLine,
                   endLine,
-                  hash: getSliceHash(lines, startLine, endLine)
+                  hash: getSliceHash(lines, startLine, endLine),
+                  calls
                 });
               }
             }
@@ -43257,6 +43967,8 @@ var TreeSitterParser = class {
               if (mName) {
                 const { startLine: ms } = getLines(mOuter);
                 const { endLine: me } = getLines(mTarget);
+                const mBody = mTarget.childForFieldName("body") || mTarget;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${className}.${mName}`,
                   shortName: mName,
@@ -43264,7 +43976,8 @@ var TreeSitterParser = class {
                   kind: "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43277,13 +43990,16 @@ var TreeSitterParser = class {
         if (fnName) {
           const { startLine } = getLines(outerNode);
           const { endLine } = getLines(target);
+          const body2 = target.childForFieldName("body") || target;
+          const calls = _TreeSitterParser.extractCalls(body2);
           symbols.push({
             name: fnName,
             shortName: fnName,
             kind: "function",
             startLine,
             endLine,
-            hash: getSliceHash(lines, startLine, endLine)
+            hash: getSliceHash(lines, startLine, endLine),
+            calls
           });
         }
       }
@@ -43350,25 +44066,36 @@ var TreeSitterParser = class {
         const rcvrNode = child.childForFieldName("receiver");
         const rcvrName = findTypeIdentifier(rcvrNode) || "Receiver";
         const { startLine, endLine } = getLines(child);
-        symbols.push({
+        const body2 = child.childForFieldName("body") || child;
+        const calls = _TreeSitterParser.extractCalls(body2);
+        const mSym = {
           name: `${rcvrName}.${name2}`,
           shortName: name2,
           containerName: rcvrName,
           kind: "method",
           startLine,
           endLine,
-          hash: getSliceHash(lines, startLine, endLine)
-        });
+          hash: getSliceHash(lines, startLine, endLine),
+          calls
+        };
+        symbols.push(mSym);
+        const parentType = symbols.find((s) => s.name === rcvrName && (s.kind === "struct" || s.kind === "interface"));
+        if (parentType && Array.isArray(parentType.methods)) {
+          parentType.methods.push(mSym);
+        }
       } else if (child.type === "function_declaration") {
         const name2 = child.childForFieldName("name")?.text;
         const { startLine, endLine } = getLines(child);
+        const body2 = child.childForFieldName("body") || child;
+        const calls = _TreeSitterParser.extractCalls(body2);
         symbols.push({
           name: name2,
           shortName: name2,
           kind: "function",
           startLine,
           endLine,
-          hash: getSliceHash(lines, startLine, endLine)
+          hash: getSliceHash(lines, startLine, endLine),
+          calls
         });
       }
     }
@@ -43415,6 +44142,8 @@ var TreeSitterParser = class {
               if (m.type === "function_signature_item" || m.type === "function_item") {
                 const fnName = m.childForFieldName("name")?.text;
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.childForFieldName("body") || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: fnName,
                   shortName: fnName,
@@ -43422,7 +44151,8 @@ var TreeSitterParser = class {
                   kind: "function",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 traitSym.methods.push(mSym);
@@ -43438,7 +44168,8 @@ var TreeSitterParser = class {
             kind: "struct",
             startLine,
             endLine,
-            hash: getSliceHash(lines, startLine, endLine)
+            hash: getSliceHash(lines, startLine, endLine),
+            methods: []
           });
         } else if (child.type === "enum_item") {
           const name2 = child.childForFieldName("name")?.text;
@@ -43461,28 +44192,39 @@ var TreeSitterParser = class {
               if (m.type === "function_item") {
                 const fnName = m.childForFieldName("name")?.text;
                 const { startLine: ms, endLine: me } = getLines(m);
-                symbols.push({
+                const mBody = m.childForFieldName("body") || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
+                const mSym = {
                   name: `${targetName}.${fnName}`,
                   shortName: fnName,
                   containerName: targetName,
                   kind: "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
-                });
+                  hash: getSliceHash(lines, ms, me),
+                  calls
+                };
+                symbols.push(mSym);
+                const parentStruct = symbols.find((s) => s.name === targetName && (s.kind === "struct" || s.kind === "trait"));
+                if (parentStruct && Array.isArray(parentStruct.methods)) {
+                  parentStruct.methods.push(mSym);
+                }
               }
             }
           }
         } else if (child.type === "function_item") {
           const fnName = child.childForFieldName("name")?.text;
           const { startLine, endLine } = getLines(child);
+          const body2 = child.childForFieldName("body") || child;
+          const calls = _TreeSitterParser.extractCalls(body2);
           symbols.push({
             name: fnName,
             shortName: fnName,
             kind: "function",
             startLine,
             endLine,
-            hash: getSliceHash(lines, startLine, endLine)
+            hash: getSliceHash(lines, startLine, endLine),
+            calls
           });
         }
       }
@@ -43527,6 +44269,8 @@ var TreeSitterParser = class {
               const fnName = fnId?.text;
               if (fnName) {
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.childForFieldName("body") || m.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${typeName}.${fnName}`,
                   shortName: fnName,
@@ -43534,7 +44278,8 @@ var TreeSitterParser = class {
                   kind: "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43543,6 +44288,8 @@ var TreeSitterParser = class {
               const varMatch = m.text.match(/var\s+([A-Za-z0-9_]+)/);
               if (varMatch && varMatch[1] === "body") {
                 const { startLine: ms, endLine: me } = getLines(m);
+                const mBody = m.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || m;
+                const calls = _TreeSitterParser.extractCalls(mBody);
                 const mSym = {
                   name: `${typeName}.body`,
                   shortName: "body",
@@ -43550,7 +44297,8 @@ var TreeSitterParser = class {
                   kind: "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43563,13 +44311,16 @@ var TreeSitterParser = class {
         const fnName = fnId?.text;
         if (fnName) {
           const { startLine, endLine } = getLines(child);
+          const body2 = child.childForFieldName("body") || child.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || child;
+          const calls = _TreeSitterParser.extractCalls(body2);
           symbols.push({
             name: fnName,
             shortName: fnName,
             kind: "function",
             startLine,
             endLine,
-            hash: getSliceHash(lines, startLine, endLine)
+            hash: getSliceHash(lines, startLine, endLine),
+            calls
           });
         }
       }
@@ -43610,14 +44361,17 @@ var TreeSitterParser = class {
                 const mName = m.childForFieldName("name")?.text;
                 if (!mName) continue;
                 const { startLine: ms, endLine: me } = getLines(m);
+                const bodyNode = m.childForFieldName("body") || m;
+                const calls = _TreeSitterParser.extractCalls(bodyNode);
                 const mSym = {
                   name: `${name2}.${mName}`,
                   shortName: mName,
                   containerName: name2,
-                  kind: "method",
+                  kind: m.type === "constructor_declaration" ? "constructor" : "method",
                   startLine: ms,
                   endLine: me,
-                  hash: getSliceHash(lines, ms, me)
+                  hash: getSliceHash(lines, ms, me),
+                  calls
                 };
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
@@ -43666,6 +44420,8 @@ var TreeSitterParser = class {
                 const fnName = fnId?.text;
                 if (fnName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const mBody = m.childForFieldName("body") || m.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || m;
+                  const calls = _TreeSitterParser.extractCalls(mBody);
                   const mSym = {
                     name: `${name2}.${fnName}`,
                     shortName: fnName,
@@ -43673,7 +44429,8 @@ var TreeSitterParser = class {
                     kind: "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43688,13 +44445,16 @@ var TreeSitterParser = class {
           const fnName = fnId?.text;
           if (fnName) {
             const { startLine, endLine } = getLines(child);
+            const body2 = child.childForFieldName("body") || child.namedChildren.find((c) => c.type.includes("body") || c.type.includes("block")) || child;
+            const calls = _TreeSitterParser.extractCalls(body2);
             symbols.push({
               name: fnName,
               shortName: fnName,
               kind: "function",
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
         }
@@ -43760,6 +44520,8 @@ var TreeSitterParser = class {
                 const cleanName = findIdentifier(declarator);
                 if (cleanName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName("body") || m;
+                  const calls = _TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name2}::${cleanName}`,
                     shortName: cleanName,
@@ -43767,7 +44529,8 @@ var TreeSitterParser = class {
                     kind: "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43780,13 +44543,16 @@ var TreeSitterParser = class {
           const fnName = findIdentifier(declarator);
           if (fnName) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName("body") || child;
+            const calls = _TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name: fnName,
               shortName: fnName,
               kind: "function",
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
         }
@@ -43841,14 +44607,17 @@ var TreeSitterParser = class {
                 const mName = m.childForFieldName("name")?.text;
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName("body") || m;
+                  const calls = _TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name2}.${mName}`,
                     shortName: mName,
                     containerName: name2,
-                    kind: "method",
+                    kind: m.type === "constructor_declaration" ? "constructor" : "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43897,6 +44666,8 @@ var TreeSitterParser = class {
                 const mName = m.childForFieldName("name")?.text;
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
+                  const bodyNode = m.childForFieldName("body") || m;
+                  const calls = _TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name2}::${mName}`,
                     shortName: mName,
@@ -43904,7 +44675,8 @@ var TreeSitterParser = class {
                     kind: "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43916,13 +44688,16 @@ var TreeSitterParser = class {
           const name2 = child.childForFieldName("name")?.text;
           if (name2) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName("body") || child;
+            const calls = _TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name: name2,
               shortName: name2,
               kind: "function",
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
         } else {
@@ -43968,6 +44743,8 @@ var TreeSitterParser = class {
                 if (mName) {
                   const { startLine: ms, endLine: me } = getLines(m);
                   const sep = m.type === "singleton_method" ? "." : "#";
+                  const bodyNode = m.childForFieldName("body") || m;
+                  const calls = _TreeSitterParser.extractCalls(bodyNode);
                   const mSym = {
                     name: `${name2}${sep}${mName}`,
                     shortName: mName,
@@ -43975,7 +44752,8 @@ var TreeSitterParser = class {
                     kind: "method",
                     startLine: ms,
                     endLine: me,
-                    hash: getSliceHash(lines, ms, me)
+                    hash: getSliceHash(lines, ms, me),
+                    calls
                   };
                   symbols.push(mSym);
                   classSym.methods.push(mSym);
@@ -43989,13 +44767,16 @@ var TreeSitterParser = class {
           const name2 = child.childForFieldName("name")?.text;
           if (name2) {
             const { startLine, endLine } = getLines(child);
+            const bodyNode = child.childForFieldName("body") || child;
+            const calls = _TreeSitterParser.extractCalls(bodyNode);
             symbols.push({
               name: name2,
               shortName: name2,
               kind: "function",
               startLine,
               endLine,
-              hash: getSliceHash(lines, startLine, endLine)
+              hash: getSliceHash(lines, startLine, endLine),
+              calls
             });
           }
         }
@@ -44007,11 +44788,11 @@ var TreeSitterParser = class {
 
 // packages/code-intel/src/language-registry.mjs
 function calculateHash2(code2) {
-  return crypto3.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
+  return crypto4.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
 }
 var LanguageRegistry = class {
   static getLanguage(filePath, content = "") {
-    const basename = path4.basename(filePath);
+    const basename = path5.basename(filePath);
     switch (basename) {
       case "Gemfile":
       case "Podfile":
@@ -44020,7 +44801,7 @@ var LanguageRegistry = class {
       case "CMakeLists.txt":
         return { name: "cpp", capability: "L3" };
     }
-    const ext = path4.extname(filePath).toLowerCase();
+    const ext = path5.extname(filePath).toLowerCase();
     switch (ext) {
       case ".js":
       case ".mjs":
@@ -44112,7 +44893,7 @@ var LanguageRegistry = class {
         this._parseRuby(lines, symbols, imports, content);
       } else {
         symbols.push({
-          name: path4.basename(filePath),
+          name: path5.basename(filePath),
           kind: "file",
           startLine: 1,
           endLine: Math.max(1, lines.length),
@@ -45212,8 +45993,8 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
 };
 
 // packages/code-intel/src/code-tools.mjs
-import fs5 from "node:fs";
-import path5 from "node:path";
+import fs6 from "node:fs";
+import path6 from "node:path";
 var CodeTools = class {
   /**
    * 1. Outline: Progressive L1 structure view
@@ -45230,19 +46011,37 @@ var CodeTools = class {
     }
     if (structure.symbols.length > 0) {
       lines.push("\n### Symbols:");
+      const renderedMethodKeys = /* @__PURE__ */ new Set();
       for (const sym of structure.symbols) {
-        if (sym.kind === "class") {
-          lines.push(`- **class** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
+        if (Array.isArray(sym.methods)) {
+          for (const m of sym.methods) {
+            renderedMethodKeys.add(`${m.name}:${m.startLine}:${m.endLine}`);
+          }
+        }
+      }
+      const CONTAINER_KINDS = /* @__PURE__ */ new Set(["class", "struct", "trait", "interface", "extension", "impl", "record", "object", "enum"]);
+      for (const sym of structure.symbols) {
+        const isContainer = CONTAINER_KINDS.has(sym.kind) || Array.isArray(sym.methods) && sym.methods.length > 0;
+        if (isContainer) {
+          lines.push(`- **${sym.kind}** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
           if (sym.methods && sym.methods.length > 0) {
             for (const m of sym.methods) {
               const displaySig = m.signature ? m.signature : m.name;
-              lines.push(`  - **method** \`${displaySig}\` [L${m.startLine}-L${m.endLine}] (hash: \`${m.hash}\`)`);
+              const callsSuffix = m.calls && m.calls.length > 0 ? ` -> calls: [${m.calls.join(", ")}]` : "";
+              lines.push(`  - **method** \`${displaySig}\` [L${m.startLine}-L${m.endLine}] (hash: \`${m.hash}\`)${callsSuffix}`);
             }
           }
+        } else if (renderedMethodKeys.has(`${sym.name}:${sym.startLine}:${sym.endLine}`)) {
+          continue;
         } else if (sym.kind === "function") {
           const displaySig = sym.signature ? sym.signature : sym.name;
-          lines.push(`- **func** \`${displaySig}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
-        } else if (sym.kind !== "method") {
+          const callsSuffix = sym.calls && sym.calls.length > 0 ? ` -> calls: [${sym.calls.join(", ")}]` : "";
+          lines.push(`- **func** \`${displaySig}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)${callsSuffix}`);
+        } else if (sym.kind === "method" || sym.kind === "constructor") {
+          const displaySig = sym.signature ? sym.signature : sym.name;
+          const callsSuffix = sym.calls && sym.calls.length > 0 ? ` -> calls: [${sym.calls.join(", ")}]` : "";
+          lines.push(`- **method** \`${displaySig}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)${callsSuffix}`);
+        } else {
           lines.push(`- **${sym.kind}** \`${sym.name}\` [L${sym.startLine}-L${sym.endLine}] (hash: \`${sym.hash}\`)`);
         }
       }
@@ -45432,10 +46231,10 @@ var CodeTools = class {
     const queryLower = query.toLowerCase();
     const results = [];
     for (const relPath of candidateFiles) {
-      const fullPath = path5.resolve(repoRoot, relPath);
-      if (!fs5.existsSync(fullPath)) continue;
+      const fullPath = path6.resolve(repoRoot, relPath);
+      if (!fs6.existsSync(fullPath)) continue;
       try {
-        const content = fs5.readFileSync(fullPath, "utf8");
+        const content = fs6.readFileSync(fullPath, "utf8");
         const structure = LanguageRegistry.parseStructure(relPath, content);
         for (const s of structure.symbols) {
           const nameMatch = s.name.toLowerCase().includes(queryLower);
@@ -45461,6 +46260,123 @@ var CodeTools = class {
   }
 };
 
+// packages/code-intel/src/bindings.mjs
+import crypto5 from "node:crypto";
+import fs7 from "node:fs";
+import path7 from "node:path";
+var MANIFEST_CANDIDATES = [
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+  "bun.lock",
+  "bun.lockb",
+  "Cargo.lock",
+  "go.sum",
+  "Package.resolved",
+  "Gemfile.lock",
+  "composer.lock",
+  "poetry.lock",
+  "Pipfile.lock"
+];
+function normalizeBindingPath(filePath) {
+  return String(filePath || "").replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+}
+function bindingMatchesPath(refPath, anchorKind, targetPath) {
+  const binding = normalizeBindingPath(refPath);
+  const target = normalizeBindingPath(targetPath);
+  if (!binding || !target) return false;
+  if (anchorKind === "tree") return target === binding || target.startsWith(`${binding}/`);
+  return target === binding;
+}
+function hashFile(fullPath) {
+  const hash = crypto5.createHash("sha256");
+  const file = fs7.openSync(fullPath, "r");
+  const buffer = Buffer.allocUnsafe(1024 * 1024);
+  try {
+    let bytesRead = 0;
+    while ((bytesRead = fs7.readSync(file, buffer, 0, buffer.length, null)) > 0) {
+      hash.update(buffer.subarray(0, bytesRead));
+    }
+  } finally {
+    fs7.closeSync(file);
+  }
+  return hash.digest("hex").slice(0, 16);
+}
+function collectDirectoryFiles(root, maxFiles) {
+  const files = [];
+  const walk = (directory, relativeDir = "") => {
+    if (files.length >= maxFiles) {
+      throw new Error(`Directory binding exceeds ${maxFiles} files; use hashMode='manifest' for dependency trees.`);
+    }
+    const entries = fs7.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      if (entry.name === ".git" || entry.name === ".contextos") continue;
+      const fullPath = path7.join(directory, entry.name);
+      const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        walk(fullPath, relativePath);
+      } else if (entry.isFile()) {
+        files.push({ fullPath, relativePath });
+        if (files.length >= maxFiles) break;
+      }
+    }
+  };
+  walk(root);
+  return files;
+}
+function findDirectoryManifest(projectRoot, relativeDir) {
+  const normalized = normalizeBindingPath(relativeDir);
+  const candidateDirs = /* @__PURE__ */ new Set([path7.join(projectRoot, normalized)]);
+  if (path7.basename(normalized) === "node_modules") {
+    candidateDirs.add(path7.dirname(path7.join(projectRoot, normalized)));
+  }
+  for (const directory of candidateDirs) {
+    for (const name2 of MANIFEST_CANDIDATES) {
+      const fullPath = path7.join(directory, name2);
+      if (!fs7.existsSync(fullPath) || !fs7.statSync(fullPath).isFile()) continue;
+      const relative = path7.relative(projectRoot, fullPath).split(path7.sep).join("/");
+      return relative;
+    }
+  }
+  return null;
+}
+function calculateTreeHash(projectRoot, relativeDir, {
+  hashMode = "content",
+  manifest = null,
+  maxFiles = 5e3
+} = {}) {
+  const normalized = normalizeBindingPath(relativeDir);
+  const fullPath = path7.resolve(projectRoot, normalized);
+  const resolvedRoot = path7.resolve(projectRoot);
+  const relativeToRoot = path7.relative(resolvedRoot, fullPath);
+  if (relativeToRoot.startsWith("..") || path7.isAbsolute(relativeToRoot)) {
+    throw new Error(`Directory binding '${relativeDir}' is outside project root`);
+  }
+  if (!fs7.existsSync(fullPath) || !fs7.statSync(fullPath).isDirectory()) {
+    throw new Error(`Directory binding not found: '${normalized}'`);
+  }
+  const resolvedMode = hashMode || (manifest ? "manifest" : "content");
+  if (resolvedMode === "manifest") {
+    const manifestPath = normalizeBindingPath(manifest || findDirectoryManifest(projectRoot, normalized));
+    if (!manifestPath) {
+      throw new Error(`No manifest found for directory binding '${normalized}'. Pass manifest explicitly.`);
+    }
+    const manifestFullPath = path7.resolve(projectRoot, manifestPath);
+    if (!fs7.existsSync(manifestFullPath) || !fs7.statSync(manifestFullPath).isFile()) {
+      throw new Error(`Manifest not found for directory binding '${normalized}': '${manifestPath}'`);
+    }
+    return { hash: hashFile(manifestFullPath), hashMode: "manifest", manifest: manifestPath, fileCount: 0 };
+  }
+  const hash = crypto5.createHash("sha256");
+  const files = collectDirectoryFiles(fullPath, maxFiles);
+  for (const file of files) {
+    hash.update(`${file.relativePath}\0`);
+    hash.update(hashFile(file.fullPath));
+    hash.update("\0");
+  }
+  return { hash: hash.digest("hex").slice(0, 16), hashMode: "content", manifest: null, fileCount: files.length };
+}
+
 // packages/code-intel/src/coverage.mjs
 var CoverageChecker = class {
   static checkCoverage(filePaths, blocks = []) {
@@ -45474,8 +46390,12 @@ var CoverageChecker = class {
     }
     for (const block of blocks) {
       for (const ref of block.artifactRefs || []) {
-        if (fileCoverageMap.has(ref.path)) {
-          const entry = fileCoverageMap.get(ref.path);
+        const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
+        const hasHash = typeof ref.hash === "string" && ref.hash.trim() && ref.hash !== "untracked";
+        const hasSymbol = typeof ref.symbol === "string" && ref.symbol.trim() && ref.symbol !== "*";
+        if (!ref.path || !hasHash || anchorKind === "symbol" && !hasSymbol) continue;
+        for (const [filePath, entry] of fileCoverageMap.entries()) {
+          if (!bindingMatchesPath(ref.path, anchorKind, filePath)) continue;
           if (!entry.coveredByBlocks.includes(block.id)) {
             entry.coveredByBlocks.push(block.id);
           }
@@ -45540,45 +46460,133 @@ var CODE_EXTENSIONS = /* @__PURE__ */ new Set([
   ".php",
   ".rb"
 ]);
-function scanProjectSourceFiles(projectRoot, maxFiles = 300) {
+var IGNORED_DIRS = /* @__PURE__ */ new Set([
+  ".git",
+  "node_modules",
+  ".contextos",
+  "dist",
+  "build",
+  ".build",
+  ".next",
+  ".nuxt",
+  "coverage",
+  ".turbo",
+  "deriveddata"
+]);
+var EXCLUDED_DISCOVERY_DIRS = /* @__PURE__ */ new Set([".git", ".contextos", "node_modules"]);
+function normalizeRelPath(filePath) {
+  return String(filePath).replace(/\\/g, "/").replace(/^\.\//, "");
+}
+function isInsideProject(projectRoot, filePath) {
+  const fullPath = path8.isAbsolute(filePath) ? path8.resolve(filePath) : path8.resolve(projectRoot, filePath);
+  const relative = path8.relative(path8.resolve(projectRoot), fullPath);
+  return relative === "" || !relative.startsWith("..") && !path8.isAbsolute(relative);
+}
+function taskScopeFromWorkingSet(files = [], projectRoot = process.cwd(), scopeDirs = []) {
+  const dirs = /* @__PURE__ */ new Set();
+  const exactFiles = /* @__PURE__ */ new Set();
+  for (const filePath of files) {
+    const normalized = normalizeRelPath(filePath);
+    const fullPath = path8.resolve(projectRoot, normalized);
+    const relativeToRoot = path8.relative(path8.resolve(projectRoot), fullPath);
+    if (relativeToRoot.startsWith("..") || path8.isAbsolute(relativeToRoot)) continue;
+    let isDirectory = false;
+    try {
+      isDirectory = fs8.existsSync(fullPath) && fs8.statSync(fullPath).isDirectory();
+    } catch (_) {
+    }
+    if (isDirectory) {
+      const root = normalized === "." ? "" : normalized.replace(/\/+$/, "");
+      if (!root.split("/").some((segment) => IGNORED_DIRS.has(segment.toLowerCase()))) dirs.add(root);
+      continue;
+    }
+    exactFiles.add(normalized);
+  }
+  for (const scopeDir of scopeDirs) {
+    const normalized = normalizeRelPath(scopeDir).replace(/\/+$/, "");
+    const fullPath = path8.resolve(projectRoot, normalized || ".");
+    const relativeToRoot = path8.relative(path8.resolve(projectRoot), fullPath);
+    if (!relativeToRoot.startsWith("..") && !path8.isAbsolute(relativeToRoot)) {
+      if (!normalized.split("/").some((segment) => IGNORED_DIRS.has(segment.toLowerCase()))) {
+        dirs.add(normalized);
+      }
+    }
+  }
+  return { dirs: Array.from(dirs), exactFiles };
+}
+function isPathInScope(relativePath, scope) {
+  const normalized = normalizeRelPath(relativePath);
+  if (scope.exactFiles.has(normalized)) return true;
+  return scope.dirs.some((dir) => !dir || normalized === dir || normalized.startsWith(`${dir}/`));
+}
+function scanScopedSourceFiles(projectRoot, workingSetFiles, scopeDirs = [], maxFiles = 300) {
   const result = [];
-  const ignoredDirs = /* @__PURE__ */ new Set([".git", "node_modules", ".contextos", "dist", "build", ".next", ".nuxt", "coverage", ".turbo"]);
-  const searchDirs = ["src", "packages", "apps", "lib", "scripts", "test"];
+  const searchDirs = taskScopeFromWorkingSet(workingSetFiles, projectRoot, scopeDirs).dirs;
   const walk = (dir, relDir = "", depth = 0) => {
     if (depth > 5 || result.length >= maxFiles) return;
     let entries = [];
     try {
-      entries = fs6.readdirSync(dir, { withFileTypes: true });
+      entries = fs8.readdirSync(dir, { withFileTypes: true });
     } catch (_) {
       return;
     }
     for (const ent of entries) {
-      if (ignoredDirs.has(ent.name)) continue;
-      const childRel = relDir ? path6.join(relDir, ent.name) : ent.name;
-      const childFull = path6.join(dir, ent.name);
+      if (IGNORED_DIRS.has(ent.name.toLowerCase())) continue;
+      const childRel = relDir ? path8.posix.join(relDir, ent.name) : ent.name;
+      const childFull = path8.join(dir, ent.name);
       if (ent.isDirectory()) {
         walk(childFull, childRel, depth + 1);
-      } else if (ent.isFile() && CODE_EXTENSIONS.has(path6.extname(ent.name).toLowerCase())) {
+      } else if (ent.isFile() && CODE_EXTENSIONS.has(path8.extname(ent.name).toLowerCase())) {
         result.push(childRel);
       }
     }
   };
   for (const sDir of searchDirs) {
-    const full = path6.join(projectRoot, sDir);
-    if (fs6.existsSync(full)) {
-      walk(full, sDir, 0);
+    const full = path8.join(projectRoot, sDir);
+    const relativeToRoot = path8.relative(path8.resolve(projectRoot), path8.resolve(full));
+    if (relativeToRoot.startsWith("..") || path8.isAbsolute(relativeToRoot)) continue;
+    if (fs8.existsSync(full)) {
+      const stat = fs8.statSync(full);
+      if (stat.isDirectory()) walk(full, sDir, 0);
+      else if (CODE_EXTENSIONS.has(path8.extname(full).toLowerCase())) result.push(sDir);
     }
-  }
-  try {
-    const rootEntries = fs6.readdirSync(projectRoot, { withFileTypes: true });
-    for (const ent of rootEntries) {
-      if (ent.isFile() && !ent.name.startsWith(".") && CODE_EXTENSIONS.has(path6.extname(ent.name).toLowerCase())) {
-        result.push(ent.name);
-      }
-    }
-  } catch (_) {
   }
   return result;
+}
+function parseGitStatusPorcelainV2(rawOutput) {
+  const tokens = String(rawOutput).split("\0");
+  const paths = [];
+  for (const token of tokens) {
+    if (!token) continue;
+    if (token.startsWith("1 ")) {
+      const parts2 = token.split(" ");
+      if (parts2.length >= 9) paths.push(parts2.slice(8).join(" "));
+    } else if (token.startsWith("2 ")) {
+      const parts2 = token.split(" ");
+      if (parts2.length >= 10) paths.push(parts2.slice(9).join(" "));
+    } else if (token.startsWith("u ")) {
+      const parts2 = token.split(" ");
+      if (parts2.length >= 11) paths.push(parts2.slice(10).join(" "));
+    } else if (token.startsWith("? ") || token.startsWith("! ")) {
+      paths.push(token.slice(2));
+    }
+  }
+  return paths;
+}
+function readScopedGitChangedPaths(projectRoot, scope) {
+  if (!projectRoot || scope.dirs.length === 0 && scope.exactFiles.size === 0) return [];
+  try {
+    const raw = execFileSync2("git", ["status", "--porcelain=v2", "-z", "--untracked-files=all"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "ignore"]
+    });
+    return parseGitStatusPorcelainV2(raw).map(normalizeRelPath).filter((filePath) => isPathInScope(filePath, scope)).filter(
+      (filePath) => filePath && !filePath.startsWith(".contextos") && !filePath.startsWith(".git") && !filePath.split("/").some((segment) => EXCLUDED_DISCOVERY_DIRS.has(segment.toLowerCase()))
+    );
+  } catch (_) {
+    return [];
+  }
 }
 var TaskService = class {
   constructor(db, syncEngine) {
@@ -45592,22 +46600,30 @@ var TaskService = class {
     if (!task.baseline.fileSnapshots) {
       task.baseline.fileSnapshots = {};
     }
-    const dbBlocks = this.db.listBlocks() || [];
-    const filesToSnapshot = new Set(task.workingSet.files || []);
-    for (const b of dbBlocks) {
-      for (const ref of b.artifactRefs || []) {
-        if (ref.path) filesToSnapshot.add(ref.path);
-      }
-    }
+    const scope = taskScopeFromWorkingSet(
+      task.workingSet.files || [],
+      projectRoot,
+      task.workingSet.scopeDirs || []
+    );
+    const filesToSnapshot = /* @__PURE__ */ new Set([
+      ...task.workingSet.files || [],
+      ...scanScopedSourceFiles(
+        projectRoot,
+        task.workingSet.files || [],
+        task.workingSet.scopeDirs || []
+      ),
+      ...readScopedGitChangedPaths(projectRoot, scope)
+    ]);
     for (const relPath of filesToSnapshot) {
+      if (!isInsideProject(projectRoot, relPath)) continue;
       if (task.baseline.fileSnapshots[relPath]) continue;
-      const fullPath = path6.isAbsolute(relPath) ? relPath : path6.join(projectRoot, relPath);
-      if (fs6.existsSync(fullPath)) {
+      const fullPath = path8.isAbsolute(relPath) ? relPath : path8.join(projectRoot, relPath);
+      if (fs8.existsSync(fullPath)) {
         try {
-          const stat = fs6.statSync(fullPath);
+          const stat = fs8.statSync(fullPath);
           if (stat.isDirectory()) continue;
-          const content = fs6.readFileSync(fullPath, "utf8");
-          const hash = crypto4.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
+          const content = fs8.readFileSync(fullPath);
+          const hash = crypto6.createHash("sha256").update(content).digest("hex").slice(0, 16);
           task.baseline.fileSnapshots[relPath] = {
             mtimeMs: stat.mtimeMs,
             size: stat.size,
@@ -45618,11 +46634,12 @@ var TaskService = class {
         }
       }
     }
+    task.baseline.initializedAt = task.baseline.initializedAt || (/* @__PURE__ */ new Date()).toISOString();
   }
   _refreshFileAstAndLocators(relPath, content, dbBlocks, task) {
     try {
       const structure = LanguageRegistry.parseStructure(relPath, content);
-      const fileHash = crypto4.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
+      const fileHash = crypto6.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
       const newLocators = (structure.symbols || []).map((s) => ({
         path: relPath,
         symbol: s.name,
@@ -45638,7 +46655,23 @@ var TaskService = class {
       for (const block of dbBlocks || []) {
         let blockModified = false;
         for (const ref of block.artifactRefs || []) {
-          if (ref.path === relPath) {
+          if (ref.path !== relPath) continue;
+          const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
+          if (anchorKind === "symbol") {
+            const symbol = newLocators.find((locator) => locator.symbol === ref.symbol);
+            if (!symbol) continue;
+            ref.anchorKind = "symbol";
+            if (ref.hash !== symbol.hash) {
+              ref.hash = symbol.hash;
+              blockModified = true;
+            }
+            if (ref.startLine !== symbol.startLine || ref.endLine !== symbol.endLine) {
+              ref.startLine = symbol.startLine;
+              ref.endLine = symbol.endLine;
+              blockModified = true;
+            }
+          } else {
+            ref.anchorKind = "file";
             if (ref.hash !== fileHash) {
               ref.hash = fileHash;
               blockModified = true;
@@ -45653,53 +46686,42 @@ var TaskService = class {
     }
   }
   _reconcileWorkingSet(task, projectRoot, dbBlocks = []) {
-    if (!projectRoot || !fs6.existsSync(projectRoot)) return;
+    if (!projectRoot || !fs8.existsSync(projectRoot)) return;
     if (!task.baseline) {
       task.baseline = { fileSnapshots: {} };
     }
     if (!task.baseline.fileSnapshots) {
       task.baseline.fileSnapshots = {};
     }
+    if (!task.baseline.initializedAt) {
+      this._initializeFileSnapshots(task, projectRoot);
+    }
+    const scope = taskScopeFromWorkingSet(
+      task.workingSet.files || [],
+      projectRoot,
+      task.workingSet.scopeDirs || []
+    );
     const candidateFiles = /* @__PURE__ */ new Set([
       ...task.workingSet.files || [],
-      ...Object.keys(task.baseline.fileSnapshots)
+      ...Object.keys(task.baseline.fileSnapshots),
+      ...scanScopedSourceFiles(
+        projectRoot,
+        task.workingSet.files || [],
+        task.workingSet.scopeDirs || []
+      ),
+      ...readScopedGitChangedPaths(projectRoot, scope)
     ]);
-    for (const block of dbBlocks) {
-      for (const ref of block.artifactRefs || []) {
-        if (ref.path) candidateFiles.add(ref.path);
-      }
-    }
-    try {
-      const gitOutput = execSync("git status --porcelain", {
-        cwd: projectRoot,
-        encoding: "utf8",
-        stdio: ["pipe", "pipe", "ignore"]
-      });
-      const lines = gitOutput.split("\n");
-      for (const line of lines) {
-        if (!line || line.length < 4) continue;
-        let rawPath = line.slice(3).trim();
-        if (rawPath.startsWith('"') && rawPath.endsWith('"')) {
-          rawPath = rawPath.slice(1, -1);
-        }
-        if (rawPath.includes(" -> ")) {
-          rawPath = rawPath.split(" -> ").pop().trim();
-        }
-        if (rawPath && !rawPath.startsWith(".contextos") && !rawPath.startsWith(".git") && !rawPath.includes("node_modules")) {
-          candidateFiles.add(rawPath);
-        }
-      }
-    } catch (_) {
-    }
-    const scannedFiles = scanProjectSourceFiles(projectRoot);
-    for (const f of scannedFiles) {
-      candidateFiles.add(f);
-    }
     for (const relPath of candidateFiles) {
-      const fullPath = path6.isAbsolute(relPath) ? relPath : path6.join(projectRoot, relPath);
-      if (!fs6.existsSync(fullPath)) {
+      if (!isInsideProject(projectRoot, relPath)) continue;
+      const fullPath = path8.isAbsolute(relPath) ? relPath : path8.join(projectRoot, relPath);
+      if (!fs8.existsSync(fullPath)) {
         if (task.baseline.fileSnapshots[relPath]) {
           delete task.baseline.fileSnapshots[relPath];
+          task.workingSet.files = (task.workingSet.files || []).filter((file) => file !== relPath);
+          const parent = path8.posix.dirname(normalizeRelPath(relPath));
+          if (parent && parent !== ".") {
+            task.workingSet.scopeDirs = [.../* @__PURE__ */ new Set([...task.workingSet.scopeDirs || [], parent])];
+          }
           if (task.contextSlice && task.contextSlice.locators) {
             task.contextSlice.locators = task.contextSlice.locators.filter((l) => l.path !== relPath);
           }
@@ -45712,7 +46734,7 @@ var TaskService = class {
       }
       let stat;
       try {
-        stat = fs6.statSync(fullPath);
+        stat = fs8.statSync(fullPath);
       } catch (_) {
         continue;
       }
@@ -45720,13 +46742,13 @@ var TaskService = class {
       const snapshot = task.baseline.fileSnapshots[relPath];
       const statChanged = !snapshot || stat.mtimeMs !== snapshot.mtimeMs || stat.size !== snapshot.size;
       if (statChanged) {
-        let content = "";
+        let content;
         try {
-          content = fs6.readFileSync(fullPath, "utf8");
+          content = fs8.readFileSync(fullPath);
         } catch (_) {
           continue;
         }
-        const currentHash = crypto4.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
+        const currentHash = crypto6.createHash("sha256").update(content).digest("hex").slice(0, 16);
         const blockRef = dbBlocks.flatMap((b) => b.artifactRefs || []).find((r) => r.path === relPath);
         const baseHash = snapshot ? snapshot.hash : blockRef?.hash || null;
         if (!baseHash || currentHash !== baseHash) {
@@ -45738,7 +46760,7 @@ var TaskService = class {
             modifiedLocally: true,
             lastReconciledAt: (/* @__PURE__ */ new Date()).toISOString()
           };
-          this._refreshFileAstAndLocators(relPath, content, dbBlocks, task);
+          this._refreshFileAstAndLocators(relPath, content.toString("utf8"), dbBlocks, task);
           task.addNote({
             text: `[Host Native Modification] Detected external disk modification in '${relPath}' via mtime/SHA256 comparison (${baseHash ? `${baseHash.slice(0, 8)} -> ${currentHash.slice(0, 8)}` : `new: ${currentHash.slice(0, 8)}`}). Working set and AST outlines refreshed.`,
             kind: "system"
@@ -45759,17 +46781,21 @@ var TaskService = class {
       }
     }
   }
-  createTask({
-    id,
-    planId,
-    phaseId,
-    title,
-    status = "draft",
-    contextSlice = {},
-    workingSet = {},
-    references = {},
-    baseline = {}
-  }, projectRoot = null) {
+  createTask(taskData = {}, projectRoot = null) {
+    const {
+      id,
+      planId,
+      phaseId,
+      title,
+      status = "draft",
+      contextSlice = {},
+      workingSet = {},
+      references = {},
+      rules,
+      ruleRefs,
+      baseline = {}
+    } = taskData;
+    const taskRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references?.rules) ? references.rules : [];
     const task = new Task({
       id: id || `task-${Date.now()}`,
       planId,
@@ -45779,11 +46805,59 @@ var TaskService = class {
       contextSlice,
       workingSet,
       references,
+      rules: taskRules,
       baseline
     });
-    if (projectRoot && fs6.existsSync(projectRoot)) {
+    if (projectRoot && fs8.existsSync(projectRoot)) {
       this._initializeFileSnapshots(task, projectRoot);
     }
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+  bindRule(taskId, ruleId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const task = new Task(raw);
+    task.bindRule(ruleId);
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+  unbindRule(taskId, ruleId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const task = new Task(raw);
+    task.unbindRule(ruleId);
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+  updateTask(taskId, taskData = {}) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const updated = { ...raw };
+    if (taskData.title !== void 0) updated.title = taskData.title;
+    if (taskData.status !== void 0) updated.status = taskData.status;
+    if (taskData.contextSlice) {
+      updated.contextSlice = { ...raw.contextSlice, ...taskData.contextSlice };
+    }
+    if (taskData.workingSet) {
+      updated.workingSet = { ...raw.workingSet, ...taskData.workingSet };
+    }
+    if (taskData.references) {
+      updated.references = { ...raw.references, ...taskData.references };
+    }
+    const incomingRules = taskData.rules !== void 0 ? taskData.rules : taskData.ruleRefs !== void 0 ? taskData.ruleRefs : taskData.references?.rules !== void 0 ? taskData.references.rules : void 0;
+    if (incomingRules !== void 0) {
+      const cleanRules = Array.isArray(incomingRules) ? [...incomingRules] : [];
+      updated.rules = cleanRules;
+      updated.references = updated.references || {};
+      updated.references.rules = cleanRules;
+    } else {
+      updated.rules = updated.references?.rules || raw.rules || [];
+    }
+    if (taskData.notes) updated.notes = taskData.notes;
+    if (taskData.checks) updated.checks = taskData.checks;
+    const task = new Task(updated);
+    task.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     this.db.saveTask(task.toJSON());
     return task.toJSON();
   }
@@ -45793,12 +46867,62 @@ var TaskService = class {
   listTasks(planId = null) {
     return this.db.listTasks(planId);
   }
+  findActiveTask(projectId) {
+    if (!projectId) return null;
+    const planIds = new Set(this.db.listPlans(projectId).map((plan) => plan.id));
+    return this.db.listTasks().filter(
+      (task) => planIds.has(task.planId) && ["active", "checking", "syncing"].includes(task.status)
+    ).sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt))).at(-1) || null;
+  }
+  repairStateHygiene(projectId, { staleMs = 7 * 24 * 60 * 60 * 1e3 } = {}) {
+    const plans = this.db.listPlans(projectId);
+    const planMap = new Map(plans.map((plan) => [plan.id, plan]));
+    const tasks = this.db.listTasks().filter((task) => planMap.has(task.planId));
+    const blockedTaskIds = [];
+    const now = Date.now();
+    for (const raw of tasks) {
+      const plan = planMap.get(raw.planId);
+      const activeLike = ["active", "checking", "syncing"].includes(raw.status);
+      if (!activeLike) continue;
+      const updatedAt = Date.parse(raw.updatedAt || "");
+      const stale = Number.isFinite(updatedAt) && now - updatedAt > staleMs;
+      if (plan?.status === "completed" || stale) {
+        const task = new Task(raw);
+        task.block(
+          plan?.status === "completed" ? `Plan '${plan.id}' is completed.` : `Task lease expired after ${staleMs}ms without progress.`
+        );
+        this.db.saveTask(task.toJSON());
+        blockedTaskIds.push(task.id);
+      }
+    }
+    const remainingActive = this.db.listTasks().filter(
+      (task) => planMap.has(task.planId) && planMap.get(task.planId)?.status === "active" && ["active", "checking", "syncing"].includes(task.status)
+    ).sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)));
+    for (const raw of remainingActive.slice(0, -1)) {
+      const task = new Task(raw);
+      task.block(`Superseded by newer active task '${remainingActive.at(-1)?.id || "unknown"}'.`);
+      this.db.saveTask(task.toJSON());
+      blockedTaskIds.push(task.id);
+    }
+    return {
+      changed: blockedTaskIds.length,
+      blockedTaskIds: [...new Set(blockedTaskIds)]
+    };
+  }
   activateTask(taskId, projectRoot = null) {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
+    const plan = this.db.getPlan(raw.planId);
+    const projectId = plan?.projectId || plan?.project_id || null;
+    const active = projectId ? this.findActiveTask(projectId) : null;
+    if (active && active.id !== taskId) {
+      throw new Error(
+        `Cannot activate Task '${taskId}' while Task '${active.id}' is ${active.status}. Resolve or resume the active task first.`
+      );
+    }
     const task = new Task(raw);
     task.activate();
-    if (projectRoot && fs6.existsSync(projectRoot)) {
+    if (projectRoot && fs8.existsSync(projectRoot)) {
       this._initializeFileSnapshots(task, projectRoot);
       this._reconcileWorkingSet(task, projectRoot, this.db.listBlocks(raw.projectId));
     }
@@ -45833,12 +46957,32 @@ var TaskService = class {
   addCheck(taskId, { receiptId = null, description, passed = true, evidence = "" }, projectRoot = null, projectId = null) {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
+    let receipt = null;
+    if (receiptId) {
+      receipt = this.db.getCommandReceipt(receiptId);
+      if (!receipt) throw new Error(`Command receipt '${receiptId}' not found`);
+      if (projectRoot && receipt.cwd) {
+        const relative = path8.relative(path8.resolve(projectRoot), path8.resolve(receipt.cwd));
+        if (relative.startsWith("..") || path8.isAbsolute(relative)) {
+          throw new Error(`Command receipt '${receiptId}' belongs to a different project`);
+        }
+      }
+      if (passed && receipt.exitCode !== 0) {
+        throw new Error(`Cannot record a passing check for receipt '${receiptId}' with exit code ${receipt.exitCode}`);
+      }
+    }
     const task = new Task(raw);
-    if (projectRoot && fs6.existsSync(projectRoot)) {
+    if (projectRoot && fs8.existsSync(projectRoot)) {
       const dbBlocks = (projectId ? this.db.listBlocks(projectId) : this.db.listBlocks(raw.projectId)) || [];
       this._reconcileWorkingSet(task, projectRoot, dbBlocks);
     }
-    const check = task.addCheck({ receiptId, description, passed, evidence });
+    const resolvedEvidence = evidence || (receipt ? `${receipt.summary} [${receipt.logHandle || "no log"}]` : "");
+    const check = task.addCheck({
+      receiptId,
+      description,
+      passed,
+      evidence: resolvedEvidence
+    });
     this.db.saveTask(task.toJSON());
     return check;
   }
@@ -45853,7 +46997,13 @@ var TaskService = class {
     this.db.saveTask(task.toJSON());
     return task.toJSON();
   }
-  syncTask(taskId, { blocks = [], chains = [], links = [], projectRoot, projectId, coverageMode = "strict" }) {
+  syncTask(taskId, {
+    blocks = [],
+    chains = [],
+    links = [],
+    projectRoot,
+    projectId
+  }) {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
     const task = new Task(raw);
@@ -45868,10 +47018,21 @@ var TaskService = class {
       blockMap.set(b.id, { ...b });
     }
     let resolvedBlocks = Array.from(blockMap.values());
-    for (const b of resolvedBlocks) {
-      for (const ref of b.artifactRefs || []) {
+    for (const block of resolvedBlocks) {
+      for (const ref of block.artifactRefs || []) {
+        const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
+        if (anchorKind === "tree") {
+          const resolved = calculateTreeHash(projectRoot || process.cwd(), ref.path, {
+            hashMode: ref.hashMode || (ref.manifest ? "manifest" : "content"),
+            manifest: ref.manifest || null
+          });
+          ref.hash = resolved.hash;
+          ref.hashMode = resolved.hashMode;
+          ref.manifest = resolved.manifest;
+          continue;
+        }
         const snap = task.baseline?.fileSnapshots?.[ref.path];
-        if (snap && snap.hash && ref.hash !== snap.hash) {
+        if (anchorKind === "file" && snap && snap.hash && ref.hash && ref.hash !== snap.hash) {
           ref.hash = snap.hash;
         }
       }
@@ -45879,87 +47040,68 @@ var TaskService = class {
     const resolvedChains = chains.map((c) => typeof c === "string" ? this.db.getChain(c) : c).filter(Boolean);
     const resolvedLinks = links.map((l) => typeof l === "string" ? this.db.getLink(l) : l).filter(Boolean);
     task.startSyncing();
-    const coverageReport = CoverageChecker.checkCoverage(task.workingSet.files || [], resolvedBlocks);
-    if (!coverageReport.isFullyCovered) {
-      if (coverageMode === "adaptive") {
-        let unassignedBlock = resolvedBlocks.find(
-          (b) => b.id === "block-unassigned" || b.id === `block-unassigned-${task.id}`
-        );
-        if (!unassignedBlock) {
-          unassignedBlock = {
-            id: `block-unassigned-${task.id}`,
-            projectId: projectId || raw.projectId || "contextos",
-            title: `Unassigned Working Set (${task.title})`,
-            summary: `Adaptive block for unassigned files: ${coverageReport.uncoveredList.join(", ")}`,
-            details: "Automatically created by ContextOS adaptive coverage gate.",
-            kind: "unassigned",
-            artifactRefs: []
-          };
-          resolvedBlocks.push(unassignedBlock);
-        }
-        for (const filePath of coverageReport.uncoveredList) {
-          if (unassignedBlock.artifactRefs.some((r) => r.path === filePath)) {
-            continue;
-          }
-          let hash = "untracked";
-          if (projectRoot) {
-            const fullPath = path6.isAbsolute(filePath) ? filePath : path6.join(projectRoot, filePath);
-            if (fs6.existsSync(fullPath)) {
-              try {
-                const content = fs6.readFileSync(fullPath, "utf8");
-                hash = crypto4.createHash("sha256").update(content).digest("hex").slice(0, 16);
-              } catch (_) {
-              }
-            }
-          }
-          unassignedBlock.artifactRefs.push({
-            path: filePath,
-            symbol: "*",
-            hash
-          });
-        }
-        task.addNote({
-          text: `[Adaptive Coverage Warning] Automatically mapped unassigned files to ${unassignedBlock.id}: ${coverageReport.uncoveredList.join(", ")}`,
-          kind: "system"
-        });
-      } else {
-        task.failSync(`Coverage gap: Missing Block ownership for: ${coverageReport.uncoveredList.join(", ")}`);
-        this.db.saveTask(task.toJSON());
-        throw new Error(
-          `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverageReport.uncoveredList.join(", ")}`
-        );
-      }
+    const effectiveProjectId = projectId || raw.projectId || raw.project_id || "contextos";
+    const allWorkingSetFiles = task.workingSet.files || [];
+    const coverage = CoverageChecker.checkCoverage(allWorkingSetFiles, resolvedBlocks);
+    if (!coverage.isFullyCovered) {
+      task.failSync(`Coverage gap: Missing Block ownership for: ${coverage.uncoveredList.join(", ")}`);
+      this.db.saveTask(task.toJSON());
+      throw new Error(
+        `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverage.uncoveredList.join(", ")}`
+      );
     }
-    for (const b of resolvedBlocks) {
-      assertBlockHasRealCode(b);
-    }
+    for (const block of resolvedBlocks) assertBlockHasRealCode(block);
     let syncResult;
-    let exportResult;
-    this.db.transaction((db) => {
-      for (const b of resolvedBlocks) {
-        db.saveBlock(b);
+    let exportResult = null;
+    let graphWarning = null;
+    try {
+      this.db.transaction((db) => {
+        for (const block of resolvedBlocks) {
+          db.saveBlock(block);
+        }
+        for (const chain of resolvedChains) {
+          db.saveChain(chain);
+        }
+        for (const link of resolvedLinks) {
+          db.saveLink(link);
+        }
+        syncResult = {
+          createdBlockIds: resolvedBlocks.map((block) => block.id),
+          updatedChainIds: resolvedChains.map((chain) => chain.id),
+          updatedLinkIds: resolvedLinks.map((link) => link.id || `${link.from}->${link.to}`),
+          coverage: {
+            totalFiles: coverage.totalFiles,
+            coveredFiles: coverage.coveredFiles,
+            coveragePercent: coverage.coveragePercent
+          }
+        };
+        task.completeSync(syncResult);
+        db.saveTask(task.toJSON());
+        if (this.syncEngine && projectRoot && effectiveProjectId) {
+          this.syncEngine.queueGraphToJson(effectiveProjectId);
+        }
+      });
+      if (this.syncEngine && projectRoot && effectiveProjectId) {
+        try {
+          exportResult = this.syncEngine.flushGraphOutbox(effectiveProjectId, projectRoot);
+        } catch (err2) {
+          graphWarning = `Graph export pending for recovery: ${err2.message}`;
+        }
       }
-      for (const c of resolvedChains) {
-        db.saveChain(c);
+    } catch (err2) {
+      const current = this.db.getTask(taskId);
+      if (current && current.status === "checking") {
+        const failedTask = new Task(current);
+        failedTask.failSync(err2.message);
+        this.db.saveTask(failedTask.toJSON());
       }
-      for (const l of resolvedLinks) {
-        db.saveLink(l);
-      }
-      syncResult = {
-        createdBlockIds: resolvedBlocks.map((b) => b.id),
-        updatedChainIds: resolvedChains.map((c) => c.id),
-        updatedLinkIds: resolvedLinks.map((l) => l.id || `${l.from}->${l.to}`)
-      };
-      task.completeSync(syncResult);
-      db.saveTask(task.toJSON());
-      if (this.syncEngine && projectRoot && projectId) {
-        exportResult = this.syncEngine.exportGraphToJson(projectId, projectRoot);
-      }
-    });
+      throw err2;
+    }
     return {
       task: task.toJSON(),
       syncResult,
-      graphRevision: exportResult ? exportResult.graphRevision : null
+      graphRevision: exportResult ? exportResult.graphRevision : null,
+      graphWarning
     };
   }
   resumeTask(taskId) {
@@ -45973,24 +47115,24 @@ var TaskService = class {
 };
 
 // packages/application/src/knowledge-service.mjs
-import path7 from "node:path";
-import fs7 from "node:fs";
+import path9 from "node:path";
+import fs9 from "node:fs";
 var KnowledgeService = class {
   static getDecisionPath(projectRoot) {
-    const defaultPath = path7.join(projectRoot, "DECISION.md");
-    if (fs7.existsSync(defaultPath)) return defaultPath;
-    const dotPath = path7.join(projectRoot, ".contextos", "DECISION.md");
-    return fs7.existsSync(dotPath) ? dotPath : defaultPath;
+    const defaultPath = path9.join(projectRoot, "DECISION.md");
+    if (fs9.existsSync(defaultPath)) return defaultPath;
+    const dotPath = path9.join(projectRoot, ".contextos", "DECISION.md");
+    return fs9.existsSync(dotPath) ? dotPath : defaultPath;
   }
   static getDecision(projectRoot) {
     const docPath = this.getDecisionPath(projectRoot);
-    if (!fs7.existsSync(docPath)) {
+    if (!fs9.existsSync(docPath)) {
       return {
         path: docPath,
         document: new DecisionDocument("# Project Decisions\n")
       };
     }
-    const raw = fs7.readFileSync(docPath, "utf8");
+    const raw = fs9.readFileSync(docPath, "utf8");
     return {
       path: docPath,
       document: new DecisionDocument(raw)
@@ -45999,27 +47141,27 @@ var KnowledgeService = class {
   static patchDecisionSection(projectRoot, { id, title, content }) {
     const { path: docPath, document } = this.getDecision(projectRoot);
     const updatedSection = document.upsertSection({ id, title, content });
-    fs7.mkdirSync(path7.dirname(docPath), { recursive: true });
-    fs7.writeFileSync(docPath, document.toMarkdown(), "utf8");
+    fs9.mkdirSync(path9.dirname(docPath), { recursive: true });
+    fs9.writeFileSync(docPath, document.toMarkdown(), "utf8");
     return {
       docPath,
       section: updatedSection
     };
   }
   static getRulesDir(projectRoot) {
-    const dotDir = path7.join(projectRoot, ".contextos", "rules");
-    if (fs7.existsSync(dotDir)) return dotDir;
-    const standardDir = path7.join(projectRoot, "rules");
-    return fs7.existsSync(standardDir) ? standardDir : dotDir;
+    const dotDir = path9.join(projectRoot, ".contextos", "rules");
+    if (fs9.existsSync(dotDir)) return dotDir;
+    const standardDir = path9.join(projectRoot, "rules");
+    return fs9.existsSync(standardDir) ? standardDir : dotDir;
   }
   static listRules(projectRoot) {
     const rulesDir = this.getRulesDir(projectRoot);
-    if (!fs7.existsSync(rulesDir)) return [];
-    const files = fs7.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+    if (!fs9.existsSync(rulesDir)) return [];
+    const files = fs9.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
     const rules = [];
     for (const file of files) {
-      const filePath = path7.join(rulesDir, file);
-      const raw = fs7.readFileSync(filePath, "utf8");
+      const filePath = path9.join(rulesDir, file);
+      const raw = fs9.readFileSync(filePath, "utf8");
       const rule = this.parseRuleFile(file, raw);
       rules.push(rule.toSummaryJSON());
     }
@@ -46027,25 +47169,25 @@ var KnowledgeService = class {
   }
   static getRule(projectRoot, ruleId) {
     const rulesDir = this.getRulesDir(projectRoot);
-    const targetFile = path7.join(rulesDir, `${ruleId}.md`);
-    if (!fs7.existsSync(targetFile)) {
-      const files = fs7.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+    const targetFile = path9.join(rulesDir, `${ruleId}.md`);
+    if (!fs9.existsSync(targetFile)) {
+      const files = fs9.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
       for (const file of files) {
-        const filePath = path7.join(rulesDir, file);
-        const raw2 = fs7.readFileSync(filePath, "utf8");
+        const filePath = path9.join(rulesDir, file);
+        const raw2 = fs9.readFileSync(filePath, "utf8");
         const rule = this.parseRuleFile(file, raw2);
         if (rule.id === ruleId) return rule.toJSON();
       }
       return null;
     }
-    const raw = fs7.readFileSync(targetFile, "utf8");
+    const raw = fs9.readFileSync(targetFile, "utf8");
     return this.parseRuleFile(`${ruleId}.md`, raw).toJSON();
   }
   static saveRule(projectRoot, { id, title, category, summary, content, priority = "normal" }) {
     const rule = new Rule({ id, title, category, summary, content, priority });
     const rulesDir = this.getRulesDir(projectRoot);
-    fs7.mkdirSync(rulesDir, { recursive: true });
-    const targetFile = path7.join(rulesDir, `${id}.md`);
+    fs9.mkdirSync(rulesDir, { recursive: true });
+    const targetFile = path9.join(rulesDir, `${id}.md`);
     const markdown = `---
 id: ${rule.id}
 title: ${rule.title}
@@ -46058,7 +47200,7 @@ summary: ${rule.summary}
 
 ${rule.content}
 `;
-    fs7.writeFileSync(targetFile, markdown, "utf8");
+    fs9.writeFileSync(targetFile, markdown, "utf8");
     return rule.toJSON();
   }
   static parseRuleFile(fileName, rawText) {
@@ -46171,10 +47313,10 @@ ${tail}`;
 }
 
 // packages/process-host/src/runner.mjs
-import { spawn, execSync as execSync2 } from "node:child_process";
-import path8 from "node:path";
-import fs8 from "node:fs";
-import crypto5 from "node:crypto";
+import { spawn, execSync } from "node:child_process";
+import path10 from "node:path";
+import fs10 from "node:fs";
+import crypto7 from "node:crypto";
 async function runCommand({
   command,
   cwd = process.cwd(),
@@ -46183,14 +47325,16 @@ async function runCommand({
   timeoutMs = 6e4,
   projectRoot = cwd
 }) {
-  const receiptId = `receipt-${Date.now()}-${crypto5.randomBytes(3).toString("hex")}`;
+  const receiptId = `receipt-${Date.now()}-${crypto7.randomBytes(3).toString("hex")}`;
   const startTime = Date.now();
-  const logDir = path8.join(projectRoot, ".contextos", "logs");
-  fs8.mkdirSync(logDir, { recursive: true });
-  const logFile = path8.join(logDir, `${receiptId}.log`);
+  const logDir = path10.join(projectRoot, ".contextos", "logs");
+  fs10.mkdirSync(logDir, { recursive: true });
+  const logFile = path10.join(logDir, `${receiptId}.log`);
+  const maxCaptureChars = 1e7;
   return new Promise((resolve) => {
     let stdoutData = "";
     let stderrData = "";
+    let captureTruncated = false;
     let killedByTimeout = false;
     const isWin = process.platform === "win32";
     const shell = isWin ? process.env.ComSpec || "cmd.exe" : "/bin/sh";
@@ -46199,39 +47343,53 @@ async function runCommand({
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: !isWin,
       windowsVerbatimArguments: isWin
     });
     const timer = setTimeout(() => {
       killedByTimeout = true;
       if (isWin && child.pid) {
         try {
-          execSync2(`taskkill /pid ${child.pid} /T /F`, { stdio: "ignore" });
+          execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: "ignore" });
         } catch (_) {
           child.kill("SIGKILL");
         }
       } else {
-        child.kill("SIGKILL");
+        try {
+          if (child.pid) process.kill(-child.pid, "SIGKILL");
+          else child.kill("SIGKILL");
+        } catch (_) {
+          child.kill("SIGKILL");
+        }
       }
     }, timeoutMs);
     child.stdout.on("data", (chunk) => {
-      stdoutData += chunk.toString("utf8");
+      if (stdoutData.length >= maxCaptureChars) {
+        captureTruncated = true;
+        return;
+      }
+      stdoutData += chunk.toString("utf8").slice(0, maxCaptureChars - stdoutData.length);
     });
     child.stderr.on("data", (chunk) => {
-      stderrData += chunk.toString("utf8");
+      if (stderrData.length >= maxCaptureChars) {
+        captureTruncated = true;
+        return;
+      }
+      stderrData += chunk.toString("utf8").slice(0, maxCaptureChars - stderrData.length);
     });
     child.on("close", (code2, signal) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
       const rawOutput = stdoutData + (stderrData ? `
 --- STDERR ---
-${stderrData}` : "");
+${stderrData}` : "") + (captureTruncated ? "\n--- CAPTURE TRUNCATED ---\n" : "");
       try {
-        fs8.writeFileSync(logFile, rawOutput, "utf8");
+        fs10.writeFileSync(logFile, redactSecrets(rawOutput), "utf8");
       } catch (_) {
       }
       const exitCode = killedByTimeout ? 124 : code2 !== null ? code2 : 1;
       const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars });
-      const relativeLogHandle = path8.relative(projectRoot, logFile);
+      const relativeLogHandle = path10.relative(projectRoot, logFile);
       resolve({
         id: receiptId,
         command: redactSecrets(command),
@@ -46267,21 +47425,21 @@ ${stderrData}` : "");
 }
 
 // packages/process-host/src/process-manager.mjs
-import { spawn as spawn2, execSync as execSync3 } from "node:child_process";
-import path9 from "node:path";
-import fs9 from "node:fs";
-import crypto6 from "node:crypto";
+import { spawn as spawn2, execSync as execSync2 } from "node:child_process";
+import path11 from "node:path";
+import fs11 from "node:fs";
+import crypto8 from "node:crypto";
 var ProcessManager = class {
   constructor({ projectRoot = process.cwd() } = {}) {
-    this.projectRoot = path9.resolve(projectRoot);
+    this.projectRoot = path11.resolve(projectRoot);
     this.sessions = /* @__PURE__ */ new Map();
     this._healZombieProcesses();
   }
   _healZombieProcesses() {
     try {
-      const procFile = path9.join(this.projectRoot, ".contextos", "processes.json");
-      if (!fs9.existsSync(procFile)) return;
-      const data = JSON.parse(fs9.readFileSync(procFile, "utf8"));
+      const procFile = path11.join(this.projectRoot, ".contextos", "processes.json");
+      if (!fs11.existsSync(procFile)) return;
+      const data = JSON.parse(fs11.readFileSync(procFile, "utf8"));
       if (!Array.isArray(data)) return;
       let hasChanges = false;
       for (const item of data) {
@@ -46309,7 +47467,7 @@ var ProcessManager = class {
             exitCode: null,
             port: item.port || null,
             url: item.url || null,
-            logFile: item.logFile || path9.join(this.projectRoot, ".contextos", "logs", `${item.id}.log`),
+            logFile: item.logFile || path11.join(this.projectRoot, ".contextos", "logs", `${item.id}.log`),
             child: null
           });
         } else {
@@ -46329,11 +47487,11 @@ var ProcessManager = class {
     readyRegex = null,
     portRegex = null
   }) {
-    const sessionId = `proc-${Date.now()}-${crypto6.randomBytes(3).toString("hex")}`;
-    const logDir = path9.join(this.projectRoot, ".contextos", "logs");
-    fs9.mkdirSync(logDir, { recursive: true });
-    const logFile = path9.join(logDir, `${sessionId}.log`);
-    const logStream = fs9.createWriteStream(logFile, { flags: "a" });
+    const sessionId = `proc-${Date.now()}-${crypto8.randomBytes(3).toString("hex")}`;
+    const logDir = path11.join(this.projectRoot, ".contextos", "logs");
+    fs11.mkdirSync(logDir, { recursive: true });
+    const logFile = path11.join(logDir, `${sessionId}.log`);
+    const logStream = fs11.createWriteStream(logFile, { flags: "a" });
     const isWin = process.platform === "win32";
     const shell = isWin ? process.env.ComSpec || "cmd.exe" : "/bin/sh";
     const shellArgs = isWin ? ["/d", "/s", "/c", command] : ["-c", command];
@@ -46401,9 +47559,9 @@ var ProcessManager = class {
   }
   _persistProcesses() {
     try {
-      const procFile = path9.join(this.projectRoot, ".contextos", "processes.json");
-      fs9.mkdirSync(path9.dirname(procFile), { recursive: true });
-      fs9.writeFileSync(procFile, JSON.stringify(this.listProcesses(), null, 2), "utf8");
+      const procFile = path11.join(this.projectRoot, ".contextos", "processes.json");
+      fs11.mkdirSync(path11.dirname(procFile), { recursive: true });
+      fs11.writeFileSync(procFile, JSON.stringify(this.listProcesses(), null, 2), "utf8");
     } catch (_) {
     }
   }
@@ -46417,10 +47575,10 @@ var ProcessManager = class {
   getLogs(sessionId, { lines = 100, grep = null, startLine = null, endLine = null } = {}) {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Process session '${sessionId}' not found`);
-    if (!fs9.existsSync(session.logFile)) {
+    if (!fs11.existsSync(session.logFile)) {
       return { lines: [], total: 0 };
     }
-    const content = fs9.readFileSync(session.logFile, "utf8");
+    const content = fs11.readFileSync(session.logFile, "utf8");
     let allLines = content.split(/\r?\n/);
     if (grep) {
       const query = grep.toLowerCase();
@@ -46437,7 +47595,7 @@ var ProcessManager = class {
       sessionId,
       lines: allLines,
       total: allLines.length,
-      logFile: path9.relative(this.projectRoot, session.logFile)
+      logFile: path11.relative(this.projectRoot, session.logFile)
     };
   }
   async stopProcess(sessionId, { graceMs = 2e3 } = {}) {
@@ -46451,7 +47609,7 @@ var ProcessManager = class {
     try {
       if (isWin && session.pid) {
         try {
-          execSync3(`taskkill /pid ${session.pid} /T /F`, { stdio: "ignore" });
+          execSync2(`taskkill /pid ${session.pid} /T /F`, { stdio: "ignore" });
         } catch (_) {
           process.kill(session.pid, "SIGTERM");
         }
@@ -46481,7 +47639,7 @@ var ProcessManager = class {
       try {
         if (isWin && session.pid) {
           try {
-            execSync3(`taskkill /pid ${session.pid} /T /F`, { stdio: "ignore" });
+            execSync2(`taskkill /pid ${session.pid} /T /F`, { stdio: "ignore" });
           } catch (_) {
             process.kill(session.pid, "SIGKILL");
           }
@@ -46635,14 +47793,132 @@ var NetworkLayoutEngine = class {
 };
 
 // packages/context/src/markdown-renderer.mjs
-var MarkdownRenderer = class {
-  // Practical Test Hook: OS V2 Active Verification
-  // Practical Test Hook: OS V2 Active Verification
-  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [] }) {
+import fs12 from "node:fs";
+import path12 from "node:path";
+function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
+  if (!ruleId || typeof ruleId !== "string") return null;
+  const cleanId = ruleId.trim();
+  if (!cleanId) return null;
+  const root = projectRoot || (typeof rulesMap === "string" ? rulesMap : rulesMap?.projectRoot) || process.cwd();
+  if (rulesMap instanceof Map && rulesMap.has(cleanId)) {
+    const val = rulesMap.get(cleanId);
+    return {
+      id: cleanId,
+      title: val?.title || cleanId,
+      category: val?.category || "general"
+    };
+  }
+  if (typeof rulesMap === "object" && rulesMap !== null) {
+    if (rulesMap[cleanId]) {
+      const val = rulesMap[cleanId];
+      return {
+        id: cleanId,
+        title: val?.title || cleanId,
+        category: val?.category || "general"
+      };
+    }
+    if (typeof rulesMap.getRule === "function") {
+      const val = rulesMap.getRule.length >= 2 ? rulesMap.getRule(root, cleanId) : rulesMap.getRule(cleanId) || (root ? rulesMap.getRule(root, cleanId) : null);
+      if (val) {
+        return {
+          id: cleanId,
+          title: val?.title || cleanId,
+          category: val?.category || "general"
+        };
+      }
+    }
+  }
+  if (root && typeof root === "string") {
+    try {
+      const dotDir = path12.join(root, ".contextos", "rules");
+      const stdDir = path12.join(root, "rules");
+      const rulesDir = fs12.existsSync(dotDir) ? dotDir : fs12.existsSync(stdDir) ? stdDir : null;
+      if (rulesDir && fs12.existsSync(rulesDir)) {
+        let content = null;
+        const targetFile = path12.join(rulesDir, `${cleanId}.md`);
+        if (fs12.existsSync(targetFile)) {
+          content = fs12.readFileSync(targetFile, "utf8");
+        } else {
+          const files = fs12.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+          for (const f of files) {
+            const fc = fs12.readFileSync(path12.join(rulesDir, f), "utf8");
+            if (f.replace(/\.md$/, "") === cleanId || fc.includes(`id: ${cleanId}`)) {
+              content = fc;
+              break;
+            }
+          }
+        }
+        if (content) {
+          const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+          let title = cleanId;
+          let category = "general";
+          if (match) {
+            for (const line of match[1].split("\n")) {
+              const m = line.match(/^([a-zA-Z0-9_-]+):\s*(.*)$/);
+              if (m) {
+                const k = m[1].trim();
+                const v = m[2].trim();
+                if (k === "title") title = v;
+                if (k === "category") category = v;
+              }
+            }
+          } else {
+            const headerMatch = content.match(/^#\s+(.+)$/m);
+            if (headerMatch) title = headerMatch[1].trim();
+          }
+          return { id: cleanId, title, category };
+        }
+      }
+    } catch (_) {
+    }
+  }
+  return { id: cleanId, title: cleanId, category: "general" };
+}
+function renderBoundRulesSection(ruleIds, rulesMap = {}, projectRoot = null) {
+  if (!Array.isArray(ruleIds) || ruleIds.length === 0) return [];
+  const lines = [];
+  lines.push("\n## \u{1F4A1} Bound Rules (\u6309\u9700\u8C03\u9605):");
+  for (const ruleId of ruleIds) {
+    const meta2 = resolveRuleMeta(ruleId, rulesMap, projectRoot);
+    if (meta2) {
+      lines.push(`- \`[${meta2.id}]\` **${meta2.title}** (category: ${meta2.category})`);
+    }
+  }
+  lines.push("> *Tip: Call `knowledge(action: 'rule_open', ruleId: '...')` to inspect full specifications if needed.*");
+  return lines;
+}
+var MarkdownRenderer = class _MarkdownRenderer {
+  static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [], rulesMap = {}, projectRoot = null, nextAction: nextActionOverride = null }) {
     const lines = [];
+    const planLabel = activePlan ? `[${activePlan.id}] ${activePlan.title}` : "None (Call plan.create or plan.list)";
+    const currentPhase = activePlan?.phases?.find((p) => p.status === "in_progress" || p.status === "active")?.id || activePlan?.phases?.[0]?.id || "N/A";
+    const taskLabel = activeTask ? `[${activeTask.id}] ${activeTask.title} (${activeTask.status.toUpperCase()})` : "None (Call task.create or task.open)";
+    const workingSetLabel = activeTask?.workingSet?.files?.length > 0 ? activeTask.workingSet.files.slice(0, 3).join(", ") + (activeTask.workingSet.files.length > 3 ? ` (+${activeTask.workingSet.files.length - 3})` : "") : "Clean";
+    const nextAction = nextActionOverride || (!activePlan ? 'Create or select a Plan via plan(action: "create")' : !activeTask ? 'Create or activate a Task via task(action: "create")' : activeTask.status === "draft" ? 'Activate task via task(action: "activate")' : activeTask.status === "active" ? "Develop with code(outline/read/edit), then test & task(check)" : activeTask.status === "checking" ? 'Complete checks & sync via task(action: "sync")' : "Task completed. Plan next task or complete plan.");
+    lines.push("\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 ContextOS Resumption Anchor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510");
+    lines.push(`\u2502 Active Plan:   ${planLabel.padEnd(61).slice(0, 61)} \u2502`);
+    lines.push(`\u2502 Current Phase: ${currentPhase.padEnd(61).slice(0, 61)} \u2502`);
+    lines.push(`\u2502 In-Prog Task:  ${taskLabel.padEnd(61).slice(0, 61)} \u2502`);
+    lines.push(`\u2502 Working Set:   ${workingSetLabel.padEnd(61).slice(0, 61)} \u2502`);
+    lines.push(`\u2502 NEXT MANDATORY ACTION:                                                       \u2502`);
+    lines.push(`\u2502 \u{1F449} ${nextAction.padEnd(72).slice(0, 72)} \u2502`);
+    lines.push("\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n");
     lines.push(`# ContextOS Project Brief: \`${project.id}\` (rev: ${project.graph_revision || 0})`);
     lines.push(`Root: \`${project.repo_root}\`
 `);
+    lines.push("## System Topology Backbone:");
+    lines.push("```");
+    lines.push("[Client / Apps] \u2500\u2500> [Gateway: MCP / Daemon]");
+    lines.push("                    \u2502");
+    lines.push("                    \u25BC");
+    lines.push("[Application Services: C-D-C-S / Runner]");
+    lines.push("       \u2502");
+    lines.push("       \u25BC");
+    lines.push("[Core Intel & Domain: AST / Invariants]");
+    lines.push("       \u2502");
+    lines.push("       \u25BC");
+    lines.push("[Storage & Infra: SQLite WAL / Git Sync]");
+    lines.push("```\n");
     if (activePlan) {
       lines.push(`## Active Plan: [${activePlan.id}] ${activePlan.title}`);
       lines.push(`- Priority: ${activePlan.priority} | Status: ${activePlan.status}`);
@@ -46667,6 +47943,11 @@ var MarkdownRenderer = class {
       const notes = activeTask.notes || [];
       if (notes.length > 0) {
         lines.push(`- Latest Note: ${notes[notes.length - 1].text}`);
+      }
+      const boundRules = (activeTask.references?.rules || activeTask.rules || []).filter(Boolean);
+      if (boundRules.length > 0) {
+        const root = projectRoot || (typeof rulesMap === "string" ? rulesMap : rulesMap?.projectRoot);
+        lines.push(...renderBoundRulesSection(boundRules, rulesMap, root));
       }
       lines.push("");
     } else {
@@ -46722,11 +48003,16 @@ var MarkdownRenderer = class {
     }
     return lines.join("\n");
   }
-  static renderTask(task) {
+  static renderTask(task, rulesMap = {}) {
     const lines = [];
     lines.push(`# Task: [${task.id}] ${task.title}`);
     lines.push(`- Status: **${task.status}** (Lifecycle: draft -> active -> checking -> syncing -> completed)`);
     lines.push(`- Belongs To: Plan \`${task.planId}\`, Phase \`${task.phaseId}\``);
+    const boundRules = (task.references?.rules || task.rules || []).filter(Boolean);
+    if (boundRules.length > 0) {
+      const root = typeof rulesMap === "string" ? rulesMap : rulesMap?.projectRoot;
+      lines.push(...renderBoundRulesSection(boundRules, rulesMap, root));
+    }
     if (task.contextSlice) {
       lines.push("\n## Context Slice:");
       if (task.contextSlice.objective) lines.push(`- **Objective**: ${task.contextSlice.objective}`);
@@ -46757,20 +48043,105 @@ var MarkdownRenderer = class {
     }
     return lines.join("\n");
   }
-  static renderBlock(block) {
+  static getBlockTier(block) {
+    if (block?.tier) return block.tier;
+    const id = (block?.id || "").toLowerCase();
+    const title = (block?.title || "").toLowerCase();
+    const refs = (block?.artifactRefs || []).filter(Boolean).map((r) => typeof r === "string" ? r : r?.path || "").join(" ").toLowerCase();
+    if (id.includes("desktop") || id.includes("cli") || id.includes("cloud") || id.includes("installer") || id.includes("client") || refs.includes("apps/desktop") || refs.includes("apps/cli") || refs.includes("apps/cloud") || title.includes("desktop") || title.includes("metro map")) {
+      return "Tier 5: Client & Tooling";
+    }
+    if (id.includes("mcp") && !id.includes("code") || id.includes("daemon") || id.includes("protocol") || refs.includes("packages/mcp") || refs.includes("packages/protocol") || refs.includes("apps/daemon") || title.includes("protocol") || title.includes("mcp facade")) {
+      return "Tier 1: Gateway & Protocol Layer";
+    }
+    if (id.includes("lifecycle") || id.includes("command-runner") || id.includes("process-host") || id.includes("coverage-guard") || refs.includes("packages/application") || refs.includes("packages/process-host") || title.includes("lifecycle") || title.includes("command runner") || title.includes("process supervisor") || title.includes("coverage guard")) {
+      return "Tier 2: Application Services";
+    }
+    if (id.includes("code-gateway") || id.includes("code-intel") || id.includes("domain") || id.includes("context") || id.includes("layout") || refs.includes("packages/code-intel") || refs.includes("packages/domain") || refs.includes("packages/context") || refs.includes("packages/layout") || title.includes("ast") || title.includes("domain") || title.includes("context") || title.includes("layout")) {
+      return "Tier 3: Core Intelligence & Domain";
+    }
+    if (id.includes("storage") || id.includes("database") || refs.includes("packages/storage") || refs.includes(".sqlite") || title.includes("sqlite") || title.includes("sync engine") || title.includes("database engine")) {
+      return "Tier 4: Infrastructure & Storage";
+    }
+    return "Tier 6: Workspace & Dynamic Blocks";
+  }
+  static renderBlockList(blocks) {
+    const lines = [`# Architecture Blocks (${blocks.length} total)`];
+    const standardTiers = [
+      "Tier 1: Gateway & Protocol Layer",
+      "Tier 2: Application Services",
+      "Tier 3: Core Intelligence & Domain",
+      "Tier 4: Infrastructure & Storage",
+      "Tier 5: Client & Tooling"
+    ];
+    const grouped = /* @__PURE__ */ new Map();
+    for (const tier of standardTiers) {
+      grouped.set(tier, []);
+    }
+    for (const b of blocks) {
+      const tier = b.tier || _MarkdownRenderer.getBlockTier(b);
+      if (!grouped.has(tier)) {
+        grouped.set(tier, []);
+      }
+      grouped.get(tier).push(b);
+    }
+    for (const [tierName, tierBlocks] of grouped.entries()) {
+      if (tierBlocks.length === 0) continue;
+      lines.push(`
+## ${tierName} (${tierBlocks.length})`);
+      for (const b of tierBlocks) {
+        lines.push(`- **[${b.id}]** ${b.title || b.id} (${b.artifactRefs?.length || 0} code refs)
+  ${b.summary || "No summary available."}`);
+      }
+    }
+    return lines.join("\n");
+  }
+  static renderBlock(block, { inboundLinks = [], outboundLinks = [] } = {}) {
     const lines = [];
-    lines.push(`# Block: [${block.id}] ${block.title} (${block.kind || "service"})`);
+    lines.push(`# Block: [${block.id}] ${block.title || block.id} (${block.kind || "service"})`);
+    const tier = block.tier || _MarkdownRenderer.getBlockTier(block);
+    if (tier) lines.push(`**Tier**: ${tier}`);
     if (block.summary) lines.push(`**Summary**: ${block.summary}`);
     if (block.details) lines.push(`
 ${block.details}`);
+    const safeInbound = inboundLinks || [];
+    const safeOutbound = outboundLinks || [];
+    lines.push("\n## Architecture Neighborhood (\u4E0A\u4E0B\u6E38\u62D3\u6251):");
+    if (safeInbound.length === 0) {
+      lines.push("- \u{1F4E5} **Called by (\u5165\u5EA6)**: *(none / root entrypoint)*");
+    } else {
+      lines.push("- \u{1F4E5} **Called by (\u5165\u5EA6)**:");
+      for (const link of safeInbound) {
+        const reason = link.reason ? ` (${link.reason})` : "";
+        lines.push(`  - \`[${link.from || "unknown"}]\` -[${link.kind || "calls"}]-> this block${reason}`);
+      }
+    }
+    if (safeOutbound.length === 0) {
+      lines.push("- \u{1F4E4} **Calls (\u51FA\u5EA6)**: *(none / terminal node)*");
+    } else {
+      lines.push("- \u{1F4E4} **Calls (\u51FA\u5EA6)**:");
+      for (const link of safeOutbound) {
+        const reason = link.reason ? ` (${link.reason})` : "";
+        lines.push(`  - this block -[${link.kind || "calls"}]-> \`[${link.to || "unknown"}]\`${reason}`);
+      }
+    }
     lines.push("\n## Bound Code Locators:");
     if ((block.artifactRefs || []).length === 0) {
       lines.push("*Warning: No bound code locators.*");
     } else {
       for (const ref of block.artifactRefs) {
-        const range = ref.startLine && ref.endLine ? `[L${ref.startLine}-L${ref.endLine}]` : "";
-        const sym = ref.symbol ? `symbol: \`${ref.symbol}\`` : "";
-        lines.push(`- \`${ref.path}\` ${range} ${sym} (role: ${ref.role}, hash: \`${ref.hash}\`)`);
+        if (!ref) continue;
+        if (typeof ref === "string") {
+          lines.push(`- \`${ref}\``);
+        } else if (typeof ref === "object") {
+          const range = ref.startLine && ref.endLine ? ` [L${ref.startLine}-L${ref.endLine}]` : "";
+          const sym = ref.symbol ? ` symbol: \`${ref.symbol}\`` : "";
+          const role = ref.role ? `role: ${ref.role}` : "";
+          const hash = ref.hash ? `hash: \`${ref.hash}\`` : "";
+          const metaParts = [role, hash].filter(Boolean);
+          const metaStr = metaParts.length > 0 ? ` (${metaParts.join(", ")})` : "";
+          lines.push(`- \`${ref.path || "unknown"}\`${range}${sym}${metaStr}`);
+        }
       }
     }
     if (block.history?.length > 0) {
@@ -46786,47 +48157,122 @@ ${block.details}`);
 // packages/mcp/src/v2-service.mjs
 var ContextOSV2Service = class {
   constructor({ projectRoot = process.cwd(), projectId = "contextos" } = {}) {
-    this.projectRoot = path10.resolve(projectRoot);
+    this.projectRoot = path13.resolve(projectRoot);
     this.projectId = projectId;
-    const dbPath2 = path10.join(this.projectRoot, ".contextos", "state.sqlite");
+    this.writeContext = new AsyncLocalStorage();
+    this.stateConflict = null;
+    const dbPath2 = path13.join(this.projectRoot, ".contextos", "state.sqlite");
     this.db = new V2Database(dbPath2);
     this.db.ensureProject(this.projectId, this.projectRoot);
     this.syncEngine = new SyncEngine(this.db);
     this.planService = new PlanService(this.db);
     this.taskService = new TaskService(this.db, this.syncEngine);
     this.processManager = new ProcessManager({ projectRoot: this.projectRoot });
-    this.syncEngine.reconcileExternalChange(this.projectId, this.projectRoot);
   }
-  close() {
+  close({ stopProcesses = true } = {}) {
     this.db.close();
-    this.processManager.stopAll().catch(() => {
+    if (stopProcesses) this.processManager.stopAll().catch(() => {
     });
+  }
+  _ensureStateReconciled() {
+    const reconciliation = this.syncEngine.reconcileExternalChange(this.projectId, this.projectRoot);
+    if (reconciliation.conflict) {
+      this.stateConflict = reconciliation;
+      return false;
+    }
+    this.stateConflict = null;
+    const hygiene = this.taskService.repairStateHygiene(this.projectId);
+    const planHygiene = this.planService.repairStateHygiene(this.projectId);
+    if (hygiene.changed > 0 || planHygiene.changed > 0) {
+      this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+    }
+    return true;
+  }
+  async _withWriteLock(label, callback, { allowConflict = false } = {}) {
+    if (this.writeContext.getStore() === true) return callback();
+    return withProjectWriteLock(
+      this.projectRoot,
+      async () => this.writeContext.run(true, async () => {
+        if (!this._ensureStateReconciled() && !allowConflict) {
+          throw new Error(`State conflict blocks ${label}: ${this.stateConflict.reason}`);
+        }
+        return callback();
+      }),
+      { label }
+    );
+  }
+  _resolveProjectPath(inputPath, label = "path") {
+    const fullPath = path13.resolve(this.projectRoot, inputPath);
+    const relativePath = path13.relative(this.projectRoot, fullPath).split(path13.sep).join("/");
+    if (relativePath.startsWith("..") || path13.isAbsolute(relativePath)) {
+      throw new Error(`${label} '${inputPath}' is outside project root '${this.projectRoot}'`);
+    }
+    return { fullPath, relativePath };
   }
   // ================= 1. os_context =================
   async osContext({ action = "brief", query = "", entityId = "", format = "markdown" }) {
+    await this._withWriteLock("os_context.preflight", async () => {
+    }, { allowConflict: true });
     switch (action) {
       case "brief": {
         const project = this.db.getProject(this.projectId) || { id: this.projectId, repo_root: this.projectRoot };
         const plans = this.db.listPlans(this.projectId);
         const planIds = new Set(plans.map((p) => p.id));
+        const activePlanIds = new Set(plans.filter((plan) => plan.status === "active").map((plan) => plan.id));
         const allTasks = this.db.listTasks();
         const projectTasks = planIds.size > 0 ? allTasks.filter((t) => planIds.has(t.planId)) : allTasks;
-        const activeTasks = projectTasks.filter((t) => ["active", "checking", "syncing"].includes(t.status));
+        const activeTasks = projectTasks.filter((t) => activePlanIds.has(t.planId) && ["active", "checking", "syncing"].includes(t.status)).sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)));
         const activeTask = activeTasks.length > 0 ? activeTasks[activeTasks.length - 1] : null;
         let activePlan = null;
         if (activeTask && activeTask.planId) {
           activePlan = plans.find((p) => p.id === activeTask.planId) || this.db.getPlan(activeTask.planId) || null;
         }
         if (!activePlan) {
-          activePlan = plans.find((p) => p.status === "active") || plans[0] || null;
+          activePlan = plans.filter((plan) => plan.status === "active").sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt))).at(-1) || null;
         }
-        const displayTask = activeTask || (activePlan ? this.db.listTasks(activePlan.id)[0] || null : null);
+        const displayTask = activeTask || (activePlan ? this.db.listTasks(activePlan.id).find((task) => task.status !== "completed") || null : null);
         const processes = this.processManager.listProcesses().filter((p) => p.status === "running" || p.status === "ready");
         const recentBlocks = this.db.listBlocks(this.projectId);
+        const writeLock = inspectProjectWriteLock(this.projectRoot);
+        const currentPhase = activePlan?.phases?.find((p) => p.status === "in_progress" || p.status === "active")?.id || activePlan?.phases?.[0]?.id || "N/A";
+        const nextAction = this.stateConflict ? 'Resolve graph state conflict via os_context(action: "reconcile")' : activeTasks.length > 1 ? "Resolve multiple active Tasks before continuing: " + activeTasks.map((task) => task.id).join(", ") : writeLock?.alive && writeLock.owner?.pid !== process.pid ? "Wait for the active project writer or inspect the project lock" : !activePlan ? 'Create or select a Plan via plan(action: "create")' : !displayTask ? 'Create or activate a Task via task(action: "create")' : displayTask.status === "draft" ? 'Activate task via task(action: "activate")' : displayTask.status === "active" ? "Develop with code(outline/read/edit), then test & task(check)" : displayTask.status === "checking" ? 'Complete checks & sync via task(action: "sync")' : "Task completed. Plan next task or complete plan.";
         if (format === "json") {
-          return { project, activePlan, activeTask: displayTask, processes, recentBlocks };
+          return {
+            resumptionAnchor: {
+              activePlan: activePlan ? { id: activePlan.id, title: activePlan.title, phase: currentPhase } : null,
+              activeTask: displayTask ? { id: displayTask.id, title: displayTask.title, status: displayTask.status } : null,
+              nextMandatoryAction: nextAction
+            },
+            project,
+            activePlan,
+            activeTask: displayTask,
+            processes,
+            recentBlocks,
+            stateConflict: this.stateConflict,
+            writeLock
+          };
         }
-        return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks });
+        let brief = MarkdownRenderer.renderBrief({
+          project,
+          activePlan,
+          activeTask: displayTask,
+          processes,
+          recentBlocks,
+          projectRoot: this.projectRoot,
+          nextAction
+        });
+        if (this.stateConflict) {
+          brief = `> [!CAUTION]
+> Graph state conflict: ${this.stateConflict.reason}
+
+${brief}`;
+        } else if (writeLock?.alive && writeLock.owner?.pid !== process.pid) {
+          brief = `> [!WARNING]
+> Another writer is active (pid ${writeLock.owner?.pid || "unknown"}). Writes may wait for the project lock.
+
+${brief}`;
+        }
+        return brief;
       }
       case "search": {
         const queryLower = (query || "").toLowerCase();
@@ -46867,18 +48313,50 @@ Members: ${chain.memberIds.join(", ")}`;
         }
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
-        return format === "json" ? block : MarkdownRenderer.renderBlock(block);
+        const allLinks = this.db.listLinks(this.projectId);
+        const inboundLinks = allLinks.filter((l) => l.to === id);
+        const outboundLinks = allLinks.filter((l) => l.from === id);
+        const tier = MarkdownRenderer.getBlockTier(block);
+        if (format === "json") {
+          return {
+            ...block,
+            tier,
+            neighborhood: {
+              inbound: inboundLinks,
+              outbound: outboundLinks
+            }
+          };
+        }
+        return MarkdownRenderer.renderBlock({ ...block, tier }, { inboundLinks, outboundLinks });
       }
       case "reconcile": {
-        const res = this.syncEngine.reconcileExternalChange(this.projectId, this.projectRoot);
-        return res.changed ? `External Git/JSON change applied! Graph revision updated to ${res.revision}.` : "ContextOS database and graph.json are already in sync.";
+        return this._withWriteLock("os_context.reconcile", () => {
+          const res = this.syncEngine.reconcileExternalChange(this.projectId, this.projectRoot);
+          this.stateConflict = res.conflict ? res : null;
+          const hygiene = res.conflict ? { changed: 0, blockedTaskIds: [] } : this.taskService.repairStateHygiene(this.projectId);
+          const planHygiene = res.conflict ? { changed: 0, changedPlanIds: [] } : this.planService.repairStateHygiene(this.projectId);
+          if (hygiene.changed > 0 || planHygiene.changed > 0) {
+            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+          }
+          if (res.changed) {
+            return `External Git/JSON change applied! Graph revision updated to ${res.revision}.`;
+          }
+          if (res.conflict) {
+            return `Graph conflict detected. ${res.reason}`;
+          }
+          const hygieneMessage = hygiene.changed > 0 || planHygiene.changed > 0 ? ` Archived ${hygiene.changed} stale task(s) and ${planHygiene.changed} stale plan(s).` : "";
+          return `ContextOS database and graph.json are already in sync.${hygieneMessage}`;
+        }, { allowConflict: true });
       }
       default:
         throw new Error(`Unknown os_context action: ${action}`);
     }
   }
   // ================= 2. plan =================
-  async plan({ action, id, planData = {}, checkpointId, passed, evidenceRef, format = "markdown" }) {
+  async plan(input) {
+    return this._withWriteLock("plan", () => this._plan(input));
+  }
+  async _plan({ action, id, planData = {}, checkpointId, passed, evidenceRef, format = "markdown" }) {
     switch (action) {
       case "list": {
         const plans = this.db.listPlans(this.projectId);
@@ -46887,6 +48365,7 @@ Members: ${chain.memberIds.join(", ")}`;
       }
       case "create": {
         const created = this.planService.createPlan({ ...planData, projectId: this.projectId });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === "json" ? created : MarkdownRenderer.renderPlan(created);
       }
       case "open": {
@@ -46896,15 +48375,18 @@ Members: ${chain.memberIds.join(", ")}`;
       }
       case "check": {
         const cp = this.planService.checkCheckpoint(id, checkpointId, { passed, evidenceRef });
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Checkpoint '${checkpointId}' in Plan '${id}' marked as ${cp.status}.`;
       }
       case "complete": {
         const completed = this.planService.completePlan(id, planData);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === "json" ? completed : `Plan '${id}' completed successfully!
 Summary: ${completed.completedSummary}`;
       }
       case "delete": {
         const deleted = this.planService.deletePlan(id);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === "json" ? { deleted, id } : `Plan '${id}' deleted successfully.`;
       }
       default:
@@ -46912,11 +48394,33 @@ Summary: ${completed.completedSummary}`;
     }
   }
   // ================= 3. task =================
-  async task({ action, id, taskData = {}, text, kind, checkData = {}, syncData = {}, format = "markdown" }) {
+  async task(input) {
+    return this._withWriteLock("task", () => this._task(input));
+  }
+  async _task({
+    action,
+    id,
+    taskData = {},
+    ruleId,
+    rules,
+    text,
+    kind,
+    checkData = {},
+    syncData = {},
+    hypothesis,
+    script,
+    findings,
+    targetBlockId,
+    files,
+    format = "markdown"
+  }) {
     switch (action) {
       case "create": {
-        const created = this.taskService.createTask(taskData, this.projectRoot);
-        return format === "json" ? created : MarkdownRenderer.renderTask(created);
+        const payload = { ...taskData };
+        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
+        if (rules && !payload.rules) payload.rules = rules;
+        const created = this.taskService.createTask(payload, this.projectRoot);
+        return format === "json" ? created : MarkdownRenderer.renderTask(created, { projectRoot: this.projectRoot });
       }
       case "open": {
         if (this.projectRoot) {
@@ -46927,7 +48431,26 @@ Summary: ${completed.completedSummary}`;
         }
         const task = this.db.getTask(id);
         if (!task) throw new Error(`Task '${id}' not found`);
-        return format === "json" ? task : MarkdownRenderer.renderTask(task);
+        return format === "json" ? task : MarkdownRenderer.renderTask(task, { projectRoot: this.projectRoot });
+      }
+      case "bind_rule": {
+        const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
+        if (!targetRule) throw new Error("ruleId is required to bind a rule");
+        const updated = this.taskService.bindRule(id, targetRule);
+        return format === "json" ? updated : `Rule '${targetRule}' bound to Task '${id}'.`;
+      }
+      case "unbind_rule": {
+        const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
+        if (!targetRule) throw new Error("ruleId is required to unbind a rule");
+        const updated = this.taskService.unbindRule(id, targetRule);
+        return format === "json" ? updated : `Rule '${targetRule}' unbound from Task '${id}'.`;
+      }
+      case "update": {
+        const payload = { ...taskData };
+        if (rules && payload.rules === void 0) payload.rules = rules;
+        if (ruleId && payload.ruleId === void 0) payload.ruleId = ruleId;
+        const updated = this.taskService.updateTask(id, payload);
+        return format === "json" ? updated : MarkdownRenderer.renderTask(updated, { projectRoot: this.projectRoot });
       }
       case "note": {
         const note = this.taskService.addNote(id, { text, kind });
@@ -46939,7 +48462,6 @@ Summary: ${completed.completedSummary}`;
       }
       case "sync": {
         const result = this.taskService.syncTask(id, {
-          coverageMode: syncData.coverageMode || "adaptive",
           ...syncData,
           projectRoot: this.projectRoot,
           projectId: this.projectId
@@ -46961,35 +48483,139 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
         const resumed = this.taskService.resumeTask(id);
         return `Task '${id}' resumed to state: ${resumed.status}.`;
       }
+      case "probe": {
+        const targetTaskId = id || taskData?.id;
+        if (!targetTaskId) throw new Error("Missing required 'id' parameter for task probe (e.g. id: 'task-xxx')");
+        const task = this.db.getTask(targetTaskId);
+        if (!task) throw new Error(`Task '${targetTaskId}' not found`);
+        const hyp = hypothesis || taskData?.hypothesis || text || "";
+        const scr = script || taskData?.script || taskData?.scratchScript || "";
+        const fnd = findings || taskData?.findings || "";
+        const probeEntry = {
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          hypothesis: hyp,
+          script: scr,
+          findings: fnd
+        };
+        const noteText = `[Probe Mode] Hypothesis: ${hyp || "N/A"}${scr ? ` | Script: ${scr}` : ""}${fnd ? ` | Findings: ${fnd}` : ""}`;
+        this.taskService.addNote(targetTaskId, { text: noteText, kind: "probe" });
+        const currentSlice = task.contextSlice || {};
+        const probes = Array.isArray(currentSlice.probes) ? [...currentSlice.probes] : [];
+        probes.push(probeEntry);
+        this.taskService.updateTask(targetTaskId, {
+          contextSlice: {
+            ...currentSlice,
+            probes
+          }
+        });
+        if (format === "json") return { taskId: targetTaskId, probe: probeEntry };
+        return `\u{1F52C} Probe recorded for Task '${targetTaskId}':
+` + (hyp ? `- Hypothesis: ${hyp}
+` : "") + (scr ? `- Script: ${scr}
+` : "") + (fnd ? `- Findings: ${fnd}
+` : "") + `
+*Tip: Continue exploratory experiments. When ready, call task(action: "graduate_probe", targetBlockId: "...") to formalize.*`;
+      }
+      case "graduate_probe": {
+        const targetTaskId = id || taskData?.id;
+        if (!targetTaskId) throw new Error("Missing required 'id' parameter for task graduate_probe (e.g. id: 'task-xxx')");
+        const task = this.db.getTask(targetTaskId);
+        if (!task) throw new Error(`Task '${targetTaskId}' not found`);
+        const tBlockId = targetBlockId || taskData?.targetBlockId || ruleId || null;
+        const gradFiles = files || taskData?.files || (script ? [script] : taskData?.script ? [taskData.script] : []);
+        const currentWorkingSet = task.workingSet || {};
+        const currentFiles = Array.isArray(currentWorkingSet.files) ? [...currentWorkingSet.files] : [];
+        for (const gf of gradFiles) {
+          if (!currentFiles.includes(gf)) {
+            currentFiles.push(gf);
+          }
+        }
+        this.taskService.updateTask(targetTaskId, {
+          workingSet: {
+            ...currentWorkingSet,
+            files: currentFiles
+          }
+        });
+        let autoBoundMsg = "";
+        if (tBlockId && gradFiles.length > 0) {
+          try {
+            const bindRes = await this.block({
+              action: "bind_auto",
+              id: tBlockId,
+              paths: gradFiles
+            });
+            autoBoundMsg = `
+${bindRes}`;
+          } catch (err2) {
+            autoBoundMsg = `
+(Auto-bind deferred: ${err2.message})`;
+          }
+        }
+        const noteText = `[Probe Graduated] Promoted files to workingSet: ${gradFiles.join(", ")}${tBlockId ? ` (bound to ${tBlockId})` : ""}`;
+        this.taskService.addNote(targetTaskId, { text: noteText, kind: "graduation" });
+        if (format === "json") return { taskId: targetTaskId, graduatedFiles: gradFiles, targetBlockId: tBlockId };
+        return `\u{1F393} Probe graduated successfully for Task '${targetTaskId}':
+- Promoted files to Task workingSet: ${gradFiles.join(", ")}
+` + (tBlockId ? `- Linked and bound to Block: '${tBlockId}'` : "") + autoBoundMsg;
+      }
       default:
         throw new Error(`Unknown task action: ${action}`);
     }
   }
-  // ================= 4. block =================
-  async block({ action, id, blockData = {}, query, format = "markdown" }) {
+  async block(input) {
+    return this._withWriteLock("block", () => this._block(input));
+  }
+  async _block({
+    action,
+    id,
+    blockData = {},
+    query,
+    path: targetPath,
+    paths = [],
+    symbols = [],
+    hashMode = null,
+    manifest = null,
+    format = "markdown"
+  }) {
     switch (action) {
       case "list": {
         const blocks = this.db.listBlocks(this.projectId);
-        if (format === "json") return blocks;
-        const lines = [`# Architecture Blocks (${blocks.length} total)`];
-        for (const b of blocks) {
-          lines.push(`- **[${b.id}]** ${b.title} (${b.artifactRefs?.length || 0} code refs)
-  ${b.summary}`);
-        }
-        return lines.join("\n");
+        const enriched = blocks.map((b) => ({
+          ...b,
+          tier: MarkdownRenderer.getBlockTier(b)
+        }));
+        if (format === "json") return enriched;
+        return MarkdownRenderer.renderBlockList(enriched);
       }
       case "open": {
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
-        return format === "json" ? block : MarkdownRenderer.renderBlock(block);
+        const allLinks = this.db.listLinks(this.projectId);
+        const inboundLinks = allLinks.filter((l) => l.to === id);
+        const outboundLinks = allLinks.filter((l) => l.from === id);
+        const tier = MarkdownRenderer.getBlockTier(block);
+        if (format === "json") {
+          return {
+            ...block,
+            tier,
+            neighborhood: {
+              inbound: inboundLinks,
+              outbound: outboundLinks
+            }
+          };
+        }
+        return MarkdownRenderer.renderBlock({ ...block, tier }, { inboundLinks, outboundLinks });
       }
       case "search": {
         const queryLower = (query || "").toLowerCase();
         const matches = this.db.listBlocks(this.projectId).filter(
-          (b) => b.title.toLowerCase().includes(queryLower) || b.summary.toLowerCase().includes(queryLower)
-        );
+          (b) => b.title?.toLowerCase().includes(queryLower) || b.summary?.toLowerCase().includes(queryLower)
+        ).map((b) => ({
+          ...b,
+          tier: MarkdownRenderer.getBlockTier(b)
+        }));
         if (format === "json") return matches;
-        return "# Block Search Results\n" + matches.map((b) => `- [${b.id}] ${b.title}: ${b.summary}`).join("\n");
+        return "# Block Search Results\n" + matches.map((b) => `- [${b.id}] (${b.tier}) ${b.title}: ${b.summary || "No summary available."}`).join("\n");
       }
       case "bind": {
         const targetId = id || blockData?.id;
@@ -47000,9 +48626,17 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
         const inputArtifactRefs = blockData?.artifactRefs || [];
         const normalizedRefs = inputArtifactRefs.map((ref) => {
           if (typeof ref === "string") {
-            return { path: ref, role: "implementation" };
+            return {
+              path: this._resolveProjectPath(ref, "artifactRef path").relativePath,
+              role: "implementation"
+            };
           }
-          return ref;
+          if (!ref?.path) return ref;
+          return {
+            ...ref,
+            path: this._resolveProjectPath(ref.path, "artifactRef path").relativePath,
+            manifest: ref.manifest ? this._resolveProjectPath(ref.manifest, "artifactRef manifest").relativePath : null
+          };
         });
         const existingRefs = existing?.artifactRefs || [];
         const mergedRefs = [...existingRefs];
@@ -47022,6 +48656,132 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
         this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Block '${block.id}' bound with ${block.artifactRefs.length} code locators.`;
       }
+      case "bind_auto": {
+        const targetId = id || blockData?.id;
+        if (!targetId) {
+          throw new Error("Missing required 'id' parameter for block bind_auto action (e.g. id: 'block-render-engine')");
+        }
+        const existing = this.db.getBlock(targetId) || {
+          id: targetId,
+          projectId: this.projectId,
+          title: blockData?.title || targetId,
+          kind: blockData?.kind || "service",
+          summary: blockData?.summary || "",
+          details: blockData?.details || "",
+          artifactRefs: []
+        };
+        const rawPaths = [];
+        if (targetPath) rawPaths.push(targetPath);
+        if (Array.isArray(paths)) rawPaths.push(...paths);
+        if (blockData?.path) rawPaths.push(blockData.path);
+        if (Array.isArray(blockData?.paths)) rawPaths.push(...blockData.paths);
+        if (rawPaths.length === 0) {
+          throw new Error("Missing 'path' or 'paths' parameter for bind_auto (e.g. path: 'SceneRenderer.swift')");
+        }
+        const symbolFilters = new Set(
+          (symbols || blockData?.symbols || []).map((s) => {
+            return s.includes("#") ? s.split("#")[1].trim() : s.trim();
+          }).filter(Boolean)
+        );
+        const autoArtifactRefs = [];
+        for (const inputPath of rawPaths) {
+          const resolvedPath = this._resolveProjectPath(inputPath, "path");
+          const cleanRelPath = resolvedPath.relativePath;
+          const fullPath = resolvedPath.fullPath;
+          if (!fs13.existsSync(fullPath)) {
+            throw new Error(`File not found on disk: '${cleanRelPath}' (resolved at: ${fullPath})`);
+          }
+          const stat = fs13.statSync(fullPath);
+          if (stat.isDirectory()) {
+            const resolvedManifest = manifest ? this._resolveProjectPath(manifest, "manifest").relativePath : findDirectoryManifest(this.projectRoot, cleanRelPath);
+            const resolved = calculateTreeHash(this.projectRoot, cleanRelPath, {
+              hashMode: hashMode || (resolvedManifest ? "manifest" : "content"),
+              manifest: resolvedManifest
+            });
+            autoArtifactRefs.push({
+              path: cleanRelPath,
+              anchorKind: "tree",
+              hash: resolved.hash,
+              role: blockData?.kind === "dependency" ? "dependency" : "resource",
+              hashMode: resolved.hashMode,
+              manifest: resolved.manifest
+            });
+            continue;
+          }
+          const content = fs13.readFileSync(fullPath, "utf8");
+          const fileHash = calculateHash2(content);
+          const lines = content.split(/\r?\n/);
+          let structure = null;
+          try {
+            structure = LanguageRegistry.parseStructure(cleanRelPath, content);
+          } catch (_) {
+            structure = null;
+          }
+          const fileSymbols = structure?.symbols || [];
+          let matchedSymbols = fileSymbols;
+          if (symbolFilters.size > 0) {
+            matchedSymbols = fileSymbols.filter((s) => symbolFilters.has(s.name));
+          }
+          if (matchedSymbols.length > 0) {
+            const CONTAINER_KINDS = /* @__PURE__ */ new Set(["class", "struct", "trait", "interface", "extension", "impl", "record", "object", "enum"]);
+            const topLevelOnly = matchedSymbols.filter((s) => CONTAINER_KINDS.has(s.kind) || s.kind === "function");
+            const targetSymbols = topLevelOnly.length > 0 ? topLevelOnly : matchedSymbols;
+            for (const sym of targetSymbols) {
+              autoArtifactRefs.push({
+                path: cleanRelPath,
+                anchorKind: "symbol",
+                symbol: sym.name,
+                startLine: sym.startLine || 1,
+                endLine: sym.endLine || lines.length,
+                hash: sym.hash || fileHash,
+                role: "implementation"
+              });
+            }
+          } else {
+            const baseSymbol = path13.basename(cleanRelPath);
+            autoArtifactRefs.push({
+              path: cleanRelPath,
+              anchorKind: "file",
+              symbol: baseSymbol,
+              startLine: 1,
+              endLine: lines.length || 1,
+              hash: fileHash,
+              role: "implementation"
+            });
+          }
+        }
+        const boundedPaths = new Set(autoArtifactRefs.map((r) => r.path));
+        const existingRefs = (existing.artifactRefs || []).filter(
+          (r) => !(boundedPaths.has(r.path) && (!r.symbol || !r.symbol.trim() || r.symbol === "*"))
+        );
+        const mergedRefs = [...existingRefs];
+        for (const autoRef of autoArtifactRefs) {
+          const idx = mergedRefs.findIndex((r) => r.path === autoRef.path && r.symbol === autoRef.symbol);
+          if (idx >= 0) {
+            mergedRefs[idx] = autoRef;
+          } else {
+            mergedRefs.push(autoRef);
+          }
+        }
+        const updatedBlock = {
+          ...existing,
+          ...blockData,
+          id: targetId,
+          projectId: this.projectId,
+          artifactRefs: mergedRefs
+        };
+        this.db.saveBlock(updatedBlock);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        if (format === "json") {
+          return { block: updatedBlock, addedRefs: autoArtifactRefs };
+        }
+        const treeRefs = autoArtifactRefs.filter((ref) => ref.anchorKind === "tree");
+        const symbolRefs = autoArtifactRefs.filter((ref) => ref.anchorKind !== "tree");
+        return `\u2705 Smart Auto-Bound Block '${targetId}':
+- Extracted ${symbolRefs.length} symbol ref(s) and ${treeRefs.length} directory tree(s) from ${rawPaths.length} path(s).
+` + autoArtifactRefs.map((r) => r.anchorKind === "tree" ? `  \u2022 \`${r.path}\` -> **TREE/${r.hashMode}** (hash: \`${r.hash}\`${r.manifest ? `, manifest: \`${r.manifest}\`` : ""})` : `  \u2022 \`${r.path}\` -> **${r.symbol}** [L${r.startLine}-L${r.endLine}] (hash: \`${r.hash}\`)`).join("\n") + `
+- Total Block Locators: ${mergedRefs.length}`;
+      }
       case "delete": {
         this.db.deleteBlock(id);
         this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
@@ -47032,7 +48792,10 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
     }
   }
   // ================= 5. chain =================
-  async chain({ action, id, chainData = {}, linkData = {}, format = "markdown" }) {
+  async chain(input) {
+    return this._withWriteLock("chain", () => this._chain(input));
+  }
+  async _chain({ action, id, chainData = {}, linkData = {}, format = "markdown" }) {
     switch (action) {
       case "list": {
         const chains = this.db.listChains(this.projectId);
@@ -47083,16 +48846,27 @@ Members: ${chain.memberIds.join(", ")}`;
         }
         return lines.join("\n");
       }
-      case "validate": {
+      case "validate":
+      case "validate_layout": {
         const blocks = this.db.listBlocks(this.projectId);
         const chains = this.db.listChains(this.projectId);
         const links = this.db.listLinks(this.projectId);
+        const blockIds = new Set(blocks.map((block) => block.id));
+        const chainedIds = new Set(chains.flatMap((chain) => chain.memberIds || []));
+        const missingMembers = chains.flatMap(
+          (chain) => (chain.memberIds || []).filter((blockId) => !blockIds.has(blockId)).map((blockId) => ({ chainId: chain.id, blockId }))
+        );
+        const orphanBlocks = blocks.filter((block) => !chainedIds.has(block.id)).map((block) => block.id);
+        const danglingLinks = links.filter((link) => !blockIds.has(link.from) || !blockIds.has(link.to)).map((link) => link.id);
         const layout = NetworkLayoutEngine.computeLayout({ blocks, chains, links });
         return {
-          valid: true,
+          valid: missingMembers.length === 0 && orphanBlocks.length === 0 && danglingLinks.length === 0,
           nodeCount: layout.nodes.length,
           edgeCount: layout.edges.length,
-          bounds: layout.bounds
+          bounds: layout.bounds,
+          orphanBlocks,
+          missingMembers,
+          danglingLinks
         };
       }
       default:
@@ -47100,7 +48874,10 @@ Members: ${chain.memberIds.join(", ")}`;
     }
   }
   // ================= 6. code =================
-  async code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, format = "markdown" }) {
+  async code(input) {
+    return this._withWriteLock("code", () => this._code(input));
+  }
+  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, format = "markdown" }) {
     if (action === "search" && !relPath) {
       const blocks = this.db.listBlocks(this.projectId);
       const allFiles = /* @__PURE__ */ new Set();
@@ -47123,18 +48900,22 @@ Members: ${chain.memberIds.join(", ")}`;
       return lines.join("\n");
     }
     if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
-    const fullPath = path10.resolve(this.projectRoot, relPath);
+    const resolvedPath = this._resolveProjectPath(relPath, "path");
+    relPath = resolvedPath.relativePath;
+    const fullPath = resolvedPath.fullPath;
     if (action === "create") {
-      fs10.mkdirSync(path10.dirname(fullPath), { recursive: true });
+      if (fs13.existsSync(fullPath)) {
+        throw new Error(`File already exists: ${relPath}. Use action 'edit' for existing files.`);
+      }
+      fs13.mkdirSync(path13.dirname(fullPath), { recursive: true });
       const initialContent = replacementContent || rawContent || "";
-      fs10.writeFileSync(fullPath, initialContent, "utf8");
+      fs13.writeFileSync(fullPath, initialContent, "utf8");
       const res = CodeTools.create(relPath, initialContent);
-      const activeTasks = this.taskService.listTasks?.(this.projectId) || [];
-      const activeTask = activeTasks.find((t) => t.status === "active");
+      const activeTask = this.taskService.findActiveTask(this.projectId);
       if (activeTask) {
         this.taskService.addFileToWorkingSet(activeTask.id, relPath);
         try {
-          const stat = fs10.statSync(fullPath);
+          const stat = fs13.statSync(fullPath);
           activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
           activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
           activeTask.baseline.fileSnapshots[relPath] = {
@@ -47154,8 +48935,8 @@ Members: ${chain.memberIds.join(", ")}`;
         message: `File '${relPath}' created successfully with AST anchors initialized.`
       };
     }
-    if (!fs10.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
-    const content = fs10.readFileSync(fullPath, "utf8");
+    if (!fs13.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
+    const content = fs13.readFileSync(fullPath, "utf8");
     switch (action) {
       case "outline": {
         const res = CodeTools.outline(relPath, content);
@@ -47165,7 +48946,7 @@ Members: ${chain.memberIds.join(", ")}`;
         const effectiveSelector = selector || (startLine !== void 0 || endLine !== void 0 ? { startLine, endLine } : null);
         const res = CodeTools.read(relPath, content, effectiveSelector);
         if (format === "json") return res;
-        return `\`\`\`${path10.extname(relPath).slice(1) || "text"}
+        return `\`\`\`${path13.extname(relPath).slice(1) || "text"}
 // ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})
 ${res.code}
 \`\`\``;
@@ -47194,13 +48975,12 @@ ${res.code}
           startLine: effectiveStartLine,
           endLine: effectiveEndLine
         });
-        fs10.writeFileSync(fullPath, res.newContent, "utf8");
-        const activeTasks = this.taskService.listTasks?.(this.projectId) || [];
-        const activeTask = activeTasks.find((t) => t.status === "active");
+        fs13.writeFileSync(fullPath, res.newContent, "utf8");
+        const activeTask = this.taskService.findActiveTask(this.projectId);
         if (activeTask) {
           this.taskService.addFileToWorkingSet(activeTask.id, relPath);
           try {
-            const stat = fs10.statSync(fullPath);
+            const stat = fs13.statSync(fullPath);
             activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
             activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
             activeTask.baseline.fileSnapshots[relPath] = {
@@ -47244,18 +49024,30 @@ ${res.code}
     }
   }
   // ================= 7. run_command =================
-  async runCommand({ command, cwd, maxChars = 1500, timeoutMs = 6e4 }) {
-    const targetCwd = cwd ? path10.resolve(this.projectRoot, cwd) : this.projectRoot;
-    return runCommand({
+  async runCommand({
+    command,
+    cwd,
+    maxChars = 1500,
+    timeoutMs = 6e4
+  }) {
+    const targetCwd = cwd ? this._resolveProjectPath(cwd, "cwd").fullPath : this.projectRoot;
+    const receipt = await runCommand({
       command,
       cwd: targetCwd,
       maxChars,
       timeoutMs,
       projectRoot: this.projectRoot
     });
+    await this._withWriteLock("run_command.record", async () => {
+      this.db.saveCommandReceipt(receipt);
+    });
+    return receipt;
   }
   // ================= 8. process =================
-  async process({ action, command, id, lines = 50, grep }) {
+  async process(input) {
+    return this._withWriteLock("process", () => this._process(input));
+  }
+  async _process({ action, command, id, lines = 50, grep }) {
     switch (action) {
       case "start":
         return this.processManager.startProcess({ command });
@@ -47275,7 +49067,10 @@ ${res.code}
     }
   }
   // ================= 9. knowledge =================
-  async knowledge({ action, ruleId, ruleData = {}, sectionId, sectionTitle, content, format = "markdown" }) {
+  async knowledge(input) {
+    return this._withWriteLock("knowledge", () => this._knowledge(input));
+  }
+  async _knowledge({ action, ruleId, ruleData = {}, sectionId, sectionTitle, content, format = "markdown" }) {
     switch (action) {
       case "rule_list": {
         const rules = KnowledgeService.listRules(this.projectRoot);
@@ -47557,10 +49352,10 @@ ${localBrief}` : localBrief;
 };
 
 // packages/mcp/src/bootstrap-util.mjs
-import fs11 from "node:fs";
-import path11 from "node:path";
+import fs14 from "node:fs";
+import path14 from "node:path";
 import os from "node:os";
-import { execSync as execSync4 } from "node:child_process";
+import { execSync as execSync3 } from "node:child_process";
 var HOME = os.homedir();
 function resolveNodeExecutable() {
   const isWin = process.platform === "win32";
@@ -47569,22 +49364,22 @@ function resolveNodeExecutable() {
   if (isWin) {
     const programFiles = process.env.ProgramFiles || "C:\\Program Files";
     const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
-    const localAppData = process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local");
-    const appData = process.env.APPDATA || path11.join(HOME, "AppData\\Roaming");
+    const localAppData = process.env.LOCALAPPDATA || path14.join(HOME, "AppData\\Local");
+    const appData = process.env.APPDATA || path14.join(HOME, "AppData\\Roaming");
     candidates.push(
-      path11.join(programFiles, "nodejs\\node.exe"),
-      path11.join(programFilesX86, "nodejs\\node.exe"),
-      path11.join(appData, "nvm\\current\\node.exe"),
-      path11.join(localAppData, "Programs\\node\\node.exe"),
-      path11.join(localAppData, "ContextOS\\bin\\node.exe")
+      path14.join(programFiles, "nodejs\\node.exe"),
+      path14.join(programFilesX86, "nodejs\\node.exe"),
+      path14.join(appData, "nvm\\current\\node.exe"),
+      path14.join(localAppData, "Programs\\node\\node.exe"),
+      path14.join(localAppData, "ContextOS\\bin\\node.exe")
     );
   } else if (isMac) {
     candidates.push(
       "/Applications/ContextOS.app/Contents/Resources/bin/node",
-      path11.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
+      path14.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
       "/opt/homebrew/bin/node",
       "/usr/local/bin/node",
-      path11.join(HOME, ".nvm/current/bin/node"),
+      path14.join(HOME, ".nvm/current/bin/node"),
       "/usr/bin/node"
     );
   } else {
@@ -47592,15 +49387,15 @@ function resolveNodeExecutable() {
       "/usr/bin/node",
       "/usr/local/bin/node",
       "/snap/bin/node",
-      path11.join(HOME, ".nvm/current/bin/node"),
-      path11.join(HOME, ".local/share/nvm/current/bin/node"),
-      path11.join(HOME, ".local/bin/node")
+      path14.join(HOME, ".nvm/current/bin/node"),
+      path14.join(HOME, ".local/share/nvm/current/bin/node"),
+      path14.join(HOME, ".local/bin/node")
     );
   }
   for (const candidate of candidates) {
-    if (candidate && fs11.existsSync(candidate)) {
+    if (candidate && fs14.existsSync(candidate)) {
       try {
-        fs11.accessSync(candidate, fs11.constants.X_OK);
+        fs14.accessSync(candidate, fs14.constants.X_OK);
         return candidate;
       } catch (_) {
       }
@@ -47613,33 +49408,33 @@ function resolveCodexExecutable() {
   const isMac = process.platform === "darwin";
   const candidates = [];
   if (isWin) {
-    const localAppData = process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local");
+    const localAppData = process.env.LOCALAPPDATA || path14.join(HOME, "AppData\\Local");
     candidates.push(
-      path11.join(localAppData, "Programs\\Codex\\codex.exe"),
-      path11.join(HOME, ".cargo\\bin\\codex.exe")
+      path14.join(localAppData, "Programs\\Codex\\codex.exe"),
+      path14.join(HOME, ".cargo\\bin\\codex.exe")
     );
   } else if (isMac) {
     candidates.push(
       "/Applications/Codex.app/Contents/Resources/codex",
       "/Applications/ChatGPT.app/Contents/Resources/codex",
-      path11.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
+      path14.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
       "/opt/homebrew/bin/codex",
       "/usr/local/bin/codex",
-      path11.join(HOME, ".cargo/bin/codex"),
-      path11.join(HOME, ".local/bin/codex")
+      path14.join(HOME, ".cargo/bin/codex"),
+      path14.join(HOME, ".local/bin/codex")
     );
   } else {
     candidates.push(
       "/usr/bin/codex",
       "/usr/local/bin/codex",
-      path11.join(HOME, ".cargo/bin/codex"),
-      path11.join(HOME, ".local/bin/codex")
+      path14.join(HOME, ".cargo/bin/codex"),
+      path14.join(HOME, ".local/bin/codex")
     );
   }
   for (const c of candidates) {
-    if (c && fs11.existsSync(c)) {
+    if (c && fs14.existsSync(c)) {
       try {
-        fs11.accessSync(c, fs11.constants.X_OK);
+        fs14.accessSync(c, fs14.constants.X_OK);
         return c;
       } catch (_) {
       }
@@ -47648,41 +49443,41 @@ function resolveCodexExecutable() {
   return null;
 }
 function deployCanonicalServer(sourceScriptPath = null) {
-  const canonicalDir = path11.join(HOME, ".contextos", "server");
-  const canonicalScript = path11.join(canonicalDir, "contextos-mcp.mjs");
-  fs11.mkdirSync(canonicalDir, { recursive: true });
+  const canonicalDir = path14.join(HOME, ".contextos", "server");
+  const canonicalScript = path14.join(canonicalDir, "contextos-mcp.mjs");
+  fs14.mkdirSync(canonicalDir, { recursive: true });
   const candidates = [
     sourceScriptPath,
     "/Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs",
-    path11.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
+    path14.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
   ].filter(Boolean);
-  const found = candidates.find((p) => fs11.existsSync(p));
+  const found = candidates.find((p) => fs14.existsSync(p));
   if (found && found !== canonicalScript) {
-    fs11.copyFileSync(found, canonicalScript);
+    fs14.copyFileSync(found, canonicalScript);
   }
   return canonicalScript;
 }
 function copyDirectoryRecursive(src, dest) {
-  if (!fs11.existsSync(src)) return;
-  fs11.mkdirSync(dest, { recursive: true });
-  const entries = fs11.readdirSync(src, { withFileTypes: true });
+  if (!fs14.existsSync(src)) return;
+  fs14.mkdirSync(dest, { recursive: true });
+  const entries = fs14.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
-    const srcPath = path11.join(src, entry.name);
-    const destPath = path11.join(dest, entry.name);
+    const srcPath = path14.join(src, entry.name);
+    const destPath = path14.join(dest, entry.name);
     if (entry.isDirectory()) {
       copyDirectoryRecursive(srcPath, destPath);
     } else {
-      fs11.copyFileSync(srcPath, destPath);
+      fs14.copyFileSync(srcPath, destPath);
     }
   }
 }
 function configureJsonMcp({ configPath, serverScript, nodePath, env = null, version: version2 = "2.1.0" }) {
-  const dir = path11.dirname(configPath);
-  fs11.mkdirSync(dir, { recursive: true });
+  const dir = path14.dirname(configPath);
+  fs14.mkdirSync(dir, { recursive: true });
   let json = {};
-  if (fs11.existsSync(configPath)) {
+  if (fs14.existsSync(configPath)) {
     try {
-      json = JSON.parse(fs11.readFileSync(configPath, "utf8"));
+      json = JSON.parse(fs14.readFileSync(configPath, "utf8"));
     } catch (_) {
       json = {};
     }
@@ -47699,13 +49494,13 @@ function configureJsonMcp({ configPath, serverScript, nodePath, env = null, vers
     delete serverEntry.env;
   }
   json.mcpServers.contextos = serverEntry;
-  fs11.writeFileSync(configPath, JSON.stringify(json, null, 2) + "\n", "utf8");
+  fs14.writeFileSync(configPath, JSON.stringify(json, null, 2) + "\n", "utf8");
   return true;
 }
 function configureTomlCodex({ configPath, serverScript, nodePath, env = null }) {
-  const dir = path11.dirname(configPath);
-  fs11.mkdirSync(dir, { recursive: true });
-  let content = fs11.existsSync(configPath) ? fs11.readFileSync(configPath, "utf8") : "";
+  const dir = path14.dirname(configPath);
+  fs14.mkdirSync(dir, { recursive: true });
+  let content = fs14.existsSync(configPath) ? fs14.readFileSync(configPath, "utf8") : "";
   const sectionHeader = "[mcp_servers.contextos]";
   const startIndex = content.indexOf(sectionHeader);
   if (startIndex !== -1) {
@@ -47733,36 +49528,36 @@ args = ["--no-warnings=ExperimentalWarning", "${safeServerScript}"]
 `;
     }
   }
-  fs11.writeFileSync(configPath, (content + tomlBlock).trim() + "\n", "utf8");
+  fs14.writeFileSync(configPath, (content + tomlBlock).trim() + "\n", "utf8");
 }
 function cleanTomlCodex({ configPath }) {
-  if (!fs11.existsSync(configPath)) return;
-  let content = fs11.readFileSync(configPath, "utf8");
+  if (!fs14.existsSync(configPath)) return;
+  let content = fs14.readFileSync(configPath, "utf8");
   const regex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
   content = content.replace(regex, "");
-  fs11.writeFileSync(configPath, content.trim() + "\n", "utf8");
+  fs14.writeFileSync(configPath, content.trim() + "\n", "utf8");
 }
 function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
-  const userPluginsContextOS = path11.join(HOME, "plugins", "contextos");
-  const personalMarketplaceDir = path11.join(HOME, ".agents", "plugins");
-  const personalMarketplaceURL = path11.join(personalMarketplaceDir, "marketplace.json");
-  const codexConfigURL = path11.join(HOME, ".codex", "config.toml");
-  if (pluginSource && fs11.existsSync(pluginSource)) {
+  const userPluginsContextOS = path14.join(HOME, "plugins", "contextos");
+  const personalMarketplaceDir = path14.join(HOME, ".agents", "plugins");
+  const personalMarketplaceURL = path14.join(personalMarketplaceDir, "marketplace.json");
+  const codexConfigURL = path14.join(HOME, ".codex", "config.toml");
+  if (pluginSource && fs14.existsSync(pluginSource)) {
     try {
-      fs11.rmSync(userPluginsContextOS, { recursive: true, force: true });
+      fs14.rmSync(userPluginsContextOS, { recursive: true, force: true });
     } catch (_) {
     }
     copyDirectoryRecursive(pluginSource, userPluginsContextOS);
-  } else if (!fs11.existsSync(userPluginsContextOS)) {
-    fs11.mkdirSync(path11.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
-    fs11.mkdirSync(path11.join(userPluginsContextOS, "server"), { recursive: true });
-    fs11.copyFileSync(serverScript, path11.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
+  } else if (!fs14.existsSync(userPluginsContextOS)) {
+    fs14.mkdirSync(path14.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
+    fs14.mkdirSync(path14.join(userPluginsContextOS, "server"), { recursive: true });
+    fs14.copyFileSync(serverScript, path14.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
   }
-  fs11.mkdirSync(personalMarketplaceDir, { recursive: true });
+  fs14.mkdirSync(personalMarketplaceDir, { recursive: true });
   let marketplaces = [];
-  if (fs11.existsSync(personalMarketplaceURL)) {
+  if (fs14.existsSync(personalMarketplaceURL)) {
     try {
-      const parsed = JSON.parse(fs11.readFileSync(personalMarketplaceURL, "utf8"));
+      const parsed = JSON.parse(fs14.readFileSync(personalMarketplaceURL, "utf8"));
       marketplaces = Array.isArray(parsed) ? parsed : [parsed];
     } catch (_) {
     }
@@ -47781,7 +49576,7 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   };
   const filtered = marketplaces.filter((m) => m.name !== "personal");
   filtered.push(personalEntry);
-  fs11.writeFileSync(
+  fs14.writeFileSync(
     personalMarketplaceURL,
     JSON.stringify(filtered.length === 1 ? filtered[0] : filtered, null, 2) + "\n",
     "utf8"
@@ -47791,10 +49586,10 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   if (codexBin) {
     try {
       try {
-        execSync4(`"${codexBin}" plugin remove contextos@personal --json`, { stdio: "ignore" });
+        execSync3(`"${codexBin}" plugin remove contextos@personal --json`, { stdio: "ignore" });
       } catch (_) {
       }
-      execSync4(`"${codexBin}" plugin add contextos@personal --json`, { stdio: "pipe" });
+      execSync3(`"${codexBin}" plugin add contextos@personal --json`, { stdio: "pipe" });
       installedViaCli = true;
     } catch (_) {
     }
@@ -47811,23 +49606,23 @@ function detectInstalledPlatforms() {
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
   const platforms = [];
-  const localAppData = isWin ? process.env.LOCALAPPDATA || path11.join(HOME, "AppData\\Local") : "";
-  const appData = isWin ? process.env.APPDATA || path11.join(HOME, "AppData\\Roaming") : "";
+  const localAppData = isWin ? process.env.LOCALAPPDATA || path14.join(HOME, "AppData\\Local") : "";
+  const appData = isWin ? process.env.APPDATA || path14.join(HOME, "AppData\\Roaming") : "";
   let claudeConfigPath = "";
   if (isMac) {
-    claudeConfigPath = path11.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
+    claudeConfigPath = path14.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
   } else if (isWin) {
-    claudeConfigPath = path11.join(appData, "Claude\\claude_desktop_config.json");
+    claudeConfigPath = path14.join(appData, "Claude\\claude_desktop_config.json");
   } else {
-    claudeConfigPath = path11.join(HOME, ".config/Claude/claude_desktop_config.json");
+    claudeConfigPath = path14.join(HOME, ".config/Claude/claude_desktop_config.json");
   }
   let claudeAppExists = false;
   if (isMac) {
-    claudeAppExists = fs11.existsSync("/Applications/Claude.app") || fs11.existsSync(path11.join(HOME, "Applications/Claude.app")) || fs11.existsSync(path11.dirname(claudeConfigPath));
+    claudeAppExists = fs14.existsSync("/Applications/Claude.app") || fs14.existsSync(path14.join(HOME, "Applications/Claude.app")) || fs14.existsSync(path14.dirname(claudeConfigPath));
   } else if (isWin) {
-    claudeAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Claude\\Claude.exe")) || fs11.existsSync(path11.dirname(claudeConfigPath));
+    claudeAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\Claude\\Claude.exe")) || fs14.existsSync(path14.dirname(claudeConfigPath));
   } else {
-    claudeAppExists = fs11.existsSync("/usr/bin/claude") || fs11.existsSync("/snap/bin/claude") || fs11.existsSync(path11.dirname(claudeConfigPath));
+    claudeAppExists = fs14.existsSync("/usr/bin/claude") || fs14.existsSync("/snap/bin/claude") || fs14.existsSync(path14.dirname(claudeConfigPath));
   }
   platforms.push({
     id: "claude",
@@ -47836,71 +49631,71 @@ function detectInstalledPlatforms() {
     configPath: claudeConfigPath,
     type: "json"
   });
-  const cursorDir = path11.join(HOME, ".cursor");
+  const cursorDir = path14.join(HOME, ".cursor");
   let cursorAppExists = false;
   if (isMac) {
-    cursorAppExists = fs11.existsSync("/Applications/Cursor.app") || fs11.existsSync(path11.join(HOME, "Applications/Cursor.app")) || fs11.existsSync(cursorDir);
+    cursorAppExists = fs14.existsSync("/Applications/Cursor.app") || fs14.existsSync(path14.join(HOME, "Applications/Cursor.app")) || fs14.existsSync(cursorDir);
   } else if (isWin) {
-    cursorAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\cursor\\Cursor.exe")) || fs11.existsSync(cursorDir);
+    cursorAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\cursor\\Cursor.exe")) || fs14.existsSync(cursorDir);
   } else {
-    cursorAppExists = fs11.existsSync("/usr/bin/cursor") || fs11.existsSync("/opt/Cursor/cursor") || fs11.existsSync(path11.join(HOME, ".local/share/cursor")) || fs11.existsSync(cursorDir);
+    cursorAppExists = fs14.existsSync("/usr/bin/cursor") || fs14.existsSync("/opt/Cursor/cursor") || fs14.existsSync(path14.join(HOME, ".local/share/cursor")) || fs14.existsSync(cursorDir);
   }
   platforms.push({
     id: "cursor",
     name: "Cursor",
     isInstalled: cursorAppExists,
-    configPath: path11.join(cursorDir, "mcp.json"),
-    skillPath: path11.join(cursorDir, "skills", "contextos"),
+    configPath: path14.join(cursorDir, "mcp.json"),
+    skillPath: path14.join(cursorDir, "skills", "contextos"),
     type: "json"
   });
-  const geminiDir = path11.join(HOME, ".gemini/config");
+  const geminiDir = path14.join(HOME, ".gemini/config");
   let antigravityAppExists = false;
   if (isMac) {
-    antigravityAppExists = fs11.existsSync("/Applications/Antigravity.app") || fs11.existsSync(path11.join(HOME, "Applications/Antigravity.app")) || fs11.existsSync(geminiDir);
+    antigravityAppExists = fs14.existsSync("/Applications/Antigravity.app") || fs14.existsSync(path14.join(HOME, "Applications/Antigravity.app")) || fs14.existsSync(geminiDir);
   } else if (isWin) {
-    antigravityAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Antigravity\\Antigravity.exe")) || fs11.existsSync(geminiDir);
+    antigravityAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\Antigravity\\Antigravity.exe")) || fs14.existsSync(geminiDir);
   } else {
-    antigravityAppExists = fs11.existsSync("/usr/bin/antigravity") || fs11.existsSync(path11.join(HOME, ".local/share/antigravity")) || fs11.existsSync(geminiDir);
+    antigravityAppExists = fs14.existsSync("/usr/bin/antigravity") || fs14.existsSync(path14.join(HOME, ".local/share/antigravity")) || fs14.existsSync(geminiDir);
   }
   platforms.push({
     id: "antigravity",
     name: "Antigravity",
     isInstalled: antigravityAppExists,
-    configPath: path11.join(geminiDir, "mcp_config.json"),
-    skillPath: path11.join(geminiDir, "skills", "contextos"),
+    configPath: path14.join(geminiDir, "mcp_config.json"),
+    skillPath: path14.join(geminiDir, "skills", "contextos"),
     type: "json"
   });
-  const opencodeDir = path11.join(HOME, ".config/opencode");
+  const opencodeDir = path14.join(HOME, ".config/opencode");
   let opencodeAppExists = false;
   if (isMac) {
-    opencodeAppExists = fs11.existsSync("/Applications/OpenCode.app") || fs11.existsSync(path11.join(HOME, "Applications/OpenCode.app")) || fs11.existsSync(opencodeDir);
+    opencodeAppExists = fs14.existsSync("/Applications/OpenCode.app") || fs14.existsSync(path14.join(HOME, "Applications/OpenCode.app")) || fs14.existsSync(opencodeDir);
   } else if (isWin) {
-    opencodeAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\OpenCode\\OpenCode.exe")) || fs11.existsSync(opencodeDir);
+    opencodeAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\OpenCode\\OpenCode.exe")) || fs14.existsSync(opencodeDir);
   } else {
-    opencodeAppExists = fs11.existsSync("/usr/bin/opencode") || fs11.existsSync(path11.join(HOME, ".local/share/opencode")) || fs11.existsSync(opencodeDir);
+    opencodeAppExists = fs14.existsSync("/usr/bin/opencode") || fs14.existsSync(path14.join(HOME, ".local/share/opencode")) || fs14.existsSync(opencodeDir);
   }
   platforms.push({
     id: "opencode",
     name: "OpenCode",
     isInstalled: opencodeAppExists,
-    configPath: path11.join(opencodeDir, "mcp.json"),
-    skillPath: path11.join(opencodeDir, "skills", "contextos"),
+    configPath: path14.join(opencodeDir, "mcp.json"),
+    skillPath: path14.join(opencodeDir, "skills", "contextos"),
     type: "json"
   });
-  const codexDir = path11.join(HOME, ".codex");
+  const codexDir = path14.join(HOME, ".codex");
   let codexAppExists = false;
   if (isMac) {
-    codexAppExists = fs11.existsSync("/Applications/ChatGPT.app") || fs11.existsSync("/Applications/Codex.app") || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+    codexAppExists = fs14.existsSync("/Applications/ChatGPT.app") || fs14.existsSync("/Applications/Codex.app") || fs14.existsSync(codexDir) || fs14.existsSync(path14.join(HOME, ".agents/plugins"));
   } else if (isWin) {
-    codexAppExists = fs11.existsSync(path11.join(localAppData, "Programs\\Codex\\Codex.exe")) || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+    codexAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\Codex\\Codex.exe")) || fs14.existsSync(codexDir) || fs14.existsSync(path14.join(HOME, ".agents/plugins"));
   } else {
-    codexAppExists = fs11.existsSync("/usr/bin/codex") || fs11.existsSync(path11.join(HOME, ".local/bin/codex")) || fs11.existsSync(codexDir) || fs11.existsSync(path11.join(HOME, ".agents/plugins"));
+    codexAppExists = fs14.existsSync("/usr/bin/codex") || fs14.existsSync(path14.join(HOME, ".local/bin/codex")) || fs14.existsSync(codexDir) || fs14.existsSync(path14.join(HOME, ".agents/plugins"));
   }
   platforms.push({
     id: "codex",
     name: "Codex",
     isInstalled: codexAppExists,
-    configPath: path11.join(codexDir, "config.toml"),
+    configPath: path14.join(codexDir, "config.toml"),
     type: "codex-plugin"
   });
   return platforms;
@@ -47930,7 +49725,7 @@ function syncAllPlatforms({
       modified.push(resultName);
       continue;
     }
-    if (platform.skillPath && skillSource && fs11.existsSync(skillSource)) {
+    if (platform.skillPath && skillSource && fs14.existsSync(skillSource)) {
       copyDirectoryRecursive(skillSource, platform.skillPath);
     }
     if (platform.type === "json") {
@@ -47948,10 +49743,10 @@ function syncAllPlatforms({
     const shouldSyncAntigravity = !selectedPlatforms || selectedPlatforms.includes("antigravity");
     const shouldSyncOpencode = !selectedPlatforms || selectedPlatforms.includes("opencode");
     if (shouldSyncCursor) {
-      const wsCursor = path11.join(targetRoot, ".cursor");
-      if (fs11.existsSync(wsCursor)) {
+      const wsCursor = path14.join(targetRoot, ".cursor");
+      if (fs14.existsSync(wsCursor)) {
         configureJsonMcp({
-          configPath: path11.join(wsCursor, "mcp.json"),
+          configPath: path14.join(wsCursor, "mcp.json"),
           serverScript,
           nodePath,
           env
@@ -47960,10 +49755,10 @@ function syncAllPlatforms({
       }
     }
     if (shouldSyncAntigravity) {
-      const wsAgents = path11.join(targetRoot, ".agents");
-      if (fs11.existsSync(wsAgents)) {
+      const wsAgents = path14.join(targetRoot, ".agents");
+      if (fs14.existsSync(wsAgents)) {
         configureJsonMcp({
-          configPath: path11.join(wsAgents, "mcp_config.json"),
+          configPath: path14.join(wsAgents, "mcp_config.json"),
           serverScript,
           nodePath,
           env
@@ -47972,10 +49767,10 @@ function syncAllPlatforms({
       }
     }
     if (shouldSyncOpencode) {
-      const wsOpencode = path11.join(targetRoot, ".opencode");
-      if (fs11.existsSync(wsOpencode)) {
+      const wsOpencode = path14.join(targetRoot, ".opencode");
+      if (fs14.existsSync(wsOpencode)) {
         configureJsonMcp({
-          configPath: path11.join(wsOpencode, "mcp.json"),
+          configPath: path14.join(wsOpencode, "mcp.json"),
           serverScript,
           nodePath,
           env
@@ -47987,41 +49782,41 @@ function syncAllPlatforms({
   return modified;
 }
 function getGlobalCloudConfig() {
-  const globalCloudPath = path11.join(HOME, ".contextos", "cloud.json");
-  if (fs11.existsSync(globalCloudPath)) {
+  const globalCloudPath = path14.join(HOME, ".contextos", "cloud.json");
+  if (fs14.existsSync(globalCloudPath)) {
     try {
-      return JSON.parse(fs11.readFileSync(globalCloudPath, "utf8"));
+      return JSON.parse(fs14.readFileSync(globalCloudPath, "utf8"));
     } catch (_) {
     }
   }
   return null;
 }
 function saveGlobalCloudConfig({ cloudUrl, token }) {
-  const dotContextos = path11.join(HOME, ".contextos");
-  fs11.mkdirSync(dotContextos, { recursive: true });
-  const globalCloudPath = path11.join(dotContextos, "cloud.json");
+  const dotContextos = path14.join(HOME, ".contextos");
+  fs14.mkdirSync(dotContextos, { recursive: true });
+  const globalCloudPath = path14.join(dotContextos, "cloud.json");
   const config2 = {
     cloudUrl: cloudUrl ? cloudUrl.replace(/\/+$/, "") : "",
     token: token || "",
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  fs11.writeFileSync(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", "utf8");
+  fs14.writeFileSync(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", "utf8");
   return config2;
 }
 function initProjectWorkspace({
   projectRoot = process.cwd(),
   mode = "local",
   cloudUrl = "",
-  token = "",
+  token: _token = "",
   projectId = "contextos"
 }) {
-  const dotContextos = path11.join(projectRoot, ".contextos");
-  fs11.mkdirSync(dotContextos, { recursive: true });
-  const projectJsonPath = path11.join(dotContextos, "project.json");
+  const dotContextos = path14.join(projectRoot, ".contextos");
+  fs14.mkdirSync(dotContextos, { recursive: true });
+  const projectJsonPath = path14.join(dotContextos, "project.json");
   let existing = {};
-  if (fs11.existsSync(projectJsonPath)) {
+  if (fs14.existsSync(projectJsonPath)) {
     try {
-      existing = JSON.parse(fs11.readFileSync(projectJsonPath, "utf8"));
+      existing = JSON.parse(fs14.readFileSync(projectJsonPath, "utf8"));
     } catch (_) {
     }
   }
@@ -48035,31 +49830,108 @@ function initProjectWorkspace({
     createdAt: existing.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
+  delete projectConfig.token;
+  delete projectConfig.cloudToken;
   if (isCloud) {
     if (cloudUrl) projectConfig.cloudUrl = cloudUrl.replace(/\/+$/, "");
-    if (token) projectConfig.token = token;
   } else {
     delete projectConfig.cloudUrl;
     delete projectConfig.token;
   }
-  fs11.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n", "utf8");
+  fs14.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n", "utf8");
   return projectConfig;
+}
+
+// packages/mcp/src/admin-cli.mjs
+import path15 from "node:path";
+import fs15 from "node:fs";
+function parseArgs(tokens) {
+  const options = {};
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token.startsWith("--")) continue;
+    const key = token.slice(2).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    const next = tokens[index + 1];
+    if (next === void 0 || next.startsWith("--")) {
+      options[key] = true;
+      continue;
+    }
+    options[key] = next;
+    index += 1;
+  }
+  for (const key of ["paths"]) {
+    if (!options[key]) continue;
+    try {
+      options[key] = JSON.parse(options[key]);
+    } catch (_) {
+      options[key] = String(options[key]).split(",").map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  if (options.ttlDays !== void 0) options.ttlDays = Number(options.ttlDays);
+  if (options.dryRun !== void 0) options.dryRun = options.dryRun !== "false";
+  if (options.purge !== void 0) options.purge = options.purge !== "false";
+  return options;
+}
+function writeJson(value) {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}
+`);
+}
+async function runAdminCli(argv = process.argv.slice(2)) {
+  const [command, ...tokens] = argv;
+  if (!command || command === "help" || command === "--help") {
+    process.stdout.write(
+      [
+        "Usage: contextos-mcp.mjs <command> [options]",
+        "  sync",
+        "  context"
+      ].join("\n") + "\n"
+    );
+    return 0;
+  }
+  const options = parseArgs(tokens);
+  const projectRoot = path15.resolve(options.projectRoot || process.cwd());
+  delete options.projectRoot;
+  let projectId = options.projectId;
+  delete options.projectId;
+  if (!projectId) {
+    try {
+      const projectConfig = JSON.parse(
+        fs15.readFileSync(path15.join(projectRoot, ".contextos", "project.json"), "utf8")
+      );
+      projectId = projectConfig.id;
+    } catch (_) {
+    }
+  }
+  const service = new ContextOSV2Service({ projectRoot, projectId: projectId || "contextos" });
+  try {
+    if (command === "sync" || command === "reconcile" || command === "context") {
+      const result = await service.osContext({ action: "reconcile", format: "json" });
+      writeJson({ ok: true, command: "sync", result });
+      return 0;
+    }
+    throw new Error(`Unknown admin command: ${command}`);
+  } catch (err2) {
+    writeJson({ ok: false, command, error: err2.message });
+    return 1;
+  } finally {
+    service.close({ stopProcesses: false });
+  }
 }
 
 // packages/mcp/src/v2-server.mjs
 var serviceCache = /* @__PURE__ */ new Map();
 function findDefaultProjectRoot() {
-  if (process.env.CONTEXTOS_PROJECT_ROOT && fs12.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
+  if (process.env.CONTEXTOS_PROJECT_ROOT && fs16.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
     return process.env.CONTEXTOS_PROJECT_ROOT;
   }
   let cur = process.cwd();
-  while (cur && cur !== path12.dirname(cur)) {
-    if (fs12.existsSync(path12.join(cur, ".contextos")) || fs12.existsSync(path12.join(cur, ".git")) || fs12.existsSync(path12.join(cur, "package.json"))) {
+  while (cur && cur !== path16.dirname(cur)) {
+    if (fs16.existsSync(path16.join(cur, ".contextos")) || fs16.existsSync(path16.join(cur, ".git")) || fs16.existsSync(path16.join(cur, "package.json"))) {
       return cur;
     }
-    cur = path12.dirname(cur);
+    cur = path16.dirname(cur);
   }
-  if (cur && (fs12.existsSync(path12.join(cur, ".contextos")) || fs12.existsSync(path12.join(cur, ".git")) || fs12.existsSync(path12.join(cur, "package.json")))) {
+  if (cur && (fs16.existsSync(path16.join(cur, ".contextos")) || fs16.existsSync(path16.join(cur, ".git")) || fs16.existsSync(path16.join(cur, "package.json")))) {
     return cur;
   }
   return process.cwd();
@@ -48070,16 +49942,16 @@ function getService(projectRoot) {
   let cloudUrl = null;
   let token = null;
   let projectId = "contextos";
-  const projJsonPath = path12.join(root, ".contextos", "project.json");
-  if (fs12.existsSync(projJsonPath)) {
+  const projJsonPath = path16.join(root, ".contextos", "project.json");
+  if (fs16.existsSync(projJsonPath)) {
     try {
-      const proj = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
+      const proj = JSON.parse(fs16.readFileSync(projJsonPath, "utf8"));
       if (proj.id) projectId = proj.id;
       if (proj.storage === "cloud" || proj.isCloud === true) {
         mode = "cloud";
         const globalCloud = getGlobalCloudConfig();
         cloudUrl = proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
-        token = proj.token || proj.cloudToken || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
+        token = globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
       } else if (proj.storage === "local" || proj.isCloud === false) {
         mode = "local";
       }
@@ -48119,7 +49991,7 @@ function textResult(content) {
 }
 function createV2Server() {
   const server = new McpServer(
-    { name: "contextos", version: "2.1.0" },
+    { name: "contextos", version: "2.3.0" },
     {
       instructions: "ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub."
     }
@@ -48168,13 +50040,20 @@ function createV2Server() {
     {
       description: "C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.",
       inputSchema: {
-        action: _enum(["create", "open", "note", "check", "sync", "resume", "activate", "develop"]),
+        action: _enum(["create", "open", "note", "check", "sync", "resume", "activate", "develop", "bind_rule", "unbind_rule", "update", "probe", "graduate_probe", "reconcile"]),
         id: string2().optional(),
         taskData: record(any()).optional(),
+        ruleId: string2().optional(),
+        rules: array(string2()).optional(),
         text: string2().optional(),
         kind: string2().optional(),
         checkData: record(any()).optional(),
         syncData: record(any()).optional(),
+        hypothesis: string2().optional(),
+        script: string2().optional(),
+        findings: string2().optional(),
+        targetBlockId: string2().optional(),
+        files: array(string2()).optional(),
         format: _enum(["markdown", "json"]).default("markdown"),
         projectRoot: string2().optional()
       }
@@ -48188,10 +50067,15 @@ function createV2Server() {
   server.registerTool(
     "block",
     {
-      description: "Manage code functional Blocks. Blocks MUST bind to real code artifacts; ghost blocks are strictly rejected.",
+      description: "Manage code functional Blocks. Blocks bind to real files, AST symbols, or directory trees; ghost blocks are rejected. Use bind_auto for symbols and dependency/resource directories.",
       inputSchema: {
-        action: _enum(["list", "open", "search", "bind", "delete"]),
+        action: _enum(["list", "open", "search", "bind", "bind_auto", "delete"]),
         id: string2().optional(),
+        path: string2().optional(),
+        paths: array(string2()).optional(),
+        symbols: array(string2()).optional(),
+        hashMode: _enum(["content", "manifest"]).optional(),
+        manifest: string2().optional(),
         query: string2().optional(),
         blockData: record(any()).optional(),
         format: _enum(["markdown", "json"]).default("markdown"),
@@ -48363,8 +50247,8 @@ function createV2Server() {
           };
           if (resolvedToken) env.CONTEXTOS_CLOUD_TOKEN = resolvedToken;
         }
-        const skillSource = path12.join(findDefaultProjectRoot(), "plugins", "contextos", "skills", "contextos");
-        const pluginSource = path12.join(findDefaultProjectRoot(), "plugins", "contextos");
+        const skillSource = path16.join(findDefaultProjectRoot(), "plugins", "contextos", "skills", "contextos");
+        const pluginSource = path16.join(findDefaultProjectRoot(), "plugins", "contextos");
         const modified = syncAllPlatforms({
           serverScript,
           nodePath,
@@ -48396,11 +50280,11 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
       const root = input.projectRoot || findDefaultProjectRoot();
       const nodePath = resolveNodeExecutable();
       let nodeVer = process.version;
-      const projJsonPath = path12.join(root, ".contextos", "project.json");
+      const projJsonPath = path16.join(root, ".contextos", "project.json");
       let projectConfig = null;
-      if (fs12.existsSync(projJsonPath)) {
+      if (fs16.existsSync(projJsonPath)) {
         try {
-          projectConfig = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
+          projectConfig = JSON.parse(fs16.readFileSync(projJsonPath, "utf8"));
         } catch (_) {
         }
       }
@@ -48412,7 +50296,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
       if (mode.startsWith("cloud") && cloudUrl !== "N/A") {
         try {
           const res = await fetch(`${cloudUrl.replace(/\/+$/, "")}/api/v2/health`, {
-            headers: projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN ? { Authorization: `Bearer ${projectConfig?.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` } : {}
+            headers: globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN ? { Authorization: `Bearer ${globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` } : {}
           });
           cloudHealth = res.ok ? "\u{1F7E2} Connected (200 OK)" : `\u{1F534} HTTP ${res.status}`;
         } catch (err2) {
@@ -48451,25 +50335,25 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
     },
     async (input) => {
       const root = input.projectRoot || findDefaultProjectRoot();
-      const dotContextos = path12.join(root, ".contextos");
-      const projJsonPath = path12.join(dotContextos, "project.json");
+      const dotContextos = path16.join(root, ".contextos");
+      const projJsonPath = path16.join(dotContextos, "project.json");
       let proj = {};
-      if (fs12.existsSync(projJsonPath)) {
+      if (fs16.existsSync(projJsonPath)) {
         try {
-          proj = JSON.parse(fs12.readFileSync(projJsonPath, "utf8"));
+          proj = JSON.parse(fs16.readFileSync(projJsonPath, "utf8"));
         } catch (_) {
         }
       }
       const globalCloud = getGlobalCloudConfig();
       const resolvedCloudUrl = input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL;
-      const resolvedToken = input.token || proj.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN;
+      const resolvedToken = input.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN;
       const pid = input.projectId || proj.id || "contextos";
       if (input.targetMode === "cloud") {
         if (!resolvedCloudUrl) {
           throw new Error("Switching to cloud requires a cloudUrl. Provide cloudUrl or configure global credentials via ~/.contextos/cloud.json.");
         }
         let localSnapshot = { blocks: [], chains: [], links: [], plans: [], tasks: [] };
-        if (fs12.existsSync(dbPath)) {
+        if (fs16.existsSync(dbPath)) {
           try {
             const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
             const blocks = localService.db.listBlocks(pid);
@@ -48491,9 +50375,10 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         proj.storage = "cloud";
         proj.isCloud = true;
         proj.cloudUrl = resolvedCloudUrl.replace(/\/+$/, "");
-        if (resolvedToken) proj.token = resolvedToken;
+        delete proj.token;
+        delete proj.cloudToken;
         proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        fs12.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+        fs16.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
         for (const k of Array.from(serviceCache.keys())) {
           if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
             try {
@@ -48580,7 +50465,9 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
               localService.close();
             }
           } catch (e) {
-            console.warn("[ContextOS Switch] Could not pull cloud snapshot before switching to local:", e.message);
+            throw new Error(
+              `Cannot switch to local because the cloud snapshot could not be pulled: ${e.message}`
+            );
           }
         }
         proj.storage = "local";
@@ -48588,7 +50475,7 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         delete proj.cloudUrl;
         delete proj.token;
         proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        fs12.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+        fs16.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
         for (const k of Array.from(serviceCache.keys())) {
           if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
             try {
@@ -48609,12 +50496,19 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
   return server;
 }
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const server = createV2Server();
-  const transport = new StdioServerTransport();
-  server.connect(transport).catch((err2) => {
-    console.error("Fatal MCP Server error:", err2);
-    process.exit(1);
-  });
+  const cliArgs = process.argv.slice(2);
+  if (cliArgs.length > 0) {
+    runAdminCli(cliArgs).then((code2) => {
+      process.exitCode = code2;
+    });
+  } else {
+    const server = createV2Server();
+    const transport = new StdioServerTransport();
+    server.connect(transport).catch((err2) => {
+      console.error("Fatal MCP Server error:", err2);
+      process.exit(1);
+    });
+  }
 }
 export {
   createV2Server

@@ -387,9 +387,13 @@ final class ProjectDatabase {
                 id: row.text("id"),
                 blockId: row.text("block_id"),
                 path: row.text("path"),
+                anchorKind: "symbol",
                 startLine: row.optionalInt("start_line"),
                 endLine: row.optionalInt("end_line"),
                 symbol: row.optionalText("symbol"),
+                hash: "",
+                hashMode: nil,
+                manifest: nil,
                 role: row.text("role"),
                 gitCommit: row.optionalText("git_commit")
             )
@@ -619,19 +623,22 @@ final class ProjectDatabase {
             }
         }
 
-        let sourceReferences = try rows("SELECT id, block_id, path, symbol, start_line, end_line, role FROM artifact_refs ORDER BY path, start_line", bindings: []).map { row in
+        let sourceReferences = try rows("SELECT id, block_id, path, symbol, anchor_kind, hash, hash_mode, manifest, start_line, end_line, role FROM artifact_refs ORDER BY path, start_line", bindings: []).map { row in
             SourceReference(
                 id: row.text("id"),
                 blockId: row.text("block_id"),
                 path: row.text("path"),
+                anchorKind: row.optionalText("anchor_kind") ?? (row.optionalText("symbol") == nil ? "file" : "symbol"),
                 startLine: row.optionalInt("start_line"),
                 endLine: row.optionalInt("end_line"),
                 symbol: row.optionalText("symbol"),
+                hash: row.text("hash"),
+                hashMode: row.optionalText("hash_mode"),
+                manifest: row.optionalText("manifest"),
                 role: row.text("role"),
                 gitCommit: nil
             )
         }
-
         let planSteps = (try? rows("SELECT id, plan_id, phase_order, objective, scope, deliverables_json, status, acceptance_json FROM phases WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?) ORDER BY phase_order ASC", bindings: [project.id]))?.map { row in
             PlanStep(
                 id: row.text("id"),

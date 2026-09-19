@@ -16,13 +16,14 @@ execSync('npm run plugin:build', { cwd: repoRoot, stdio: 'inherit' });
 
 // 2. Build Swift Desktop App in release mode
 console.log('🔨 Step 2/5: Compiling Swift Desktop App (release mode)...');
-const releaseBinaryPath = path.join(repoRoot, 'apps/desktop/.build/arm64-apple-macosx/release/contextos-desktop');
+execSync('swift build --package-path apps/desktop -c release', { cwd: repoRoot, stdio: 'inherit' });
+const swiftBinDir = execSync('swift build --package-path apps/desktop -c release --show-bin-path', { cwd: repoRoot, encoding: 'utf8' }).trim();
+const releaseBinaryPath = path.join(swiftBinDir, 'contextos-desktop');
 if (!fs.existsSync(releaseBinaryPath)) {
-  execSync('swift build --package-path apps/desktop -c release', { cwd: repoRoot, stdio: 'inherit' });
-} else {
-  console.log(`   Found existing release binary (${(fs.statSync(releaseBinaryPath).size / 1024 / 1024).toFixed(2)} MB). Re-verifying...`);
-  execSync('swift build --package-path apps/desktop -c release', { cwd: repoRoot, stdio: 'inherit' });
+  throw new Error(`Compiled desktop binary not found at: ${releaseBinaryPath}`);
 }
+console.log(`   Compiled fresh release binary (${(fs.statSync(releaseBinaryPath).size / 1024 / 1024).toFixed(2)} MB) at ${releaseBinaryPath}`);
+
 
 // 2.5 Ensure standalone Node runtime is ready
 console.log('📦 Step 2.5/5: Preparing bundled standalone Node runtime...');
@@ -148,13 +149,28 @@ fs.copyFileSync(zipFullV, zipFullLatest);
 const fullZipStats = fs.statSync(zipFullV);
 const appStats = fs.statSync(targetBinary);
 
+// 6. Provide Capitalized Release Names and Checksums for GitHub Releases
+const capStandardZip = path.join(distDir, 'ContextOS-macos.zip');
+const capFullZip = path.join(distDir, 'ContextOS-macos-full.zip');
+fs.copyFileSync(zipStandardLatest, capStandardZip);
+fs.copyFileSync(zipFullLatest, capFullZip);
+
+// Copy MCP standalone bundle for direct release download
+const mcpReleaseBundle = path.join(distDir, 'contextos-mcp.mjs');
+fs.copyFileSync(path.join(repoRoot, 'plugins/contextos/server/contextos-mcp.mjs'), mcpReleaseBundle);
+
+// Generate SHA256SUMS
+console.log('🔒 Step 6/6: Generating SHA256SUMS checksums...');
+execSync('shasum -a 256 ContextOS-macos.zip ContextOS-macos-full.zip contextos-mcp.mjs > SHA256SUMS', { cwd: distDir, stdio: 'inherit' });
+
 console.log('\n========================================');
 console.log('🎉 ContextOS macOS Dual Release Packaging Complete!');
 console.log(`📦 Application:       dist/ContextOS.app (Full standalone with bundled Node 22)`);
 console.log(`⚙️  Native Binary:     ContextOS (${(appStats.size / 1024 / 1024).toFixed(2)} MB)`);
 console.log(`🏷️  Version:           ${pkgVersion}`);
-console.log(`🤐 Standard Archive:  dist/contextos-macos.zip (${(standardZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
-console.log(`                      dist/contextos-macos-v${pkgVersion}.zip`);
-console.log(`🤐 Full Archive:      dist/contextos-macos-full.zip (${(fullZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
-console.log(`                      dist/contextos-macos-full-v${pkgVersion}.zip`);
+console.log(`🤐 Standard Archive:  dist/ContextOS-macos.zip (${(standardZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`🤐 Full Archive:      dist/ContextOS-macos-full.zip (${(fullZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`📜 MCP Server:        dist/contextos-mcp.mjs`);
+console.log(`🔑 Checksums:         dist/SHA256SUMS`);
 console.log('========================================\n');
+

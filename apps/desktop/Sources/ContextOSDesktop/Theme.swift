@@ -2,10 +2,24 @@ import AppKit
 import SwiftUI
 
 enum ContextOSTheme {
-    // AppKit semantic colors resolve dynamically against the window's
-    // active appearance, so light/dark mode and system themes update cleanly.
-    static var canvas: Color { Color(nsColor: NSColor.controlBackgroundColor) }
-    static var surface: Color { Color(nsColor: NSColor.windowBackgroundColor) }
+    // Keep the neutral workspace independent from AppKit's SDK-dependent
+    // semantic gray values while still adapting to light and dark mode.
+    private static func adaptiveNeutral(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil, dynamicProvider: { appearance in
+            let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+            return match == .darkAqua ? dark : light
+        }))
+    }
+
+    static var canvas: Color {
+        adaptiveNeutral(light: .white, dark: NSColor(white: 0.10, alpha: 1))
+    }
+    static var surface: Color {
+        adaptiveNeutral(light: .white, dark: NSColor(white: 0.13, alpha: 1))
+    }
+    static var card: Color {
+        adaptiveNeutral(light: .white, dark: NSColor(white: 0.17, alpha: 1))
+    }
     static var ink: Color { Color(nsColor: NSColor.labelColor) }
     static var muted: Color { Color(nsColor: NSColor.secondaryLabelColor) }
     static var hairline: Color { Color(nsColor: NSColor.separatorColor) }

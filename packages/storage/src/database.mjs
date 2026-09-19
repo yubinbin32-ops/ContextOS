@@ -10,25 +10,135 @@ export class V2Database {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
     }
     this.db = new DatabaseSync(filePath);
+    this.transactionDepth = 0;
     this.init();
   }
 
   init() {
     this.db.exec('PRAGMA journal_mode = WAL;');
+    this.db.exec('PRAGMA busy_timeout = 5000;');
     this.db.exec('PRAGMA foreign_keys = ON;');
     this.db.exec(V2_SQL_SCHEMA);
+    this._ensureSchemaMigrations();
+  }
+
+  _ensureSchemaMigrations() {
+    const refColumns = this.db.prepare('PRAGMA table_info(artifact_refs)').all();
+    if (!refColumns.some((column) => column.name === 'anchor_kind')) {
+      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN anchor_kind TEXT NOT NULL DEFAULT 'symbol';");
+    }
+    if (!refColumns.some((column) => column.name === 'hash_mode')) {
+      this.db.exec('ALTER TABLE artifact_refs ADD COLUMN hash_mode TEXT;');
+    }
+    if (!refColumns.some((column) => column.name === 'manifest')) {
+      this.db.exec('ALTER TABLE artifact_refs ADD COLUMN manifest TEXT;');
+    }
+    this.db.exec(`
+      UPDATE artifact_refs
+      SET anchor_kind = 'file'
+      WHERE anchor_kind = 'symbol'
+        AND (symbol IS NULL OR TRIM(symbol) = '')
+    `);
+
+    const receiptColumns = this.db.prepare('PRAGMA table_info(command_receipts)').all();
+    if (!receiptColumns.some((column) => column.name === 'changed_paths_json')) {
+      this.db.exec("ALTER TABLE command_receipts ADD COLUMN changed_paths_json TEXT NOT NULL DEFAULT '[]';");
+    }
+    if (receiptColumns.some((column) => column.name === 'artifacts_json')) {
+      this.db.exec(`
+        UPDATE command_receipts
+        SET changed_paths_json = artifacts_json
+        WHERE changed_paths_json = '[]' AND artifacts_json != '[]'
+      `);
+    }
+
+    this.db.exec(`
+      DROP TABLE IF EXISTS artifact_links;
+      DROP TABLE IF EXISTS artifact_records;
+      DROP TABLE IF EXISTS build_runs;
+      UPDATE projects SET schema_version = 3;
+    `);
   }
 
   transaction(fn) {
-    this.db.exec('BEGIN TRANSACTION;');
+    if (this.transactionDepth > 0) {
+      this.transactionDepth += 1;
+      try {
+        return fn(this);
+      } finally {
+        this.transactionDepth -= 1;
+      }
+    }
+
+    this.db.exec('BEGIN IMMEDIATE;');
+    this.transactionDepth = 1;
     try {
       const result = fn(this);
       this.db.exec('COMMIT;');
+      this.transactionDepth = 0;
       return result;
     } catch (err) {
-      this.db.exec('ROLLBACK;');
+      try {
+        this.db.exec('ROLLBACK;');
+      } finally {
+        this.transactionDepth = 0;
+      }
       throw err;
     }
+  }
+
+  setGraphExported(projectId, revision, sha256, exportedAt = new Date().toISOString()) {
+    this.transaction((db) => {
+      db.db
+        .prepare('UPDATE projects SET graph_revision = ?, exported_at = ? WHERE id = ?')
+        .run(revision, exportedAt, projectId);
+      db.setSyncState(`last_exported_hash:${projectId}`, sha256);
+      db.db.prepare('DELETE FROM graph_outbox WHERE project_id = ?').run(projectId);
+    });
+  }
+
+  getGraphOutbox(projectId) {
+    const row = this.db.prepare('SELECT * FROM graph_outbox WHERE project_id = ?').get(projectId);
+    if (!row) return null;
+    return {
+      projectId: row.project_id,
+      baseRevision: row.base_revision,
+      targetRevision: row.target_revision,
+      payloadHash: row.payload_hash,
+      payloadJson: row.payload_json,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  saveGraphOutbox(entry) {
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(`
+      INSERT INTO graph_outbox (
+        project_id, base_revision, target_revision, payload_hash, payload_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        base_revision = excluded.base_revision,
+        target_revision = excluded.target_revision,
+        payload_hash = excluded.payload_hash,
+        payload_json = excluded.payload_json,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      entry.projectId,
+      entry.baseRevision,
+      entry.targetRevision,
+      entry.payloadHash,
+      entry.payloadJson,
+      entry.createdAt || now,
+      now
+    );
+    return this.getGraphOutbox(entry.projectId);
+  }
+
+  deleteGraphOutbox(projectId) {
+    this.db.prepare('DELETE FROM graph_outbox WHERE project_id = ?').run(projectId);
+    return true;
   }
 
   close() {
@@ -45,7 +155,7 @@ export class V2Database {
     const existing = this.getProject(projectId);
     if (existing) return existing;
     const stmt = this.db.prepare(
-      'INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, 0, ?, 2)'
+      'INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, 0, ?, 3)'
     );
     stmt.run(projectId, repoRoot, new Date().toISOString());
     return this.getProject(projectId);
@@ -70,12 +180,28 @@ export class V2Database {
 
   // --- Plan ---
   savePlan(plan) {
+    return this.transaction((db) => db._savePlan(plan));
+  }
+
+  _savePlan(plan) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO plans (
+      INSERT INTO plans (
         id, project_id, title, priority, status, summary, completed_summary,
         history_ref, rule_refs_json, decision_refs_json, dependency_refs_json,
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        priority = excluded.priority,
+        status = excluded.status,
+        summary = excluded.summary,
+        completed_summary = excluded.completed_summary,
+        history_ref = excluded.history_ref,
+        rule_refs_json = excluded.rule_refs_json,
+        decision_refs_json = excluded.decision_refs_json,
+        dependency_refs_json = excluded.dependency_refs_json,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       plan.id,
@@ -195,21 +321,36 @@ export class V2Database {
   }
 
   deletePlan(planId) {
-    this.db.prepare('DELETE FROM checkpoints WHERE plan_id = ?').run(planId);
-    this.db.prepare('DELETE FROM phases WHERE plan_id = ?').run(planId);
-    this.db.prepare('DELETE FROM tasks WHERE plan_id = ?').run(planId);
-    const result = this.db.prepare('DELETE FROM plans WHERE id = ?').run(planId);
-    return result.changes > 0;
+    return this.transaction((db) => {
+      db.db.prepare('DELETE FROM checkpoints WHERE plan_id = ?').run(planId);
+      db.db.prepare('DELETE FROM phases WHERE plan_id = ?').run(planId);
+      db.db.prepare('DELETE FROM tasks WHERE plan_id = ?').run(planId);
+      const result = db.db.prepare('DELETE FROM plans WHERE id = ?').run(planId);
+      return result.changes > 0;
+    });
   }
 
   // --- Task ---
   saveTask(task) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO tasks (
+      INSERT INTO tasks (
         id, plan_id, phase_id, title, status, context_slice_json,
         working_set_json, references_json, baseline_json, notes_json,
         checks_json, sync_result_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        plan_id = excluded.plan_id,
+        phase_id = excluded.phase_id,
+        title = excluded.title,
+        status = excluded.status,
+        context_slice_json = excluded.context_slice_json,
+        working_set_json = excluded.working_set_json,
+        references_json = excluded.references_json,
+        baseline_json = excluded.baseline_json,
+        notes_json = excluded.notes_json,
+        checks_json = excluded.checks_json,
+        sync_result_json = excluded.sync_result_json,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       task.id,
@@ -233,6 +374,7 @@ export class V2Database {
     const stmt = this.db.prepare('SELECT * FROM tasks WHERE id = ?');
     const row = stmt.get(taskId);
     if (!row) return null;
+    const references = JSON.parse(row.references_json || '{}');
     return {
       id: row.id,
       planId: row.plan_id,
@@ -241,7 +383,8 @@ export class V2Database {
       status: row.status,
       contextSlice: JSON.parse(row.context_slice_json || '{}'),
       workingSet: JSON.parse(row.working_set_json || '{}'),
-      references: JSON.parse(row.references_json || '{}'),
+      references,
+      rules: references.rules || [],
       baseline: JSON.parse(row.baseline_json || '{}'),
       notes: JSON.parse(row.notes_json || '[]'),
       checks: JSON.parse(row.checks_json || '[]'),
@@ -256,30 +399,46 @@ export class V2Database {
       ? this.db.prepare('SELECT * FROM tasks WHERE plan_id = ? ORDER BY created_at ASC')
       : this.db.prepare('SELECT * FROM tasks ORDER BY created_at ASC');
     const rows = planId ? stmt.all(planId) : stmt.all();
-    return rows.map((r) => ({
-      id: r.id,
-      planId: r.plan_id,
-      phaseId: r.phase_id,
-      title: r.title,
-      status: r.status,
-      contextSlice: JSON.parse(r.context_slice_json || '{}'),
-      workingSet: JSON.parse(r.working_set_json || '{}'),
-      references: JSON.parse(r.references_json || '{}'),
-      baseline: JSON.parse(r.baseline_json || '{}'),
-      notes: JSON.parse(r.notes_json || '[]'),
-      checks: JSON.parse(r.checks_json || '[]'),
-      syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }));
+    return rows.map((r) => {
+      const references = JSON.parse(r.references_json || '{}');
+      return {
+        id: r.id,
+        planId: r.plan_id,
+        phaseId: r.phase_id,
+        title: r.title,
+        status: r.status,
+        contextSlice: JSON.parse(r.context_slice_json || '{}'),
+        workingSet: JSON.parse(r.working_set_json || '{}'),
+        references,
+        rules: references.rules || [],
+        baseline: JSON.parse(r.baseline_json || '{}'),
+        notes: JSON.parse(r.notes_json || '[]'),
+        checks: JSON.parse(r.checks_json || '[]'),
+        syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      };
+    });
   }
 
   // --- Block & ArtifactRefs ---
   saveBlock(block) {
+    return this.transaction((db) => db._saveBlock(block));
+  }
+
+  _saveBlock(block) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO blocks (
+      INSERT INTO blocks (
         id, project_id, title, kind, summary, details, history_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        kind = excluded.kind,
+        summary = excluded.summary,
+        details = excluded.details,
+        history_json = excluded.history_json,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       block.id,
@@ -298,8 +457,8 @@ export class V2Database {
 
     const insertRef = this.db.prepare(`
       INSERT INTO artifact_refs (
-        id, block_id, path, symbol, start_line, end_line, hash, role
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        id, block_id, path, symbol, anchor_kind, start_line, end_line, hash, role, hash_mode, manifest
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const refs = block.artifactRefs || block.artifact_refs || [];
     for (let i = 0; i < refs.length; i++) {
@@ -309,10 +468,13 @@ export class V2Database {
         block.id,
         ref.path,
         ref.symbol || null,
+        ref.anchorKind || (ref.symbol ? 'symbol' : 'file'),
         ref.startLine || ref.start_line || null,
         ref.endLine || ref.end_line || null,
         ref.hash || '',
-        ref.role || 'implementation'
+        ref.role || 'implementation',
+        ref.hashMode || ref.hash_mode || null,
+        ref.manifest || null
       );
     }
   }
@@ -326,10 +488,13 @@ export class V2Database {
     const refs = refsStmt.all(blockId).map((r) => ({
       path: r.path,
       symbol: r.symbol,
+      anchorKind: r.anchor_kind || (r.symbol ? 'symbol' : 'file'),
       startLine: r.start_line,
       endLine: r.end_line,
       hash: r.hash,
       role: r.role,
+      hashMode: r.hash_mode || null,
+      manifest: r.manifest || null,
     }));
 
     return {
@@ -373,9 +538,17 @@ export class V2Database {
   // --- Chain ---
   saveChain(chain) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO chains (
+      INSERT INTO chains (
         id, project_id, title, summary, kind, member_ids_json, metadata_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        summary = excluded.summary,
+        kind = excluded.kind,
+        member_ids_json = excluded.member_ids_json,
+        metadata_json = excluded.metadata_json,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       chain.id,
@@ -434,9 +607,19 @@ export class V2Database {
   // --- Link ---
   saveLink(link) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO links (
+      INSERT INTO links (
         id, project_id, from_id, to_id, kind, provenance, confidence, reason, revision, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        from_id = excluded.from_id,
+        to_id = excluded.to_id,
+        kind = excluded.kind,
+        provenance = excluded.provenance,
+        confidence = excluded.confidence,
+        reason = excluded.reason,
+        revision = excluded.revision,
+        updated_at = excluded.updated_at
     `);
     stmt.run(
       link.id || `${link.from || link.source_id}->${link.to || link.target_id}`,
@@ -473,6 +656,24 @@ export class V2Database {
     }));
   }
 
+  getLink(linkId) {
+    const row = this.db.prepare('SELECT * FROM links WHERE id = ?').get(linkId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      from: row.from_id,
+      to: row.to_id,
+      kind: row.kind,
+      provenance: row.provenance,
+      confidence: row.confidence,
+      reason: row.reason,
+      revision: row.revision,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
   deleteLink(linkId) {
     const stmt = this.db.prepare('DELETE FROM links WHERE id = ?');
     stmt.run(linkId);
@@ -488,9 +689,19 @@ export class V2Database {
   // --- Command Receipts ---
   saveCommandReceipt(receipt) {
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO command_receipts (
-        id, command, cwd, exit_code, duration_ms, summary, errors_json, warnings_json, artifacts_json, log_handle, created_at
+      INSERT INTO command_receipts (
+        id, command, cwd, exit_code, duration_ms, summary, errors_json, warnings_json, changed_paths_json, log_handle, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        command = excluded.command,
+        cwd = excluded.cwd,
+        exit_code = excluded.exit_code,
+        duration_ms = excluded.duration_ms,
+        summary = excluded.summary,
+        errors_json = excluded.errors_json,
+        warnings_json = excluded.warnings_json,
+        changed_paths_json = excluded.changed_paths_json,
+        log_handle = excluded.log_handle
     `);
     stmt.run(
       receipt.id,
@@ -501,7 +712,7 @@ export class V2Database {
       receipt.summary || '',
       JSON.stringify(receipt.errors || []),
       JSON.stringify(receipt.warnings || []),
-      JSON.stringify(receipt.artifacts || []),
+      JSON.stringify(receipt.changedPaths || []),
       receipt.logHandle || null,
       receipt.createdAt || new Date().toISOString()
     );
@@ -520,7 +731,7 @@ export class V2Database {
       summary: row.summary,
       errors: JSON.parse(row.errors_json || '[]'),
       warnings: JSON.parse(row.warnings_json || '[]'),
-      artifacts: JSON.parse(row.artifacts_json || '[]'),
+      changedPaths: JSON.parse(row.changed_paths_json || '[]'),
       logHandle: row.log_handle,
       createdAt: row.created_at,
     };

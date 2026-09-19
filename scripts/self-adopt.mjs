@@ -483,6 +483,7 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
     checkData: {
       description: 'All V2 unit tests pass and all 49 project source files covered by Block artifactRefs.',
       passed: true,
+      evidence: 'manual self-adoption verification script',
     },
   });
 

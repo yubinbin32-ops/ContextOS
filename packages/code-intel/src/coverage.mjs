@@ -1,3 +1,5 @@
+import { bindingMatchesPath } from './bindings.mjs';
+
 /**
  * Coverage checker: Calculates project or task working set Block coverage.
  * Detects orphan code and coverage gaps.
@@ -17,8 +19,12 @@ export class CoverageChecker {
 
     for (const block of blocks) {
       for (const ref of block.artifactRefs || []) {
-        if (fileCoverageMap.has(ref.path)) {
-          const entry = fileCoverageMap.get(ref.path);
+        const anchorKind = ref.anchorKind || (ref.symbol ? 'symbol' : 'file');
+        const hasHash = typeof ref.hash === 'string' && ref.hash.trim() && ref.hash !== 'untracked';
+        const hasSymbol = typeof ref.symbol === 'string' && ref.symbol.trim() && ref.symbol !== '*';
+        if (!ref.path || !hasHash || (anchorKind === 'symbol' && !hasSymbol)) continue;
+        for (const [filePath, entry] of fileCoverageMap.entries()) {
+          if (!bindingMatchesPath(ref.path, anchorKind, filePath)) continue;
           if (!entry.coveredByBlocks.includes(block.id)) {
             entry.coveredByBlocks.push(block.id);
           }

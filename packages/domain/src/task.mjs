@@ -24,6 +24,8 @@ export class Task {
     contextSlice = {},
     workingSet = {},
     references = {},
+    rules = null,
+    ruleRefs = null,
     baseline = {},
     notes = [],
     checks = [],
@@ -58,12 +60,19 @@ export class Task {
       files: Array.isArray(workingSet.files) ? [...workingSet.files] : [],
       symbols: Array.isArray(workingSet.symbols) ? [...workingSet.symbols] : [],
       candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : [],
+      scopeDirs: Array.isArray(workingSet.scopeDirs) ? [...workingSet.scopeDirs] : [],
     };
 
+    const initialRules = Array.isArray(rules)
+      ? rules
+      : (Array.isArray(ruleRefs)
+        ? ruleRefs
+        : (Array.isArray(references?.rules) ? references.rules : []));
+
     this.references = {
-      rules: Array.isArray(references.rules) ? [...references.rules] : [],
-      decisionSections: Array.isArray(references.decisionSections) ? [...references.decisionSections] : [],
-      blockIds: Array.isArray(references.blockIds) ? [...references.blockIds] : [],
+      rules: [...new Set(initialRules.filter((r) => typeof r === 'string' && r.trim()))],
+      decisionSections: Array.isArray(references?.decisionSections) ? [...references.decisionSections] : [],
+      blockIds: Array.isArray(references?.blockIds) ? [...references.blockIds] : [],
     };
 
     this.baseline = {
@@ -71,6 +80,7 @@ export class Task {
       dirtyHash: baseline.dirtyHash || null,
       indexRevision: baseline.indexRevision || 0,
       fileSnapshots: baseline.fileSnapshots ? { ...baseline.fileSnapshots } : {},
+      initializedAt: baseline.initializedAt || null,
     };
 
     this.notes = Array.isArray(notes) ? [...notes] : [];
@@ -140,6 +150,12 @@ export class Task {
     if (this.status !== 'checking') {
       throw new Error(`Cannot transition to syncing from state: ${this.status}. Must be active or checking.`);
     }
+    const verifiedChecks = this.checks.filter(
+      (check) => check.passed && (check.receiptId || String(check.evidence || '').trim())
+    );
+    if (verifiedChecks.length === 0) {
+      throw new Error('Cannot sync task without at least one passing check backed by a receipt or evidence.');
+    }
     const failedChecks = this.checks.filter((c) => !c.passed);
     if (failedChecks.length > 0) {
       throw new Error(`Cannot sync task with ${failedChecks.length} failed checks`);
@@ -182,6 +198,40 @@ export class Task {
     this.updatedAt = new Date().toISOString();
   }
 
+  get rules() {
+    return this.references.rules;
+  }
+
+  set rules(newRules) {
+    this.references.rules = Array.isArray(newRules)
+      ? [...new Set(newRules.filter((r) => typeof r === 'string' && r.trim()))]
+      : [];
+    this.updatedAt = new Date().toISOString();
+  }
+
+  bindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== 'string') return;
+    const clean = ruleId.trim();
+    if (clean && !this.references.rules.includes(clean)) {
+      this.references.rules.push(clean);
+      this.updatedAt = new Date().toISOString();
+    }
+  }
+
+  unbindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== 'string') return;
+    const clean = ruleId.trim();
+    const idx = this.references.rules.indexOf(clean);
+    if (idx !== -1) {
+      this.references.rules.splice(idx, 1);
+      this.updatedAt = new Date().toISOString();
+    }
+  }
+
+  setRules(rules) {
+    this.rules = rules;
+  }
+
   toJSON() {
     return {
       id: this.id,
@@ -192,6 +242,7 @@ export class Task {
       contextSlice: this.contextSlice,
       workingSet: this.workingSet,
       references: this.references,
+      rules: this.references.rules,
       baseline: this.baseline,
       notes: this.notes,
       checks: this.checks,

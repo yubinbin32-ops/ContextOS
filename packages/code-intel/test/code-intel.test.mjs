@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LanguageRegistry, CodeTools, CoverageChecker, TreeSitterParser } from '../src/index.mjs';
+import { LanguageRegistry, CodeTools, CoverageChecker, TreeSitterParser, normalizeCallee } from '../src/index.mjs';
 
 const JS_CODE = `import fs from 'node:fs';
 import path from 'node:path';
@@ -415,7 +415,7 @@ test('CoverageChecker identifies gaps and covered files', () => {
   const blocks = [
     {
       id: 'block-1',
-      artifactRefs: [{ path: 'src/a.js' }, { path: 'src/b.js' }],
+      artifactRefs: [{ path: 'src/a.js', hash: 'hash-a' }, { path: 'src/b.js', hash: 'hash-b' }],
     },
   ];
 
@@ -426,6 +426,35 @@ test('CoverageChecker identifies gaps and covered files', () => {
   assert.equal(report.isFullyCovered, false);
   assert.deepEqual(report.uncoveredList, ['src/c.js']);
   assert.equal(report.gaps.length, 1);
+});
+
+test('CoverageChecker resolves directory tree anchors without enumerating files', () => {
+  const files = ['node_modules/runtime/index.js', 'resources/icon.png', 'src/app.js'];
+  const blocks = [
+    {
+      id: 'block-dependencies',
+      artifactRefs: [{
+        path: 'node_modules',
+        anchorKind: 'tree',
+        hashMode: 'manifest',
+        manifest: 'package-lock.json',
+        hash: 'lock-hash',
+      }],
+    },
+    {
+      id: 'block-resources',
+      artifactRefs: [{
+        path: 'resources',
+        anchorKind: 'tree',
+        hashMode: 'content',
+        hash: 'tree-hash',
+      }],
+    },
+  ];
+
+  const report = CoverageChecker.checkCoverage(files, blocks);
+  assert.equal(report.coveredFiles, 2);
+  assert.deepEqual(report.uncoveredList, ['src/app.js']);
 });
 
 test('TreeSitterParser extracts true AST symbols across target languages', () => {
@@ -618,4 +647,236 @@ end
   const phpEnum = `<?php\nenum PaymentState: string { case PAID = 'paid'; }`;
   const phpRes = TreeSitterParser.parse('php', phpEnum, phpEnum.split('\n'));
   assert.ok(phpRes.symbols.some((s) => s.name === 'PaymentState' && s.kind === 'enum'));
+});
+
+test('normalizeCallee handles generics, receivers, chaining, and rejects closures', () => {
+  // Generic stripping
+  assert.equal(normalizeCallee('parse<T>'), 'parse');
+  assert.equal(normalizeCallee('parse::<Config>'), 'parse');
+  assert.equal(normalizeCallee('map::<K, V>'), 'map');
+  assert.equal(normalizeCallee('Container<T>::get'), 'Container::get');
+
+  // Receiver stripping
+  assert.equal(normalizeCallee('this.compute'), 'compute');
+  assert.equal(normalizeCallee('self.dispatch'), 'dispatch');
+  assert.equal(normalizeCallee('$this->execute'), 'execute');
+  assert.equal(normalizeCallee('$this.run'), 'run');
+  assert.equal(normalizeCallee('this->action'), 'action');
+
+  // Arrow notation normalization
+  assert.equal(normalizeCallee('db->save'), 'db.save');
+
+  // Chained calls parentheses stripping
+  assert.equal(normalizeCallee('builder().build'), 'build');
+  assert.equal(normalizeCallee('client.get().then'), 'then');
+
+  // Multiline & closure rejections
+  assert.equal(normalizeCallee('func() {\n  foo()\n}'), null);
+  assert.equal(normalizeCallee('() => { bar(); }'), null);
+  assert.equal(normalizeCallee('{ val: 1 }'), null);
+  assert.equal(normalizeCallee('function'), null);
+  assert.equal(normalizeCallee('func'), null);
+  assert.equal(normalizeCallee('lambda'), null);
+  assert.equal(normalizeCallee(''), null);
+  assert.equal(normalizeCallee(null), null);
+});
+
+test('TreeSitterParser extracts 2-hop calls and isolates nested function scopes', () => {
+  // JS with nested scopes and compound statements
+  const jsSource = `
+export function processOrder(order) {
+  validateOrder(order);
+  if (order.isValid) {
+    calculateTaxes(order.total);
+    saveOrder(order);
+  }
+
+  // Nested arrow function should NOT pollute processOrder calls
+  const innerFormatter = (val) => {
+    formatCurrency(val);
+    return val;
+  };
+
+  // Nested function declaration should NOT pollute processOrder calls
+  function localAudit() {
+    writeAuditLog('audit');
+  }
+
+  notifyCustomer(order.id);
+}
+`;
+  const jsRes = TreeSitterParser.parse('javascript', jsSource, jsSource.split('\n'));
+  const procSym = jsRes.symbols.find((s) => s.name === 'processOrder');
+  assert.ok(procSym);
+  assert.ok(procSym.calls.includes('validateOrder'));
+  assert.ok(procSym.calls.includes('calculateTaxes'));
+  assert.ok(procSym.calls.includes('saveOrder'));
+  assert.ok(procSym.calls.includes('notifyCustomer'));
+  // Ensure inner calls are NOT in outer function's calls
+  assert.equal(procSym.calls.includes('formatCurrency'), false);
+  assert.equal(procSym.calls.includes('writeAuditLog'), false);
+
+  // Go with struct methods, if blocks, and func_literal (IIFE)
+  const goSource = `package service
+type OrderService struct {}
+func (s *OrderService) Execute() error {
+  initContext()
+  if true {
+    checkPermissions()
+  }
+  go func() {
+    backgroundTelemetry()
+  }()
+  finalize()
+  return nil
+}
+`;
+  const goRes = TreeSitterParser.parse('go', goSource, goSource.split('\n'));
+  const execSym = goRes.symbols.find((s) => s.name === 'OrderService.Execute');
+  assert.ok(execSym);
+  assert.ok(execSym.calls.includes('initContext'));
+  assert.ok(execSym.calls.includes('checkPermissions'));
+  assert.ok(execSym.calls.includes('finalize'));
+  // The anonymous func_literal must NOT leak into calls
+  assert.equal(execSym.calls.includes('backgroundTelemetry'), false);
+  assert.ok(!execSym.calls.some((c) => c.includes('func')));
+
+  // Python class method with self receiver and helper call
+  const pySource = `class Service:
+    def execute(self):
+        self.prepare()
+        run_worker()
+        self.cleanup()
+`;
+  const pyRes = TreeSitterParser.parse('python', pySource, pySource.split('\n'));
+  const pySym = pyRes.symbols.find((s) => s.name === 'Service.execute');
+  assert.ok(pySym);
+  assert.deepEqual(pySym.calls, ['prepare', 'run_worker', 'cleanup']);
+
+  // Rust impl with generics and receiver calls
+  const rustSource = `impl Manager {
+    pub fn start(&self) {
+      self.init();
+      parse::<Config>();
+      spawn();
+    }
+}
+`;
+  const rustRes = TreeSitterParser.parse('rust', rustSource, rustSource.split('\n'));
+  const rustSym = rustRes.symbols.find((s) => s.name === 'Manager.start');
+  assert.ok(rustSym);
+  assert.ok(rustSym.calls.includes('init'));
+  assert.ok(rustSym.calls.includes('parse'));
+  assert.ok(rustSym.calls.includes('spawn'));
+});
+
+test('CodeTools.outline formats 2-Hop calls and associates container methods correctly', () => {
+  const pyCode = `class Controller:
+    def handle(self):
+        self.authenticate()
+        process_request()
+`;
+  const pyOutline = CodeTools.outline('app/ctrl.py', pyCode);
+  assert.ok(pyOutline.markdown.includes('- **class** `Controller`'));
+  assert.ok(pyOutline.markdown.includes('- **method** `Controller.handle`'));
+  assert.ok(pyOutline.markdown.includes('-> calls: [authenticate, process_request]'));
+
+  // Go struct methods rendered under struct with calls
+  const goCode = `package main
+type Server struct {}
+func (s *Server) Start() {
+    bind()
+    listen()
+}
+`;
+  const goOutline = CodeTools.outline('server.go', goCode);
+  assert.ok(goOutline.markdown.includes('- **struct** `Server`'));
+  assert.ok(goOutline.markdown.includes('- **method** `Server.Start`'));
+  assert.ok(goOutline.markdown.includes('-> calls: [bind, listen]'));
+
+  // JS class methods and constructors are not duplicated
+  const jsCode = `export class Engine {
+  constructor() {
+    this.setup();
+  }
+  start() {
+    init();
+  }
+}
+`;
+  const jsOutline = CodeTools.outline('engine.js', jsCode);
+  // Ensure 'constructor' only appears once under Engine
+  const constructorMatches = (jsOutline.markdown.match(/constructor/g) || []).length;
+  assert.equal(constructorMatches, 1);
+  assert.ok(jsOutline.markdown.includes('-> calls: [setup]'));
+  assert.ok(jsOutline.markdown.includes('-> calls: [init]'));
+
+  // Go method declared BEFORE struct definition in file order
+  const goOutOfOrderCode = `package main
+func (s *Server) Start() {
+    bind()
+    listen()
+}
+type Server struct {}
+`;
+  const goOutOfOrderOutline = CodeTools.outline('server_order.go', goOutOfOrderCode);
+  assert.ok(goOutOfOrderOutline.markdown.includes('- **struct** `Server`'));
+  assert.ok(goOutOfOrderOutline.markdown.includes('  - **method** `Server.Start`'));
+  assert.ok(goOutOfOrderOutline.markdown.includes('-> calls: [bind, listen]'));
+  // Ensure Start is not rendered twice
+  const startMatches = (goOutOfOrderOutline.markdown.match(/Server\.Start/g) || []).length;
+  assert.equal(startMatches, 1);
+
+  // Ruby method with receiver and nested block isolation
+  const rubyCode = `def process
+  self.db.save(record)
+  [1, 2].each do |x|
+    inner_worker(x)
+  end
+  notify()
+end
+`;
+  const rubyRes = TreeSitterParser.parse('ruby', rubyCode, rubyCode.split('\n'));
+  const procMethod = rubyRes.symbols.find((s) => s.name === 'process');
+  assert.ok(procMethod);
+  assert.ok(procMethod.calls.includes('db.save'));
+  assert.ok(procMethod.calls.includes('notify'));
+  // Bare 'self' must NOT be in calls
+  assert.equal(procMethod.calls.includes('self'), false);
+  // Nested do_block must NOT leak into process calls
+  assert.equal(procMethod.calls.includes('inner_worker'), false);
+
+  // Rust nested helper function isolation
+  const rustNestedCode = `fn compute() {
+    setup();
+    fn local_helper() {
+        nested_call();
+    }
+    teardown();
+}
+`;
+  const rustNestedRes = TreeSitterParser.parse('rust', rustNestedCode, rustNestedCode.split('\n'));
+  const compSym = rustNestedRes.symbols.find((s) => s.name === 'compute');
+  assert.ok(compSym);
+  assert.ok(compSym.calls.includes('setup'));
+  assert.ok(compSym.calls.includes('teardown'));
+  assert.equal(compSym.calls.includes('nested_call'), false);
+
+  // JS nested class method isolation
+  const jsNestedClassCode = `function runPipeline() {
+    init();
+    class LocalWorker {
+      work() {
+        doSecretWork();
+      }
+    }
+    finish();
+}
+`;
+  const jsNestedRes = TreeSitterParser.parse('javascript', jsNestedClassCode, jsNestedClassCode.split('\n'));
+  const pipeSym = jsNestedRes.symbols.find((s) => s.name === 'runPipeline');
+  assert.ok(pipeSym);
+  assert.ok(pipeSym.calls.includes('init'));
+  assert.ok(pipeSym.calls.includes('finish'));
+  assert.equal(pipeSym.calls.includes('doSecretWork'), false);
 });

@@ -378,7 +378,11 @@ export function helper() {
   await service.task({
     action: 'check',
     id: task.id,
-    checkData: { description: 'All verifications passed', passed: true },
+    checkData: {
+      description: 'All verifications passed',
+      passed: true,
+      evidence: 'manual feature verification script',
+    },
   });
 
   const syncResult = await service.task({

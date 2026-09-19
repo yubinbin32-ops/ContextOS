@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject private var store = GraphStore()
@@ -53,10 +54,38 @@ struct ContentView: View {
                 try? await Task.sleep(for: .seconds(2))
             }
         }
-        .onChange(of: store.selection) { _, value in if value != nil { closeDocument() } }
-        .onChange(of: store.projectRoot) { _, _ in closeDocument() }
+        .onChange(of: store.selection) { _, value in
+            if value != nil {
+                closeDocument()
+            }
+        }
+        .onChange(of: store.projectRoot) { _, _ in
+            closeDocument()
+        }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenKnowledgeDocument"))) { event in
             if let id = event.userInfo?["id"] as? String { openDocument(id, nil) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ChooseProject"))) { _ in
+            store.chooseProject()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("OpenSpecificProject"))) { notif in
+            if let path = notif.userInfo?["path"] as? String {
+                store.openProject(RecentProject(path: path, name: URL(fileURLWithPath: path).lastPathComponent))
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RecentProjectsChanged"))) { _ in
+            store.refreshRecentProjects()
+        }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            guard let provider = providers.first else { return false }
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                if let url = url {
+                    DispatchQueue.main.async {
+                        store.openKnowledgeProject(at: url)
+                    }
+                }
+            }
+            return true
         }
         .onOpenURL { url in
             guard url.scheme == "contextos" else { return }
@@ -242,39 +271,12 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 7) {
             let isCloudProject = store.snapshot.project.name.contains("(Cloud)") || store.projectRoot.contains(".contextos/cloud_projects")
             HStack(alignment: .center, spacing: 6) {
-                Text(store.snapshot.project.name)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundStyle(ContextOSTheme.ink)
-                    .lineLimit(1)
-                if isCloudProject {
-                    HStack(spacing: 4) {
-                        Image(systemName: "cloud.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(ContextOSTheme.focus)
-                        Button {
-                            Task { await store.refreshCloudProject() }
-                        } label: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(ContextOSTheme.focus)
-                        }
-                        .buttonStyle(.plain)
-                        .help(store.activeLocale == "zh-Hans" ? "从云端中枢拉取最新图谱" : "Sync latest graph from cloud")
-                    }
-                }
-                Spacer()
                 Menu {
                     if !store.recentProjects.isEmpty {
                         Section(store.text("recentProjects")) {
                             ForEach(store.recentProjects) { project in
-                                Menu {
-                                    Button(store.text("open")) { store.openProject(project) }
-                                    Divider()
-                                    Button(role: .destructive) {
-                                        store.removeRecentProject(project)
-                                    } label: {
-                                        Label(store.activeLocale == "zh-Hans" ? "从最近列表中移除" : "Remove from Recents", systemImage: "trash")
-                                    }
+                                Button {
+                                    store.openProject(project)
                                 } label: {
                                     let isCurrent = project.path == store.projectRoot
                                     let isCloud = project.name.contains("(Cloud)") || project.path.contains(".contextos/cloud_projects")
@@ -286,14 +288,61 @@ struct ContentView: View {
                             }
                         }
                         Divider()
+                        Menu(store.activeLocale == "zh-Hans" ? "管理最近列表" : "Manage Recents") {
+                            ForEach(store.recentProjects) { project in
+                                Button(role: .destructive) {
+                                    store.removeRecentProject(project)
+                                } label: {
+                                    Label(store.activeLocale == "zh-Hans" ? "移除 \(project.name)" : "Remove \(project.name)", systemImage: "trash")
+                                }
+                            }
+                            Divider()
+                            Button(role: .destructive) {
+                                store.clearRecentProjects()
+                            } label: {
+                                Text(store.activeLocale == "zh-Hans" ? "清空所有最近记录" : "Clear All Recents")
+                            }
+                        }
+                        Divider()
                     }
                     Button(store.text("openProject")) { store.chooseProject() }
                 } label: {
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(ContextOSTheme.muted)
-                        .frame(width: 24, height: 24)
+                    HStack(spacing: 6) {
+                        Image(systemName: isCloudProject ? "cloud.fill" : "folder.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(ContextOSTheme.focus)
+                        Text(store.snapshot.project.name)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(ContextOSTheme.ink)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(ContextOSTheme.muted)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(ContextOSTheme.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(ContextOSTheme.hairline, lineWidth: 1)
+                    )
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .help(store.activeLocale == "zh-Hans" ? "点击切换项目或查看最近项目 (⌘O 打开)" : "Click to switch project or view recents (⌘O to open)")
+
+                if isCloudProject {
+                    Button {
+                        Task { await store.refreshCloudProject() }
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(ContextOSTheme.focus)
+                    }
+                    .buttonStyle(.plain)
+                    .help(store.activeLocale == "zh-Hans" ? "从云端中枢拉取最新图谱" : "Sync latest graph from cloud")
+                }
+                Spacer()
             }
 
             let totalCps = store.totalCheckpointsCount
@@ -595,7 +644,7 @@ private struct SettingsView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                         }
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                        .background(RoundedRectangle(cornerRadius: 10).fill(ContextOSTheme.card))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
                     }
 
@@ -648,7 +697,7 @@ private struct SettingsView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                         }
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                        .background(RoundedRectangle(cornerRadius: 10).fill(ContextOSTheme.card))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
                     }
                 }
@@ -691,7 +740,7 @@ private struct SettingsView: View {
                             EditorPlatformRow(status: status, store: store)
                         }
                     }
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+                    .background(RoundedRectangle(cornerRadius: 10).fill(ContextOSTheme.card))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
 
                     Text(store.runtimeHandshake)
@@ -712,7 +761,7 @@ private struct SettingsView: View {
             .padding(.bottom, 18)
         }
         .frame(width: 716)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(ContextOSTheme.surface.ignoresSafeArea())
         .onAppear {
             store.updater.checkOnSettingsOpen()
         }
@@ -741,7 +790,7 @@ private struct SoftwareUpdateSection: View {
                 HStack(spacing: 12) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 6.5)
-                            .fill(Color(nsColor: .controlBackgroundColor))
+                            .fill(ContextOSTheme.card)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6.5)
                                     .stroke(Color.black.opacity(0.07), lineWidth: 0.75)
@@ -920,7 +969,7 @@ private struct SoftwareUpdateSection: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
             }
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+            .background(RoundedRectangle(cornerRadius: 10).fill(ContextOSTheme.card))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
         }
     }
@@ -1047,7 +1096,7 @@ private struct SoftwareUpdateSection: View {
                                 .textSelection(.enabled)
                         }
                         .frame(maxHeight: 120)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor).opacity(0.6)))
+                        .background(RoundedRectangle(cornerRadius: 6).fill(ContextOSTheme.card))
                         .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.5))
                     }
                 }
@@ -1163,7 +1212,7 @@ private struct EditorPlatformRow: View {
             // iOS-style Precision Icon Squircle
             ZStack {
                 RoundedRectangle(cornerRadius: 6.5)
-                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .fill(ContextOSTheme.card)
                     .overlay(
                         RoundedRectangle(cornerRadius: 6.5)
                             .stroke(Color.black.opacity(0.07), lineWidth: 0.75)
