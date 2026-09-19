@@ -10,44 +10,45 @@ enum ContextOSTheme {
         }))
     }
 
-    // Modern crisp canvas: clean subtle slate in light mode, deep sleek slate in dark mode
+    // Pure white canvas in light mode, sleek dark in dark mode
     static var canvas: Color {
         dynamicColor(
-            light: NSColor(srgbRed: 0.965, green: 0.970, blue: 0.978, alpha: 1.0), // #F6F7FA
-            dark: NSColor(srgbRed: 0.055, green: 0.063, blue: 0.082, alpha: 1.0)   // #0E1015
+            light: NSColor.white,                                                  // #FFFFFF Pure White
+            dark: NSColor(white: 0.10, alpha: 1.0)                                 // Deep Dark
         )
     }
 
-    // Modern surface (sidebar, headers, drawers): clean elevated background
+    // Pure white surface (sidebar, headers, drawers)
     static var surface: Color {
         dynamicColor(
-            light: NSColor(srgbRed: 0.945, green: 0.952, blue: 0.962, alpha: 1.0), // #F1F3F6
-            dark: NSColor(srgbRed: 0.082, green: 0.094, blue: 0.122, alpha: 1.0)   // #15181F
+            light: NSColor.white,                                                  // #FFFFFF Pure White
+            dark: NSColor(white: 0.13, alpha: 1.0)                                 // Elevated Dark
         )
     }
 
-    // Card background: pure crisp white in light mode, rich elevated card in dark mode
+    // Pure crisp white card background
     static var cardBackground: Color {
         dynamicColor(
-            light: NSColor.white,                                                  // #FFFFFF
-            dark: NSColor(srgbRed: 0.114, green: 0.129, blue: 0.165, alpha: 1.0)   // #1D212A
+            light: NSColor.white,                                                  // #FFFFFF Pure White
+            dark: NSColor(white: 0.17, alpha: 1.0)                                 // Card Dark
         )
     }
 
     static var cardGhostBackground: Color {
         dynamicColor(
-            light: NSColor(srgbRed: 0.98, green: 0.98, blue: 0.99, alpha: 0.72),
-            dark: NSColor(srgbRed: 0.09, green: 0.10, blue: 0.13, alpha: 0.72)
+            light: NSColor.white.withAlphaComponent(0.82),
+            dark: NSColor(white: 0.13, alpha: 0.82)
         )
     }
 
     static var ink: Color { Color(nsColor: NSColor.labelColor) }
     static var muted: Color { Color(nsColor: NSColor.secondaryLabelColor) }
 
+    // Pure neutral light hairline border (strictly 0% saturation / zero blue tint)
     static var hairline: Color {
         dynamicColor(
-            light: NSColor(srgbRed: 0.880, green: 0.895, blue: 0.915, alpha: 1.0), // #E0E4EA
-            dark: NSColor(srgbRed: 0.170, green: 0.190, blue: 0.240, alpha: 1.0)   // #2B303D
+            light: NSColor(white: 0.89, alpha: 1.0),                               // #E3E3E3 Neutral Light Gray
+            dark: NSColor(white: 0.25, alpha: 1.0)                                 // #404040
         )
     }
 
