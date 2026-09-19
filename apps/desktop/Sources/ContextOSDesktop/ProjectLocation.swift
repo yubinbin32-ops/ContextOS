@@ -31,23 +31,45 @@ struct ProjectLocation {
         ))
     }
 
+    static func isValidProjectRoot(_ root: URL) -> Bool {
+        let descriptorURL = root.appending(path: ".contextos/project.json")
+        let graphURL = root.appending(path: ".contextos/graph.json")
+        let stateDb = root.appending(path: ".contextos/state.sqlite")
+        let legacyDb = root.appending(path: ".contextos/contextos.sqlite")
+        let fm = FileManager.default
+        return fm.fileExists(atPath: descriptorURL.path) ||
+               fm.fileExists(atPath: graphURL.path) ||
+               fm.fileExists(atPath: stateDb.path) ||
+               fm.fileExists(atPath: legacyDb.path)
+    }
+
     static func resolve(startingAt root: URL) throws -> ProjectLocation {
         var candidate = root.standardizedFileURL
 
         while candidate.path != "/" {
             let descriptorURL = candidate.appending(path: ".contextos/project.json")
             let graphURL = candidate.appending(path: ".contextos/graph.json")
+            let stateDbURL = candidate.appending(path: ".contextos/state.sqlite")
+            let legacyDbURL = candidate.appending(path: ".contextos/contextos.sqlite")
             let hasDescriptor = FileManager.default.fileExists(atPath: descriptorURL.path)
             let hasGraph = FileManager.default.fileExists(atPath: graphURL.path)
+            let hasStateDb = FileManager.default.fileExists(atPath: stateDbURL.path)
+            let hasLegacyDb = FileManager.default.fileExists(atPath: legacyDbURL.path)
 
-            if hasDescriptor || hasGraph {
+            if hasDescriptor || hasGraph || hasStateDb || hasLegacyDb {
                 let descriptor: ProjectDescriptor
                 if hasDescriptor, let data = try? Data(contentsOf: descriptorURL),
                    let decoded = try? JSONDecoder().decode(ProjectDescriptor.self, from: data) {
                     descriptor = decoded
                 } else {
-                    let projId = "contextos"
-                    descriptor = ProjectDescriptor(id: projId, name: candidate.lastPathComponent, schemaVersion: 2)
+                    let projId = candidate.lastPathComponent.lowercased().replacingOccurrences(of: " ", with: "-")
+                    let newDescriptor = ProjectDescriptor(id: projId, name: candidate.lastPathComponent, schemaVersion: 2)
+                    descriptor = newDescriptor
+                    let dotDir = candidate.appending(path: ".contextos")
+                    try? FileManager.default.createDirectory(at: dotDir, withIntermediateDirectories: true)
+                    if let encoded = try? JSONEncoder().encode(newDescriptor) {
+                        try? encoded.write(to: descriptorURL)
+                    }
                 }
 
                 let dataRoot: URL
@@ -84,7 +106,7 @@ struct ProjectLocation {
         }
         return projects.filter {
             let root = URL(fileURLWithPath: $0.path)
-            return FileManager.default.fileExists(atPath: root.appending(path: ".contextos/project.json").path)
+            return isValidProjectRoot(root)
         }
     }
 
@@ -95,6 +117,10 @@ struct ProjectLocation {
         }
     }
 
+    static func clearAll() {
+        UserDefaults.standard.removeObject(forKey: recentProjectsKey)
+    }
+
     private static func remember(_ location: ProjectLocation) {
         let current = RecentProject(path: location.root.path, name: location.descriptor.name)
         var projects = recentProjects().filter { $0.path != current.path }
@@ -102,7 +128,7 @@ struct ProjectLocation {
         // Keep the switcher a recent-project affordance, not an ever-growing
         // project registry.  Project data remains on disk and can always be
         // reopened from the file picker.
-        if projects.count > 3 { projects.removeLast(projects.count - 3) }
+        if projects.count > 10 { projects.removeLast(projects.count - 10) }
         if let data = try? JSONEncoder().encode(projects) {
             UserDefaults.standard.set(data, forKey: recentProjectsKey)
         }

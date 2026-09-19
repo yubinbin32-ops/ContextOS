@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "AI 编码的高精度外骨骼动力装甲：通过 MCP 自动管理上下文，实测减少 90%+ 上下文开销。(High-Precision Powered Exoskeleton for AI Coding: Auto-governs context via MCP, reducing context window waste by 90%+)",
   "license": "MIT",
   "type": "module",

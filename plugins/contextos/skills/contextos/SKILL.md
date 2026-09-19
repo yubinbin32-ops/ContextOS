@@ -7,13 +7,13 @@ description: MUST be used whenever starting ANY coding task, exploring or unders
 
 > [!CRITICAL]
 > **ContextOS 开发准入硬性守则（Mandatory Zero-Tolerance Rules）**：
-> 1. **首要动作必须调用 OS（Mandatory First Action）**：每次对话开始、承接新功能、理解项目或排查缺陷时，第一步必须调用 `os_context(action: "brief")` 获取系统拓扑、活跃 Plan、Task 切片及当前绑定的规则清单。
+> 1. **首要动作必须调用 OS（Mandatory First Action & Resumption Anchor）**：每次对话开始、承接新功能、理解项目、排查缺陷或**经历长上下文截断（Compaction）后**，第一步必须调用 `os_context(action: "brief")` 获取系统拓扑、活跃 Plan、Task 切片、已绑定规则清单及顶部专属的 **【ContextOS Resumption Anchor 自愈锚点】**，无缝恢复状态机。
 > 2. **显式规则绑定与渐进披露（Progressive Rule Disclosure）**：在创建计划或任务（`plan.create` / `task.create` / `task.bind_rule`）时，根据任务性质**显式绑定关联规约（`rules: ["rule-xxx", ...]`）**。在执行任务时，`os_context(brief)` 与 `task(open)` 会自动按需展示已绑定规则的标题与要点；智能体仅在需要查阅规则深层细节时按需调用 `knowledge(action: "rule_open", ruleId: "...")`，严禁脱离既定规则凭空臆造，亦严禁机械化全量扫表。重点遵循 `rule-ui-aesthetic-precision`、`rule-product-contract`、`rule-command-sessions`、`rule-out-of-context-commands` 与 `rule-surgical-code-editing` 等核心规约。
 > 3. **严禁全量盲读（FORBIDDEN Blind Reading）**：在未调用 `os_context(action: "brief")` 建立认知前，严禁直接调用原生 `view_file`、`cat`、`read_file` 遍历或通读业务源码来了解架构。
 > 4. **手术刀式读写（Surgical Code Operations）**：必须遵循 `rule-surgical-code-editing`。优先使用 `code(action: "search")` / `code(action: "outline")` 定位结构，再用 `code(action: "read")` 手术刀提取目标方法，禁止倾倒整文件内容进上下文。
 > 5. **AST 2-Hop 调用拓扑感知（2-Hop Call Graph Navigation）**：调用 `code(action: "outline")` 时，系统已深度分析 Tree-sitter AST 并自动输出直接被调用者（Callees）拓扑（格式如 `foo() -> calls: [bar, baz]`）。智能体必须基于该调用拓扑梳理上下游调用依赖，禁止盲猜代码流向或倾倒完整函数体。
 > 6. **命令出舱脱敏（Out-of-Context Execution）**：必须遵循 `rule-out-of-context-commands` 与 `rule-command-sessions`。所有构建、测试与脚本检查必须通过 `run_command` 执行，守护服务必须通过 `process` 托管，日志出舱存盘，严禁将成百上千行终端原始日志直接倾倒进会话。
-> 7. **生命周期闭环（C-D-C-S Protocol）**：必须遵循 `os_context(brief)` ➔ `plan/task(create/open with rules: [...])` ➔ `code` ➔ `run_command` ➔ `task(sync)` 的原子闭环。
+> 7. **生命周期闭环（C-D-C-S Protocol）**：必须遵循 `os_context(brief)` ➔ `plan/task(create/open with rules: [...])` ➔ `code` ➔ `run_command` ➔ `task(sync)` 的原子闭环。代码绑定必须优先使用 `block(action: "bind_auto")` 智能挂载，`task(sync)` 会硬门禁校验有效符号与哈希。
 
 ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控制与架构治理操作系统。它通过拓扑图谱结构化索引、按需切片展开、编译器级 AST 手术刀读写、脱敏出舱命令沙箱、分类规则库、章节式架构决议以及 C-D-C-S 状态机，保障大规模与复杂项目在长对话周期中的上下文极度精炼与架构一致性。
 
@@ -81,9 +81,11 @@ ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周
   - `action: "update", id: "任务ID", taskData: { title, description, workingSet, rules }`：更新任务元数据或绑定的规约规则列表。
   - `action: "develop", id: "任务ID"`：将任务切换至激活开发态。
   - `action: "note", id: "任务ID", text: "记录内容", kind: "decision" | "discovery" | "progress"`：在任务流中沉淀重要决策与发现。
+  - `action: "probe", id: "任务ID", hypothesis: "假设描述", script: "scratch/probe_script.py", findings: "实验结论"`：**【探针/逆向探索态】**。在算法探索或逆向工程初期沉淀摸索成果，不强加严格 Block 绑定要求。
+  - `action: "graduate_probe", id: "任务ID", targetBlockId: "BlockID", files: ["..."]`：**【探针晋级】**。探索验证成功后，一键将探针代码推入正式 workingSet，并自动触发 AST 智能绑定到目标 Block。
   - `action: "check", id: "任务ID", checkData: { receiptId: "...", description: "单元测试通过", passed: true }`：记录命令回执验证。
-  - `action: "sync", id: "任务ID", syncData: { blocks: [...] }`：**原子写回**。触发 100% 工作区覆盖率校验。
-- **最佳使用时机**：日常功能实现与 bugfix 的主战场。开发过程中随时记录 `note`，测试通过后一次性执行 `sync`。
+  - `action: "sync", id: "任务ID", syncData: { blocks: [...] }`：**原子写回**。触发 100% 工作区覆盖率校验以及**物理级符号硬门禁（严禁空 symbol 或空 hash）**。
+- **最佳使用时机**：日常功能实现与 bugfix 的主战场。摸索阶段调用 `probe`，开发过程中随时记录 `note`，测试通过后一次性执行 `sync`。
 
 ### 4. `code` —— 编译器级真 AST 手术刀读写（14 种主流语言 + 2-Hop 调用拓扑）
 - **核心作用**：结构大纲审视、2-Hop Callees 调用图谱感知、精准符号抽取、补丁式安全写入、自动符号重锚。
@@ -125,8 +127,9 @@ ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周
   - `action: "list"`：列出所有 Block 及其绑定文件。
   - `action: "open", id: "BlockID"`：查看 Block 职责描述、关联符号与依赖关系。
   - `action: "search", query: "关键词"`：根据职责或代码路径搜索 Block。
-  - `action: "bind", id: "BlockID", blockData: { artifactRefs: [...] }`：将新增源码文件绑定到 Block。
-- **约束规范**：**杜绝虚空 Block（Ghost Block）**。每一个 Block 必须在物理磁盘上存在对应的源码实现。
+  - `action: "bind_auto", id: "BlockID", path: "文件路径", paths: ["..."], symbols: ["..."]`：**【一键智能 AST 自动绑定（强烈推荐）】**。底层自动调用 Tree-sitter 解析源文件，抽取顶层类、结构体与函数签名并自动计算 Hash，一键生成挂载，彻底摆脱手工挑 Hash。
+  - `action: "bind", id: "BlockID", blockData: { artifactRefs: [...] }`：手工高级绑定。
+- **约束规范**：**杜绝虚空 Block（Ghost Block）与未锚定符号**。每一个 Block 必须在物理磁盘上存在对应的源码实现，所有挂载必须具备有效 `symbol` 与 `hash`（否则 `task(sync)` 将物理报错拦截）。
 
 ### 8. `chain` —— 地铁主线与正交换乘链接
 - **核心作用**：将 Block 串接为清晰的业务轨道，管理系统的数据流向与依赖拓扑。

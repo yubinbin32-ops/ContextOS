@@ -332,3 +332,165 @@ test('HybridContextOSService runs local commands and handles cloud fallback grac
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('P0-P1: Smart auto-binding, sync physical gate, resumption anchor, and probe mode', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-p0p1-test-'));
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'p0p1-test' });
+
+  // 1. Resumption Anchor in osContext brief
+  const briefMd = await service.osContext({ action: 'brief', format: 'markdown' });
+  assert.ok(briefMd.includes('ContextOS Resumption Anchor'));
+  assert.ok(briefMd.includes('NEXT MANDATORY ACTION'));
+
+  const briefJson = await service.osContext({ action: 'brief', format: 'json' });
+  assert.ok(briefJson.resumptionAnchor);
+  assert.ok(briefJson.resumptionAnchor.nextMandatoryAction);
+
+  // 2. Create Plan & Task
+  const plan = await service.plan({
+    action: 'create',
+    planData: {
+      id: 'plan-probe-1',
+      title: 'Probe Test Plan',
+      phases: [{ id: 'P1', order: 0, status: 'active' }],
+    },
+    format: 'json',
+  });
+
+  const task = await service.task({
+    action: 'create',
+    taskData: {
+      id: 'task-probe-1',
+      planId: plan.id,
+      phaseId: 'P1',
+      title: 'Reverse Engineering Task',
+    },
+    format: 'json',
+  });
+
+  // 3. Task Probe Mode
+  const probeRes = await service.task({
+    action: 'probe',
+    id: task.id,
+    taskData: {
+      hypothesis: 'Verify vertex stride 80 bytes',
+      script: 'scratch/probe.py',
+      findings: 'Confirmed offset 48 contains UV coords',
+    },
+    format: 'json',
+  });
+  assert.equal(probeRes.taskId, task.id);
+  assert.equal(probeRes.probe.hypothesis, 'Verify vertex stride 80 bytes');
+
+  // Verify task notes recorded probe
+  const taskAfterProbe = await service.task({ action: 'open', id: task.id, format: 'json' });
+  assert.ok(taskAfterProbe.notes.some((n) => n.kind === 'probe'));
+
+  // 4. Create sample code files for bind_auto
+  const sampleSwift = path.join(tempDir, 'Renderer.swift');
+  fs.writeFileSync(sampleSwift, `
+import Foundation
+
+public class SceneRenderer {
+    public func render() {}
+}
+
+public struct VertexLayout {
+    public var stride: Int
+}
+`, 'utf8');
+
+  // Create initial block
+  await service.block({
+    action: 'bind',
+    id: 'block-renderer',
+    blockData: {
+      title: 'Metal Renderer',
+      summary: 'Handles GPU rendering',
+      artifactRefs: [],
+    },
+  });
+
+  // 5. Test Smart Auto-Binding (bind_auto)
+  const autoBindRes = await service.block({
+    action: 'bind_auto',
+    id: 'block-renderer',
+    path: 'Renderer.swift',
+    format: 'json',
+  });
+
+  assert.equal(autoBindRes.block.id, 'block-renderer');
+  assert.ok(autoBindRes.addedRefs.length >= 2);
+  const symbols = autoBindRes.addedRefs.map((r) => r.symbol);
+  assert.ok(symbols.includes('SceneRenderer'));
+  assert.ok(symbols.includes('VertexLayout'));
+  for (const ref of autoBindRes.addedRefs) {
+    assert.ok(ref.hash && ref.hash.length > 0);
+    assert.ok(ref.symbol && ref.symbol.length > 0);
+  }
+
+  // 6. Test Task Graduate Probe (promotes probe file and auto-binds to block)
+  const gradRes = await service.task({
+    action: 'graduate_probe',
+    id: task.id,
+    taskData: {
+      targetBlockId: 'block-renderer',
+      files: ['Renderer.swift'],
+    },
+    format: 'json',
+  });
+  assert.deepEqual(gradRes.graduatedFiles, ['Renderer.swift']);
+  assert.equal(gradRes.targetBlockId, 'block-renderer');
+
+  // 7. Physical Gate Test on task(sync):
+  // 7a. Try syncing with a block that has an unanchored ref (empty symbol or hash): MUST THROW!
+  await service.block({
+    action: 'bind',
+    id: 'block-unanchored',
+    blockData: {
+      title: 'Unanchored Block',
+      artifactRefs: [{ path: 'Renderer.swift', symbol: '', hash: '' }],
+    },
+  });
+
+  await service.task({ action: 'activate', id: task.id });
+  await service.task({
+    action: 'check',
+    id: task.id,
+    checkData: { description: 'Render test', passed: true },
+  });
+
+  await assert.rejects(
+    async () => {
+      await service.task({
+        action: 'sync',
+        id: task.id,
+        syncData: {
+          blocks: ['block-unanchored'],
+        },
+      });
+    },
+    /Invariant 1 Violation: Block 'block-unanchored' contains unanchored artifactRef/
+  );
+
+  // 7b. Repair the unanchored block using bind_auto, then sync: MUST SUCCEED!
+  await service.block({
+    action: 'bind_auto',
+    id: 'block-unanchored',
+    path: 'Renderer.swift',
+  });
+
+  const syncSuccess = await service.task({
+    action: 'sync',
+    id: task.id,
+    syncData: {
+      blocks: ['block-renderer', 'block-unanchored'],
+    },
+    format: 'json',
+  });
+  assert.equal(syncSuccess.task.status, 'completed');
+
+  service.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+

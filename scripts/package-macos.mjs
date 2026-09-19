@@ -148,13 +148,28 @@ fs.copyFileSync(zipFullV, zipFullLatest);
 const fullZipStats = fs.statSync(zipFullV);
 const appStats = fs.statSync(targetBinary);
 
+// 6. Provide Capitalized Release Names and Checksums for GitHub Releases
+const capStandardZip = path.join(distDir, 'ContextOS-macos.zip');
+const capFullZip = path.join(distDir, 'ContextOS-macos-full.zip');
+fs.copyFileSync(zipStandardLatest, capStandardZip);
+fs.copyFileSync(zipFullLatest, capFullZip);
+
+// Copy MCP standalone bundle for direct release download
+const mcpReleaseBundle = path.join(distDir, 'contextos-mcp.mjs');
+fs.copyFileSync(path.join(repoRoot, 'plugins/contextos/server/contextos-mcp.mjs'), mcpReleaseBundle);
+
+// Generate SHA256SUMS
+console.log('🔒 Step 6/6: Generating SHA256SUMS checksums...');
+execSync('shasum -a 256 ContextOS-macos.zip ContextOS-macos-full.zip contextos-mcp.mjs > SHA256SUMS', { cwd: distDir, stdio: 'inherit' });
+
 console.log('\n========================================');
 console.log('🎉 ContextOS macOS Dual Release Packaging Complete!');
 console.log(`📦 Application:       dist/ContextOS.app (Full standalone with bundled Node 22)`);
 console.log(`⚙️  Native Binary:     ContextOS (${(appStats.size / 1024 / 1024).toFixed(2)} MB)`);
 console.log(`🏷️  Version:           ${pkgVersion}`);
-console.log(`🤐 Standard Archive:  dist/contextos-macos.zip (${(standardZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
-console.log(`                      dist/contextos-macos-v${pkgVersion}.zip`);
-console.log(`🤐 Full Archive:      dist/contextos-macos-full.zip (${(fullZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
-console.log(`                      dist/contextos-macos-full-v${pkgVersion}.zip`);
+console.log(`🤐 Standard Archive:  dist/ContextOS-macos.zip (${(standardZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`🤐 Full Archive:      dist/ContextOS-macos-full.zip (${(fullZipStats.size / 1024 / 1024).toFixed(2)} MB)`);
+console.log(`📜 MCP Server:        dist/contextos-mcp.mjs`);
+console.log(`🔑 Checksums:         dist/SHA256SUMS`);
 console.log('========================================\n');
+

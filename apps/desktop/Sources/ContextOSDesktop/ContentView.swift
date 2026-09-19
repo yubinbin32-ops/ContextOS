@@ -267,14 +267,8 @@ struct ContentView: View {
                     if !store.recentProjects.isEmpty {
                         Section(store.text("recentProjects")) {
                             ForEach(store.recentProjects) { project in
-                                Menu {
-                                    Button(store.text("open")) { store.openProject(project) }
-                                    Divider()
-                                    Button(role: .destructive) {
-                                        store.removeRecentProject(project)
-                                    } label: {
-                                        Label(store.activeLocale == "zh-Hans" ? "从最近列表中移除" : "Remove from Recents", systemImage: "trash")
-                                    }
+                                Button {
+                                    store.openProject(project)
                                 } label: {
                                     let isCurrent = project.path == store.projectRoot
                                     let isCloud = project.name.contains("(Cloud)") || project.path.contains(".contextos/cloud_projects")
@@ -283,6 +277,22 @@ struct ContentView: View {
                                         systemImage: isCurrent ? "checkmark" : (isCloud ? "cloud" : "folder")
                                     )
                                 }
+                            }
+                        }
+                        Divider()
+                        Menu(store.activeLocale == "zh-Hans" ? "管理最近列表" : "Manage Recents") {
+                            ForEach(store.recentProjects) { project in
+                                Button(role: .destructive) {
+                                    store.removeRecentProject(project)
+                                } label: {
+                                    Label(store.activeLocale == "zh-Hans" ? "移除 \(project.name)" : "Remove \(project.name)", systemImage: "trash")
+                                }
+                            }
+                            Divider()
+                            Button(role: .destructive) {
+                                store.clearRecentProjects()
+                            } label: {
+                                Text(store.activeLocale == "zh-Hans" ? "清空所有最近记录" : "Clear All Recents")
                             }
                         }
                         Divider()

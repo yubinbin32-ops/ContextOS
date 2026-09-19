@@ -109,6 +109,33 @@ function renderBoundRulesSection(ruleIds, rulesMap = {}, projectRoot = null) {
 export class MarkdownRenderer {
   static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [], rulesMap = {}, projectRoot = null }) {
     const lines = [];
+
+    // 0. ContextOS Resumption Anchor (跨 Compaction 状态自愈锚点)
+    const planLabel = activePlan ? `[${activePlan.id}] ${activePlan.title}` : 'None (Call plan.create or plan.list)';
+    const currentPhase = activePlan?.phases?.find((p) => p.status === 'in_progress' || p.status === 'active')?.id || activePlan?.phases?.[0]?.id || 'N/A';
+    const taskLabel = activeTask ? `[${activeTask.id}] ${activeTask.title} (${activeTask.status.toUpperCase()})` : 'None (Call task.create or task.open)';
+    const workingSetLabel = activeTask?.workingSet?.files?.length > 0 ? activeTask.workingSet.files.slice(0, 3).join(', ') + (activeTask.workingSet.files.length > 3 ? ` (+${activeTask.workingSet.files.length - 3})` : '') : 'Clean';
+    const nextAction = !activePlan
+      ? 'Create or select a Plan via plan(action: "create")'
+      : (!activeTask
+        ? 'Create or activate a Task via task(action: "create")'
+        : (activeTask.status === 'draft'
+          ? 'Activate task via task(action: "activate")'
+          : (activeTask.status === 'active'
+            ? 'Develop with code(outline/read/edit), then test & task(check)'
+            : (activeTask.status === 'checking'
+              ? 'Complete checks & sync via task(action: "sync")'
+              : 'Task completed. Plan next task or complete plan.'))));
+
+    lines.push('┌──────────────────────── ContextOS Resumption Anchor ────────────────────────┐');
+    lines.push(`│ Active Plan:   ${planLabel.padEnd(61).slice(0, 61)} │`);
+    lines.push(`│ Current Phase: ${currentPhase.padEnd(61).slice(0, 61)} │`);
+    lines.push(`│ In-Prog Task:  ${taskLabel.padEnd(61).slice(0, 61)} │`);
+    lines.push(`│ Working Set:   ${workingSetLabel.padEnd(61).slice(0, 61)} │`);
+    lines.push(`│ NEXT MANDATORY ACTION:                                                       │`);
+    lines.push(`│ 👉 ${nextAction.padEnd(72).slice(0, 72)} │`);
+    lines.push('└──────────────────────────────────────────────────────────────────────────────┘\n');
+
     lines.push(`# ContextOS Project Brief: \`${project.id}\` (rev: ${project.graph_revision || 0})`);
     lines.push(`Root: \`${project.repo_root}\`\n`);
 

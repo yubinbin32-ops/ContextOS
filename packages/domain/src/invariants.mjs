@@ -20,6 +20,23 @@ export function assertBlockHasRealCode(block) {
       { blockId: block.id }
     );
   }
+
+  for (const ref of block.artifactRefs) {
+    if (!ref.path || typeof ref.path !== 'string' || !ref.path.trim()) {
+      throw new InvariantViolationError(
+        `Invariant 1 Violation: Block '${block.id}' contains an artifactRef without a valid path.`,
+        { blockId: block.id, ref }
+      );
+    }
+    const hasSymbol = typeof ref.symbol === 'string' && ref.symbol.trim().length > 0;
+    const hasHash = typeof ref.hash === 'string' && ref.hash.trim().length > 0;
+    if (!hasSymbol || !hasHash) {
+      throw new InvariantViolationError(
+        `Invariant 1 Violation: Block '${block.id}' contains unanchored artifactRef for '${ref.path}' (symbol: '${ref.symbol || ''}', hash: '${ref.hash || ''}'). Every code ref must have valid 'symbol' and 'hash'. Run 'block(action: "bind_auto", id: "${block.id}", path: "${ref.path}")' to automatically extract symbols and compute hashes before sync.`,
+        { blockId: block.id, ref }
+      );
+    }
+  }
 }
 
 /**

@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { V2Database, SyncEngine } from '../../storage/src/index.mjs';
 import { PlanService, TaskService, KnowledgeService } from '../../application/src/index.mjs';
-import { CodeTools, CoverageChecker } from '../../code-intel/src/index.mjs';
+import { CodeTools, CoverageChecker, LanguageRegistry, calculateHash } from '../../code-intel/src/index.mjs';
 import { runCommand, ProcessManager } from '../../process-host/src/index.mjs';
 import { NetworkLayoutEngine } from '../../layout/src/index.mjs';
 import { MarkdownRenderer } from '../../context/src/index.mjs';
@@ -54,8 +54,32 @@ export class ContextOSV2Service {
         const processes = this.processManager.listProcesses().filter((p) => p.status === 'running' || p.status === 'ready');
         const recentBlocks = this.db.listBlocks(this.projectId);
 
+        const currentPhase = activePlan?.phases?.find((p) => p.status === 'in_progress' || p.status === 'active')?.id || activePlan?.phases?.[0]?.id || 'N/A';
+        const nextAction = !activePlan
+          ? 'Create or select a Plan via plan(action: "create")'
+          : (!displayTask
+            ? 'Create or activate a Task via task(action: "create")'
+            : (displayTask.status === 'draft'
+              ? 'Activate task via task(action: "activate")'
+              : (displayTask.status === 'active'
+                ? 'Develop with code(outline/read/edit), then test & task(check)'
+                : (displayTask.status === 'checking'
+                  ? 'Complete checks & sync via task(action: "sync")'
+                  : 'Task completed. Plan next task or complete plan.'))));
+
         if (format === 'json') {
-          return { project, activePlan, activeTask: displayTask, processes, recentBlocks };
+          return {
+            resumptionAnchor: {
+              activePlan: activePlan ? { id: activePlan.id, title: activePlan.title, phase: currentPhase } : null,
+              activeTask: displayTask ? { id: displayTask.id, title: displayTask.title, status: displayTask.status } : null,
+              nextMandatoryAction: nextAction,
+            },
+            project,
+            activePlan,
+            activeTask: displayTask,
+            processes,
+            recentBlocks,
+          };
         }
         return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks, projectRoot: this.projectRoot });
       }
@@ -167,7 +191,23 @@ export class ContextOSV2Service {
   }
 
   // ================= 3. task =================
-  async task({ action, id, taskData = {}, ruleId, rules, text, kind, checkData = {}, syncData = {}, format = 'markdown' }) {
+  async task({
+    action,
+    id,
+    taskData = {},
+    ruleId,
+    rules,
+    text,
+    kind,
+    checkData = {},
+    syncData = {},
+    hypothesis,
+    script,
+    findings,
+    targetBlockId,
+    files,
+    format = 'markdown',
+  }) {
     switch (action) {
       case 'create': {
         const payload = { ...taskData };
@@ -239,13 +279,105 @@ export class ContextOSV2Service {
         const resumed = this.taskService.resumeTask(id);
         return `Task '${id}' resumed to state: ${resumed.status}.`;
       }
+      case 'probe': {
+        const targetTaskId = id || taskData?.id;
+        if (!targetTaskId) throw new Error("Missing required 'id' parameter for task probe (e.g. id: 'task-xxx')");
+        const task = this.db.getTask(targetTaskId);
+        if (!task) throw new Error(`Task '${targetTaskId}' not found`);
+
+        const hyp = hypothesis || taskData?.hypothesis || text || '';
+        const scr = script || taskData?.script || taskData?.scratchScript || '';
+        const fnd = findings || taskData?.findings || '';
+
+        const probeEntry = {
+          timestamp: new Date().toISOString(),
+          hypothesis: hyp,
+          script: scr,
+          findings: fnd,
+        };
+
+        const noteText = `[Probe Mode] Hypothesis: ${hyp || 'N/A'}${scr ? ` | Script: ${scr}` : ''}${fnd ? ` | Findings: ${fnd}` : ''}`;
+        this.taskService.addNote(targetTaskId, { text: noteText, kind: 'probe' });
+
+        const currentSlice = task.contextSlice || {};
+        const probes = Array.isArray(currentSlice.probes) ? [...currentSlice.probes] : [];
+        probes.push(probeEntry);
+        this.taskService.updateTask(targetTaskId, {
+          contextSlice: {
+            ...currentSlice,
+            probes,
+          },
+        });
+
+        if (format === 'json') return { taskId: targetTaskId, probe: probeEntry };
+        return `🔬 Probe recorded for Task '${targetTaskId}':\n` +
+          (hyp ? `- Hypothesis: ${hyp}\n` : '') +
+          (scr ? `- Script: ${scr}\n` : '') +
+          (fnd ? `- Findings: ${fnd}\n` : '') +
+          `\n*Tip: Continue exploratory experiments. When ready, call task(action: "graduate_probe", targetBlockId: "...") to formalize.*`;
+      }
+      case 'graduate_probe': {
+        const targetTaskId = id || taskData?.id;
+        if (!targetTaskId) throw new Error("Missing required 'id' parameter for task graduate_probe (e.g. id: 'task-xxx')");
+        const task = this.db.getTask(targetTaskId);
+        if (!task) throw new Error(`Task '${targetTaskId}' not found`);
+
+        const tBlockId = targetBlockId || taskData?.targetBlockId || ruleId || null;
+        const gradFiles = files || taskData?.files || (script ? [script] : (taskData?.script ? [taskData.script] : []));
+
+        const currentWorkingSet = task.workingSet || {};
+        const currentFiles = Array.isArray(currentWorkingSet.files) ? [...currentWorkingSet.files] : [];
+        for (const gf of gradFiles) {
+          if (!currentFiles.includes(gf)) {
+            currentFiles.push(gf);
+          }
+        }
+
+        this.taskService.updateTask(targetTaskId, {
+          workingSet: {
+            ...currentWorkingSet,
+            files: currentFiles,
+          },
+        });
+
+        let autoBoundMsg = '';
+        if (tBlockId && gradFiles.length > 0) {
+          try {
+            const bindRes = await this.block({
+              action: 'bind_auto',
+              id: tBlockId,
+              paths: gradFiles,
+            });
+            autoBoundMsg = `\n${bindRes}`;
+          } catch (err) {
+            autoBoundMsg = `\n(Auto-bind deferred: ${err.message})`;
+          }
+        }
+
+        const noteText = `[Probe Graduated] Promoted files to workingSet: ${gradFiles.join(', ')}${tBlockId ? ` (bound to ${tBlockId})` : ''}`;
+        this.taskService.addNote(targetTaskId, { text: noteText, kind: 'graduation' });
+
+        if (format === 'json') return { taskId: targetTaskId, graduatedFiles: gradFiles, targetBlockId: tBlockId };
+        return `🎓 Probe graduated successfully for Task '${targetTaskId}':\n` +
+          `- Promoted files to Task workingSet: ${gradFiles.join(', ')}\n` +
+          (tBlockId ? `- Linked and bound to Block: '${tBlockId}'` : '') +
+          autoBoundMsg;
+      }
       default:
         throw new Error(`Unknown task action: ${action}`);
     }
   }
 
-  // ================= 4. block =================
-  async block({ action, id, blockData = {}, query, format = 'markdown' }) {
+  async block({
+    action,
+    id,
+    blockData = {},
+    query,
+    path: targetPath,
+    paths = [],
+    symbols = [],
+    format = 'markdown',
+  }) {
     switch (action) {
       case 'list': {
         const blocks = this.db.listBlocks(this.projectId);
@@ -318,6 +450,130 @@ export class ContextOSV2Service {
         this.db.saveBlock(block);
         this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Block '${block.id}' bound with ${block.artifactRefs.length} code locators.`;
+      }
+      case 'bind_auto': {
+        const targetId = id || blockData?.id;
+        if (!targetId) {
+          throw new Error("Missing required 'id' parameter for block bind_auto action (e.g. id: 'block-render-engine')");
+        }
+        const existing = this.db.getBlock(targetId);
+        if (!existing) {
+          throw new Error(`Block '${targetId}' not found. Please create the Block first or specify a valid block ID.`);
+        }
+
+        const rawPaths = [];
+        if (targetPath) rawPaths.push(targetPath);
+        if (Array.isArray(paths)) rawPaths.push(...paths);
+        if (blockData?.path) rawPaths.push(blockData.path);
+        if (Array.isArray(blockData?.paths)) rawPaths.push(...blockData.paths);
+
+        if (rawPaths.length === 0) {
+          throw new Error("Missing 'path' or 'paths' parameter for bind_auto (e.g. path: 'SceneRenderer.swift')");
+        }
+
+        const symbolFilters = new Set(
+          (symbols || blockData?.symbols || []).map((s) => {
+            return s.includes('#') ? s.split('#')[1].trim() : s.trim();
+          }).filter(Boolean)
+        );
+
+        const autoArtifactRefs = [];
+
+        for (const inputPath of rawPaths) {
+          const cleanRelPath = inputPath.startsWith(this.projectRoot)
+            ? path.relative(this.projectRoot, inputPath)
+            : inputPath.replace(/^\.\//, '');
+          const fullPath = path.isAbsolute(inputPath)
+            ? inputPath
+            : path.join(this.projectRoot, cleanRelPath);
+
+          if (!fs.existsSync(fullPath)) {
+            throw new Error(`File not found on disk: '${cleanRelPath}' (resolved at: ${fullPath})`);
+          }
+
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory()) {
+            throw new Error(`Path is a directory, not a file: '${cleanRelPath}'. Please pass concrete code file paths.`);
+          }
+
+          const content = fs.readFileSync(fullPath, 'utf8');
+          const fileHash = calculateHash(content);
+          const lines = content.split(/\r?\n/);
+
+          let structure = null;
+          try {
+            structure = LanguageRegistry.parseStructure(cleanRelPath, content);
+          } catch (_) {
+            structure = null;
+          }
+
+          const fileSymbols = structure?.symbols || [];
+          let matchedSymbols = fileSymbols;
+
+          if (symbolFilters.size > 0) {
+            matchedSymbols = fileSymbols.filter((s) => symbolFilters.has(s.name));
+          }
+
+          if (matchedSymbols.length > 0) {
+            const CONTAINER_KINDS = new Set(['class', 'struct', 'trait', 'interface', 'extension', 'impl', 'record', 'object', 'enum']);
+            const topLevelOnly = matchedSymbols.filter((s) => CONTAINER_KINDS.has(s.kind) || s.kind === 'function');
+            const targetSymbols = topLevelOnly.length > 0 ? topLevelOnly : matchedSymbols;
+
+            for (const sym of targetSymbols) {
+              autoArtifactRefs.push({
+                path: cleanRelPath,
+                symbol: sym.name,
+                startLine: sym.startLine || 1,
+                endLine: sym.endLine || lines.length,
+                hash: sym.hash || fileHash,
+                role: 'implementation',
+              });
+            }
+          } else {
+            const baseSymbol = path.basename(cleanRelPath);
+            autoArtifactRefs.push({
+              path: cleanRelPath,
+              symbol: baseSymbol,
+              startLine: 1,
+              endLine: lines.length || 1,
+              hash: fileHash,
+              role: 'implementation',
+            });
+          }
+        }
+
+        const boundedPaths = new Set(autoArtifactRefs.map((r) => r.path));
+        const existingRefs = (existing.artifactRefs || []).filter(
+          (r) => !(boundedPaths.has(r.path) && (!r.symbol || !r.symbol.trim() || r.symbol === '*'))
+        );
+        const mergedRefs = [...existingRefs];
+        for (const autoRef of autoArtifactRefs) {
+          const idx = mergedRefs.findIndex((r) => r.path === autoRef.path && r.symbol === autoRef.symbol);
+          if (idx >= 0) {
+            mergedRefs[idx] = autoRef;
+          } else {
+            mergedRefs.push(autoRef);
+          }
+        }
+
+        const updatedBlock = {
+          ...existing,
+          ...blockData,
+          id: targetId,
+          projectId: this.projectId,
+          artifactRefs: mergedRefs,
+        };
+
+        this.db.saveBlock(updatedBlock);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+
+        if (format === 'json') {
+          return { block: updatedBlock, addedRefs: autoArtifactRefs };
+        }
+        return `✅ Smart Auto-Bound Block '${targetId}':\n` +
+          `- Extracted & Anchored ${autoArtifactRefs.length} symbol refs from ${rawPaths.length} file(s).\n` +
+          autoArtifactRefs.map((r) => `  • \`${r.path}\` -> **${r.symbol}** [L${r.startLine}-L${r.endLine}] (hash: \`${r.hash}\`)`).join('\n') +
+          `\n- Total Block Locators: ${mergedRefs.length}`;
       }
       case 'delete': {
         this.db.deleteBlock(id);

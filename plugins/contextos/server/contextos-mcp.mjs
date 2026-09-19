@@ -24513,6 +24513,22 @@ function assertBlockHasRealCode(block) {
       { blockId: block.id }
     );
   }
+  for (const ref of block.artifactRefs) {
+    if (!ref.path || typeof ref.path !== "string" || !ref.path.trim()) {
+      throw new InvariantViolationError(
+        `Invariant 1 Violation: Block '${block.id}' contains an artifactRef without a valid path.`,
+        { blockId: block.id, ref }
+      );
+    }
+    const hasSymbol = typeof ref.symbol === "string" && ref.symbol.trim().length > 0;
+    const hasHash = typeof ref.hash === "string" && ref.hash.trim().length > 0;
+    if (!hasSymbol || !hasHash) {
+      throw new InvariantViolationError(
+        `Invariant 1 Violation: Block '${block.id}' contains unanchored artifactRef for '${ref.path}' (symbol: '${ref.symbol || ""}', hash: '${ref.hash || ""}'). Every code ref must have valid 'symbol' and 'hash'. Run 'block(action: "bind_auto", id: "${block.id}", path: "${ref.path}")' to automatically extract symbols and compute hashes before sync.`,
+        { blockId: block.id, ref }
+      );
+    }
+  }
 }
 function assertPlanCanBeCompleted(plan) {
   const failedOrPending = (plan.checkpoints || []).filter((cp) => cp.status !== "passed");
@@ -47066,6 +47082,19 @@ function renderBoundRulesSection(ruleIds, rulesMap = {}, projectRoot = null) {
 var MarkdownRenderer = class _MarkdownRenderer {
   static renderBrief({ project, activePlan, activeTask, processes = [], recentBlocks = [], rulesMap = {}, projectRoot = null }) {
     const lines = [];
+    const planLabel = activePlan ? `[${activePlan.id}] ${activePlan.title}` : "None (Call plan.create or plan.list)";
+    const currentPhase = activePlan?.phases?.find((p) => p.status === "in_progress" || p.status === "active")?.id || activePlan?.phases?.[0]?.id || "N/A";
+    const taskLabel = activeTask ? `[${activeTask.id}] ${activeTask.title} (${activeTask.status.toUpperCase()})` : "None (Call task.create or task.open)";
+    const workingSetLabel = activeTask?.workingSet?.files?.length > 0 ? activeTask.workingSet.files.slice(0, 3).join(", ") + (activeTask.workingSet.files.length > 3 ? ` (+${activeTask.workingSet.files.length - 3})` : "") : "Clean";
+    const nextAction = !activePlan ? 'Create or select a Plan via plan(action: "create")' : !activeTask ? 'Create or activate a Task via task(action: "create")' : activeTask.status === "draft" ? 'Activate task via task(action: "activate")' : activeTask.status === "active" ? "Develop with code(outline/read/edit), then test & task(check)" : activeTask.status === "checking" ? 'Complete checks & sync via task(action: "sync")' : "Task completed. Plan next task or complete plan.";
+    lines.push("\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 ContextOS Resumption Anchor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510");
+    lines.push(`\u2502 Active Plan:   ${planLabel.padEnd(61).slice(0, 61)} \u2502`);
+    lines.push(`\u2502 Current Phase: ${currentPhase.padEnd(61).slice(0, 61)} \u2502`);
+    lines.push(`\u2502 In-Prog Task:  ${taskLabel.padEnd(61).slice(0, 61)} \u2502`);
+    lines.push(`\u2502 Working Set:   ${workingSetLabel.padEnd(61).slice(0, 61)} \u2502`);
+    lines.push(`\u2502 NEXT MANDATORY ACTION:                                                       \u2502`);
+    lines.push(`\u2502 \u{1F449} ${nextAction.padEnd(72).slice(0, 72)} \u2502`);
+    lines.push("\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n");
     lines.push(`# ContextOS Project Brief: \`${project.id}\` (rev: ${project.graph_revision || 0})`);
     lines.push(`Root: \`${project.repo_root}\`
 `);
@@ -47360,8 +47389,21 @@ var ContextOSV2Service = class {
         const displayTask = activeTask || (activePlan ? this.db.listTasks(activePlan.id)[0] || null : null);
         const processes = this.processManager.listProcesses().filter((p) => p.status === "running" || p.status === "ready");
         const recentBlocks = this.db.listBlocks(this.projectId);
+        const currentPhase = activePlan?.phases?.find((p) => p.status === "in_progress" || p.status === "active")?.id || activePlan?.phases?.[0]?.id || "N/A";
+        const nextAction = !activePlan ? 'Create or select a Plan via plan(action: "create")' : !displayTask ? 'Create or activate a Task via task(action: "create")' : displayTask.status === "draft" ? 'Activate task via task(action: "activate")' : displayTask.status === "active" ? "Develop with code(outline/read/edit), then test & task(check)" : displayTask.status === "checking" ? 'Complete checks & sync via task(action: "sync")' : "Task completed. Plan next task or complete plan.";
         if (format === "json") {
-          return { project, activePlan, activeTask: displayTask, processes, recentBlocks };
+          return {
+            resumptionAnchor: {
+              activePlan: activePlan ? { id: activePlan.id, title: activePlan.title, phase: currentPhase } : null,
+              activeTask: displayTask ? { id: displayTask.id, title: displayTask.title, status: displayTask.status } : null,
+              nextMandatoryAction: nextAction
+            },
+            project,
+            activePlan,
+            activeTask: displayTask,
+            processes,
+            recentBlocks
+          };
         }
         return MarkdownRenderer.renderBrief({ project, activePlan, activeTask: displayTask, processes, recentBlocks, projectRoot: this.projectRoot });
       }
@@ -47467,7 +47509,23 @@ Summary: ${completed.completedSummary}`;
     }
   }
   // ================= 3. task =================
-  async task({ action, id, taskData = {}, ruleId, rules, text, kind, checkData = {}, syncData = {}, format = "markdown" }) {
+  async task({
+    action,
+    id,
+    taskData = {},
+    ruleId,
+    rules,
+    text,
+    kind,
+    checkData = {},
+    syncData = {},
+    hypothesis,
+    script,
+    findings,
+    targetBlockId,
+    files,
+    format = "markdown"
+  }) {
     switch (action) {
       case "create": {
         const payload = { ...taskData };
@@ -47538,12 +47596,95 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
         const resumed = this.taskService.resumeTask(id);
         return `Task '${id}' resumed to state: ${resumed.status}.`;
       }
+      case "probe": {
+        const targetTaskId = id || taskData?.id;
+        if (!targetTaskId) throw new Error("Missing required 'id' parameter for task probe (e.g. id: 'task-xxx')");
+        const task = this.db.getTask(targetTaskId);
+        if (!task) throw new Error(`Task '${targetTaskId}' not found`);
+        const hyp = hypothesis || taskData?.hypothesis || text || "";
+        const scr = script || taskData?.script || taskData?.scratchScript || "";
+        const fnd = findings || taskData?.findings || "";
+        const probeEntry = {
+          timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+          hypothesis: hyp,
+          script: scr,
+          findings: fnd
+        };
+        const noteText = `[Probe Mode] Hypothesis: ${hyp || "N/A"}${scr ? ` | Script: ${scr}` : ""}${fnd ? ` | Findings: ${fnd}` : ""}`;
+        this.taskService.addNote(targetTaskId, { text: noteText, kind: "probe" });
+        const currentSlice = task.contextSlice || {};
+        const probes = Array.isArray(currentSlice.probes) ? [...currentSlice.probes] : [];
+        probes.push(probeEntry);
+        this.taskService.updateTask(targetTaskId, {
+          contextSlice: {
+            ...currentSlice,
+            probes
+          }
+        });
+        if (format === "json") return { taskId: targetTaskId, probe: probeEntry };
+        return `\u{1F52C} Probe recorded for Task '${targetTaskId}':
+` + (hyp ? `- Hypothesis: ${hyp}
+` : "") + (scr ? `- Script: ${scr}
+` : "") + (fnd ? `- Findings: ${fnd}
+` : "") + `
+*Tip: Continue exploratory experiments. When ready, call task(action: "graduate_probe", targetBlockId: "...") to formalize.*`;
+      }
+      case "graduate_probe": {
+        const targetTaskId = id || taskData?.id;
+        if (!targetTaskId) throw new Error("Missing required 'id' parameter for task graduate_probe (e.g. id: 'task-xxx')");
+        const task = this.db.getTask(targetTaskId);
+        if (!task) throw new Error(`Task '${targetTaskId}' not found`);
+        const tBlockId = targetBlockId || taskData?.targetBlockId || ruleId || null;
+        const gradFiles = files || taskData?.files || (script ? [script] : taskData?.script ? [taskData.script] : []);
+        const currentWorkingSet = task.workingSet || {};
+        const currentFiles = Array.isArray(currentWorkingSet.files) ? [...currentWorkingSet.files] : [];
+        for (const gf of gradFiles) {
+          if (!currentFiles.includes(gf)) {
+            currentFiles.push(gf);
+          }
+        }
+        this.taskService.updateTask(targetTaskId, {
+          workingSet: {
+            ...currentWorkingSet,
+            files: currentFiles
+          }
+        });
+        let autoBoundMsg = "";
+        if (tBlockId && gradFiles.length > 0) {
+          try {
+            const bindRes = await this.block({
+              action: "bind_auto",
+              id: tBlockId,
+              paths: gradFiles
+            });
+            autoBoundMsg = `
+${bindRes}`;
+          } catch (err2) {
+            autoBoundMsg = `
+(Auto-bind deferred: ${err2.message})`;
+          }
+        }
+        const noteText = `[Probe Graduated] Promoted files to workingSet: ${gradFiles.join(", ")}${tBlockId ? ` (bound to ${tBlockId})` : ""}`;
+        this.taskService.addNote(targetTaskId, { text: noteText, kind: "graduation" });
+        if (format === "json") return { taskId: targetTaskId, graduatedFiles: gradFiles, targetBlockId: tBlockId };
+        return `\u{1F393} Probe graduated successfully for Task '${targetTaskId}':
+- Promoted files to Task workingSet: ${gradFiles.join(", ")}
+` + (tBlockId ? `- Linked and bound to Block: '${tBlockId}'` : "") + autoBoundMsg;
+      }
       default:
         throw new Error(`Unknown task action: ${action}`);
     }
   }
-  // ================= 4. block =================
-  async block({ action, id, blockData = {}, query, format = "markdown" }) {
+  async block({
+    action,
+    id,
+    blockData = {},
+    query,
+    path: targetPath,
+    paths = [],
+    symbols = [],
+    format = "markdown"
+  }) {
     switch (action) {
       case "list": {
         const blocks = this.db.listBlocks(this.projectId);
@@ -47614,6 +47755,109 @@ Blocks: ${result.syncResult.createdBlockIds.join(", ")}`;
         this.db.saveBlock(block);
         this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Block '${block.id}' bound with ${block.artifactRefs.length} code locators.`;
+      }
+      case "bind_auto": {
+        const targetId = id || blockData?.id;
+        if (!targetId) {
+          throw new Error("Missing required 'id' parameter for block bind_auto action (e.g. id: 'block-render-engine')");
+        }
+        const existing = this.db.getBlock(targetId);
+        if (!existing) {
+          throw new Error(`Block '${targetId}' not found. Please create the Block first or specify a valid block ID.`);
+        }
+        const rawPaths = [];
+        if (targetPath) rawPaths.push(targetPath);
+        if (Array.isArray(paths)) rawPaths.push(...paths);
+        if (blockData?.path) rawPaths.push(blockData.path);
+        if (Array.isArray(blockData?.paths)) rawPaths.push(...blockData.paths);
+        if (rawPaths.length === 0) {
+          throw new Error("Missing 'path' or 'paths' parameter for bind_auto (e.g. path: 'SceneRenderer.swift')");
+        }
+        const symbolFilters = new Set(
+          (symbols || blockData?.symbols || []).map((s) => {
+            return s.includes("#") ? s.split("#")[1].trim() : s.trim();
+          }).filter(Boolean)
+        );
+        const autoArtifactRefs = [];
+        for (const inputPath of rawPaths) {
+          const cleanRelPath = inputPath.startsWith(this.projectRoot) ? path11.relative(this.projectRoot, inputPath) : inputPath.replace(/^\.\//, "");
+          const fullPath = path11.isAbsolute(inputPath) ? inputPath : path11.join(this.projectRoot, cleanRelPath);
+          if (!fs11.existsSync(fullPath)) {
+            throw new Error(`File not found on disk: '${cleanRelPath}' (resolved at: ${fullPath})`);
+          }
+          const stat = fs11.statSync(fullPath);
+          if (stat.isDirectory()) {
+            throw new Error(`Path is a directory, not a file: '${cleanRelPath}'. Please pass concrete code file paths.`);
+          }
+          const content = fs11.readFileSync(fullPath, "utf8");
+          const fileHash = calculateHash2(content);
+          const lines = content.split(/\r?\n/);
+          let structure = null;
+          try {
+            structure = LanguageRegistry.parseStructure(cleanRelPath, content);
+          } catch (_) {
+            structure = null;
+          }
+          const fileSymbols = structure?.symbols || [];
+          let matchedSymbols = fileSymbols;
+          if (symbolFilters.size > 0) {
+            matchedSymbols = fileSymbols.filter((s) => symbolFilters.has(s.name));
+          }
+          if (matchedSymbols.length > 0) {
+            const CONTAINER_KINDS = /* @__PURE__ */ new Set(["class", "struct", "trait", "interface", "extension", "impl", "record", "object", "enum"]);
+            const topLevelOnly = matchedSymbols.filter((s) => CONTAINER_KINDS.has(s.kind) || s.kind === "function");
+            const targetSymbols = topLevelOnly.length > 0 ? topLevelOnly : matchedSymbols;
+            for (const sym of targetSymbols) {
+              autoArtifactRefs.push({
+                path: cleanRelPath,
+                symbol: sym.name,
+                startLine: sym.startLine || 1,
+                endLine: sym.endLine || lines.length,
+                hash: sym.hash || fileHash,
+                role: "implementation"
+              });
+            }
+          } else {
+            const baseSymbol = path11.basename(cleanRelPath);
+            autoArtifactRefs.push({
+              path: cleanRelPath,
+              symbol: baseSymbol,
+              startLine: 1,
+              endLine: lines.length || 1,
+              hash: fileHash,
+              role: "implementation"
+            });
+          }
+        }
+        const boundedPaths = new Set(autoArtifactRefs.map((r) => r.path));
+        const existingRefs = (existing.artifactRefs || []).filter(
+          (r) => !(boundedPaths.has(r.path) && (!r.symbol || !r.symbol.trim() || r.symbol === "*"))
+        );
+        const mergedRefs = [...existingRefs];
+        for (const autoRef of autoArtifactRefs) {
+          const idx = mergedRefs.findIndex((r) => r.path === autoRef.path && r.symbol === autoRef.symbol);
+          if (idx >= 0) {
+            mergedRefs[idx] = autoRef;
+          } else {
+            mergedRefs.push(autoRef);
+          }
+        }
+        const updatedBlock = {
+          ...existing,
+          ...blockData,
+          id: targetId,
+          projectId: this.projectId,
+          artifactRefs: mergedRefs
+        };
+        this.db.saveBlock(updatedBlock);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        if (format === "json") {
+          return { block: updatedBlock, addedRefs: autoArtifactRefs };
+        }
+        return `\u2705 Smart Auto-Bound Block '${targetId}':
+- Extracted & Anchored ${autoArtifactRefs.length} symbol refs from ${rawPaths.length} file(s).
+` + autoArtifactRefs.map((r) => `  \u2022 \`${r.path}\` -> **${r.symbol}** [L${r.startLine}-L${r.endLine}] (hash: \`${r.hash}\`)`).join("\n") + `
+- Total Block Locators: ${mergedRefs.length}`;
       }
       case "delete": {
         this.db.deleteBlock(id);
@@ -48712,7 +48956,7 @@ function textResult(content) {
 }
 function createV2Server() {
   const server = new McpServer(
-    { name: "contextos", version: "2.2.2" },
+    { name: "contextos", version: "2.2.3" },
     {
       instructions: "ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub."
     }
@@ -48761,7 +49005,7 @@ function createV2Server() {
     {
       description: "C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.",
       inputSchema: {
-        action: _enum(["create", "open", "note", "check", "sync", "resume", "activate", "develop", "bind_rule", "unbind_rule", "update"]),
+        action: _enum(["create", "open", "note", "check", "sync", "resume", "activate", "develop", "bind_rule", "unbind_rule", "update", "probe", "graduate_probe"]),
         id: string2().optional(),
         taskData: record(any()).optional(),
         ruleId: string2().optional(),
@@ -48770,6 +49014,11 @@ function createV2Server() {
         kind: string2().optional(),
         checkData: record(any()).optional(),
         syncData: record(any()).optional(),
+        hypothesis: string2().optional(),
+        script: string2().optional(),
+        findings: string2().optional(),
+        targetBlockId: string2().optional(),
+        files: array(string2()).optional(),
         format: _enum(["markdown", "json"]).default("markdown"),
         projectRoot: string2().optional()
       }
@@ -48783,10 +49032,13 @@ function createV2Server() {
   server.registerTool(
     "block",
     {
-      description: "Manage code functional Blocks. Blocks MUST bind to real code artifacts; ghost blocks are strictly rejected.",
+      description: "Manage code functional Blocks. Blocks MUST bind to real code artifacts; ghost blocks are strictly rejected. Use bind_auto for smart 1-call Tree-sitter AST extraction.",
       inputSchema: {
-        action: _enum(["list", "open", "search", "bind", "delete"]),
+        action: _enum(["list", "open", "search", "bind", "bind_auto", "delete"]),
         id: string2().optional(),
+        path: string2().optional(),
+        paths: array(string2()).optional(),
+        symbols: array(string2()).optional(),
         query: string2().optional(),
         blockData: record(any()).optional(),
         format: _enum(["markdown", "json"]).default("markdown"),

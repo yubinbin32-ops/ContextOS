@@ -107,7 +107,7 @@ function textResult(content) {
 
 export function createV2Server() {
   const server = new McpServer(
-    { name: 'contextos', version: '2.2.2' },
+    { name: 'contextos', version: '2.2.3' },
     {
       instructions:
         'ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub.',
@@ -163,7 +163,7 @@ export function createV2Server() {
     {
       description: 'C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.',
       inputSchema: {
-        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume', 'activate', 'develop', 'bind_rule', 'unbind_rule', 'update']),
+        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume', 'activate', 'develop', 'bind_rule', 'unbind_rule', 'update', 'probe', 'graduate_probe']),
         id: z.string().optional(),
         taskData: z.record(z.any()).optional(),
         ruleId: z.string().optional(),
@@ -172,6 +172,11 @@ export function createV2Server() {
         kind: z.string().optional(),
         checkData: z.record(z.any()).optional(),
         syncData: z.record(z.any()).optional(),
+        hypothesis: z.string().optional(),
+        script: z.string().optional(),
+        findings: z.string().optional(),
+        targetBlockId: z.string().optional(),
+        files: z.array(z.string()).optional(),
         format: z.enum(['markdown', 'json']).default('markdown'),
         projectRoot: z.string().optional(),
       },
@@ -187,10 +192,13 @@ export function createV2Server() {
   server.registerTool(
     'block',
     {
-      description: 'Manage code functional Blocks. Blocks MUST bind to real code artifacts; ghost blocks are strictly rejected.',
+      description: 'Manage code functional Blocks. Blocks MUST bind to real code artifacts; ghost blocks are strictly rejected. Use bind_auto for smart 1-call Tree-sitter AST extraction.',
       inputSchema: {
-        action: z.enum(['list', 'open', 'search', 'bind', 'delete']),
+        action: z.enum(['list', 'open', 'search', 'bind', 'bind_auto', 'delete']),
         id: z.string().optional(),
+        path: z.string().optional(),
+        paths: z.array(z.string()).optional(),
+        symbols: z.array(z.string()).optional(),
         query: z.string().optional(),
         blockData: z.record(z.any()).optional(),
         format: z.enum(['markdown', 'json']).default('markdown'),
