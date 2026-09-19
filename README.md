@@ -81,6 +81,12 @@ Download the package matching your environment from [GitHub Releases](https://gi
 4. In your AI coding chat, simply activate ContextOS:
    > *"Write this proposal into ContextOS and start execution"* or *"Inspect ContextOS and resume development"*
 
+> [!IMPORTANT]
+> **First-time launch on macOS shows "Cannot be opened" or "Unidentified Developer"?**
+> ContextOS is an open-source tool without Apple's paid developer certificate notarization. macOS Gatekeeper will block it on first launch by default. You only need to allow it once:
+> - **Method 1 (System Settings · Recommended)**: Open macOS **System Settings ➔ Privacy & Security**, scroll down to the "Security" section, and click **Open Anyway** next to "ContextOS was blocked". Enter your password to confirm.
+> - **Method 2 (Control-Click Shortcut)**: In Finder, open `/Applications`, hold **Control and click (or right-click)** `ContextOS.app`, select **Open** from the context menu, and click **Open** in the confirmation dialog.
+
 ![One-click editor and MCP synchronization](assets/settings-sync.png)
 
 ---

@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "description": "Spatial architecture canvas and context optimization OS for AI coding agents with C-D-C-S workflow.",
   "author": {
     "name": "ContextOS"

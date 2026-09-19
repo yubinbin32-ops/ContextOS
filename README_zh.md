@@ -81,6 +81,12 @@ graph TD
 4. 在编辑器对话中只需一句话唤醒 ContextOS 协作：
    > **“把这个方案写入 ContextOS 后开始执行”** 或 **“查看 ContextOS 继续开发”**
 
+> [!IMPORTANT]
+> **首次在 macOS 打开提示“无法打开”或“已拦截未受信任的开发者”？**
+> 由于独立开源软件尚未加入苹果付费开发者签名公证，macOS Gatekeeper 安全机制会在首次双击启动时弹出风险拦截提示。这是 macOS 的正常保护机制，**仅需在首次启动时放行一次即可**：
+> - **方式一（系统设置放行 · 推荐）**：打开 macOS **“系统设置” (System Settings) ➔ “隐私与安全性” (Privacy & Security)**，向下滑动到“安全性”栏目，在“已拦截 ContextOS.app”旁边点击 **“仍要打开” (Open Anyway)** 并确认。
+> - **方式二（快捷右键打开）**：在“访达”（Finder）的“应用程序”中找到 `ContextOS`，按住 **Control 键点按（或右键）** 应用图标，在右键菜单中点击 **“打开”**，并在二次弹出的警告窗中点击 **“打开”**。
+
 ![一键同步编辑器和 MCP](assets/settings-sync.png)
 
 ---
