@@ -40,7 +40,7 @@ export function sanitizeTerminalOutput(rawText, options = {}) {
   const warnings = [];
 
   for (const line of nonNoiseLines) {
-    if (line.match(/error[:\s]|failed|failure|exception|fatal/i)) {
+    if (exitCode !== 0 && line.match(/error[:\s]|failed|failure|exception|fatal/i)) {
       errors.push(line);
     } else if (line.match(/warning[:\s]|warn[:\s]/i)) {
       warnings.push(line);
@@ -48,7 +48,7 @@ export function sanitizeTerminalOutput(rawText, options = {}) {
   }
 
   let summary = '';
-  if (exitCode === 0 && errors.length === 0) {
+  if (exitCode === 0) {
     if (lines.length <= 15 && cleaned.length <= maxChars) {
       summary = `Command succeeded (${lines.length} lines).`;
     } else {
@@ -63,7 +63,7 @@ export function sanitizeTerminalOutput(rawText, options = {}) {
 
   // Construct compact text
   let resultText = '';
-  if (exitCode === 0 && errors.length === 0) {
+  if (exitCode === 0) {
     if (lines.length <= 15 && cleaned.length <= maxChars) {
       resultText = lines.join('\n');
     } else {

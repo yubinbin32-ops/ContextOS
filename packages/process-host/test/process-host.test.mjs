@@ -41,16 +41,24 @@ test('runCommand executes command, logs out-of-context, and compresses context',
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('Sanitizer treats the exit code as authoritative for successful command output', () => {
+  const sanitized = sanitizeTerminalOutput('Recovered from a failed attempt successfully.\n', { exitCode: 0 });
+  assert.match(sanitized.summary, /succeeded/i);
+  assert.ok(!sanitized.summary.includes('Command failed'));
+  assert.equal(sanitized.errors.length, 0);
+});
+
 test('ProcessManager starts, streams logs, and terminates process group', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-proc-test-'));
   const manager = new ProcessManager({ projectRoot: tempDir });
 
   // Start a background ticking process
   const session = await manager.startProcess({
+    id: 'test-process',
     command: 'node -e "setInterval(() => console.log(\'tick-\' + Date.now()), 50)"',
   });
 
-  assert.ok(session.id);
+  assert.equal(session.id, 'test-process');
   assert.equal(session.status, 'running');
   assert.ok(session.pid > 0);
 

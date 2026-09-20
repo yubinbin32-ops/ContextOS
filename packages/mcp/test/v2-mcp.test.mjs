@@ -239,6 +239,101 @@ test('ContextOSV2Service executes core facades end-to-end', async () => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('task.start and task.finish provide a lightweight lifecycle', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-task-lite-'));
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'task-lite' });
+  fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+  fs.mkdirSync(path.join(tempDir, 'test'), { recursive: true });
+  fs.writeFileSync(path.join(tempDir, 'src/add.mjs'), 'export function add(a, b) { return a + b; }\n', 'utf8');
+  fs.writeFileSync(
+    path.join(tempDir, 'test/add.test.mjs'),
+    [
+      "import test from 'node:test';",
+      "import assert from 'node:assert/strict';",
+      "import { add } from '../src/add.mjs';",
+      "test('adds', () => assert.equal(add(1, 2), 3));",
+      '',
+    ].join('\n'),
+    'utf8'
+  );
+
+  const started = await service.task({
+    action: 'start',
+    taskData: {
+      id: 'task-lite',
+      title: 'Lightweight add',
+      workingSet: ['src/add.mjs', 'test/add.test.mjs'],
+      rules: ['rule-testing'],
+    },
+    format: 'json',
+  });
+  assert.equal(started.task.status, 'active');
+  assert.equal(started.lightweight, true);
+  assert.ok(started.autoPlanId.startsWith('plan-light-'));
+
+  await service.block({
+    action: 'bind_auto',
+    id: 'block-add',
+    paths: ['src/add.mjs', 'test/add.test.mjs'],
+  });
+
+  const finished = await service.task({
+    action: 'finish',
+    id: 'task-lite',
+    checkData: {
+      command: 'node --test test/add.test.mjs',
+      description: 'Lightweight test passed',
+    },
+    syncData: { blocks: ['block-add'] },
+    format: 'json',
+  });
+  assert.equal(finished.task.status, 'completed');
+  assert.equal(finished.check.passed, true);
+  assert.equal(finished.completedPlan.status, 'completed');
+  assert.equal(finished.syncResult.coverage.coveragePercent, 100);
+
+  service.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('sync coverage failures return structured repair guidance', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-coverage-repair-'));
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'coverage-repair' });
+  fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(tempDir, 'src/orphan.mjs'), 'export const orphan = true;\n', 'utf8');
+
+  await service.task({
+    action: 'start',
+    taskData: {
+      id: 'task-orphan',
+      title: 'Orphan coverage',
+      workingSet: ['src/orphan.mjs'],
+    },
+  });
+  await service.task({
+    action: 'check',
+    id: 'task-orphan',
+    checkData: {
+      description: 'Manual evidence',
+      passed: true,
+      evidence: 'Reviewed manually before coverage gate',
+    },
+  });
+
+  await assert.rejects(
+    () => service.task({ action: 'sync', id: 'task-orphan' }),
+    /Suggested repair: call block\(action:"bind_auto"/
+  );
+
+  const failed = await service.task({ action: 'open', id: 'task-orphan', format: 'json' });
+  assert.equal(failed.status, 'sync_failed');
+  assert.deepEqual(failed.syncResult.repair.paths, ['src/orphan.mjs']);
+  assert.deepEqual(failed.syncResult.repair.then, ['task.resume', 'task.sync']);
+
+  service.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
 test('createV2Server registers all 12 tools', () => {
   const server = createV2Server();
   assert.ok(server);
@@ -282,6 +377,26 @@ test('dependency directories bind as tree anchors and run_command stores a recei
   assert.equal(receipt.exitCode, 0);
   assert.equal(receipt.buildRun, undefined);
   assert.ok(service.db.getCommandReceipt(receipt.id));
+
+  service.close();
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('bind_auto uses file anchors for non-code documents', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-file-anchor-mcp-'));
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'file-anchor-mcp' });
+  fs.mkdirSync(path.join(tempDir, 'docs'), { recursive: true });
+  fs.writeFileSync(path.join(tempDir, 'docs/development.md'), '# Development\n\nRelease notes.\n', 'utf8');
+
+  const result = await service.block({
+    action: 'bind_auto',
+    id: 'block-docs',
+    path: 'docs/development.md',
+    format: 'json',
+  });
+  assert.equal(result.addedRefs.length, 1);
+  assert.equal(result.addedRefs[0].anchorKind, 'file');
+  assert.equal(result.addedRefs[0].symbol, 'development.md');
 
   service.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
@@ -339,6 +454,11 @@ test('initProjectWorkspace guarantees local vs cloud isolation', async () => {
   assert.equal(localConfig.storage, 'local');
   assert.equal(localConfig.isCloud, false);
   assert.equal(localConfig.cloudUrl, undefined);
+
+  assert.throws(
+    () => initProjectWorkspace({ projectRoot: tempDir, mode: 'cloud' }),
+    /Cloud mode requires a cloudUrl/
+  );
 
   const readLocal = JSON.parse(fs.readFileSync(path.join(tempDir, '.contextos', 'project.json'), 'utf8'));
   assert.equal(readLocal.storage, 'local');

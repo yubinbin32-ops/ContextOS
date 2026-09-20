@@ -506,6 +506,10 @@ test('TaskService manages explicit rule bindings and task updates', () => {
   });
 
   assert.deepEqual(task.rules, ['rule-surgical-code-editing']);
+  assert.deepEqual(
+    planService.getPlan('plan-rule-test').phases.find((phase) => phase.id === 'P0').taskIds,
+    ['task-app-rule']
+  );
 
   // Bind rule
   const bound = taskService.bindRule('task-app-rule', 'rule-product-contract');
@@ -523,9 +527,11 @@ test('TaskService manages explicit rule bindings and task updates', () => {
   // Update task
   const updated = taskService.updateTask('task-app-rule', {
     title: 'Updated Rule Test Task',
+    workingSet: ['src/updated.mjs'],
     rules: ['rule-ui-aesthetic-precision', 'rule-command-sessions'],
   });
   assert.equal(updated.title, 'Updated Rule Test Task');
+  assert.deepEqual(updated.workingSet.files, ['src/updated.mjs']);
   assert.deepEqual(updated.rules, ['rule-ui-aesthetic-precision', 'rule-command-sessions']);
 
   // Update task using references.rules object

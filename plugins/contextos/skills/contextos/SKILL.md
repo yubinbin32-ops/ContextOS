@@ -19,16 +19,48 @@ ContextOS 是面向自主 AI 智能体（Agent）全生命周期的上下文控�
 
 ---
 
+## 任务路径选择（先选轻量或完整，不要机械套流程）
+
+### A. 轻量任务路径（推荐：1~3 个文件、无新架构、无 UI 改动）
+
+```text
+os_context(brief)
+  -> task(action: "start", taskData: { title, workingSet, rules })
+  -> code(outline/read/edit)
+  -> task(action: "finish", id, checkData: { command, description }, syncData: { blocks? })
+```
+
+- `task.start` 一次完成“创建 Task + 绑定 workingSet/规则 + 激活”；没有 Plan 时会自动创建 `plan-light-*`。
+- `task.finish` 一次完成“执行命令 + 记录 Receipt + 记录 check + 覆盖率门禁 + sync”；轻量 Plan 会在全部 Task 完成后自动完成。
+- 仍必须提供真实命令、Receipt 和 100% 覆盖率。轻量路径只减少调用步骤，不跳过证据门禁。
+
+### B. 完整架构路径（多模块、新功能、重构、UI、跨系统依赖）
+
+```text
+os_context(brief)
+  -> plan(create/open)
+  -> task(start/create with rules)
+  -> code
+  -> block(bind_auto) / chain(compose/link)
+  -> run_command -> task(check/finish)
+  -> task(sync) -> plan(check/complete)
+```
+
+- 涉及新架构边界、跨模块契约、UI/UX 或共享数据流时，必须走完整路径。
+- `task.sync` 的 100% Block 覆盖门禁不可绕过；覆盖率失败时先绑定 uncovered 文件，再 `task.resume` 重试。
+
+> 无论走哪条路径，第一步都必须是 `os_context(brief)`；任何代码改动都不得跳过真实检查和 Receipt。
+
 ## 核心开发节奏：C-D-C-S 闭环（规约优先与全生命周期硬性门禁）
 
 在进行任何真实功能开发、重构或缺陷修复时，**必须强制遵循** **`Create → Develop → Check → Sync`** 的确定性工程闭环，并在各阶段严格贯彻规约检查：
 
 ```text
-[1. Create]   os_context(brief) ──> plan/task(create/open with rules: [...]) ──> task(develop)
+[1. Create]   os_context(brief) ──> task.start 或 plan/task(create/open with rules: [...])
                     │
 [2. Develop]  Bound Rules Awareness (按需 rule_open) ──> code(search/outline) ──> code(read) ──> code(edit) ──> task(note)
                     │
-[3. Check]    run_command(test/lint) ──> task(check with receiptId)
+[3. Check]    run_command(test/lint) ──> task(check/finish with receiptId)
                     │
 [4. Sync]     task(sync with 100% coverage gate) ──> plan(check/complete)
 ```
@@ -75,6 +107,7 @@ ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周
 ### 3. `task` —— C-D-C-S 任务状态机与覆盖率门禁
 - **核心作用**：执行原子开发任务，绑定物理工作集，显式关联规约规则，记录笔记与检查证据，并在最终 Sync 时执行覆盖率门禁。
 - **关键 Action 与入参**：
+  - `action: "start", taskData: { title, workingSet, rules }`：**【轻量入口，推荐】** 一次完成创建、绑定、激活；未提供 `planId` 时优先复用活跃 Plan，没有活跃 Plan 时自动创建 `plan-light-*`。
   - `action: "create", taskData: { planId, phaseId, title, description, workingSet: ["src/..."], rules: ["rule-surgical-code-editing"] }`：创建任务并显式绑定相关规约规则。
   - `action: "bind_rule", id: "任务ID", ruleId: "rule-xxx"`：为进行中任务追加绑定规约规则。
   - `action: "unbind_rule", id: "任务ID", ruleId: "rule-xxx"`：为任务解绑指定规约规则。
@@ -83,7 +116,8 @@ ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周
   - `action: "note", id: "任务ID", text: "记录内容", kind: "decision" | "discovery" | "progress"`：在任务流中沉淀重要决策与发现。
   - `action: "probe", id: "任务ID", hypothesis: "假设描述", script: "scratch/probe_script.py", findings: "实验结论"`：**【探针/逆向探索态】**。在算法探索或逆向工程初期沉淀摸索成果，不强加严格 Block 绑定要求。
   - `action: "graduate_probe", id: "任务ID", targetBlockId: "BlockID", files: ["..."]`：**【探针晋级】**。探索验证成功后，一键将探针代码推入正式 workingSet，并自动触发 AST 智能绑定到目标 Block。
-  - `action: "check", id: "任务ID", checkData: { receiptId: "...", description: "单元测试通过", passed: true }`：记录命令回执验证。
+  - `action: "check", id: "任务ID", checkData: { receiptId: "...", description: "单元测试通过", passed: true }`：记录命令回执验证；`checkData.command` 可直接执行命令并自动生成 Receipt。
+  - `action: "finish", id: "任务ID", checkData: { command: "npm test", description: "测试通过" }, syncData: { blocks: [...] }`：**【轻量收尾，推荐】** 一次完成命令验证、Receipt、check 和 sync；轻量 Plan 会在最后自动完结。
   - `action: "sync", id: "任务ID", syncData: { blocks: [...], chains: [...], links: [...] }`：**原子写回**。workingSet 中每个文件必须由精确 file/symbol 锚点或目录 tree 锚点覆盖；未覆盖文件会阻断同步。依赖目录使用 manifest Hash，不枚举文件。
 - **最佳使用时机**：日常功能实现与 bugfix 的主战场。摸索阶段调用 `probe`，开发过程中随时记录 `note`，测试通过后一次性执行 `sync`。
 
@@ -131,7 +165,7 @@ ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周
   - `action: "bind_auto", id: "BlockID", path: "文件路径", paths: ["..."], symbols: ["..."]`：**【一键智能 AST 自动绑定（强烈推荐）】**。文件会通过 Tree-sitter 抽取顶层符号与 Hash；目录会生成一个 `anchorKind: "tree"` 绑定，不枚举目录内文件。
   - `action: "bind_auto", id: "BlockID", path: "node_modules", hashMode: "manifest", manifest: "package-lock.json"`：依赖目录使用一个 `dependency` Block 和 manifest Hash 表达边界，适用于 node_modules、vendor、Pods 等大目录。
   - `action: "bind", id: "BlockID", blockData: { artifactRefs: [...] }`：手工高级绑定。
-- **约束规范**：**杜绝虚空 Block（Ghost Block）与未锚定符号**。源码使用 `anchorKind: "symbol"` 并要求 `symbol + hash`；配置文件使用 `anchorKind: "file"`；资源或依赖目录使用 `anchorKind: "tree"`，`hashMode: "content"` 计算目录内容，`hashMode: "manifest"` 只使用 lockfile/manifest Hash。
+- **约束规范**：优先用 `bind_auto`，不要让 Block 长期停留在无物理锚点状态。源码使用 `anchorKind: "symbol"` 并要求 `symbol + hash`；配置文件使用 `anchorKind: "file"`；资源或依赖目录使用 `anchorKind: "tree"`，`hashMode: "content"` 计算目录内容，`hashMode: "manifest"` 只使用 lockfile/manifest Hash。`block.bind` 可以暂时建立待补锚点的 Block，但 `task.sync` 会拒绝未锚定 Block。
 - **边界原则**：generated/build/dist 产物不创建 Block，也不进入架构图谱；需要追溯时查看 `run_command` Receipt 与 `.contextos/logs`。
 
 ### 8. `chain` —— 地铁主线与正交换乘链接
@@ -168,12 +202,31 @@ ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周
 - **核心作用**：全方位诊断当前宿主环境、Node 运行时、存储路由模式、Cloudflare 连通性以及各大已安装编辑器的 MCP 配置状态。
 - **使用时机**：配置完毕后进行自检，或在遇到连接异常时快速获取排障诊断报告。
 
-### 12. `contextos_switch` —— 本地与云端无损双向切换与数据同步
-- **核心作用**：在当前项目自由切换本地离线模式与云端协同模式，并自动完成架构数据的双向迁移。
+### 12. `contextos_switch` —— 本地与实验性云端切换
+- **核心作用**：在当前项目切换本地离线模式与实验性 Cloud Hub 模式，并尝试完成架构快照迁移。
 - **关键入参**：`targetMode: "local" | "cloud"`, `cloudUrl?: "..."`, `token?: "..."`。
 - **迁移机制**：
-  - `local ➔ cloud`：读取本地 SQLite 数据库中的所有 Block、Chain、Link、Plan 并无损同步至 Cloud Hub，更新 project.json；
-  - `cloud ➔ local`：拉取云端最新架构快照写入本地 SQLite，更新 project.json 并完全切断网络依赖。
+  - `local ➔ cloud`：读取本地 SQLite 中的架构快照并推送到兼容的 Cloud Hub，更新 project.json；
+  - `cloud ➔ local`：拉取兼容的云端快照写入本地 SQLite，更新 project.json 并回到离线模式。
+- **边界**：切换到云端前必须确认 Hub 可达且版本兼容；切换失败时不得改写 `project.json`。本地模式始终可独立离线运行，不应因为全局旧云端配置而尝试联网。
+- **实验状态**：Cloud Hub 的多端并发、跨版本快照和远程 CRUD 尚未达到本地模式同等稳定性；不得把云端切换作为本版本的关键依赖。
+
+### 12 工具 Action 契约速查
+
+| Tool | Actions |
+| --- | --- |
+| `os_context` | `brief`, `search`, `open`, `reconcile` |
+| `plan` | `list`, `create`, `open`, `check`, `complete`, `delete` |
+| `task` | `create`, `start`, `open`, `note`, `check`, `finish`, `sync`, `resume`, `activate`, `develop`, `bind_rule`, `unbind_rule`, `update`, `probe`, `graduate_probe`, `reconcile` |
+| `block` | `list`, `open`, `search`, `bind`, `bind_auto`, `delete` |
+| `chain` | `list`, `open`, `compose`, `delete`, `link`, `unlink`, `links`, `validate_layout`, `validate` |
+| `code` | `outline`, `read`, `edit`, `search`, `create` |
+| `run_command` | 无 action，直接传 `command` |
+| `process` | `start`, `list`, `status`, `logs`, `stop`, `clear` |
+| `knowledge` | `rule_list`, `rule_open`, `rule_write`, `decision_open`, `decision_write` |
+| `contextos_init` | 无 action，直接传 `mode` |
+| `contextos_doctor` | 无 action |
+| `contextos_switch` | 无 action，直接传 `targetMode` |
 
 ---
 
@@ -190,12 +243,7 @@ ContextOS 收敛为 12 个高内聚 Facade 工具，覆盖 AI 开发全生命周
 ### 2. 项目已固化核心规则矩阵（Core Rule Matrix）
 ContextOS 仓库已内置并严格强制以下核心规则，智能体在相应场景必须无条件遵从：
 
-1. **`rule-ui-aesthetic-precision`（iOS 克制艺术与白色精密数学工程界面规范）**：
-   - **纯白与极浅冷灰工作台**：主画布与操作区使用坚实纯白背景（`#FFFFFF` / `#FBFBFD`），边框使用 0.5pt/1pt 超精细单像素发丝分割线（`#E5E5EA`）；
-   - **8pt 数学网格模数**：所有组件尺寸、间距、填充严格遵循 4pt / 8pt / 16pt / 24pt 的数学倍数，确保跨分辨率下的几何严丝合缝；
-   - **字体排印与等宽度量**：Apple SF Pro 作为界面排版字体，SF Mono 纯等宽字体展示数字、哈希、链路 ID、行号与状态码，提供精密仪表级读数质感；
-   - **Metro 地铁轨道式导轨**：水平主干道、90 度正交换乘廊道（Orthogonal Routing）、圆角半透明导轨胶囊包裹区；
-   - **功能性克制色彩**：通行绿 `#34C759`、冷核蓝 `#007AFF`、静谧紫 `#5856D6`、警示橙 `#FF9500`、故障红 `#FF3B30`。严禁非语义装饰杂色与粗糙无序通用卡片！
+1. **`rule-ui-aesthetic-precision`**：涉及 ContextOS 原生界面的任务必须读取该规则后执行；UI 细节不在 Skill 内重复展开。
 2. **`rule-out-of-context-commands`（命令出舱脱敏与回执凭据治理）**：
    - 严禁倾倒冗长终端日志进对话上下文；单次测试、构建与脚本必须经由 `run_command` 执行；
    - 全量日志出舱持久化存盘至 `.contextos/logs/<timestamp>-<hash>.log`；
@@ -339,9 +387,10 @@ ContextOS 的数据同时持久化在本地 SQLite 与 Git 追踪的结构化文
 - 系统在工作区 `.contextos/project.json` 标记 `"storage": "local"` 并建立本地 SQLite；
 - 初始化完成后，直接进入 C-D-C-S 正常开发流程。
 
-### 2. 随时双向无损切换规范
+### 2. 实验性云端切换规范
 仅当用户在对话中主动提出切换要求时才执行切换：
-- 用户说：“把本项目切换到云端协同模式” ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，本地架构数据完整推送到云端 D1；
-- 用户说：“把本项目切回本地模式” ➔ AI 调用 `contextos_switch(targetMode: "local")`，云端最新快照自动落盘为本地 SQLite，后续完全离线运行。
+- 用户说：“把本项目切换到云端协同模式” ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，推送兼容快照到 Cloud Hub；
+- 用户说：“把本项目切回本地模式” ➔ AI 调用 `contextos_switch(targetMode: "local")`，拉取兼容快照并回到本地离线模式。
+- Cloud Hub 为实验功能；如果 Hub 不可达、版本不兼容或快照字段缺失，必须明确报告失败并保留本地状态。
 
 ---

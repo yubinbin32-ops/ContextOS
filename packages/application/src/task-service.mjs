@@ -406,7 +406,22 @@ export class TaskService {
     }
 
     this.db.saveTask(task.toJSON());
+    this._attachTaskToPlanPhase(task);
     return task.toJSON();
+  }
+
+  _attachTaskToPlanPhase(task) {
+    if (!task.planId || !task.phaseId) return;
+    const plan = this.db.getPlan(task.planId);
+    if (!plan) return;
+    const phase = (plan.phases || []).find((item) => item.id === task.phaseId);
+    if (!phase) return;
+    if (!Array.isArray(phase.taskIds)) phase.taskIds = [];
+    if (!phase.taskIds.includes(task.id)) {
+      phase.taskIds.push(task.id);
+      plan.updatedAt = new Date().toISOString();
+      this.db.savePlan(plan);
+    }
   }
 
   bindRule(taskId, ruleId) {
@@ -438,7 +453,10 @@ export class TaskService {
       updated.contextSlice = { ...raw.contextSlice, ...taskData.contextSlice };
     }
     if (taskData.workingSet) {
-      updated.workingSet = { ...raw.workingSet, ...taskData.workingSet };
+      const incomingWorkingSet = Array.isArray(taskData.workingSet)
+        ? { files: taskData.workingSet }
+        : taskData.workingSet;
+      updated.workingSet = { ...raw.workingSet, ...incomingWorkingSet };
     }
     if (taskData.references) {
       updated.references = { ...raw.references, ...taskData.references };
@@ -465,6 +483,7 @@ export class TaskService {
     const task = new Task(updated);
     task.updatedAt = new Date().toISOString();
     this.db.saveTask(task.toJSON());
+    this._attachTaskToPlanPhase(task);
     return task.toJSON();
   }
 
@@ -696,10 +715,22 @@ export class TaskService {
     const coverage = CoverageChecker.checkCoverage(allWorkingSetFiles, resolvedBlocks);
 
     if (!coverage.isFullyCovered) {
+      const repair = {
+        action: 'block.bind_auto',
+        paths: coverage.uncoveredList,
+        then: ['task.resume', 'task.sync'],
+      };
       task.failSync(`Coverage gap: Missing Block ownership for: ${coverage.uncoveredList.join(', ')}`);
+      task.syncResult.coverage = {
+        totalFiles: coverage.totalFiles,
+        coveredFiles: coverage.coveredFiles,
+        coveragePercent: coverage.coveragePercent,
+      };
+      task.syncResult.repair = repair;
       this.db.saveTask(task.toJSON());
       throw new Error(
-        `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverage.uncoveredList.join(', ')}`
+        `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverage.uncoveredList.join(', ')}. ` +
+        `Suggested repair: call block(action:"bind_auto", id:"<block-id>", paths:${JSON.stringify(repair.paths)}), then task(action:"resume") and retry.`
       );
     }
 

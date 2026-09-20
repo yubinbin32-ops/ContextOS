@@ -195,6 +195,9 @@ export class Plan {
       throw new Error(`Cannot complete Plan ${this.id}: checkpoints not passed: ${pending.join(', ')}`);
     }
     this.status = 'completed';
+    for (const phase of this.phases) {
+      phase.complete();
+    }
     this.completedSummary = completedSummary || this.summary;
     this.historyRef = historyRef;
     this.updatedAt = new Date().toISOString();

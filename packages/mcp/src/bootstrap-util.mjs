@@ -554,6 +554,9 @@ export function initProjectWorkspace({
   }
 
   const isCloud = mode === 'cloud';
+  if (isCloud && !cloudUrl) {
+    throw new Error('Cloud mode requires a cloudUrl. Configure a compatible Cloud Hub before switching.');
+  }
   const projectConfig = {
     ...existing,
     id: projectId || existing.id || 'contextos',

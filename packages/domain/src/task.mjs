@@ -56,11 +56,15 @@ export class Task {
       openQuestions: Array.isArray(contextSlice.openQuestions) ? [...contextSlice.openQuestions] : [],
     };
 
+    const normalizedWorkingSet = Array.isArray(workingSet)
+      ? { files: workingSet }
+      : (workingSet || {});
+
     this.workingSet = {
-      files: Array.isArray(workingSet.files) ? [...workingSet.files] : [],
-      symbols: Array.isArray(workingSet.symbols) ? [...workingSet.symbols] : [],
-      candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : [],
-      scopeDirs: Array.isArray(workingSet.scopeDirs) ? [...workingSet.scopeDirs] : [],
+      files: Array.isArray(normalizedWorkingSet.files) ? [...normalizedWorkingSet.files] : [],
+      symbols: Array.isArray(normalizedWorkingSet.symbols) ? [...normalizedWorkingSet.symbols] : [],
+      candidateBlockIds: Array.isArray(normalizedWorkingSet.candidateBlockIds) ? [...normalizedWorkingSet.candidateBlockIds] : [],
+      scopeDirs: Array.isArray(normalizedWorkingSet.scopeDirs) ? [...normalizedWorkingSet.scopeDirs] : [],
     };
 
     const initialRules = Array.isArray(rules)

@@ -24607,6 +24607,9 @@ var Plan = class {
       throw new Error(`Cannot complete Plan ${this.id}: checkpoints not passed: ${pending.join(", ")}`);
     }
     this.status = "completed";
+    for (const phase of this.phases) {
+      phase.complete();
+    }
     this.completedSummary = completedSummary || this.summary;
     this.historyRef = historyRef;
     this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
@@ -24681,11 +24684,12 @@ var Task = class {
       nextSteps: Array.isArray(contextSlice.nextSteps) ? [...contextSlice.nextSteps] : [],
       openQuestions: Array.isArray(contextSlice.openQuestions) ? [...contextSlice.openQuestions] : []
     };
+    const normalizedWorkingSet = Array.isArray(workingSet) ? { files: workingSet } : workingSet || {};
     this.workingSet = {
-      files: Array.isArray(workingSet.files) ? [...workingSet.files] : [],
-      symbols: Array.isArray(workingSet.symbols) ? [...workingSet.symbols] : [],
-      candidateBlockIds: Array.isArray(workingSet.candidateBlockIds) ? [...workingSet.candidateBlockIds] : [],
-      scopeDirs: Array.isArray(workingSet.scopeDirs) ? [...workingSet.scopeDirs] : []
+      files: Array.isArray(normalizedWorkingSet.files) ? [...normalizedWorkingSet.files] : [],
+      symbols: Array.isArray(normalizedWorkingSet.symbols) ? [...normalizedWorkingSet.symbols] : [],
+      candidateBlockIds: Array.isArray(normalizedWorkingSet.candidateBlockIds) ? [...normalizedWorkingSet.candidateBlockIds] : [],
+      scopeDirs: Array.isArray(normalizedWorkingSet.scopeDirs) ? [...normalizedWorkingSet.scopeDirs] : []
     };
     const initialRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references?.rules) ? references.rules : [];
     this.references = {
@@ -46812,7 +46816,21 @@ var TaskService = class {
       this._initializeFileSnapshots(task, projectRoot);
     }
     this.db.saveTask(task.toJSON());
+    this._attachTaskToPlanPhase(task);
     return task.toJSON();
+  }
+  _attachTaskToPlanPhase(task) {
+    if (!task.planId || !task.phaseId) return;
+    const plan = this.db.getPlan(task.planId);
+    if (!plan) return;
+    const phase = (plan.phases || []).find((item) => item.id === task.phaseId);
+    if (!phase) return;
+    if (!Array.isArray(phase.taskIds)) phase.taskIds = [];
+    if (!phase.taskIds.includes(task.id)) {
+      phase.taskIds.push(task.id);
+      plan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      this.db.savePlan(plan);
+    }
   }
   bindRule(taskId, ruleId) {
     const raw = this.db.getTask(taskId);
@@ -46840,7 +46858,8 @@ var TaskService = class {
       updated.contextSlice = { ...raw.contextSlice, ...taskData.contextSlice };
     }
     if (taskData.workingSet) {
-      updated.workingSet = { ...raw.workingSet, ...taskData.workingSet };
+      const incomingWorkingSet = Array.isArray(taskData.workingSet) ? { files: taskData.workingSet } : taskData.workingSet;
+      updated.workingSet = { ...raw.workingSet, ...incomingWorkingSet };
     }
     if (taskData.references) {
       updated.references = { ...raw.references, ...taskData.references };
@@ -46859,6 +46878,7 @@ var TaskService = class {
     const task = new Task(updated);
     task.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     this.db.saveTask(task.toJSON());
+    this._attachTaskToPlanPhase(task);
     return task.toJSON();
   }
   getTask(taskId) {
@@ -47044,10 +47064,21 @@ var TaskService = class {
     const allWorkingSetFiles = task.workingSet.files || [];
     const coverage = CoverageChecker.checkCoverage(allWorkingSetFiles, resolvedBlocks);
     if (!coverage.isFullyCovered) {
+      const repair = {
+        action: "block.bind_auto",
+        paths: coverage.uncoveredList,
+        then: ["task.resume", "task.sync"]
+      };
       task.failSync(`Coverage gap: Missing Block ownership for: ${coverage.uncoveredList.join(", ")}`);
+      task.syncResult.coverage = {
+        totalFiles: coverage.totalFiles,
+        coveredFiles: coverage.coveredFiles,
+        coveragePercent: coverage.coveragePercent
+      };
+      task.syncResult.repair = repair;
       this.db.saveTask(task.toJSON());
       throw new Error(
-        `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverage.uncoveredList.join(", ")}`
+        `Task sync failed: Working set code has no Block coverage. Uncovered files: ${coverage.uncoveredList.join(", ")}. Suggested repair: call block(action:"bind_auto", id:"<block-id>", paths:${JSON.stringify(repair.paths)}), then task(action:"resume") and retry.`
       );
     }
     for (const block of resolvedBlocks) assertBlockHasRealCode(block);
@@ -47257,14 +47288,14 @@ function sanitizeTerminalOutput(rawText, options = {}) {
   const errors = [];
   const warnings = [];
   for (const line of nonNoiseLines) {
-    if (line.match(/error[:\s]|failed|failure|exception|fatal/i)) {
+    if (exitCode !== 0 && line.match(/error[:\s]|failed|failure|exception|fatal/i)) {
       errors.push(line);
     } else if (line.match(/warning[:\s]|warn[:\s]/i)) {
       warnings.push(line);
     }
   }
   let summary = "";
-  if (exitCode === 0 && errors.length === 0) {
+  if (exitCode === 0) {
     if (lines.length <= 15 && cleaned.length <= maxChars) {
       summary = `Command succeeded (${lines.length} lines).`;
     } else {
@@ -47277,7 +47308,7 @@ function sanitizeTerminalOutput(rawText, options = {}) {
     summary = `Command failed with exit code ${exitCode}. Found ${errors.length} error(s).`;
   }
   let resultText = "";
-  if (exitCode === 0 && errors.length === 0) {
+  if (exitCode === 0) {
     if (lines.length <= 15 && cleaned.length <= maxChars) {
       resultText = lines.join("\n");
     } else {
@@ -47481,13 +47512,17 @@ var ProcessManager = class {
     }
   }
   async startProcess({
+    id = null,
     command,
     cwd = this.projectRoot,
     env = process.env,
     readyRegex = null,
     portRegex = null
   }) {
-    const sessionId = `proc-${Date.now()}-${crypto8.randomBytes(3).toString("hex")}`;
+    const sessionId = id || `proc-${Date.now()}-${crypto8.randomBytes(3).toString("hex")}`;
+    if (this.sessions.has(sessionId)) {
+      throw new Error(`Process session '${sessionId}' already exists`);
+    }
     const logDir = path11.join(this.projectRoot, ".contextos", "logs");
     fs11.mkdirSync(logDir, { recursive: true });
     const logFile = path11.join(logDir, `${sessionId}.log`);
@@ -48235,7 +48270,7 @@ var ContextOSV2Service = class {
         const recentBlocks = this.db.listBlocks(this.projectId);
         const writeLock = inspectProjectWriteLock(this.projectRoot);
         const currentPhase = activePlan?.phases?.find((p) => p.status === "in_progress" || p.status === "active")?.id || activePlan?.phases?.[0]?.id || "N/A";
-        const nextAction = this.stateConflict ? 'Resolve graph state conflict via os_context(action: "reconcile")' : activeTasks.length > 1 ? "Resolve multiple active Tasks before continuing: " + activeTasks.map((task) => task.id).join(", ") : writeLock?.alive && writeLock.owner?.pid !== process.pid ? "Wait for the active project writer or inspect the project lock" : !activePlan ? 'Create or select a Plan via plan(action: "create")' : !displayTask ? 'Create or activate a Task via task(action: "create")' : displayTask.status === "draft" ? 'Activate task via task(action: "activate")' : displayTask.status === "active" ? "Develop with code(outline/read/edit), then test & task(check)" : displayTask.status === "checking" ? 'Complete checks & sync via task(action: "sync")' : "Task completed. Plan next task or complete plan.";
+        const nextAction = this.stateConflict ? 'Resolve graph state conflict via os_context(action: "reconcile")' : activeTasks.length > 1 ? "Resolve multiple active Tasks before continuing: " + activeTasks.map((task) => task.id).join(", ") : writeLock?.alive && writeLock.owner?.pid !== process.pid ? "Wait for the active project writer or inspect the project lock" : !activePlan ? 'Create a Plan or start a lightweight Task via task(action: "start")' : !displayTask ? 'Create or activate a Task via task(action: "start")' : displayTask.status === "draft" ? 'Activate task via task(action: "activate")' : displayTask.status === "active" ? 'Develop with code(outline/read/edit), then use task(action: "finish") or task(check) + task(sync)' : displayTask.status === "checking" ? 'Complete checks & sync via task(action: "finish") or task(action: "sync")' : "Task completed. Plan next task or complete plan.";
         if (format === "json") {
           return {
             resumptionAnchor: {
@@ -48397,6 +48432,34 @@ Summary: ${completed.completedSummary}`;
   async task(input) {
     return this._withWriteLock("task", () => this._task(input));
   }
+  _ensurePlanPhase(planId, preferredPhaseId = null) {
+    const plan = this.db.getPlan(planId);
+    if (!plan) throw new Error(`Plan '${planId}' not found`);
+    const phases = Array.isArray(plan.phases) ? plan.phases : [];
+    const phase = phases.find((item) => item.id === preferredPhaseId) || phases.find((item) => item.status === "active" || item.status === "in_progress") || phases[0];
+    if (phase) {
+      if (phase.status === "pending") {
+        phase.status = "active";
+        plan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        this.db.savePlan(plan);
+      }
+      return phase.id;
+    }
+    const createdPhase = {
+      id: preferredPhaseId || "phase-work",
+      order: 0,
+      objective: "",
+      scope: "",
+      deliverables: [],
+      status: "active",
+      taskIds: [],
+      acceptance: []
+    };
+    plan.phases = [...phases, createdPhase];
+    plan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    this.db.savePlan(plan);
+    return createdPhase.id;
+  }
   async _task({
     action,
     id,
@@ -48415,6 +48478,43 @@ Summary: ${completed.completedSummary}`;
     format = "markdown"
   }) {
     switch (action) {
+      case "start": {
+        const payload = { ...taskData };
+        payload.id = payload.id || `task-${Date.now()}`;
+        payload.title = payload.title || "Untitled task";
+        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
+        if (rules && !payload.rules) payload.rules = rules;
+        let autoPlanId = null;
+        if (!payload.planId) {
+          const activePlan = this.db.listPlans(this.projectId).filter((plan) => plan.status === "active").at(-1);
+          if (activePlan) {
+            payload.planId = activePlan.id;
+          } else {
+            const createdPlan = this.planService.createPlan({
+              id: `plan-light-${payload.id}`,
+              projectId: this.projectId,
+              title: payload.title,
+              summary: `Auto-created lightweight plan for task '${payload.title}'.`,
+              phases: [{ id: "phase-work", order: 0, status: "active" }],
+              checkpoints: []
+            });
+            payload.planId = createdPlan.id;
+            autoPlanId = createdPlan.id;
+          }
+        }
+        payload.phaseId = this._ensurePlanPhase(payload.planId, payload.phaseId);
+        const created = this.taskService.createTask(payload, this.projectRoot);
+        const started = this.taskService.activateTask(created.id, this.projectRoot);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        if (format === "json") {
+          return {
+            task: started,
+            autoPlanId,
+            lightweight: Boolean(autoPlanId)
+          };
+        }
+        return `Task '${started.id}' started in state '${started.status}'.${autoPlanId ? ` Auto-created lightweight plan '${autoPlanId}'.` : ""}`;
+      }
       case "create": {
         const payload = { ...taskData };
         if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
@@ -48459,6 +48559,65 @@ Summary: ${completed.completedSummary}`;
       case "check": {
         const check = this.taskService.addCheck(id, checkData, this.projectRoot, this.projectId);
         return `Verification check recorded for Task '${id}': [${check.passed ? "PASS" : "FAIL"}] ${check.description}`;
+      }
+      case "finish": {
+        let resolvedCheckData = { ...checkData };
+        if (!resolvedCheckData.receiptId && !resolvedCheckData.evidence) {
+          if (!resolvedCheckData.command) {
+            throw new Error("task.finish requires checkData.command, checkData.receiptId, or checkData.evidence");
+          }
+          const receipt = await this.runCommand({
+            command: resolvedCheckData.command,
+            cwd: resolvedCheckData.cwd,
+            maxChars: resolvedCheckData.maxChars,
+            timeoutMs: resolvedCheckData.timeoutMs
+          });
+          if (receipt.exitCode !== 0) {
+            this.taskService.addNote(id, {
+              text: `[Failed Check] ${resolvedCheckData.description || resolvedCheckData.command}: ${receipt.summary}`,
+              kind: "check"
+            });
+            const error2 = new Error(
+              `task.finish check failed with exit code ${receipt.exitCode}. Receipt: ${receipt.id}. Log: ${receipt.logHandle || "N/A"}`
+            );
+            error2.receipt = receipt;
+            throw error2;
+          }
+          resolvedCheckData = {
+            ...resolvedCheckData,
+            receiptId: receipt.id,
+            passed: resolvedCheckData.passed !== false,
+            description: resolvedCheckData.description || resolvedCheckData.command
+          };
+        }
+        const check = this.taskService.addCheck(id, resolvedCheckData, this.projectRoot, this.projectId);
+        const result = this.taskService.syncTask(id, {
+          ...syncData,
+          projectRoot: this.projectRoot,
+          projectId: this.projectId
+        });
+        let completedPlan = null;
+        const plan = this.db.getPlan(result.task.planId);
+        if (plan && plan.id.startsWith("plan-light-") && (!plan.checkpoints || plan.checkpoints.length === 0)) {
+          const tasks = this.db.listTasks(plan.id);
+          if (tasks.length > 0 && tasks.every((task) => task.status === "completed")) {
+            completedPlan = this.planService.completePlan(plan.id, {
+              completedSummary: `Lightweight task '${result.task.title}' completed.`
+            });
+            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+          }
+        }
+        if (format === "json") {
+          return {
+            ...result,
+            check,
+            completedPlan
+          };
+        }
+        return `Task '${id}' finished and synced.
+Revision: ${result.graphRevision}
+Coverage: ${result.syncResult.coverage.coveragePercent}%${completedPlan ? `
+Lightweight plan '${completedPlan.id}' completed.` : ""}`;
       }
       case "sync": {
         const result = this.taskService.syncTask(id, {
@@ -48718,9 +48877,10 @@ ${bindRes}`;
             structure = null;
           }
           const fileSymbols = structure?.symbols || [];
-          let matchedSymbols = fileSymbols;
+          const declaredSymbols = fileSymbols.filter((symbol) => symbol.kind !== "file");
+          let matchedSymbols = declaredSymbols;
           if (symbolFilters.size > 0) {
-            matchedSymbols = fileSymbols.filter((s) => symbolFilters.has(s.name));
+            matchedSymbols = declaredSymbols.filter((s) => symbolFilters.has(s.name));
           }
           if (matchedSymbols.length > 0) {
             const CONTAINER_KINDS = /* @__PURE__ */ new Set(["class", "struct", "trait", "interface", "extension", "impl", "record", "object", "enum"]);
@@ -49050,7 +49210,7 @@ ${res.code}
   async _process({ action, command, id, lines = 50, grep }) {
     switch (action) {
       case "start":
-        return this.processManager.startProcess({ command });
+        return this.processManager.startProcess({ id, command });
       case "list":
         return this.processManager.listProcesses();
       case "status":
@@ -49350,6 +49510,50 @@ ${localBrief}` : localBrief;
     }
   }
 };
+
+// packages/mcp/src/tool-contract.mjs
+var TOOL_ACTIONS = Object.freeze({
+  os_context: Object.freeze(["brief", "search", "open", "reconcile"]),
+  plan: Object.freeze(["list", "create", "open", "check", "complete", "delete"]),
+  task: Object.freeze([
+    "create",
+    "start",
+    "open",
+    "note",
+    "check",
+    "finish",
+    "sync",
+    "resume",
+    "activate",
+    "develop",
+    "bind_rule",
+    "unbind_rule",
+    "update",
+    "probe",
+    "graduate_probe",
+    "reconcile"
+  ]),
+  block: Object.freeze(["list", "open", "search", "bind", "bind_auto", "delete"]),
+  chain: Object.freeze([
+    "list",
+    "open",
+    "compose",
+    "delete",
+    "link",
+    "unlink",
+    "links",
+    "validate_layout",
+    "validate"
+  ]),
+  code: Object.freeze(["outline", "read", "edit", "search", "create"]),
+  run_command: Object.freeze([]),
+  process: Object.freeze(["start", "list", "status", "logs", "stop", "clear"]),
+  knowledge: Object.freeze(["rule_list", "rule_open", "rule_write", "decision_open", "decision_write"]),
+  contextos_init: Object.freeze([]),
+  contextos_doctor: Object.freeze([]),
+  contextos_switch: Object.freeze([])
+});
+var MCP_TOOL_NAMES = Object.freeze(Object.keys(TOOL_ACTIONS));
 
 // packages/mcp/src/bootstrap-util.mjs
 import fs14 from "node:fs";
@@ -49821,6 +50025,9 @@ function initProjectWorkspace({
     }
   }
   const isCloud = mode === "cloud";
+  if (isCloud && !cloudUrl) {
+    throw new Error("Cloud mode requires a cloudUrl. Configure a compatible Cloud Hub before switching.");
+  }
   const projectConfig = {
     ...existing,
     id: projectId || existing.id || "contextos",
@@ -49991,7 +50198,7 @@ function textResult(content) {
 }
 function createV2Server() {
   const server = new McpServer(
-    { name: "contextos", version: "2.3.0" },
+    { name: "contextos", version: "2.4.0" },
     {
       instructions: "ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub."
     }
@@ -50001,7 +50208,7 @@ function createV2Server() {
     {
       description: "Project context gateway. Use action=brief on session start or resume; search to find entities; open to read an entity; reconcile to check external Git/JSON changes.",
       inputSchema: {
-        action: _enum(["brief", "search", "open", "reconcile"]).default("brief"),
+        action: _enum(TOOL_ACTIONS.os_context).default("brief"),
         query: string2().optional(),
         entityId: string2().optional(),
         format: _enum(["markdown", "json"]).default("markdown"),
@@ -50019,7 +50226,7 @@ function createV2Server() {
     {
       description: "Manage delivery Plans, Phases and Plan Checkpoints (formal acceptance). Checkpoints belong strictly to Plans.",
       inputSchema: {
-        action: _enum(["list", "create", "open", "check", "complete", "delete"]),
+        action: _enum(TOOL_ACTIONS.plan),
         id: string2().optional(),
         planData: record(any()).optional(),
         checkpointId: string2().optional(),
@@ -50038,9 +50245,9 @@ function createV2Server() {
   server.registerTool(
     "task",
     {
-      description: "C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.",
+      description: "C-D-C-S task lifecycle. Use task=start for a lightweight create+activate path and task=finish for check+sync; full create/develop/check/sync remains available. Sync requires 100% Block coverage.",
       inputSchema: {
-        action: _enum(["create", "open", "note", "check", "sync", "resume", "activate", "develop", "bind_rule", "unbind_rule", "update", "probe", "graduate_probe", "reconcile"]),
+        action: _enum(TOOL_ACTIONS.task),
         id: string2().optional(),
         taskData: record(any()).optional(),
         ruleId: string2().optional(),
@@ -50069,7 +50276,7 @@ function createV2Server() {
     {
       description: "Manage code functional Blocks. Blocks bind to real files, AST symbols, or directory trees; ghost blocks are rejected. Use bind_auto for symbols and dependency/resource directories.",
       inputSchema: {
-        action: _enum(["list", "open", "search", "bind", "bind_auto", "delete"]),
+        action: _enum(TOOL_ACTIONS.block),
         id: string2().optional(),
         path: string2().optional(),
         paths: array(string2()).optional(),
@@ -50093,7 +50300,7 @@ function createV2Server() {
     {
       description: "Feature chains and dependency links. Link kind reflects true semantics: depends_on, calls, imports, implements.",
       inputSchema: {
-        action: _enum(["list", "open", "compose", "delete", "link", "unlink", "links", "validate_layout", "validate"]),
+        action: _enum(TOOL_ACTIONS.chain),
         id: string2().optional(),
         chainData: record(any()).optional(),
         linkData: record(any()).optional(),
@@ -50112,7 +50319,7 @@ function createV2Server() {
     {
       description: "Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, symbol search, and create new files with AST registration.",
       inputSchema: {
-        action: _enum(["outline", "read", "edit", "search", "create"]),
+        action: _enum(TOOL_ACTIONS.code),
         path: string2().optional(),
         selector: union([string2(), record(any())]).optional(),
         startLine: number2().optional(),
@@ -50154,7 +50361,7 @@ function createV2Server() {
     {
       description: "Manage long-running daemon background processes (dev servers, watchers). Stop terminates entire process group.",
       inputSchema: {
-        action: _enum(["start", "list", "status", "logs", "stop", "clear"]),
+        action: _enum(TOOL_ACTIONS.process),
         id: string2().optional(),
         command: string2().optional(),
         lines: number2().default(50),
@@ -50173,7 +50380,7 @@ function createV2Server() {
     {
       description: "Project knowledge management: categorized Rules and single-narrative project Decision (DECISION.md).",
       inputSchema: {
-        action: _enum(["rule_list", "rule_open", "rule_write", "decision_open", "decision_write"]),
+        action: _enum(TOOL_ACTIONS.knowledge),
         ruleId: string2().optional(),
         ruleData: record(any()).optional(),
         sectionId: string2().optional(),
@@ -50345,8 +50552,8 @@ ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
         }
       }
       const globalCloud = getGlobalCloudConfig();
-      const resolvedCloudUrl = input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL;
-      const resolvedToken = input.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN;
+      const resolvedCloudUrl = input.targetMode === "cloud" ? input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL : input.cloudUrl || proj.cloudUrl;
+      const resolvedToken = input.token || (input.targetMode === "cloud" ? globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN : null);
       const pid = input.projectId || proj.id || "contextos";
       if (input.targetMode === "cloud") {
         if (!resolvedCloudUrl) {

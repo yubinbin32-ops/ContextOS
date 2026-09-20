@@ -122,15 +122,15 @@ export class ContextOSV2Service {
           : writeLock?.alive && writeLock.owner?.pid !== process.pid
           ? 'Wait for the active project writer or inspect the project lock'
           : (!activePlan
-          ? 'Create or select a Plan via plan(action: "create")'
+          ? 'Create a Plan or start a lightweight Task via task(action: "start")'
           : (!displayTask
-            ? 'Create or activate a Task via task(action: "create")'
+            ? 'Create or activate a Task via task(action: "start")'
             : (displayTask.status === 'draft'
               ? 'Activate task via task(action: "activate")'
               : (displayTask.status === 'active'
-                ? 'Develop with code(outline/read/edit), then test & task(check)'
+                ? 'Develop with code(outline/read/edit), then use task(action: "finish") or task(check) + task(sync)'
                 : (displayTask.status === 'checking'
-                  ? 'Complete checks & sync via task(action: "sync")'
+                  ? 'Complete checks & sync via task(action: "finish") or task(action: "sync")'
                   : 'Task completed. Plan next task or complete plan.')))));
 
         if (format === 'json') {
@@ -300,6 +300,39 @@ export class ContextOSV2Service {
     return this._withWriteLock('task', () => this._task(input));
   }
 
+  _ensurePlanPhase(planId, preferredPhaseId = null) {
+    const plan = this.db.getPlan(planId);
+    if (!plan) throw new Error(`Plan '${planId}' not found`);
+    const phases = Array.isArray(plan.phases) ? plan.phases : [];
+    const phase = phases.find((item) => item.id === preferredPhaseId)
+      || phases.find((item) => item.status === 'active' || item.status === 'in_progress')
+      || phases[0];
+
+    if (phase) {
+      if (phase.status === 'pending') {
+        phase.status = 'active';
+        plan.updatedAt = new Date().toISOString();
+        this.db.savePlan(plan);
+      }
+      return phase.id;
+    }
+
+    const createdPhase = {
+      id: preferredPhaseId || 'phase-work',
+      order: 0,
+      objective: '',
+      scope: '',
+      deliverables: [],
+      status: 'active',
+      taskIds: [],
+      acceptance: [],
+    };
+    plan.phases = [...phases, createdPhase];
+    plan.updatedAt = new Date().toISOString();
+    this.db.savePlan(plan);
+    return createdPhase.id;
+  }
+
   async _task({
     action,
     id,
@@ -318,6 +351,50 @@ export class ContextOSV2Service {
     format = 'markdown',
   }) {
     switch (action) {
+      case 'start': {
+        const payload = { ...taskData };
+        payload.id = payload.id || `task-${Date.now()}`;
+        payload.title = payload.title || 'Untitled task';
+        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
+        if (rules && !payload.rules) payload.rules = rules;
+
+        let autoPlanId = null;
+        if (!payload.planId) {
+          const activePlan = this.db
+            .listPlans(this.projectId)
+            .filter((plan) => plan.status === 'active')
+            .at(-1);
+
+          if (activePlan) {
+            payload.planId = activePlan.id;
+          } else {
+            const createdPlan = this.planService.createPlan({
+              id: `plan-light-${payload.id}`,
+              projectId: this.projectId,
+              title: payload.title,
+              summary: `Auto-created lightweight plan for task '${payload.title}'.`,
+              phases: [{ id: 'phase-work', order: 0, status: 'active' }],
+              checkpoints: [],
+            });
+            payload.planId = createdPlan.id;
+            autoPlanId = createdPlan.id;
+          }
+        }
+
+        payload.phaseId = this._ensurePlanPhase(payload.planId, payload.phaseId);
+        const created = this.taskService.createTask(payload, this.projectRoot);
+        const started = this.taskService.activateTask(created.id, this.projectRoot);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+
+        if (format === 'json') {
+          return {
+            task: started,
+            autoPlanId,
+            lightweight: Boolean(autoPlanId),
+          };
+        }
+        return `Task '${started.id}' started in state '${started.status}'.${autoPlanId ? ` Auto-created lightweight plan '${autoPlanId}'.` : ''}`;
+      }
       case 'create': {
         const payload = { ...taskData };
         if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
@@ -361,6 +438,65 @@ export class ContextOSV2Service {
       case 'check': {
         const check = this.taskService.addCheck(id, checkData, this.projectRoot, this.projectId);
         return `Verification check recorded for Task '${id}': [${check.passed ? 'PASS' : 'FAIL'}] ${check.description}`;
+      }
+      case 'finish': {
+        let resolvedCheckData = { ...checkData };
+        if (!resolvedCheckData.receiptId && !resolvedCheckData.evidence) {
+          if (!resolvedCheckData.command) {
+            throw new Error("task.finish requires checkData.command, checkData.receiptId, or checkData.evidence");
+          }
+          const receipt = await this.runCommand({
+            command: resolvedCheckData.command,
+            cwd: resolvedCheckData.cwd,
+            maxChars: resolvedCheckData.maxChars,
+            timeoutMs: resolvedCheckData.timeoutMs,
+          });
+          if (receipt.exitCode !== 0) {
+            this.taskService.addNote(id, {
+              text: `[Failed Check] ${resolvedCheckData.description || resolvedCheckData.command}: ${receipt.summary}`,
+              kind: 'check',
+            });
+            const error = new Error(
+              `task.finish check failed with exit code ${receipt.exitCode}. Receipt: ${receipt.id}. Log: ${receipt.logHandle || 'N/A'}`
+            );
+            error.receipt = receipt;
+            throw error;
+          }
+          resolvedCheckData = {
+            ...resolvedCheckData,
+            receiptId: receipt.id,
+            passed: resolvedCheckData.passed !== false,
+            description: resolvedCheckData.description || resolvedCheckData.command,
+          };
+        }
+
+        const check = this.taskService.addCheck(id, resolvedCheckData, this.projectRoot, this.projectId);
+        const result = this.taskService.syncTask(id, {
+          ...syncData,
+          projectRoot: this.projectRoot,
+          projectId: this.projectId,
+        });
+
+        let completedPlan = null;
+        const plan = this.db.getPlan(result.task.planId);
+        if (plan && plan.id.startsWith('plan-light-') && (!plan.checkpoints || plan.checkpoints.length === 0)) {
+          const tasks = this.db.listTasks(plan.id);
+          if (tasks.length > 0 && tasks.every((task) => task.status === 'completed')) {
+            completedPlan = this.planService.completePlan(plan.id, {
+              completedSummary: `Lightweight task '${result.task.title}' completed.`,
+            });
+            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+          }
+        }
+
+        if (format === 'json') {
+          return {
+            ...result,
+            check,
+            completedPlan,
+          };
+        }
+        return `Task '${id}' finished and synced.\nRevision: ${result.graphRevision}\nCoverage: ${result.syncResult.coverage.coveragePercent}%${completedPlan ? `\nLightweight plan '${completedPlan.id}' completed.` : ''}`;
       }
       case 'sync': {
         const result = this.taskService.syncTask(id, {
@@ -649,10 +785,11 @@ export class ContextOSV2Service {
           }
 
           const fileSymbols = structure?.symbols || [];
-          let matchedSymbols = fileSymbols;
+          const declaredSymbols = fileSymbols.filter((symbol) => symbol.kind !== 'file');
+          let matchedSymbols = declaredSymbols;
 
           if (symbolFilters.size > 0) {
-            matchedSymbols = fileSymbols.filter((s) => symbolFilters.has(s.name));
+            matchedSymbols = declaredSymbols.filter((s) => symbolFilters.has(s.name));
           }
 
           if (matchedSymbols.length > 0) {
@@ -1010,7 +1147,7 @@ export class ContextOSV2Service {
   async _process({ action, command, id, lines = 50, grep }) {
     switch (action) {
       case 'start':
-        return this.processManager.startProcess({ command });
+        return this.processManager.startProcess({ id, command });
       case 'list':
         return this.processManager.listProcesses();
       case 'status':

@@ -311,6 +311,33 @@ test('Task explicit rule binding, lifecycle, and toJSON serialization', () => {
   assert.deepEqual(taskFromRuleRefs.rules, ['rule-command-sessions']);
 });
 
+test('Task accepts the documented array shorthand for workingSet.files', () => {
+  const task = new Task({
+    id: 'task-working-set-array',
+    planId: 'plan-1',
+    phaseId: 'P0',
+    title: 'Array working set',
+    workingSet: ['src/a.mjs', 'test/a.test.mjs'],
+  });
+
+  assert.deepEqual(task.workingSet.files, ['src/a.mjs', 'test/a.test.mjs']);
+  assert.deepEqual(task.workingSet.symbols, []);
+  assert.deepEqual(task.toJSON().workingSet.files, ['src/a.mjs', 'test/a.test.mjs']);
+});
+
+test('Completing a Plan completes its phases', () => {
+  const plan = new Plan({
+    id: 'plan-phase-completion',
+    projectId: 'proj-1',
+    title: 'Phase completion',
+    phases: [{ id: 'P0', status: 'active' }],
+  });
+
+  plan.complete({ completedSummary: 'done' });
+  assert.equal(plan.status, 'completed');
+  assert.equal(plan.phases[0].status, 'completed');
+});
+
 test('File anchor invariant accepts hashes without a symbol and rejects placeholders', () => {
   const fileBlock = new Block({
     id: 'block-file-anchor',

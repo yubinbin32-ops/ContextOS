@@ -59,13 +59,17 @@ export class ProcessManager {
   }
 
   async startProcess({
+    id = null,
     command,
     cwd = this.projectRoot,
     env = process.env,
     readyRegex = null,
     portRegex = null,
   }) {
-    const sessionId = `proc-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+    const sessionId = id || `proc-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+    if (this.sessions.has(sessionId)) {
+      throw new Error(`Process session '${sessionId}' already exists`);
+    }
     const logDir = path.join(this.projectRoot, '.contextos', 'logs');
     fs.mkdirSync(logDir, { recursive: true });
     const logFile = path.join(logDir, `${sessionId}.log`);

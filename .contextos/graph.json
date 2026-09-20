@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "contextos",
-  "graphRevision": 349,
-  "exportedAt": "2026-09-19T19:06:55.414Z",
+  "graphRevision": 377,
+  "exportedAt": "2026-09-20T05:08:54.682Z",
   "data": {
     "plans": [
       {
@@ -77,6 +77,93 @@
         ],
         "createdAt": "2026-09-19T12:13:29.916Z",
         "updatedAt": "2026-09-19T14:11:18.225Z"
+      },
+      {
+        "id": "plan-agent-flow",
+        "projectId": "contextos",
+        "title": "Agent flow simplification and Skill contract alignment",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "Reduce task lifecycle friction while keeping the full C-D-C-S architecture path and aligning Skill, schemas, and services.",
+        "completedSummary": "Lightweight task flow and Skill/tool contract alignment verified; macOS and standalone MCP packages rebuilt for v2.4.0.",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-lite",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [
+              "task-agent-flow-optimization"
+            ],
+            "acceptance": []
+          },
+          {
+            "id": "phase-contract",
+            "order": 1,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": []
+          },
+          {
+            "id": "phase-verify",
+            "order": 2,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [
+          {
+            "id": "cp-lite-flow",
+            "planId": "plan-agent-flow",
+            "phaseId": null,
+            "title": "Lightweight task flow passes end to end",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1789880839984-76eba2"
+            ],
+            "completedAt": "2026-09-20T05:07:54.495Z"
+          },
+          {
+            "id": "cp-contract",
+            "planId": "plan-agent-flow",
+            "phaseId": null,
+            "title": "Tool and Skill contract checks pass",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1789880839984-76eba2"
+            ],
+            "completedAt": "2026-09-20T05:07:54.531Z"
+          },
+          {
+            "id": "cp-package",
+            "planId": "plan-agent-flow",
+            "phaseId": null,
+            "title": "Updated package is verified",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1789880881292-7d8fd2"
+            ],
+            "completedAt": "2026-09-20T05:08:54.625Z"
+          }
+        ],
+        "createdAt": "2026-09-20T05:02:00.548Z",
+        "updatedAt": "2026-09-20T05:08:54.677Z"
       },
       {
         "id": "plan-architecture-cognition",
@@ -476,6 +563,148 @@
         ],
         "createdAt": "2026-09-19T14:39:31.052Z",
         "updatedAt": "2026-09-19T15:59:10.922Z"
+      },
+      {
+        "id": "plan-v231-phase-fix",
+        "projectId": "contextos",
+        "title": "v2.3.1 plan phase consistency fix",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "Ensure separately-created tasks attach to phases and completing a plan completes its phases.",
+        "completedSummary": "Phase task attachment and phase completion consistency verified.",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-fix",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [
+              "task-phase-consistency-fix"
+            ],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [
+          {
+            "id": "cp-phase-fix",
+            "planId": "plan-v231-phase-fix",
+            "phaseId": null,
+            "title": "Phase consistency verified",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1789847194756-208235"
+            ],
+            "completedAt": "2026-09-19T19:46:56.374Z"
+          }
+        ],
+        "createdAt": "2026-09-19T19:46:28.286Z",
+        "updatedAt": "2026-09-19T19:46:56.408Z"
+      },
+      {
+        "id": "plan-v231-process-id",
+        "projectId": "contextos",
+        "title": "v2.3.1 process id contract fix",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "Honor the optional process.start id parameter and verify it end to end.",
+        "completedSummary": "process.start now honors the optional id and is covered by unit plus zero-project MCP verification.",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-process",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [
+              "task-process-id-contract"
+            ],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [
+          {
+            "id": "cp-process-id",
+            "planId": "plan-v231-process-id",
+            "phaseId": null,
+            "title": "Process id contract verified",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1789847352008-d26149"
+            ],
+            "completedAt": "2026-09-19T19:49:33.924Z"
+          }
+        ],
+        "createdAt": "2026-09-19T19:49:05.514Z",
+        "updatedAt": "2026-09-19T19:49:33.955Z"
+      },
+      {
+        "id": "plan-v231-release",
+        "projectId": "contextos",
+        "title": "v2.3.1 release verification and hardening",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "Fix defects found by the zero-project MCP lifecycle test, re-run all gates, and package a local release.",
+        "completedSummary": "v2.3.1 zero-project lifecycle fixes verified; macOS standard/full release archives and standalone MCP bundle packaged locally. Phase consistency follow-up verified.",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "phase-harden",
+            "order": 0,
+            "objective": "",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [
+              "task-fix-zero-project-defects"
+            ],
+            "acceptance": []
+          }
+        ],
+        "checkpoints": [
+          {
+            "id": "cp-zero-project",
+            "planId": "plan-v231-release",
+            "phaseId": null,
+            "title": "Zero-project MCP lifecycle passes",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1789846979567-0c1519"
+            ],
+            "completedAt": "2026-09-19T19:43:35.591Z"
+          },
+          {
+            "id": "cp-release-package",
+            "planId": "plan-v231-release",
+            "phaseId": null,
+            "title": "Local release package is verified",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1789847030381-2d8135",
+              "receipt-1789847231024-a2fb4d"
+            ],
+            "completedAt": "2026-09-19T19:47:39.722Z"
+          }
+        ],
+        "createdAt": "2026-09-19T19:37:50.054Z",
+        "updatedAt": "2026-09-19T19:47:03.272Z"
       }
     ],
     "tasks": [
@@ -1025,6 +1254,198 @@
         },
         "createdAt": "2026-09-19T14:13:02.435Z",
         "updatedAt": "2026-09-19T14:25:16.962Z"
+      },
+      {
+        "id": "task-agent-flow-optimization",
+        "planId": "plan-agent-flow",
+        "phaseId": "phase-lite",
+        "title": "Implement lightweight task flow and contract alignment",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "",
+          "constraints": [],
+          "references": {},
+          "nextSteps": [],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "packages/mcp/src/tool-contract.mjs",
+            "packages/mcp/src/v2-server.mjs",
+            "packages/mcp/src/v2-service.mjs",
+            "packages/mcp/src/bootstrap-util.mjs",
+            "packages/mcp/test/v2-mcp.test.mjs",
+            "packages/application/src/task-service.mjs",
+            "plugins/contextos/skills/contextos/SKILL.md",
+            "scripts/plugin-smoke.mjs",
+            "scripts/manual-zero-project-verification.mjs",
+            "package.json",
+            "package-lock.json",
+            "plugins/contextos/.codex-plugin/plugin.json",
+            "server.json",
+            "apps/desktop/Resources/Info.plist",
+            "apps/desktop/Sources/ContextOSDesktop/AppUpdater.swift",
+            "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [
+            "rule-surgical-code-editing",
+            "rule-product-contract",
+            "rule-cdcs-workflow"
+          ],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [
+          "rule-surgical-code-editing",
+          "rule-product-contract",
+          "rule-cdcs-workflow"
+        ],
+        "notes": [
+          {
+            "id": "note-1789880865486-rx43n",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/src/tool-contract.mjs' via mtime/SHA256 comparison (bc35f6c9 -> 69fa4787). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.486Z"
+          },
+          {
+            "id": "note-1789880865505-w6cir",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/src/v2-server.mjs' via mtime/SHA256 comparison (7d6dd5e0 -> 64402b41). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.505Z"
+          },
+          {
+            "id": "note-1789880865525-aayzq",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/src/v2-service.mjs' via mtime/SHA256 comparison (6100d85d -> 9ffa11bc). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.525Z"
+          },
+          {
+            "id": "note-1789880865531-tkrl3",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/src/bootstrap-util.mjs' via mtime/SHA256 comparison (e67cb368 -> 23dd3fe4). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.531Z"
+          },
+          {
+            "id": "note-1789880865536-xd4e0",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/test/v2-mcp.test.mjs' via mtime/SHA256 comparison (d59e4800 -> e9a57f1d). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.536Z"
+          },
+          {
+            "id": "note-1789880865545-nw7gw",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/application/src/task-service.mjs' via mtime/SHA256 comparison (4843d3fc -> 0cfde7be). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.545Z"
+          },
+          {
+            "id": "note-1789880865545-q4v8h",
+            "text": "[Host Native Modification] Detected external disk modification in 'plugins/contextos/skills/contextos/SKILL.md' via mtime/SHA256 comparison (4f2034b7 -> af2df7e7). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.545Z"
+          },
+          {
+            "id": "note-1789880865547-4tqze",
+            "text": "[Host Native Modification] Detected external disk modification in 'scripts/plugin-smoke.mjs' via mtime/SHA256 comparison (98bc7944 -> 328c9946). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.547Z"
+          },
+          {
+            "id": "note-1789880865552-vgawz",
+            "text": "[Host Native Modification] Detected external disk modification in 'scripts/manual-zero-project-verification.mjs' via mtime/SHA256 comparison (f53b5f0d -> c50fb738). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.552Z"
+          },
+          {
+            "id": "note-1789880865553-0cymc",
+            "text": "[Host Native Modification] Detected external disk modification in 'package.json' via mtime/SHA256 comparison (f53a4f68 -> 41d62ef4). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.553Z"
+          },
+          {
+            "id": "note-1789880865554-4w5l3",
+            "text": "[Host Native Modification] Detected external disk modification in 'package-lock.json' via mtime/SHA256 comparison (ff0836c8 -> 23d08b68). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.554Z"
+          },
+          {
+            "id": "note-1789880865554-2hfdk",
+            "text": "[Host Native Modification] Detected external disk modification in 'plugins/contextos/.codex-plugin/plugin.json' via mtime/SHA256 comparison (42585aae -> 0d1dd295). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.554Z"
+          },
+          {
+            "id": "note-1789880865555-cqow5",
+            "text": "[Host Native Modification] Detected external disk modification in 'server.json' via mtime/SHA256 comparison (85f1f013 -> 47f06afe). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.555Z"
+          },
+          {
+            "id": "note-1789880865556-923vh",
+            "text": "[Host Native Modification] Detected external disk modification in 'apps/desktop/Resources/Info.plist' via mtime/SHA256 comparison (b892dcf8 -> 5937b53e). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.556Z"
+          },
+          {
+            "id": "note-1789880865588-u98mx",
+            "text": "[Host Native Modification] Detected external disk modification in 'apps/desktop/Sources/ContextOSDesktop/AppUpdater.swift' via mtime/SHA256 comparison (ddb60118 -> 51643108). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.588Z"
+          },
+          {
+            "id": "note-1789880865607-2awpw",
+            "text": "[Host Native Modification] Detected external disk modification in 'apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift' via mtime/SHA256 comparison (cc0b7231 -> 83592931). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-20T05:07:45.607Z"
+          }
+        ],
+        "checks": [
+          {
+            "id": "check-1789880865607-0zirh",
+            "receiptId": "receipt-1789880839984-76eba2",
+            "description": "Agent flow optimization verified: 74 tests, 12-tool contract, Skill action table, zero-project MCP lifecycle, Swift build",
+            "passed": true,
+            "evidence": "Command succeeded (520 lines collapsed). 14 warning(s). [.contextos/logs/receipt-1789880839984-76eba2.log]",
+            "recordedAt": "2026-09-20T05:07:45.607Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-command-runner",
+            "block-daemon-host",
+            "block-desktop-canvas",
+            "block-coverage-guard",
+            "block-context-envelope",
+            "block-desktop-shell",
+            "block-desktop-inspector",
+            "block-process-host",
+            "block-layout-engine",
+            "block-domain-models",
+            "block-domain-invariants",
+            "block-storage-sqlite",
+            "block-storage-sync",
+            "block-lifecycle-services",
+            "block-mcp-facades",
+            "block-desktop-database",
+            "block-desktop-installer",
+            "block-code-gateway",
+            "block-verification-suite"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 16,
+            "coveredFiles": 16,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-20T05:07:45.672Z"
+        },
+        "createdAt": "2026-09-20T05:02:06.756Z",
+        "updatedAt": "2026-09-20T05:07:45.672Z"
       },
       {
         "id": "task-artifact-inbox-actions",
@@ -1874,6 +2295,239 @@
         "updatedAt": "2026-09-19T15:56:45.553Z"
       },
       {
+        "id": "task-fix-zero-project-defects",
+        "planId": "plan-v231-release",
+        "phaseId": "phase-harden",
+        "title": "Fix zero-project lifecycle defects and verify release",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "",
+          "constraints": [],
+          "references": {},
+          "nextSteps": [],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "packages/domain/src/task.mjs",
+            "packages/domain/test/domain.test.mjs",
+            "packages/application/src/task-service.mjs",
+            "packages/application/test/application.test.mjs",
+            "packages/mcp/src/v2-service.mjs",
+            "packages/mcp/src/v2-server.mjs",
+            "packages/mcp/test/v2-mcp.test.mjs",
+            "packages/process-host/src/sanitizer.mjs",
+            "packages/process-host/test/process-host.test.mjs",
+            "scripts/manual-zero-project-verification.mjs",
+            "scripts/plugin-smoke.mjs",
+            "plugins/contextos/skills/contextos/SKILL.md",
+            "package.json",
+            "package-lock.json",
+            "server.json",
+            "plugins/contextos/.codex-plugin/plugin.json",
+            "apps/desktop/Resources/Info.plist",
+            "apps/desktop/Sources/ContextOSDesktop/AppUpdater.swift",
+            "apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [
+            "rule-surgical-code-editing",
+            "rule-product-contract",
+            "rule-cdcs-workflow"
+          ],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [
+          "rule-surgical-code-editing",
+          "rule-product-contract",
+          "rule-cdcs-workflow"
+        ],
+        "notes": [
+          {
+            "id": "note-1789847008146-661hp",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/domain/src/task.mjs' via mtime/SHA256 comparison (3e813f60 -> 5ca41df1). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.146Z"
+          },
+          {
+            "id": "note-1789847008150-du0am",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/domain/test/domain.test.mjs' via mtime/SHA256 comparison (8ea1e59f -> 4377608e). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.150Z"
+          },
+          {
+            "id": "note-1789847008163-5ioda",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/application/src/task-service.mjs' via mtime/SHA256 comparison (99fb9389 -> e3ec23bc). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.163Z"
+          },
+          {
+            "id": "note-1789847008169-tmmxn",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/application/test/application.test.mjs' via mtime/SHA256 comparison (bcf754bd -> f3912fc2). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.169Z"
+          },
+          {
+            "id": "note-1789847008183-t69s2",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/src/v2-service.mjs' via mtime/SHA256 comparison (b92e8d7d -> 4691f61b). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.183Z"
+          },
+          {
+            "id": "note-1789847008190-cuxfq",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/src/v2-server.mjs' via mtime/SHA256 comparison (4e4618fb -> 7d6dd5e0). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.190Z"
+          },
+          {
+            "id": "note-1789847008194-1hklt",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/test/v2-mcp.test.mjs' via mtime/SHA256 comparison (ed91a9cd -> d59e4800). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.194Z"
+          },
+          {
+            "id": "note-1789847008195-78hx1",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/process-host/src/sanitizer.mjs' via mtime/SHA256 comparison (3687a08f -> cf71768a). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.195Z"
+          },
+          {
+            "id": "note-1789847008199-882ck",
+            "text": "[Host Native Modification] Detected external disk modification in 'scripts/manual-zero-project-verification.mjs' via mtime/SHA256 comparison (855409d7 -> 2db53c15). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.199Z"
+          },
+          {
+            "id": "note-1789847008200-ec7au",
+            "text": "[Host Native Modification] Detected external disk modification in 'scripts/plugin-smoke.mjs' via mtime/SHA256 comparison (a2ef9886 -> 98bc7944). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.200Z"
+          },
+          {
+            "id": "note-1789847008201-jtwyb",
+            "text": "[Host Native Modification] Detected external disk modification in 'plugins/contextos/skills/contextos/SKILL.md' via mtime/SHA256 comparison (f86518a4 -> 4f2034b7). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.201Z"
+          },
+          {
+            "id": "note-1789847008201-k1c8v",
+            "text": "[Host Native Modification] Detected external disk modification in 'package.json' via mtime/SHA256 comparison (2a2920a2 -> f53a4f68). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.201Z"
+          },
+          {
+            "id": "note-1789847008202-pw52h",
+            "text": "[Host Native Modification] Detected external disk modification in 'package-lock.json' via mtime/SHA256 comparison (56a6aad3 -> ff0836c8). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.202Z"
+          },
+          {
+            "id": "note-1789847008202-bazus",
+            "text": "[Host Native Modification] Detected external disk modification in 'server.json' via mtime/SHA256 comparison (f8835c62 -> 85f1f013). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.202Z"
+          },
+          {
+            "id": "note-1789847008202-oe5mh",
+            "text": "[Host Native Modification] Detected external disk modification in 'plugins/contextos/.codex-plugin/plugin.json' via mtime/SHA256 comparison (7412ff94 -> 42585aae). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.202Z"
+          },
+          {
+            "id": "note-1789847008203-yrqdi",
+            "text": "[Host Native Modification] Detected external disk modification in 'apps/desktop/Resources/Info.plist' via mtime/SHA256 comparison (0bc21e15 -> b892dcf8). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.203Z"
+          },
+          {
+            "id": "note-1789847008231-ifypi",
+            "text": "[Host Native Modification] Detected external disk modification in 'apps/desktop/Sources/ContextOSDesktop/AppUpdater.swift' via mtime/SHA256 comparison (0aca41e8 -> ddb60118). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.231Z"
+          },
+          {
+            "id": "note-1789847008249-4nqz9",
+            "text": "[Host Native Modification] Detected external disk modification in 'apps/desktop/Sources/ContextOSDesktop/PluginInstaller.swift' via mtime/SHA256 comparison (cc0b7231 -> 825d4f9a). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:43:28.249Z"
+          },
+          {
+            "id": "note-1789847259688-4hl86",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/domain/test/domain.test.mjs' via mtime/SHA256 comparison (4377608e -> b3334ee6). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:47:39.688Z"
+          },
+          {
+            "id": "note-1789847259707-rs27a",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/application/src/task-service.mjs' via mtime/SHA256 comparison (e3ec23bc -> d30380f0). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:47:39.707Z"
+          },
+          {
+            "id": "note-1789847259712-f4qql",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/application/test/application.test.mjs' via mtime/SHA256 comparison (f3912fc2 -> becdb06c). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-19T19:47:39.712Z"
+          }
+        ],
+        "checks": [
+          {
+            "id": "check-1789847008249-of4q9",
+            "receiptId": "receipt-1789846979567-0c1519",
+            "description": "Full verify suite passed: 71 tests, plugin smoke, manual tree bindings, zero-project MCP lifecycle, Swift desktop build",
+            "passed": true,
+            "evidence": "Command succeeded (501 lines collapsed). 14 warning(s). [.contextos/logs/receipt-1789846979567-0c1519.log]",
+            "recordedAt": "2026-09-19T19:43:28.249Z"
+          },
+          {
+            "id": "check-1789847259712-x6j3x",
+            "receiptId": "receipt-1789847194756-208235",
+            "description": "Final verify suite passed: 72 tests, plugin smoke, manual tree bindings, zero-project lifecycle, Swift build",
+            "passed": true,
+            "evidence": "Command succeeded (503 lines collapsed). 14 warning(s). [.contextos/logs/receipt-1789847194756-208235.log]",
+            "recordedAt": "2026-09-19T19:47:39.712Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-command-runner",
+            "block-daemon-host",
+            "block-desktop-canvas",
+            "block-coverage-guard",
+            "block-context-envelope",
+            "block-desktop-shell",
+            "block-desktop-inspector",
+            "block-process-host",
+            "block-layout-engine",
+            "block-domain-models",
+            "block-domain-invariants",
+            "block-storage-sqlite",
+            "block-storage-sync",
+            "block-lifecycle-services",
+            "block-mcp-facades",
+            "block-desktop-database",
+            "block-desktop-installer",
+            "block-code-gateway",
+            "block-verification-suite"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 19,
+            "coveredFiles": 19,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-19T19:43:28.307Z"
+        },
+        "createdAt": "2026-09-19T19:37:50.086Z",
+        "updatedAt": "2026-09-19T19:47:39.712Z"
+      },
+      {
         "id": "task-incremental-skill-updates",
         "planId": "plan-skill-correction",
         "phaseId": "phase-skill-correction",
@@ -2093,6 +2747,168 @@
         },
         "createdAt": "2026-09-19T14:39:31.051Z",
         "updatedAt": "2026-09-19T15:56:46.124Z"
+      },
+      {
+        "id": "task-phase-consistency-fix",
+        "planId": "plan-v231-phase-fix",
+        "phaseId": "phase-fix",
+        "title": "Fix plan phase consistency",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "",
+          "constraints": [],
+          "references": {},
+          "nextSteps": [],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "packages/domain/src/plan.mjs",
+            "packages/domain/test/domain.test.mjs",
+            "packages/application/src/task-service.mjs",
+            "packages/application/test/application.test.mjs"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [
+            "rule-surgical-code-editing",
+            "rule-cdcs-workflow"
+          ],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [
+          "rule-surgical-code-editing",
+          "rule-cdcs-workflow"
+        ],
+        "notes": [],
+        "checks": [
+          {
+            "id": "check-1789847216303-h4wbb",
+            "receiptId": "receipt-1789847194756-208235",
+            "description": "Verify suite passed with plan phase consistency fix: 72 tests plus manual workflows",
+            "passed": true,
+            "evidence": "Command succeeded (503 lines collapsed). 14 warning(s). [.contextos/logs/receipt-1789847194756-208235.log]",
+            "recordedAt": "2026-09-19T19:46:56.303Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-command-runner",
+            "block-daemon-host",
+            "block-desktop-canvas",
+            "block-coverage-guard",
+            "block-context-envelope",
+            "block-desktop-shell",
+            "block-desktop-inspector",
+            "block-process-host",
+            "block-layout-engine",
+            "block-domain-models",
+            "block-domain-invariants",
+            "block-storage-sqlite",
+            "block-storage-sync",
+            "block-lifecycle-services",
+            "block-mcp-facades",
+            "block-desktop-database",
+            "block-desktop-installer",
+            "block-code-gateway",
+            "block-verification-suite"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 4,
+            "coveredFiles": 4,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-19T19:46:56.355Z"
+        },
+        "createdAt": "2026-09-19T19:46:28.315Z",
+        "updatedAt": "2026-09-19T19:46:56.355Z"
+      },
+      {
+        "id": "task-process-id-contract",
+        "planId": "plan-v231-process-id",
+        "phaseId": "phase-process",
+        "title": "Honor process.start id",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "",
+          "constraints": [],
+          "references": {},
+          "nextSteps": [],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "packages/process-host/src/process-manager.mjs",
+            "packages/mcp/src/v2-service.mjs",
+            "packages/process-host/test/process-host.test.mjs",
+            "scripts/manual-zero-project-verification.mjs"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [
+            "rule-surgical-code-editing",
+            "rule-command-sessions"
+          ],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [
+          "rule-surgical-code-editing",
+          "rule-command-sessions"
+        ],
+        "notes": [],
+        "checks": [
+          {
+            "id": "check-1789847373858-gi89y",
+            "receiptId": "receipt-1789847352008-d26149",
+            "description": "Process id contract verified by full suite and zero-project MCP flow",
+            "passed": true,
+            "evidence": "Command succeeded (502 lines collapsed). 14 warning(s). [.contextos/logs/receipt-1789847352008-d26149.log]",
+            "recordedAt": "2026-09-19T19:49:33.858Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-command-runner",
+            "block-daemon-host",
+            "block-desktop-canvas",
+            "block-coverage-guard",
+            "block-context-envelope",
+            "block-desktop-shell",
+            "block-desktop-inspector",
+            "block-process-host",
+            "block-layout-engine",
+            "block-domain-models",
+            "block-domain-invariants",
+            "block-storage-sqlite",
+            "block-storage-sync",
+            "block-lifecycle-services",
+            "block-mcp-facades",
+            "block-desktop-database",
+            "block-desktop-installer",
+            "block-code-gateway",
+            "block-verification-suite"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 4,
+            "coveredFiles": 4,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-19T19:49:33.905Z"
+        },
+        "createdAt": "2026-09-19T19:49:05.545Z",
+        "updatedAt": "2026-09-19T19:49:33.905Z"
       },
       {
         "id": "task-restore-comprehensive-skill",
@@ -3432,7 +4248,7 @@
             "anchorKind": "symbol",
             "startLine": 9,
             "endLine": 11,
-            "hash": "3687a08f928b47b0",
+            "hash": "51af3e8356213e49",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -3443,7 +4259,7 @@
             "anchorKind": "symbol",
             "startLine": 13,
             "endLine": 20,
-            "hash": "3687a08f928b47b0",
+            "hash": "9256c98d3f50078d",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -3453,8 +4269,8 @@
             "symbol": "sanitizeTerminalOutput",
             "anchorKind": "symbol",
             "startLine": 22,
-            "endLine": 88,
-            "hash": "3687a08f928b47b0",
+            "endLine": 96,
+            "hash": "9efce8efb3cb6703",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4205,7 +5021,7 @@
             "anchorKind": "tree",
             "startLine": null,
             "endLine": null,
-            "hash": "42a0d7ba65832236",
+            "hash": "a4d29f6c0fad94f7",
             "role": "documentation",
             "hashMode": "content",
             "manifest": null
@@ -4216,7 +5032,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "2a2920a2dbf1a5b6",
+            "hash": "41d62ef4587c3a5b",
             "role": "documentation",
             "hashMode": null,
             "manifest": null
@@ -4227,7 +5043,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "56a6aad3dc11c70d",
+            "hash": "23d08b68fbcbe9c5",
             "role": "documentation",
             "hashMode": null,
             "manifest": null
@@ -4238,7 +5054,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "f8835c621b0913df",
+            "hash": "47f06afeaadfb40f",
             "role": "documentation",
             "hashMode": null,
             "manifest": null
@@ -4249,7 +5065,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "7412ff94ae439ac5",
+            "hash": "0d1dd29518f404df",
             "role": "documentation",
             "hashMode": null,
             "manifest": null
@@ -4260,7 +5076,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "0bc21e155820d56f",
+            "hash": "5937b53ef596b886",
             "role": "documentation",
             "hashMode": null,
             "manifest": null
@@ -4271,7 +5087,139 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "0aca41e8664a8ed8",
+            "hash": "5164310876a1f927",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "resolveNodeExecutable",
+            "anchorKind": "symbol",
+            "startLine": 8,
+            "endLine": 55,
+            "hash": "370f5257b69ac0ef",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "resolveCodexExecutable",
+            "anchorKind": "symbol",
+            "startLine": 57,
+            "endLine": 96,
+            "hash": "55cf96101df8f6d6",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "deployCanonicalServer",
+            "anchorKind": "symbol",
+            "startLine": 98,
+            "endLine": 114,
+            "hash": "3505e9366c5cd388",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "copyDirectoryRecursive",
+            "anchorKind": "symbol",
+            "startLine": 116,
+            "endLine": 129,
+            "hash": "2751c24c50696f70",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "configureJsonMcp",
+            "anchorKind": "symbol",
+            "startLine": 131,
+            "endLine": 160,
+            "hash": "f997112706175da8",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "configureTomlCodex",
+            "anchorKind": "symbol",
+            "startLine": 162,
+            "endLine": 191,
+            "hash": "9ea7e59129d099e3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "cleanTomlCodex",
+            "anchorKind": "symbol",
+            "startLine": 193,
+            "endLine": 199,
+            "hash": "58a2578d681e6186",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "installCodexPlugin",
+            "anchorKind": "symbol",
+            "startLine": 201,
+            "endLine": 265,
+            "hash": "ba7ce04914692e69",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "detectInstalledPlatforms",
+            "anchorKind": "symbol",
+            "startLine": 267,
+            "endLine": 420,
+            "hash": "a0cbef5c07913480",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "getGlobalCloudConfig",
+            "anchorKind": "symbol",
+            "startLine": 515,
+            "endLine": 523,
+            "hash": "6509c7d4b290a17b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "saveGlobalCloudConfig",
+            "anchorKind": "symbol",
+            "startLine": 525,
+            "endLine": 536,
+            "hash": "20305a1263c27d37",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/bootstrap-util.mjs",
+            "symbol": "initProjectWorkspace",
+            "anchorKind": "symbol",
+            "startLine": 538,
+            "endLine": 581,
+            "hash": "6c7952a14bc6cbd0",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4551,8 +5499,8 @@
             "symbol": "Task",
             "anchorKind": "symbol",
             "startLine": 17,
-            "endLine": 254,
-            "hash": "12892d1cc3c3bdb7",
+            "endLine": 258,
+            "hash": "d71fd75f5f273b89",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4562,8 +5510,8 @@
             "symbol": "Task.constructor",
             "anchorKind": "symbol",
             "startLine": 18,
-            "endLine": 91,
-            "hash": "a34b358b67ba72ad",
+            "endLine": 95,
+            "hash": "8a11238ef21c30d8",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4572,8 +5520,8 @@
             "path": "packages/domain/src/task.mjs",
             "symbol": "Task.activate",
             "anchorKind": "symbol",
-            "startLine": 93,
-            "endLine": 99,
+            "startLine": 97,
+            "endLine": 103,
             "hash": "925d005d84c55ab3",
             "role": "implementation",
             "hashMode": null,
@@ -4583,8 +5531,8 @@
             "path": "packages/domain/src/task.mjs",
             "symbol": "Task.addNote",
             "anchorKind": "symbol",
-            "startLine": 101,
-            "endLine": 112,
+            "startLine": 105,
+            "endLine": 116,
             "hash": "89bfc02912abb4bd",
             "role": "implementation",
             "hashMode": null,
@@ -4874,8 +5822,8 @@
             "symbol": "TaskService",
             "anchorKind": "symbol",
             "startLine": 155,
-            "endLine": 777,
-            "hash": "ad9baafaa0f301b7",
+            "endLine": 808,
+            "hash": "aa067fc273ee2dad",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4896,8 +5844,8 @@
             "symbol": "TaskService.createTask",
             "anchorKind": "symbol",
             "startLine": 370,
-            "endLine": 410,
-            "hash": "b85b0e3fd8974cc2",
+            "endLine": 411,
+            "hash": "7eab1155a9125f73",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4906,8 +5854,8 @@
             "path": "packages/application/src/task-service.mjs",
             "symbol": "TaskService.getTask",
             "anchorKind": "symbol",
-            "startLine": 471,
-            "endLine": 473,
+            "startLine": 490,
+            "endLine": 492,
             "hash": "4f33e67f6abd56d6",
             "role": "implementation",
             "hashMode": null,
@@ -5050,8 +5998,8 @@
             "symbol": "Task",
             "anchorKind": "symbol",
             "startLine": 17,
-            "endLine": 254,
-            "hash": "12892d1cc3c3bdb7",
+            "endLine": 258,
+            "hash": "d71fd75f5f273b89",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -5073,8 +6021,8 @@
             "path": "packages/mcp/src/v2-server.mjs",
             "symbol": "findDefaultProjectRoot",
             "anchorKind": "symbol",
-            "startLine": 22,
-            "endLine": 46,
+            "startLine": 23,
+            "endLine": 47,
             "hash": "588ce2bdc3119c81",
             "role": "implementation",
             "hashMode": null,
@@ -5107,8 +6055,8 @@
             "symbol": "ContextOSV2Service",
             "anchorKind": "symbol",
             "startLine": 22,
-            "endLine": 1072,
-            "hash": "b92e8d7d0a6ef4fc",
+            "endLine": 1209,
+            "hash": "9a0a764d02685775",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -5128,8 +6076,8 @@
             "path": "packages/mcp/src/v2-server.mjs",
             "symbol": "getService",
             "anchorKind": "symbol",
-            "startLine": 48,
-            "endLine": 100,
+            "startLine": 49,
+            "endLine": 101,
             "hash": "5a090ba4033bac2f",
             "role": "implementation",
             "hashMode": null,
@@ -5139,8 +6087,8 @@
             "path": "packages/mcp/src/v2-server.mjs",
             "symbol": "textResult",
             "anchorKind": "symbol",
-            "startLine": 102,
-            "endLine": 107,
+            "startLine": 103,
+            "endLine": 108,
             "hash": "df19c89cc78bb0f0",
             "role": "implementation",
             "hashMode": null,
@@ -5150,9 +6098,9 @@
             "path": "packages/mcp/src/v2-server.mjs",
             "symbol": "createV2Server",
             "anchorKind": "symbol",
-            "startLine": 109,
-            "endLine": 651,
-            "hash": "3001d428e72f1f3c",
+            "startLine": 110,
+            "endLine": 655,
+            "hash": "42284d665e51c029",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -5186,6 +6134,17 @@
             "startLine": 37,
             "endLine": 79,
             "hash": "525cc8f4bc18f3c3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/mcp/src/tool-contract.mjs",
+            "symbol": "toolActions",
+            "anchorKind": "symbol",
+            "startLine": 51,
+            "endLine": 53,
+            "hash": "bc35f6c903b5ebb2",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -5501,7 +6460,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "8ea1e59f79dc740c",
+            "hash": "b3334ee657d5671a",
             "role": "verification",
             "hashMode": null,
             "manifest": null
@@ -5534,7 +6493,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "bcf754bd164a6fc4",
+            "hash": "becdb06cf4a054ed",
             "role": "verification",
             "hashMode": null,
             "manifest": null
@@ -5556,7 +6515,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "ed91a9cdbbc81a77",
+            "hash": "e9a57f1d2156fc61",
             "role": "verification",
             "hashMode": null,
             "manifest": null
@@ -5578,7 +6537,7 @@
             "anchorKind": "file",
             "startLine": null,
             "endLine": null,
-            "hash": "a2ef9886d66df7b8",
+            "hash": "328c9946a87180f9",
             "role": "verification",
             "hashMode": null,
             "manifest": null
@@ -5646,6 +6605,72 @@
             "endLine": null,
             "hash": "67ad7d0bd8b95120",
             "role": "verification",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/manual-zero-project-verification.mjs",
+            "symbol": "short",
+            "anchorKind": "symbol",
+            "startLine": 34,
+            "endLine": 37,
+            "hash": "086137c1c2502225",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/manual-zero-project-verification.mjs",
+            "symbol": "step",
+            "anchorKind": "symbol",
+            "startLine": 39,
+            "endLine": 42,
+            "hash": "889081eae1ee7928",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/manual-zero-project-verification.mjs",
+            "symbol": "call",
+            "anchorKind": "symbol",
+            "startLine": 44,
+            "endLine": 58,
+            "hash": "f53f4c7862f50191",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/manual-zero-project-verification.mjs",
+            "symbol": "callJson",
+            "anchorKind": "symbol",
+            "startLine": 60,
+            "endLine": 67,
+            "hash": "9fffe38558173280",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/manual-zero-project-verification.mjs",
+            "symbol": "expectFailure",
+            "anchorKind": "symbol",
+            "startLine": 69,
+            "endLine": 77,
+            "hash": "7e7e9dda06189a40",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/process-host/test/process-host.test.mjs",
+            "symbol": "process-host.test.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 86,
+            "hash": "1dc14a66db1ef00a",
+            "role": "implementation",
             "hashMode": null,
             "manifest": null
           }

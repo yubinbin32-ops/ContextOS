@@ -6,6 +6,7 @@ import * as z from 'zod/v4';
 import { ContextOSV2Service } from './v2-service.mjs';
 import { HybridContextOSService } from './hybrid-service.mjs';
 import { ContextOSCloudClient } from './cloud-client.mjs';
+import { TOOL_ACTIONS } from './tool-contract.mjs';
 import {
   initProjectWorkspace,
   syncAllPlatforms,
@@ -108,7 +109,7 @@ function textResult(content) {
 
 export function createV2Server() {
   const server = new McpServer(
-    { name: 'contextos', version: '2.3.0' },
+    { name: 'contextos', version: '2.4.0' },
     {
       instructions:
         'ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub.',
@@ -121,7 +122,7 @@ export function createV2Server() {
     {
       description: 'Project context gateway. Use action=brief on session start or resume; search to find entities; open to read an entity; reconcile to check external Git/JSON changes.',
       inputSchema: {
-        action: z.enum(['brief', 'search', 'open', 'reconcile']).default('brief'),
+        action: z.enum(TOOL_ACTIONS.os_context).default('brief'),
         query: z.string().optional(),
         entityId: z.string().optional(),
         format: z.enum(['markdown', 'json']).default('markdown'),
@@ -141,7 +142,7 @@ export function createV2Server() {
     {
       description: 'Manage delivery Plans, Phases and Plan Checkpoints (formal acceptance). Checkpoints belong strictly to Plans.',
       inputSchema: {
-        action: z.enum(['list', 'create', 'open', 'check', 'complete', 'delete']),
+        action: z.enum(TOOL_ACTIONS.plan),
         id: z.string().optional(),
         planData: z.record(z.any()).optional(),
         checkpointId: z.string().optional(),
@@ -162,9 +163,9 @@ export function createV2Server() {
   server.registerTool(
     'task',
     {
-      description: 'C-D-C-S development lifecycle task execution (draft -> active -> checking -> syncing -> completed). Task sync requires 100% Block coverage on working set files.',
+      description: 'C-D-C-S task lifecycle. Use task=start for a lightweight create+activate path and task=finish for check+sync; full create/develop/check/sync remains available. Sync requires 100% Block coverage.',
       inputSchema: {
-        action: z.enum(['create', 'open', 'note', 'check', 'sync', 'resume', 'activate', 'develop', 'bind_rule', 'unbind_rule', 'update', 'probe', 'graduate_probe', 'reconcile']),
+        action: z.enum(TOOL_ACTIONS.task),
         id: z.string().optional(),
         taskData: z.record(z.any()).optional(),
         ruleId: z.string().optional(),
@@ -195,7 +196,7 @@ export function createV2Server() {
     {
       description: 'Manage code functional Blocks. Blocks bind to real files, AST symbols, or directory trees; ghost blocks are rejected. Use bind_auto for symbols and dependency/resource directories.',
       inputSchema: {
-        action: z.enum(['list', 'open', 'search', 'bind', 'bind_auto', 'delete']),
+        action: z.enum(TOOL_ACTIONS.block),
         id: z.string().optional(),
         path: z.string().optional(),
         paths: z.array(z.string()).optional(),
@@ -221,7 +222,7 @@ export function createV2Server() {
     {
       description: 'Feature chains and dependency links. Link kind reflects true semantics: depends_on, calls, imports, implements.',
       inputSchema: {
-        action: z.enum(['list', 'open', 'compose', 'delete', 'link', 'unlink', 'links', 'validate_layout', 'validate']),
+        action: z.enum(TOOL_ACTIONS.chain),
         id: z.string().optional(),
         chainData: z.record(z.any()).optional(),
         linkData: z.record(z.any()).optional(),
@@ -242,7 +243,7 @@ export function createV2Server() {
     {
       description: 'Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, symbol search, and create new files with AST registration.',
       inputSchema: {
-        action: z.enum(['outline', 'read', 'edit', 'search', 'create']),
+        action: z.enum(TOOL_ACTIONS.code),
         path: z.string().optional(),
         selector: z.union([z.string(), z.record(z.any())]).optional(),
         startLine: z.number().optional(),
@@ -288,7 +289,7 @@ export function createV2Server() {
     {
       description: 'Manage long-running daemon background processes (dev servers, watchers). Stop terminates entire process group.',
       inputSchema: {
-        action: z.enum(['start', 'list', 'status', 'logs', 'stop', 'clear']),
+        action: z.enum(TOOL_ACTIONS.process),
         id: z.string().optional(),
         command: z.string().optional(),
         lines: z.number().default(50),
@@ -309,7 +310,7 @@ export function createV2Server() {
     {
       description: 'Project knowledge management: categorized Rules and single-narrative project Decision (DECISION.md).',
       inputSchema: {
-        action: z.enum(['rule_list', 'rule_open', 'rule_write', 'decision_open', 'decision_write']),
+        action: z.enum(TOOL_ACTIONS.knowledge),
         ruleId: z.string().optional(),
         ruleData: z.record(z.any()).optional(),
         sectionId: z.string().optional(),
@@ -492,8 +493,11 @@ export function createV2Server() {
       }
 
       const globalCloud = getGlobalCloudConfig();
-      const resolvedCloudUrl = input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL;
-      const resolvedToken = input.token || globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN;
+      const resolvedCloudUrl = input.targetMode === 'cloud'
+        ? (input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL)
+        : (input.cloudUrl || proj.cloudUrl);
+      const resolvedToken = input.token
+        || (input.targetMode === 'cloud' ? (globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN) : null);
       const pid = input.projectId || proj.id || 'contextos';
 
       if (input.targetMode === 'cloud') {
