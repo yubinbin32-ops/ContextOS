@@ -49,7 +49,13 @@ try {
     planData: {
       id: 'plan-e2e',
       title: 'E2E Lifecycle',
-      phases: [{ id: 'P0', order: 0, status: 'active' }],
+      phases: [{
+        id: 'P0',
+        order: 0,
+        objective: 'Verify the complete project lifecycle.',
+        acceptance: ['Plan and task reach a verified terminal state.'],
+        status: 'active',
+      }],
       checkpoints: [{ id: 'cp-e2e', title: 'Lifecycle verified', status: 'pending' }],
     },
   });

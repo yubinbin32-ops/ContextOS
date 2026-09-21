@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -157,10 +156,10 @@ var require_code = __commonJS({
     function interpolate(x) {
       return typeof x == "number" || typeof x == "boolean" || x === null ? x : safeStringify(Array.isArray(x) ? x.join(",") : x);
     }
-    function stringify(x) {
+    function stringify2(x) {
       return new _Code(safeStringify(x));
     }
-    exports.stringify = stringify;
+    exports.stringify = stringify2;
     function safeStringify(x) {
       return JSON.stringify(x).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
     }
@@ -3258,8 +3257,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path17) {
-      let input = path17;
+    function removeDotSegments(path27) {
+      let input = path27;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3668,8 +3667,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path17 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path17 && path17 !== "/" ? path17 : void 0;
+        const path27 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path27 && path27 !== "/" ? path27 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7181,12 +7180,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name2}"`);
       return f;
     };
-    function addFormats(ajv, list, fs17, exportName) {
+    function addFormats(ajv, list, fs26, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs17[f]);
+        ajv.addFormat(f, fs26[f]);
     }
     module2.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -7194,9 +7193,10 @@ var require_dist = __commonJS({
   }
 });
 
-// packages/mcp/src/v2-server.mjs
-import fs16 from "node:fs";
-import path16 from "node:path";
+// packages/mcp/src/v3-server.mjs
+import fs25 from "node:fs";
+import path26 from "node:path";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/zod/v3/helpers/util.js
 var util;
@@ -7572,8 +7572,8 @@ function getErrorMap() {
 
 // node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
-  const { data, path: path17, errorMaps, issueData } = params;
-  const fullPath = [...path17, ...issueData.path || []];
+  const { data, path: path27, errorMaps, issueData } = params;
+  const fullPath = [...path27, ...issueData.path || []];
   const fullIssue = {
     ...issueData,
     path: fullPath
@@ -7688,11 +7688,11 @@ var errorUtil;
 
 // node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
-  constructor(parent, value, path17, key) {
+  constructor(parent, value, path27, key) {
     this._cachedPath = [];
     this.parent = parent;
     this.data = value;
-    this._path = path17;
+    this._path = path27;
     this._key = key;
   }
   get path() {
@@ -11274,10 +11274,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path17) {
-  if (!path17)
+function getElementAtPath(obj, path27) {
+  if (!path27)
     return obj;
-  return path17.reduce((acc, key) => acc?.[key], obj);
+  return path27.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -11689,11 +11689,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path17, issues) {
+function prefixIssues(path27, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path17);
+    iss.path.unshift(path27);
     return iss;
   });
 }
@@ -12122,16 +12122,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path17 = []) => {
+  const processError = (error3, path27 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path17, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path27, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path17, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path27, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path17, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path27, ...issue2.path]);
       } else {
-        const fullpath = [...path17, ...issue2.path];
+        const fullpath = [...path27, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -16646,11 +16646,11 @@ function normalizeObjectSchema(schema) {
   }
   return void 0;
 }
-function getDotPath(path17) {
-  if (path17.length === 0) {
+function getDotPath(path27) {
+  if (path27.length === 0) {
     return "object root";
   }
-  return path17.reduce((acc, seg, index) => {
+  return path27.reduce((acc, seg, index) => {
     if (index === 0) {
       return String(seg);
     }
@@ -23224,1940 +23224,422 @@ var StdioServerTransport = class {
   }
 };
 
-// packages/mcp/src/v2-service.mjs
-import path13 from "node:path";
-import fs13 from "node:fs";
-import { AsyncLocalStorage } from "node:async_hooks";
-
-// packages/storage/src/schema.mjs
-var V2_SQL_SCHEMA = `
-CREATE TABLE IF NOT EXISTS projects (
-  id TEXT PRIMARY KEY,
-  repo_root TEXT NOT NULL,
-  graph_revision INTEGER NOT NULL DEFAULT 0,
-  exported_at TEXT,
-  schema_version INTEGER NOT NULL DEFAULT 3
-);
-
-CREATE TABLE IF NOT EXISTS plans (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  title TEXT NOT NULL,
-  priority TEXT NOT NULL DEFAULT 'normal',
-  status TEXT NOT NULL DEFAULT 'active',
-  summary TEXT NOT NULL DEFAULT '',
-  completed_summary TEXT,
-  history_ref TEXT,
-  rule_refs_json TEXT NOT NULL DEFAULT '[]',
-  decision_refs_json TEXT NOT NULL DEFAULT '[]',
-  dependency_refs_json TEXT NOT NULL DEFAULT '[]',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS phases (
-  id TEXT NOT NULL,
-  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-  phase_order INTEGER NOT NULL DEFAULT 0,
-  objective TEXT NOT NULL DEFAULT '',
-  scope TEXT NOT NULL DEFAULT '',
-  deliverables_json TEXT NOT NULL DEFAULT '[]',
-  status TEXT NOT NULL DEFAULT 'pending',
-  task_ids_json TEXT NOT NULL DEFAULT '[]',
-  acceptance_json TEXT NOT NULL DEFAULT '[]',
-  PRIMARY KEY (id, plan_id)
-);
-
-CREATE TABLE IF NOT EXISTS checkpoints (
-  id TEXT PRIMARY KEY,
-  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-  phase_id TEXT,
-  title TEXT NOT NULL,
-  criteria TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-  completed_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS tasks (
-  id TEXT PRIMARY KEY,
-  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-  phase_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'draft',
-  context_slice_json TEXT NOT NULL DEFAULT '{}',
-  working_set_json TEXT NOT NULL DEFAULT '{}',
-  references_json TEXT NOT NULL DEFAULT '{}',
-  baseline_json TEXT NOT NULL DEFAULT '{}',
-  notes_json TEXT NOT NULL DEFAULT '[]',
-  checks_json TEXT NOT NULL DEFAULT '[]',
-  sync_result_json TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS blocks (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  title TEXT NOT NULL,
-  kind TEXT NOT NULL DEFAULT 'service',
-  summary TEXT NOT NULL DEFAULT '',
-  details TEXT NOT NULL DEFAULT '',
-  history_json TEXT NOT NULL DEFAULT '[]',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS artifact_refs (
-  id TEXT PRIMARY KEY,
-  block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
-  path TEXT NOT NULL,
-  symbol TEXT,
-  anchor_kind TEXT NOT NULL DEFAULT 'symbol',
-  start_line INTEGER,
-  end_line INTEGER,
-  hash TEXT NOT NULL DEFAULT '',
-  role TEXT NOT NULL DEFAULT 'implementation',
-  hash_mode TEXT,
-  manifest TEXT
-);
-
-CREATE TABLE IF NOT EXISTS chains (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  title TEXT NOT NULL,
-  summary TEXT NOT NULL DEFAULT '',
-  kind TEXT NOT NULL DEFAULT 'leaf',
-  member_ids_json TEXT NOT NULL DEFAULT '[]',
-  metadata_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS links (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  from_id TEXT NOT NULL,
-  to_id TEXT NOT NULL,
-  kind TEXT NOT NULL DEFAULT 'depends_on',
-  provenance TEXT NOT NULL DEFAULT 'authored',
-  confidence REAL NOT NULL DEFAULT 1.0,
-  reason TEXT NOT NULL DEFAULT '',
-  revision INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS command_receipts (
-  id TEXT PRIMARY KEY,
-  command TEXT NOT NULL,
-  cwd TEXT NOT NULL,
-  exit_code INTEGER NOT NULL,
-  duration_ms REAL NOT NULL,
-  summary TEXT NOT NULL DEFAULT '',
-  errors_json TEXT NOT NULL DEFAULT '[]',
-  warnings_json TEXT NOT NULL DEFAULT '[]',
-  changed_paths_json TEXT NOT NULL DEFAULT '[]',
-  log_handle TEXT,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sync_state (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS graph_outbox (
-  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
-  base_revision INTEGER NOT NULL,
-  target_revision INTEGER NOT NULL,
-  payload_hash TEXT NOT NULL,
-  payload_json TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-`;
-
-// packages/storage/src/database.mjs
-import { DatabaseSync } from "node:sqlite";
-import path from "node:path";
+// packages/orchestrator/src/session-store.mjs
 import fs2 from "node:fs";
-var V2Database = class {
-  constructor(filePath = ":memory:") {
-    this.filePath = filePath;
-    if (filePath !== ":memory:") {
-      fs2.mkdirSync(path.dirname(filePath), { recursive: true });
-    }
-    this.db = new DatabaseSync(filePath);
-    this.transactionDepth = 0;
-    this.init();
-  }
-  init() {
-    this.db.exec("PRAGMA journal_mode = WAL;");
-    this.db.exec("PRAGMA busy_timeout = 5000;");
-    this.db.exec("PRAGMA foreign_keys = ON;");
-    this.db.exec(V2_SQL_SCHEMA);
-    this._ensureSchemaMigrations();
-  }
-  _ensureSchemaMigrations() {
-    const refColumns = this.db.prepare("PRAGMA table_info(artifact_refs)").all();
-    if (!refColumns.some((column) => column.name === "anchor_kind")) {
-      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN anchor_kind TEXT NOT NULL DEFAULT 'symbol';");
-    }
-    if (!refColumns.some((column) => column.name === "hash_mode")) {
-      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN hash_mode TEXT;");
-    }
-    if (!refColumns.some((column) => column.name === "manifest")) {
-      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN manifest TEXT;");
-    }
-    this.db.exec(`
-      UPDATE artifact_refs
-      SET anchor_kind = 'file'
-      WHERE anchor_kind = 'symbol'
-        AND (symbol IS NULL OR TRIM(symbol) = '')
-    `);
-    const receiptColumns = this.db.prepare("PRAGMA table_info(command_receipts)").all();
-    if (!receiptColumns.some((column) => column.name === "changed_paths_json")) {
-      this.db.exec("ALTER TABLE command_receipts ADD COLUMN changed_paths_json TEXT NOT NULL DEFAULT '[]';");
-    }
-    if (receiptColumns.some((column) => column.name === "artifacts_json")) {
-      this.db.exec(`
-        UPDATE command_receipts
-        SET changed_paths_json = artifacts_json
-        WHERE changed_paths_json = '[]' AND artifacts_json != '[]'
-      `);
-    }
-    this.db.exec(`
-      DROP TABLE IF EXISTS artifact_links;
-      DROP TABLE IF EXISTS artifact_records;
-      DROP TABLE IF EXISTS build_runs;
-      UPDATE projects SET schema_version = 3;
-    `);
-  }
-  transaction(fn) {
-    if (this.transactionDepth > 0) {
-      this.transactionDepth += 1;
-      try {
-        return fn(this);
-      } finally {
-        this.transactionDepth -= 1;
-      }
-    }
-    this.db.exec("BEGIN IMMEDIATE;");
-    this.transactionDepth = 1;
-    try {
-      const result = fn(this);
-      this.db.exec("COMMIT;");
-      this.transactionDepth = 0;
-      return result;
-    } catch (err2) {
-      try {
-        this.db.exec("ROLLBACK;");
-      } finally {
-        this.transactionDepth = 0;
-      }
-      throw err2;
-    }
-  }
-  setGraphExported(projectId, revision, sha256, exportedAt = (/* @__PURE__ */ new Date()).toISOString()) {
-    this.transaction((db) => {
-      db.db.prepare("UPDATE projects SET graph_revision = ?, exported_at = ? WHERE id = ?").run(revision, exportedAt, projectId);
-      db.setSyncState(`last_exported_hash:${projectId}`, sha256);
-      db.db.prepare("DELETE FROM graph_outbox WHERE project_id = ?").run(projectId);
-    });
-  }
-  getGraphOutbox(projectId) {
-    const row = this.db.prepare("SELECT * FROM graph_outbox WHERE project_id = ?").get(projectId);
-    if (!row) return null;
-    return {
-      projectId: row.project_id,
-      baseRevision: row.base_revision,
-      targetRevision: row.target_revision,
-      payloadHash: row.payload_hash,
-      payloadJson: row.payload_json,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
-  saveGraphOutbox(entry) {
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    const stmt = this.db.prepare(`
-      INSERT INTO graph_outbox (
-        project_id, base_revision, target_revision, payload_hash, payload_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(project_id) DO UPDATE SET
-        base_revision = excluded.base_revision,
-        target_revision = excluded.target_revision,
-        payload_hash = excluded.payload_hash,
-        payload_json = excluded.payload_json,
-        updated_at = excluded.updated_at
-    `);
-    stmt.run(
-      entry.projectId,
-      entry.baseRevision,
-      entry.targetRevision,
-      entry.payloadHash,
-      entry.payloadJson,
-      entry.createdAt || now,
-      now
-    );
-    return this.getGraphOutbox(entry.projectId);
-  }
-  deleteGraphOutbox(projectId) {
-    this.db.prepare("DELETE FROM graph_outbox WHERE project_id = ?").run(projectId);
-    return true;
-  }
-  close() {
-    this.db.close();
-  }
-  // --- Project ---
-  getProject(projectId) {
-    const stmt = this.db.prepare("SELECT * FROM projects WHERE id = ?");
-    return stmt.get(projectId) || null;
-  }
-  ensureProject(projectId, repoRoot) {
-    const existing = this.getProject(projectId);
-    if (existing) return existing;
-    const stmt = this.db.prepare(
-      "INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, 0, ?, 3)"
-    );
-    stmt.run(projectId, repoRoot, (/* @__PURE__ */ new Date()).toISOString());
-    return this.getProject(projectId);
-  }
-  setGraphRevision(projectId, revision) {
-    const stmt = this.db.prepare("UPDATE projects SET graph_revision = ? WHERE id = ?");
-    stmt.run(revision, projectId);
-  }
-  // --- Sync State ---
-  getSyncState(key) {
-    const stmt = this.db.prepare("SELECT value FROM sync_state WHERE key = ?");
-    const row = stmt.get(key);
-    return row ? row.value : null;
-  }
-  setSyncState(key, value) {
-    const stmt = this.db.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)");
-    stmt.run(key, value);
-  }
-  // --- Plan ---
-  savePlan(plan) {
-    return this.transaction((db) => db._savePlan(plan));
-  }
-  _savePlan(plan) {
-    const stmt = this.db.prepare(`
-      INSERT INTO plans (
-        id, project_id, title, priority, status, summary, completed_summary,
-        history_ref, rule_refs_json, decision_refs_json, dependency_refs_json,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        project_id = excluded.project_id,
-        title = excluded.title,
-        priority = excluded.priority,
-        status = excluded.status,
-        summary = excluded.summary,
-        completed_summary = excluded.completed_summary,
-        history_ref = excluded.history_ref,
-        rule_refs_json = excluded.rule_refs_json,
-        decision_refs_json = excluded.decision_refs_json,
-        dependency_refs_json = excluded.dependency_refs_json,
-        updated_at = excluded.updated_at
-    `);
-    stmt.run(
-      plan.id,
-      plan.projectId || plan.project_id || "contextos",
-      plan.title || plan.id,
-      plan.priority || "normal",
-      plan.status || "active",
-      plan.summary || "",
-      plan.completedSummary || plan.completed_summary || null,
-      plan.historyRef || plan.history_ref || null,
-      JSON.stringify(plan.ruleRefs || plan.rule_refs || []),
-      JSON.stringify(plan.decisionRefs || plan.decision_refs || []),
-      JSON.stringify(plan.dependencyRefs || plan.dependency_refs || []),
-      plan.createdAt || plan.created_at || (/* @__PURE__ */ new Date()).toISOString(),
-      plan.updatedAt || plan.updated_at || (/* @__PURE__ */ new Date()).toISOString()
-    );
-    const deletePhases = this.db.prepare("DELETE FROM phases WHERE plan_id = ?");
-    deletePhases.run(plan.id);
-    const insertPhase = this.db.prepare(`
-      INSERT INTO phases (
-        id, plan_id, phase_order, objective, scope, deliverables_json,
-        status, task_ids_json, acceptance_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const phase of plan.phases || []) {
-      insertPhase.run(
-        phase.id,
-        plan.id,
-        phase.order || 0,
-        phase.objective || "",
-        phase.scope || "",
-        JSON.stringify(phase.deliverables || []),
-        phase.status || "pending",
-        JSON.stringify(phase.taskIds || []),
-        JSON.stringify(phase.acceptance || [])
-      );
-    }
-    const deleteCheckpoints = this.db.prepare("DELETE FROM checkpoints WHERE plan_id = ?");
-    deleteCheckpoints.run(plan.id);
-    const insertCp = this.db.prepare(`
-      INSERT INTO checkpoints (
-        id, plan_id, phase_id, title, criteria, status, evidence_refs_json, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const cp of plan.checkpoints || []) {
-      insertCp.run(
-        cp.id,
-        plan.id,
-        cp.phaseId || null,
-        cp.title,
-        cp.criteria || "",
-        cp.status || "pending",
-        JSON.stringify(cp.evidenceRefs || []),
-        cp.completedAt || null
-      );
-    }
-  }
-  getPlan(planId) {
-    const stmt = this.db.prepare("SELECT * FROM plans WHERE id = ?");
-    const row = stmt.get(planId);
-    if (!row) return null;
-    const phasesStmt = this.db.prepare("SELECT * FROM phases WHERE plan_id = ? ORDER BY phase_order ASC");
-    const phases = phasesStmt.all(planId).map((p) => ({
-      id: p.id,
-      order: p.phase_order,
-      objective: p.objective,
-      scope: p.scope,
-      deliverables: JSON.parse(p.deliverables_json || "[]"),
-      status: p.status,
-      taskIds: JSON.parse(p.task_ids_json || "[]"),
-      acceptance: JSON.parse(p.acceptance_json || "[]")
-    }));
-    const cpStmt = this.db.prepare("SELECT * FROM checkpoints WHERE plan_id = ?");
-    const checkpoints = cpStmt.all(planId).map((c) => ({
-      id: c.id,
-      planId: c.plan_id,
-      phaseId: c.phase_id,
-      title: c.title,
-      criteria: c.criteria,
-      status: c.status,
-      evidenceRefs: JSON.parse(c.evidence_refs_json || "[]"),
-      completedAt: c.completed_at
-    }));
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      title: row.title,
-      priority: row.priority,
-      status: row.status,
-      summary: row.summary,
-      completedSummary: row.completed_summary,
-      historyRef: row.history_ref,
-      ruleRefs: JSON.parse(row.rule_refs_json || "[]"),
-      decisionRefs: JSON.parse(row.decision_refs_json || "[]"),
-      dependencyRefs: JSON.parse(row.dependency_refs_json || "[]"),
-      phases,
-      checkpoints,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
-  listPlans(projectId) {
-    const stmt = projectId ? this.db.prepare("SELECT id FROM plans WHERE project_id = ? ORDER BY created_at DESC") : this.db.prepare("SELECT id FROM plans ORDER BY created_at DESC");
-    const rows = projectId ? stmt.all(projectId) : stmt.all();
-    return rows.map((r) => this.getPlan(r.id));
-  }
-  deletePlan(planId) {
-    return this.transaction((db) => {
-      db.db.prepare("DELETE FROM checkpoints WHERE plan_id = ?").run(planId);
-      db.db.prepare("DELETE FROM phases WHERE plan_id = ?").run(planId);
-      db.db.prepare("DELETE FROM tasks WHERE plan_id = ?").run(planId);
-      const result = db.db.prepare("DELETE FROM plans WHERE id = ?").run(planId);
-      return result.changes > 0;
-    });
-  }
-  // --- Task ---
-  saveTask(task) {
-    const stmt = this.db.prepare(`
-      INSERT INTO tasks (
-        id, plan_id, phase_id, title, status, context_slice_json,
-        working_set_json, references_json, baseline_json, notes_json,
-        checks_json, sync_result_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        plan_id = excluded.plan_id,
-        phase_id = excluded.phase_id,
-        title = excluded.title,
-        status = excluded.status,
-        context_slice_json = excluded.context_slice_json,
-        working_set_json = excluded.working_set_json,
-        references_json = excluded.references_json,
-        baseline_json = excluded.baseline_json,
-        notes_json = excluded.notes_json,
-        checks_json = excluded.checks_json,
-        sync_result_json = excluded.sync_result_json,
-        updated_at = excluded.updated_at
-    `);
-    stmt.run(
-      task.id,
-      task.planId || task.plan_id || "plan-default",
-      task.phaseId || task.phase_id || "P0",
-      task.title || task.id,
-      task.status || "draft",
-      JSON.stringify(task.contextSlice || task.context_slice || {}),
-      JSON.stringify(task.workingSet || task.working_set || {}),
-      JSON.stringify(task.references || {}),
-      JSON.stringify(task.baseline || {}),
-      JSON.stringify(task.notes || []),
-      JSON.stringify(task.checks || []),
-      task.syncResult ? JSON.stringify(task.syncResult) : task.sync_result ? JSON.stringify(task.sync_result) : null,
-      task.createdAt || task.created_at || (/* @__PURE__ */ new Date()).toISOString(),
-      task.updatedAt || task.updated_at || (/* @__PURE__ */ new Date()).toISOString()
-    );
-  }
-  getTask(taskId) {
-    const stmt = this.db.prepare("SELECT * FROM tasks WHERE id = ?");
-    const row = stmt.get(taskId);
-    if (!row) return null;
-    const references = JSON.parse(row.references_json || "{}");
-    return {
-      id: row.id,
-      planId: row.plan_id,
-      phaseId: row.phase_id,
-      title: row.title,
-      status: row.status,
-      contextSlice: JSON.parse(row.context_slice_json || "{}"),
-      workingSet: JSON.parse(row.working_set_json || "{}"),
-      references,
-      rules: references.rules || [],
-      baseline: JSON.parse(row.baseline_json || "{}"),
-      notes: JSON.parse(row.notes_json || "[]"),
-      checks: JSON.parse(row.checks_json || "[]"),
-      syncResult: row.sync_result_json ? JSON.parse(row.sync_result_json) : null,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
-  listTasks(planId) {
-    const stmt = planId ? this.db.prepare("SELECT * FROM tasks WHERE plan_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM tasks ORDER BY created_at ASC");
-    const rows = planId ? stmt.all(planId) : stmt.all();
-    return rows.map((r) => {
-      const references = JSON.parse(r.references_json || "{}");
-      return {
-        id: r.id,
-        planId: r.plan_id,
-        phaseId: r.phase_id,
-        title: r.title,
-        status: r.status,
-        contextSlice: JSON.parse(r.context_slice_json || "{}"),
-        workingSet: JSON.parse(r.working_set_json || "{}"),
-        references,
-        rules: references.rules || [],
-        baseline: JSON.parse(r.baseline_json || "{}"),
-        notes: JSON.parse(r.notes_json || "[]"),
-        checks: JSON.parse(r.checks_json || "[]"),
-        syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at
-      };
-    });
-  }
-  // --- Block & ArtifactRefs ---
-  saveBlock(block) {
-    return this.transaction((db) => db._saveBlock(block));
-  }
-  _saveBlock(block) {
-    const stmt = this.db.prepare(`
-      INSERT INTO blocks (
-        id, project_id, title, kind, summary, details, history_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        project_id = excluded.project_id,
-        title = excluded.title,
-        kind = excluded.kind,
-        summary = excluded.summary,
-        details = excluded.details,
-        history_json = excluded.history_json,
-        updated_at = excluded.updated_at
-    `);
-    stmt.run(
-      block.id,
-      block.projectId || block.project_id || "contextos",
-      block.title || block.id,
-      block.kind || "service",
-      block.summary || "",
-      block.details || "",
-      JSON.stringify(block.history || []),
-      block.createdAt || block.created_at || (/* @__PURE__ */ new Date()).toISOString(),
-      block.updatedAt || block.updated_at || (/* @__PURE__ */ new Date()).toISOString()
-    );
-    const deleteRefs = this.db.prepare("DELETE FROM artifact_refs WHERE block_id = ?");
-    deleteRefs.run(block.id);
-    const insertRef = this.db.prepare(`
-      INSERT INTO artifact_refs (
-        id, block_id, path, symbol, anchor_kind, start_line, end_line, hash, role, hash_mode, manifest
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const refs = block.artifactRefs || block.artifact_refs || [];
-    for (let i2 = 0; i2 < refs.length; i2++) {
-      const ref = refs[i2];
-      insertRef.run(
-        `${block.id}-ref-${i2}`,
-        block.id,
-        ref.path,
-        ref.symbol || null,
-        ref.anchorKind || (ref.symbol ? "symbol" : "file"),
-        ref.startLine || ref.start_line || null,
-        ref.endLine || ref.end_line || null,
-        ref.hash || "",
-        ref.role || "implementation",
-        ref.hashMode || ref.hash_mode || null,
-        ref.manifest || null
-      );
-    }
-  }
-  getBlock(blockId) {
-    const stmt = this.db.prepare("SELECT * FROM blocks WHERE id = ?");
-    const row = stmt.get(blockId);
-    if (!row) return null;
-    const refsStmt = this.db.prepare("SELECT * FROM artifact_refs WHERE block_id = ?");
-    const refs = refsStmt.all(blockId).map((r) => ({
-      path: r.path,
-      symbol: r.symbol,
-      anchorKind: r.anchor_kind || (r.symbol ? "symbol" : "file"),
-      startLine: r.start_line,
-      endLine: r.end_line,
-      hash: r.hash,
-      role: r.role,
-      hashMode: r.hash_mode || null,
-      manifest: r.manifest || null
-    }));
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      title: row.title,
-      kind: row.kind || "service",
-      summary: row.summary,
-      details: row.details,
-      artifactRefs: refs,
-      history: JSON.parse(row.history_json || "[]"),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
-  listBlocks(projectId) {
-    const stmt = projectId ? this.db.prepare("SELECT id FROM blocks WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT id FROM blocks ORDER BY created_at ASC");
-    const rows = projectId ? stmt.all(projectId) : stmt.all();
-    return rows.map((r) => this.getBlock(r.id));
-  }
-  deleteBlock(blockId) {
-    this.transaction((self) => {
-      self.db.prepare("DELETE FROM links WHERE from_id = ? OR to_id = ?").run(blockId, blockId);
-      self.db.prepare("DELETE FROM artifact_refs WHERE block_id = ?").run(blockId);
-      self.db.prepare("DELETE FROM blocks WHERE id = ?").run(blockId);
-      const chains = self.listChains();
-      for (const c of chains) {
-        if (c.memberIds?.includes(blockId)) {
-          c.memberIds = c.memberIds.filter((m) => m !== blockId);
-          self.saveChain(c);
-        }
-      }
-    });
-    return true;
-  }
-  // --- Chain ---
-  saveChain(chain) {
-    const stmt = this.db.prepare(`
-      INSERT INTO chains (
-        id, project_id, title, summary, kind, member_ids_json, metadata_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        project_id = excluded.project_id,
-        title = excluded.title,
-        summary = excluded.summary,
-        kind = excluded.kind,
-        member_ids_json = excluded.member_ids_json,
-        metadata_json = excluded.metadata_json,
-        updated_at = excluded.updated_at
-    `);
-    stmt.run(
-      chain.id,
-      chain.projectId || chain.project_id || "contextos",
-      chain.title || chain.id,
-      chain.summary || "",
-      chain.kind || "leaf",
-      JSON.stringify(chain.memberIds || chain.member_ids || []),
-      JSON.stringify(chain.metadata || {}),
-      chain.createdAt || chain.created_at || (/* @__PURE__ */ new Date()).toISOString(),
-      chain.updatedAt || chain.updated_at || (/* @__PURE__ */ new Date()).toISOString()
-    );
-  }
-  getChain(chainId) {
-    const stmt = this.db.prepare("SELECT * FROM chains WHERE id = ?");
-    const row = stmt.get(chainId);
-    if (!row) return null;
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      title: row.title,
-      summary: row.summary,
-      kind: row.kind,
-      memberIds: JSON.parse(row.member_ids_json || "[]"),
-      metadata: JSON.parse(row.metadata_json || "{}"),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
-  listChains(projectId) {
-    const stmt = projectId ? this.db.prepare("SELECT * FROM chains WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM chains ORDER BY created_at ASC");
-    const rows = projectId ? stmt.all(projectId) : stmt.all();
-    return rows.map((r) => ({
-      id: r.id,
-      projectId: r.project_id,
-      title: r.title,
-      summary: r.summary,
-      kind: r.kind,
-      memberIds: JSON.parse(r.member_ids_json || "[]"),
-      metadata: JSON.parse(r.metadata_json || "{}"),
-      createdAt: r.created_at,
-      updatedAt: r.updated_at
-    }));
-  }
-  deleteChain(chainId) {
-    const stmt = this.db.prepare("DELETE FROM chains WHERE id = ?");
-    stmt.run(chainId);
-    return true;
-  }
-  // --- Link ---
-  saveLink(link) {
-    const stmt = this.db.prepare(`
-      INSERT INTO links (
-        id, project_id, from_id, to_id, kind, provenance, confidence, reason, revision, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        project_id = excluded.project_id,
-        from_id = excluded.from_id,
-        to_id = excluded.to_id,
-        kind = excluded.kind,
-        provenance = excluded.provenance,
-        confidence = excluded.confidence,
-        reason = excluded.reason,
-        revision = excluded.revision,
-        updated_at = excluded.updated_at
-    `);
-    stmt.run(
-      link.id || `${link.from || link.source_id}->${link.to || link.target_id}`,
-      link.projectId || link.project_id || "contextos",
-      link.from || link.from_id || link.source_id || link.sourceId,
-      link.to || link.to_id || link.target_id || link.targetId,
-      link.kind || link.link_type || link.linkType || "depends_on",
-      link.provenance || "authored",
-      link.confidence !== void 0 ? link.confidence : 1,
-      link.reason || "",
-      link.revision || 1,
-      link.createdAt || link.created_at || (/* @__PURE__ */ new Date()).toISOString(),
-      link.updatedAt || link.updated_at || (/* @__PURE__ */ new Date()).toISOString()
-    );
-  }
-  listLinks(projectId) {
-    const stmt = projectId ? this.db.prepare("SELECT * FROM links WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM links ORDER BY created_at ASC");
-    const rows = projectId ? stmt.all(projectId) : stmt.all();
-    return rows.map((r) => ({
-      id: r.id,
-      projectId: r.project_id,
-      from: r.from_id,
-      to: r.to_id,
-      kind: r.kind,
-      provenance: r.provenance,
-      confidence: r.confidence,
-      reason: r.reason,
-      revision: r.revision,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at
-    }));
-  }
-  getLink(linkId) {
-    const row = this.db.prepare("SELECT * FROM links WHERE id = ?").get(linkId);
-    if (!row) return null;
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      from: row.from_id,
-      to: row.to_id,
-      kind: row.kind,
-      provenance: row.provenance,
-      confidence: row.confidence,
-      reason: row.reason,
-      revision: row.revision,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
-    };
-  }
-  deleteLink(linkId) {
-    const stmt = this.db.prepare("DELETE FROM links WHERE id = ?");
-    stmt.run(linkId);
-    return true;
-  }
-  deleteLinkBetween(fromId, toId) {
-    const stmt = this.db.prepare("DELETE FROM links WHERE (from_id = ? AND to_id = ?) OR (id = ?)");
-    stmt.run(fromId, toId, `${fromId}->${toId}`);
-    return true;
-  }
-  // --- Command Receipts ---
-  saveCommandReceipt(receipt) {
-    const stmt = this.db.prepare(`
-      INSERT INTO command_receipts (
-        id, command, cwd, exit_code, duration_ms, summary, errors_json, warnings_json, changed_paths_json, log_handle, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        command = excluded.command,
-        cwd = excluded.cwd,
-        exit_code = excluded.exit_code,
-        duration_ms = excluded.duration_ms,
-        summary = excluded.summary,
-        errors_json = excluded.errors_json,
-        warnings_json = excluded.warnings_json,
-        changed_paths_json = excluded.changed_paths_json,
-        log_handle = excluded.log_handle
-    `);
-    stmt.run(
-      receipt.id,
-      receipt.command,
-      receipt.cwd || process.cwd(),
-      receipt.exitCode,
-      receipt.durationMs || 0,
-      receipt.summary || "",
-      JSON.stringify(receipt.errors || []),
-      JSON.stringify(receipt.warnings || []),
-      JSON.stringify(receipt.changedPaths || []),
-      receipt.logHandle || null,
-      receipt.createdAt || (/* @__PURE__ */ new Date()).toISOString()
-    );
-  }
-  getCommandReceipt(receiptId) {
-    const stmt = this.db.prepare("SELECT * FROM command_receipts WHERE id = ?");
-    const row = stmt.get(receiptId);
-    if (!row) return null;
-    return {
-      id: row.id,
-      command: row.command,
-      cwd: row.cwd,
-      exitCode: row.exit_code,
-      durationMs: row.duration_ms,
-      summary: row.summary,
-      errors: JSON.parse(row.errors_json || "[]"),
-      warnings: JSON.parse(row.warnings_json || "[]"),
-      changedPaths: JSON.parse(row.changed_paths_json || "[]"),
-      logHandle: row.log_handle,
-      createdAt: row.created_at
-    };
-  }
-};
-
-// packages/storage/src/sync-engine.mjs
+import path from "node:path";
 import crypto from "node:crypto";
-import fs3 from "node:fs";
-import path2 from "node:path";
-function calculateSha256(text) {
-  return crypto.createHash("sha256").update(text, "utf8").digest("hex");
+var MAX_TOUCHED = 200;
+var MAX_RECEIPTS = 50;
+var MAX_NOTES = 100;
+function normalizeCommand(command) {
+  return String(command || "").trim().replace(/\s+/g, " ");
 }
-var SyncEngine = class {
-  constructor(db) {
-    this.db = db;
+function emptySession(projectId, intent) {
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  return {
+    id: `sess-${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`,
+    projectId,
+    status: "open",
+    intent: intent || "",
+    intents: intent ? [{ text: intent, at: now }] : [],
+    touchedFiles: [],
+    receipts: [],
+    notes: [],
+    startedAt: now,
+    updatedAt: now,
+    closedAt: null,
+    summary: null
+  };
+}
+var SessionStore = class {
+  constructor({ projectRoot, projectId = "contextos" }) {
+    this.projectRoot = projectRoot;
+    this.projectId = projectId;
+    this.dotDir = path.join(projectRoot, ".contextos");
+    this.sessionPath = path.join(this.dotDir, "session.json");
+    this.historyPath = path.join(this.dotDir, "logs", "sessions", "history.jsonl");
   }
-  _lastExportedHash(projectId) {
-    return this.db.getSyncState(`last_exported_hash:${projectId}`) || this.db.getSyncState("last_exported_hash");
-  }
-  _buildGraph(projectId, graphRevision) {
-    const project = this.db.getProject(projectId);
-    if (!project) throw new Error(`Project ${projectId} not found in database`);
-    const plans = this.db.listPlans(projectId).sort((a, b) => a.id.localeCompare(b.id));
-    const planIds = new Set(plans.map((plan) => plan.id));
-    const tasks = this.db.listTasks().filter((task) => planIds.has(task.planId)).map((task) => ({
-      id: task.id,
-      planId: task.planId,
-      phaseId: task.phaseId,
-      title: task.title,
-      status: task.status,
-      contextSlice: {
-        objective: task.contextSlice?.objective || "",
-        constraints: task.contextSlice?.constraints || [],
-        references: task.contextSlice?.references || [],
-        nextSteps: task.contextSlice?.nextSteps || [],
-        openQuestions: task.contextSlice?.openQuestions || []
-      },
-      workingSet: task.workingSet || {},
-      references: task.references || {},
-      rules: task.rules || task.references?.rules || [],
-      notes: task.notes || [],
-      checks: task.checks || [],
-      syncResult: task.syncResult || null,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt
-    })).sort((a, b) => a.id.localeCompare(b.id));
-    const blocks = this.db.listBlocks(projectId).sort((a, b) => a.id.localeCompare(b.id));
-    const chains = this.db.listChains(projectId).sort((a, b) => a.id.localeCompare(b.id));
-    const links = this.db.listLinks(projectId).sort((a, b) => a.id.localeCompare(b.id));
-    const graph = {
-      schemaVersion: 3,
-      projectId,
-      graphRevision,
-      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      data: {
-        plans,
-        tasks,
-        blocks,
-        chains,
-        links
-      }
-    };
-    const jsonText = JSON.stringify(graph, null, 2) + "\n";
-    return {
-      project,
-      graph,
-      jsonText,
-      sha256: calculateSha256(jsonText)
-    };
-  }
-  _writeGraphFile(projectRoot, jsonText) {
-    const targetDir = path2.join(projectRoot, ".contextos");
-    fs3.mkdirSync(targetDir, { recursive: true });
-    const targetFile = path2.join(targetDir, "graph.json");
-    const tempFile = path2.join(targetDir, `graph.json.tmp.${process.pid}.${Date.now()}`);
-    let fd = null;
+  load() {
+    if (!fs2.existsSync(this.sessionPath)) return null;
     try {
-      fd = fs3.openSync(tempFile, "w");
-      fs3.writeFileSync(fd, jsonText, "utf8");
-      fs3.fsyncSync(fd);
-      fs3.closeSync(fd);
-      fd = null;
-      fs3.renameSync(tempFile, targetFile);
-      return targetFile;
-    } catch (err2) {
-      if (fd !== null) {
-        try {
-          fs3.closeSync(fd);
-        } catch (_) {
+      return JSON.parse(fs2.readFileSync(this.sessionPath, "utf8"));
+    } catch (_) {
+      return null;
+    }
+  }
+  save(session) {
+    session.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    fs2.mkdirSync(this.dotDir, { recursive: true });
+    fs2.writeFileSync(this.sessionPath, JSON.stringify(session, null, 2) + "\n", "utf8");
+    return session;
+  }
+  get current() {
+    const session = this.load();
+    return session && session.status === "open" ? session : null;
+  }
+  ensureSession(intent = "") {
+    const existing = this.current;
+    if (existing) {
+      if (existing.projectId === "contextos" && this.projectId && this.projectId !== "contextos") {
+        existing.projectId = this.projectId;
+      }
+      if (intent && existing.intent !== intent) {
+        existing.intents.push({ text: intent, at: (/* @__PURE__ */ new Date()).toISOString() });
+        existing.intent = intent;
+      }
+      return this.save(existing);
+    }
+    return this.save(emptySession(this.projectId, intent));
+  }
+  touch(entries = [], source = "edit") {
+    if (!entries.length) return this.current;
+    const session = this.ensureSession();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const index = new Map(session.touchedFiles.map((entry) => [entry.path, entry]));
+    for (const raw of entries) {
+      const entry = typeof raw === "string" ? { path: raw } : raw;
+      if (!entry?.path) continue;
+      const existing = index.get(entry.path);
+      if (existing) {
+        existing.lastTouchedAt = now;
+        existing.source = source;
+        if (entry.deleted === true) {
+          existing.deleted = true;
+          delete existing.mtimeMs;
+          delete existing.size;
+        } else {
+          delete existing.deleted;
+          if (entry.mtimeMs !== void 0) existing.mtimeMs = entry.mtimeMs;
+          if (entry.size !== void 0) existing.size = entry.size;
+        }
+      } else {
+        const created = {
+          path: entry.path,
+          source,
+          firstSeenAt: now,
+          lastTouchedAt: now,
+          mtimeMs: entry.mtimeMs,
+          size: entry.size,
+          ...entry.deleted === true ? { deleted: true } : {}
+        };
+        session.touchedFiles.push(created);
+        index.set(entry.path, created);
+      }
+    }
+    if (session.touchedFiles.length > MAX_TOUCHED) {
+      session.touchedFiles = session.touchedFiles.slice(-MAX_TOUCHED);
+    }
+    return this.save(session);
+  }
+  attachReceipt(receipt) {
+    if (!receipt) return this.current;
+    const session = this.ensureSession();
+    const commandKey = normalizeCommand(receipt.command);
+    const cwd = receipt.cwd || null;
+    const resolvedAt = (/* @__PURE__ */ new Date()).toISOString();
+    if (receipt.exitCode === 0) {
+      for (const previous of session.receipts) {
+        const sameCommand = normalizeCommand(previous.command) === commandKey;
+        const sameCwd = !previous.cwd || !cwd || previous.cwd === cwd;
+        if (previous.exitCode !== 0 && previous.status !== "superseded" && sameCommand && sameCwd) {
+          previous.status = "superseded";
+          previous.supersededBy = receipt.id || null;
+          previous.resolvedAt = resolvedAt;
         }
       }
+    }
+    session.receipts.push({
+      id: receipt.id || null,
+      command: receipt.command || null,
+      cwd,
+      exitCode: receipt.exitCode,
+      status: receipt.exitCode === 0 ? "passed" : "unresolved",
+      durationMs: receipt.durationMs,
+      at: resolvedAt
+    });
+    if (session.receipts.length > MAX_RECEIPTS) {
+      session.receipts = session.receipts.slice(-MAX_RECEIPTS);
+    }
+    return this.save(session);
+  }
+  note(text, kind = "note") {
+    if (!text) return this.current;
+    const session = this.ensureSession();
+    session.notes.push({ text, kind, at: (/* @__PURE__ */ new Date()).toISOString() });
+    if (session.notes.length > MAX_NOTES) {
+      session.notes = session.notes.slice(-MAX_NOTES);
+    }
+    return this.save(session);
+  }
+  close(summary = "") {
+    const session = this.ensureSession();
+    session.status = "closed";
+    session.closedAt = (/* @__PURE__ */ new Date()).toISOString();
+    session.summary = summary || session.intent;
+    this.save(session);
+    fs2.mkdirSync(path.dirname(this.historyPath), { recursive: true });
+    fs2.appendFileSync(
+      this.historyPath,
+      JSON.stringify({
+        id: session.id,
+        intent: session.intent,
+        summary: session.summary,
+        touchedFiles: session.touchedFiles.map((entry) => entry.path),
+        receipts: session.receipts,
+        closedAt: session.closedAt
+      }) + "\n",
+      "utf8"
+    );
+    return session;
+  }
+  recentHistory(limit = 3) {
+    if (!fs2.existsSync(this.historyPath)) return [];
+    const lines = fs2.readFileSync(this.historyPath, "utf8").split("\n").filter(Boolean);
+    const parsed = [];
+    for (const line of lines.slice(-limit)) {
       try {
-        fs3.rmSync(tempFile, { force: true });
+        parsed.push(JSON.parse(line));
       } catch (_) {
       }
-      throw err2;
     }
-  }
-  flushGraphOutbox(projectId, projectRoot) {
-    const outbox = this.db.getGraphOutbox(projectId);
-    if (!outbox) return null;
-    const project = this.db.getProject(projectId);
-    if (!project) throw new Error(`Project ${projectId} not found in database`);
-    if ((project.graph_revision || 0) !== outbox.baseRevision) {
-      if ((project.graph_revision || 0) >= outbox.targetRevision) {
-        this.db.deleteGraphOutbox(projectId);
-        return {
-          graphRevision: project.graph_revision,
-          sha256: this._lastExportedHash(projectId),
-          targetFile: path2.join(projectRoot, ".contextos", "graph.json")
-        };
-      }
-      throw new Error(
-        `Graph export revision conflict for '${projectId}': database=${project.graph_revision}, base=${outbox.baseRevision}`
-      );
-    }
-    const targetFile = this._writeGraphFile(projectRoot, outbox.payloadJson);
-    const actualSha256 = calculateSha256(fs3.readFileSync(targetFile, "utf8"));
-    if (actualSha256 !== outbox.payloadHash) {
-      throw new Error(`Graph export hash verification failed for '${projectId}'`);
-    }
-    this.db.setGraphExported(projectId, outbox.targetRevision, outbox.payloadHash);
-    return {
-      graphRevision: outbox.targetRevision,
-      sha256: outbox.payloadHash,
-      targetFile
-    };
-  }
-  recoverGraphOutbox(projectId, projectRoot) {
-    const result = this.flushGraphOutbox(projectId, projectRoot);
-    return result ? { recovered: true, ...result } : { recovered: false };
-  }
-  queueGraphToJson(projectId) {
-    const project = this.db.getProject(projectId);
-    if (!project) throw new Error(`Project ${projectId} not found in database`);
-    const targetRevision = (project.graph_revision || 0) + 1;
-    const payload = this._buildGraph(projectId, targetRevision);
-    return this.db.saveGraphOutbox({
-      projectId,
-      baseRevision: project.graph_revision || 0,
-      targetRevision,
-      payloadHash: payload.sha256,
-      payloadJson: payload.jsonText
-    });
-  }
-  exportGraphToJson(projectId, projectRoot) {
-    this.flushGraphOutbox(projectId, projectRoot);
-    this.queueGraphToJson(projectId);
-    return this.flushGraphOutbox(projectId, projectRoot);
-  }
-  importGraphFromJson(jsonText, projectRoot) {
-    let graph;
-    try {
-      graph = JSON.parse(jsonText);
-    } catch (err2) {
-      throw new Error(`Invalid JSON syntax in graph: ${err2.message}`);
-    }
-    const projectId = graph.projectId || graph.project?.id || graph.id || "contextos";
-    const graphRevision = graph.graphRevision || graph.project?.graphRevision || 0;
-    const sha256 = calculateSha256(jsonText);
-    const data = graph.data || {};
-    let blocks = data.blocks || [];
-    if (graph.schemaVersion === 1 && Array.isArray(data.source_refs)) {
-      const refsByBlock = /* @__PURE__ */ new Map();
-      for (const ref of data.source_refs) {
-        const bId = ref.block_id || ref.blockId;
-        if (!refsByBlock.has(bId)) refsByBlock.set(bId, []);
-        refsByBlock.get(bId).push({
-          path: ref.path,
-          symbol: ref.symbol,
-          startLine: ref.start_line ?? ref.startLine,
-          endLine: ref.end_line ?? ref.endLine,
-          hash: ref.hash || "",
-          role: ref.role || "implementation"
-        });
-      }
-      blocks = blocks.map((b) => {
-        const refs = b.artifactRefs || refsByBlock.get(b.id);
-        if (!Array.isArray(refs) || refs.length === 0) {
-          throw new Error(`Ghost Block rejected during graph import: Block '${b.id}' has no artifactRefs.`);
-        }
-        return { ...b, artifactRefs: refs };
-      });
-    }
-    this.db.transaction((db) => {
-      db.ensureProject(projectId, projectRoot);
-      db.setGraphRevision(projectId, graphRevision);
-      db.db.prepare("DELETE FROM plans WHERE project_id = ?").run(projectId);
-      db.db.prepare("DELETE FROM blocks WHERE project_id = ?").run(projectId);
-      db.db.prepare("DELETE FROM chains WHERE project_id = ?").run(projectId);
-      db.db.prepare("DELETE FROM links WHERE project_id = ?").run(projectId);
-      const plans = data.plans || [];
-      const planIds = new Set(plans.map((plan) => plan.id));
-      for (const plan of plans) {
-        db.savePlan({ ...plan, projectId });
-      }
-      for (const task of data.tasks || []) {
-        const planId = task.planId || task.plan_id;
-        if (!planIds.has(planId)) continue;
-        db.saveTask({ ...task, planId, phaseId: task.phaseId || task.phase_id || "P0" });
-      }
-      for (const block of blocks) {
-        db.saveBlock({ ...block, projectId });
-      }
-      for (const chain of data.chains || []) {
-        db.saveChain({ ...chain, projectId });
-      }
-      for (const link of data.links || []) {
-        db.saveLink({ ...link, projectId });
-      }
-      db.setGraphExported(projectId, graphRevision, sha256);
-    });
-    return {
-      projectId,
-      graphRevision,
-      sha256
-    };
-  }
-  reconcileExternalChange(projectId, projectRoot) {
-    this.recoverGraphOutbox(projectId, projectRoot);
-    const targetFile = path2.join(projectRoot, ".contextos", "graph.json");
-    if (!fs3.existsSync(targetFile)) {
-      return { changed: false, reason: "File does not exist" };
-    }
-    const jsonText = fs3.readFileSync(targetFile, "utf8");
-    const currentSha256 = calculateSha256(jsonText);
-    const lastHash = this._lastExportedHash(projectId);
-    if (currentSha256 === lastHash) {
-      return { changed: false, reason: "Hash identical to last export" };
-    }
-    let graph;
-    try {
-      graph = JSON.parse(jsonText);
-    } catch (err2) {
-      throw new Error(`Invalid JSON syntax in graph: ${err2.message}`);
-    }
-    const project = this.db.getProject(projectId);
-    const currentRevision = project?.graph_revision || 0;
-    const incomingRevision = graph.graphRevision || graph.project?.graphRevision || 0;
-    if (incomingRevision < currentRevision) {
-      return {
-        changed: false,
-        conflict: true,
-        reason: `Refusing stale graph rollback: graph revision ${incomingRevision} is older than database revision ${currentRevision}`,
-        graphRevision: incomingRevision,
-        databaseRevision: currentRevision
-      };
-    }
-    if (incomingRevision === currentRevision) {
-      return {
-        changed: false,
-        conflict: true,
-        reason: `Graph revision ${incomingRevision} diverged without a newer revision`,
-        graphRevision: incomingRevision,
-        databaseRevision: currentRevision
-      };
-    }
-    const importResult = this.importGraphFromJson(jsonText, projectRoot);
-    return {
-      changed: true,
-      revision: importResult.graphRevision,
-      sha256: currentSha256
-    };
+    return parsed.reverse();
   }
 };
 
-// packages/storage/src/project-lock.mjs
-import crypto2 from "node:crypto";
-import fs4 from "node:fs";
-import path3 from "node:path";
-var LOCK_DIR_NAME = "project.lock";
-function lockPath(projectRoot) {
-  return path3.join(path3.resolve(projectRoot), ".contextos", LOCK_DIR_NAME);
-}
-function readOwner(lockDir) {
-  try {
-    return JSON.parse(fs4.readFileSync(path3.join(lockDir, "owner.json"), "utf8"));
-  } catch (_) {
-    return null;
+// packages/orchestrator/src/tracer.mjs
+import fs3 from "node:fs";
+import path2 from "node:path";
+var Tracer = class {
+  constructor({ projectRoot, sessionId = "no-session" }) {
+    this.projectRoot = projectRoot;
+    this.sessionId = sessionId;
+    this.tracePath = path2.join(projectRoot, ".contextos", "logs", "sessions", `${sessionId}.jsonl`);
+    this.steps = [];
   }
-}
-function processIsAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err2) {
-    return err2.code === "EPERM";
+  step(name2, meta2 = {}) {
+    this.steps.push({ name: name2, ...meta2 });
   }
-}
-function isStale(lockDir, owner, staleMs) {
-  const createdAt = owner?.createdAt ? Date.parse(owner.createdAt) : NaN;
-  let stat = null;
-  try {
-    stat = fs4.statSync(lockDir);
-  } catch (_) {
-    return true;
+  flush() {
+    try {
+      fs3.mkdirSync(path2.dirname(this.tracePath), { recursive: true });
+      const payload = this.steps.map((entry) => JSON.stringify({ at: (/* @__PURE__ */ new Date()).toISOString(), ...entry })).join("\n");
+      fs3.appendFileSync(this.tracePath, payload ? `${payload}
+` : "", "utf8");
+    } catch (_) {
+    }
   }
-  const timestamp = Number.isFinite(createdAt) ? createdAt : stat?.mtimeMs || 0;
-  if (!timestamp || Date.now() - timestamp <= staleMs) return false;
-  if (owner?.pid && processIsAlive(owner.pid)) return false;
-  return true;
-}
-function removeLockDirectory(lockDir) {
-  try {
-    fs4.rmSync(lockDir, { recursive: true, force: true });
-  } catch (_) {
-  }
-}
-async function sleep(ms) {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-function inspectProjectWriteLock(projectRoot) {
-  const lockDir = lockPath(projectRoot);
-  if (!fs4.existsSync(lockDir)) return null;
-  const owner = readOwner(lockDir);
-  let stat;
-  try {
-    stat = fs4.statSync(lockDir);
-  } catch (_) {
-    return null;
+};
+
+// packages/orchestrator/src/capabilities.mjs
+function createCapabilities({ service, projectRoot, projectId }) {
+  async function safe(name2, fn) {
+    try {
+      const data = await fn();
+      return { ok: true, data };
+    } catch (error2) {
+      return { ok: false, error: error2.message, capability: name2 };
+    }
   }
   return {
-    path: lockDir,
-    owner,
-    ageMs: Date.now() - stat.mtimeMs,
-    alive: owner?.pid ? processIsAlive(owner.pid) : false
+    code: (args2 = {}) => safe("code", () => service.code({ format: "markdown", ...args2 })),
+    codeJson: (args2 = {}) => safe("code", () => service.code({ format: "json", ...args2 })),
+    run: (args2 = {}) => safe("run_command", () => service.runCommand(args2)),
+    process: (args2 = {}) => safe("process", () => service.process(args2)),
+    knowledge: (args2 = {}) => safe("knowledge", () => service.knowledge(args2)),
+    block: (args2 = {}) => safe("block", () => service.block(args2)),
+    blocks: () => safe("block", async () => {
+      const result = await service.block({ action: "list", format: "json" });
+      return Array.isArray(result) ? result : [];
+    }),
+    chain: (args2 = {}) => safe("chain", () => service.chain(args2)),
+    task: (args2 = {}) => safe("task", () => service.task(args2)),
+    plan: (args2 = {}) => safe("plan", () => service.plan(args2)),
+    osContext: (args2 = {}) => safe("os_context", () => service.osContext(args2)),
+    rules: () => safe("knowledge", async () => {
+      const result = await service.knowledge({ action: "rule_list", format: "json" });
+      return Array.isArray(result) ? result : [];
+    }),
+    exportGraph: () => safe("graph", () => service.syncEngine.exportGraphToJson(projectId, projectRoot))
   };
 }
-async function withProjectWriteLock(projectRoot, callback, { timeoutMs = 15e3, staleMs = 6e4, label = "write" } = {}) {
-  const absoluteRoot = path3.resolve(projectRoot);
-  const lockDir = lockPath(absoluteRoot);
-  const token = crypto2.randomBytes(12).toString("hex");
-  const startedAt = Date.now();
-  const owner = {
-    token,
-    pid: process.pid,
-    label,
-    projectRoot: absoluteRoot,
-    createdAt: (/* @__PURE__ */ new Date()).toISOString()
-  };
-  fs4.mkdirSync(path3.dirname(lockDir), { recursive: true });
-  while (true) {
-    try {
-      fs4.mkdirSync(lockDir);
-      fs4.writeFileSync(path3.join(lockDir, "owner.json"), JSON.stringify(owner, null, 2) + "\n", "utf8");
-      break;
-    } catch (err2) {
-      if (err2.code !== "EEXIST") throw err2;
-      const currentOwner = readOwner(lockDir);
-      if (isStale(lockDir, currentOwner, staleMs)) {
-        const staleDir = `${lockDir}.stale-${token}-${Date.now()}`;
-        try {
-          fs4.renameSync(lockDir, staleDir);
-          removeLockDirectory(staleDir);
-          continue;
-        } catch (_) {
-        }
-      }
-      if (Date.now() - startedAt >= timeoutMs) {
-        const holder = currentOwner ? `pid=${currentOwner.pid || "unknown"} label=${currentOwner.label || "unknown"}` : "unknown holder";
-        throw new Error(`Project write lock timeout in ${label}: ${holder}`);
-      }
-      await sleep(40);
-    }
-  }
-  const release = () => {
-    const currentOwner = readOwner(lockDir);
-    if (currentOwner?.token !== token) return;
-    const releasedDir = `${lockDir}.released-${token}`;
-    try {
-      fs4.renameSync(lockDir, releasedDir);
-      removeLockDirectory(releasedDir);
-    } catch (_) {
-      removeLockDirectory(lockDir);
-    }
-  };
+
+// packages/orchestrator/src/profile.mjs
+import fs4 from "node:fs";
+import path3 from "node:path";
+var VERIFY_SCRIPT_PRIORITY = ["test", "lint", "build"];
+function inferFromPackageJson(projectRoot) {
+  const pkgPath = path3.join(projectRoot, "package.json");
+  if (!fs4.existsSync(pkgPath)) return [];
   try {
-    return await callback();
-  } finally {
-    release();
+    const pkg = JSON.parse(fs4.readFileSync(pkgPath, "utf8"));
+    const scripts = pkg.scripts || {};
+    const found = [];
+    for (const name2 of VERIFY_SCRIPT_PRIORITY) {
+      if (scripts[name2]) found.push(`npm run ${name2}`);
+    }
+    return found.slice(0, 2);
+  } catch (_) {
+    return [];
   }
 }
+function loadProfile(projectRoot) {
+  const defaults = { strict: false, verify: [], maxChars: 1500, timeoutMs: 12e4, budget: null };
+  const profilePath = path3.join(projectRoot, ".contextos", "profile.json");
+  let stored = {};
+  if (fs4.existsSync(profilePath)) {
+    try {
+      stored = JSON.parse(fs4.readFileSync(profilePath, "utf8"));
+    } catch (_) {
+      stored = {};
+    }
+  }
+  const verify = Array.isArray(stored.verify) && stored.verify.length > 0 ? stored.verify : inferFromPackageJson(projectRoot);
+  return { ...defaults, ...stored, verify };
+}
+function saveProfile(projectRoot, patch = {}) {
+  const profilePath = path3.join(projectRoot, ".contextos", "profile.json");
+  const current = loadProfile(projectRoot);
+  const next = { ...current, ...patch };
+  fs4.mkdirSync(path3.dirname(profilePath), { recursive: true });
+  fs4.writeFileSync(profilePath, JSON.stringify(next, null, 2) + "\n", "utf8");
+  return next;
+}
 
-// packages/domain/src/plan.mjs
-var PLAN_PRIORITIES = ["critical", "high", "normal", "low"];
-var PLAN_STATUSES = ["draft", "active", "completed", "archived"];
-var PHASE_STATUSES = ["pending", "active", "completed"];
-var CHECKPOINT_STATUSES = ["pending", "passed", "failed", "stale"];
-var PlanCheckpoint = class {
-  constructor({
-    id,
-    planId,
-    phaseId = null,
-    title,
-    criteria = "",
-    status = "pending",
-    evidenceRefs = [],
-    completedAt = null
-  }) {
-    if (!id || typeof id !== "string") throw new Error("PlanCheckpoint requires a valid string id");
-    if (!planId || typeof planId !== "string") throw new Error("PlanCheckpoint requires planId");
-    if (!title || typeof title !== "string") throw new Error("PlanCheckpoint requires title");
-    if (!CHECKPOINT_STATUSES.includes(status)) {
-      throw new Error(`Invalid checkpoint status: ${status}. Must be one of ${CHECKPOINT_STATUSES.join(", ")}`);
-    }
-    this.id = id;
-    this.planId = planId;
-    this.phaseId = phaseId;
-    this.title = title;
-    this.criteria = criteria;
-    this.status = status;
-    this.evidenceRefs = Array.isArray(evidenceRefs) ? [...evidenceRefs] : [];
-    this.completedAt = completedAt;
-  }
-  pass(evidenceRef) {
-    if (evidenceRef) this.evidenceRefs.push(evidenceRef);
-    this.status = "passed";
-    this.completedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  fail(reason) {
-    this.status = "failed";
-    this.criteria = reason ? `${this.criteria}
-Failure: ${reason}`.trim() : this.criteria;
-  }
-  markStale() {
-    this.status = "stale";
-  }
-  toJSON() {
-    return {
-      id: this.id,
-      planId: this.planId,
-      phaseId: this.phaseId,
-      title: this.title,
-      criteria: this.criteria,
-      status: this.status,
-      evidenceRefs: this.evidenceRefs,
-      completedAt: this.completedAt
-    };
-  }
-};
-var Phase = class {
-  constructor({
-    id,
-    order = 0,
-    objective = "",
-    scope = "",
-    deliverables = [],
-    status = "pending",
-    taskIds = [],
-    acceptance = []
-  }) {
-    if (!id || typeof id !== "string") throw new Error("Phase requires a valid string id (e.g. P0, P1)");
-    if (!PHASE_STATUSES.includes(status)) {
-      throw new Error(`Invalid phase status: ${status}. Must be one of ${PHASE_STATUSES.join(", ")}`);
-    }
-    this.id = id;
-    this.order = order;
-    this.objective = objective;
-    this.scope = scope;
-    this.deliverables = Array.isArray(deliverables) ? [...deliverables] : [];
-    this.status = status;
-    this.taskIds = Array.isArray(taskIds) ? [...taskIds] : [];
-    this.acceptance = Array.isArray(acceptance) ? [...acceptance] : [];
-  }
-  activate() {
-    this.status = "active";
-  }
-  complete() {
-    this.status = "completed";
-  }
-  toJSON() {
-    return {
-      id: this.id,
-      order: this.order,
-      objective: this.objective,
-      scope: this.scope,
-      deliverables: this.deliverables,
-      status: this.status,
-      taskIds: this.taskIds,
-      acceptance: this.acceptance
-    };
-  }
-};
-var Plan = class {
-  constructor({
-    id,
-    projectId,
-    title,
-    priority = "normal",
-    status = "active",
-    summary = "",
-    phases = [],
-    ruleRefs = [],
-    decisionRefs = [],
-    dependencyRefs = [],
-    checkpoints = [],
-    completedSummary = null,
-    historyRef = null,
-    createdAt = (/* @__PURE__ */ new Date()).toISOString(),
-    updatedAt = (/* @__PURE__ */ new Date()).toISOString()
-  }) {
-    if (!id || typeof id !== "string") throw new Error("Plan requires a valid string id");
-    if (!projectId || typeof projectId !== "string") throw new Error("Plan requires projectId");
-    if (!title || typeof title !== "string") throw new Error("Plan requires title");
-    if (!PLAN_PRIORITIES.includes(priority)) {
-      throw new Error(`Invalid plan priority: ${priority}. Must be one of ${PLAN_PRIORITIES.join(", ")}`);
-    }
-    if (!PLAN_STATUSES.includes(status)) {
-      throw new Error(`Invalid plan status: ${status}. Must be one of ${PLAN_STATUSES.join(", ")}`);
-    }
-    this.id = id;
-    this.projectId = projectId;
-    this.title = title;
-    this.priority = priority;
-    this.status = status;
-    this.summary = summary;
-    this.phases = phases.map((p) => p instanceof Phase ? p : new Phase(p));
-    this.ruleRefs = Array.isArray(ruleRefs) ? [...ruleRefs] : [];
-    this.decisionRefs = Array.isArray(decisionRefs) ? [...decisionRefs] : [];
-    this.dependencyRefs = Array.isArray(dependencyRefs) ? [...dependencyRefs] : [];
-    this.checkpoints = checkpoints.map((c) => c instanceof PlanCheckpoint ? c : new PlanCheckpoint({ ...c, planId: id }));
-    this.completedSummary = completedSummary;
-    this.historyRef = historyRef;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
-  }
-  addPhase(phaseData) {
-    const phase = phaseData instanceof Phase ? phaseData : new Phase(phaseData);
-    if (this.phases.some((p) => p.id === phase.id)) {
-      throw new Error(`Phase ${phase.id} already exists in plan ${this.id}`);
-    }
-    this.phases.push(phase);
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    return phase;
-  }
-  getPhase(phaseId) {
-    return this.phases.find((p) => p.id === phaseId) || null;
-  }
-  addCheckpoint(checkpointData) {
-    const cp = checkpointData instanceof PlanCheckpoint ? checkpointData : new PlanCheckpoint({ ...checkpointData, planId: this.id });
-    if (this.checkpoints.some((c) => c.id === cp.id)) {
-      throw new Error(`Checkpoint ${cp.id} already exists in plan ${this.id}`);
-    }
-    this.checkpoints.push(cp);
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    return cp;
-  }
-  canComplete() {
-    if (this.checkpoints.length === 0) return true;
-    return this.checkpoints.every((cp) => cp.status === "passed");
-  }
-  complete({ completedSummary, historyRef = null }) {
-    if (!this.canComplete()) {
-      const pending = this.checkpoints.filter((cp) => cp.status !== "passed").map((cp) => cp.id);
-      throw new Error(`Cannot complete Plan ${this.id}: checkpoints not passed: ${pending.join(", ")}`);
-    }
-    this.status = "completed";
-    for (const phase of this.phases) {
-      phase.complete();
-    }
-    this.completedSummary = completedSummary || this.summary;
-    this.historyRef = historyRef;
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  toJSON() {
-    return {
-      id: this.id,
-      projectId: this.projectId,
-      title: this.title,
-      priority: this.priority,
-      status: this.status,
-      summary: this.summary,
-      phases: this.phases.map((p) => p.toJSON()),
-      ruleRefs: this.ruleRefs,
-      decisionRefs: this.decisionRefs,
-      dependencyRefs: this.dependencyRefs,
-      checkpoints: this.checkpoints.map((c) => c.toJSON()),
-      completedSummary: this.completedSummary,
-      historyRef: this.historyRef,
-      createdAt: this.createdAt,
-      updatedAt: this.updatedAt
-    };
-  }
-};
+// packages/orchestrator/src/pipelines.mjs
+import fs9 from "node:fs";
+import path9 from "node:path";
 
-// packages/domain/src/task.mjs
-var TASK_STATUSES = [
-  "draft",
-  "active",
-  "checking",
-  "syncing",
-  "completed",
-  "blocked",
-  "sync_failed"
-];
-var Task = class {
-  constructor({
-    id,
-    planId,
-    phaseId,
-    title,
-    status = "draft",
-    contextSlice = {},
-    workingSet = {},
-    references = {},
-    rules = null,
-    ruleRefs = null,
-    baseline = {},
-    notes = [],
-    checks = [],
-    syncResult = null,
-    createdAt = (/* @__PURE__ */ new Date()).toISOString(),
-    updatedAt = (/* @__PURE__ */ new Date()).toISOString()
-  }) {
-    if (!id || typeof id !== "string") throw new Error("Task requires a valid string id");
-    if (!planId || typeof planId !== "string") throw new Error("Task requires planId");
-    if (!phaseId || typeof phaseId !== "string") throw new Error("Task requires phaseId");
-    if (!title || typeof title !== "string") throw new Error("Task requires title");
-    if (!TASK_STATUSES.includes(status)) {
-      throw new Error(`Invalid task status: ${status}. Must be one of ${TASK_STATUSES.join(", ")}`);
+// packages/orchestrator/src/context-budget.mjs
+var BUDGET_PRESETS = Object.freeze({
+  shallow: 1800,
+  normal: 4e3,
+  deep: 9e3
+});
+function resolveBudget(depth, override) {
+  if (typeof override === "number" && override > 0) return override;
+  return BUDGET_PRESETS[depth] || BUDGET_PRESETS.normal;
+}
+function priorityOf(section) {
+  return typeof section.priority === "number" ? section.priority : 99;
+}
+function fitSections(sections = [], { maxChars = BUDGET_PRESETS.normal } = {}) {
+  const ordered = [...sections].filter((section) => (section.lines || []).length > 0).sort((a, b) => priorityOf(a) - priorityOf(b));
+  const chunks = [];
+  const included = [];
+  const dropped = [];
+  const truncated = [];
+  let used = 0;
+  for (const section of ordered) {
+    const body2 = section.lines.join("\n");
+    const header = `## ${section.title}`;
+    const block = `${header}
+${body2}`;
+    if (used + block.length <= maxChars) {
+      chunks.push(block);
+      used += block.length + 2;
+      included.push(section.key);
+      continue;
     }
-    this.id = id;
-    this.planId = planId;
-    this.phaseId = phaseId;
-    this.title = title;
-    this.status = status;
-    this.contextSlice = {
-      objective: contextSlice.objective || "",
-      constraints: Array.isArray(contextSlice.constraints) ? [...contextSlice.constraints] : [],
-      references: contextSlice.references || {},
-      locators: Array.isArray(contextSlice.locators) ? [...contextSlice.locators] : [],
-      nextSteps: Array.isArray(contextSlice.nextSteps) ? [...contextSlice.nextSteps] : [],
-      openQuestions: Array.isArray(contextSlice.openQuestions) ? [...contextSlice.openQuestions] : []
-    };
-    const normalizedWorkingSet = Array.isArray(workingSet) ? { files: workingSet } : workingSet || {};
-    this.workingSet = {
-      files: Array.isArray(normalizedWorkingSet.files) ? [...normalizedWorkingSet.files] : [],
-      symbols: Array.isArray(normalizedWorkingSet.symbols) ? [...normalizedWorkingSet.symbols] : [],
-      candidateBlockIds: Array.isArray(normalizedWorkingSet.candidateBlockIds) ? [...normalizedWorkingSet.candidateBlockIds] : [],
-      scopeDirs: Array.isArray(normalizedWorkingSet.scopeDirs) ? [...normalizedWorkingSet.scopeDirs] : []
-    };
-    const initialRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references?.rules) ? references.rules : [];
-    this.references = {
-      rules: [...new Set(initialRules.filter((r) => typeof r === "string" && r.trim()))],
-      decisionSections: Array.isArray(references?.decisionSections) ? [...references.decisionSections] : [],
-      blockIds: Array.isArray(references?.blockIds) ? [...references.blockIds] : []
-    };
-    this.baseline = {
-      gitHead: baseline.gitHead || null,
-      dirtyHash: baseline.dirtyHash || null,
-      indexRevision: baseline.indexRevision || 0,
-      fileSnapshots: baseline.fileSnapshots ? { ...baseline.fileSnapshots } : {},
-      initializedAt: baseline.initializedAt || null
-    };
-    this.notes = Array.isArray(notes) ? [...notes] : [];
-    this.checks = Array.isArray(checks) ? [...checks] : [];
-    this.syncResult = syncResult;
-    this.createdAt = createdAt;
-    this.updatedAt = updatedAt;
-  }
-  activate() {
-    if (this.status !== "draft" && this.status !== "blocked") {
-      throw new Error(`Cannot activate task in ${this.status} state`);
-    }
-    this.status = "active";
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  addNote({ text, kind = "journal" }) {
-    if (!text || typeof text !== "string") throw new Error("Note text is required");
-    const note = {
-      id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      text,
-      kind,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    this.notes.push(note);
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    return note;
-  }
-  addFileToWorkingSet(filePath) {
-    if (filePath && !this.workingSet.files.includes(filePath)) {
-      this.workingSet.files.push(filePath);
-      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    }
-  }
-  addCheck({ receiptId = null, description, passed = true, evidence = "" }) {
-    if (!description || typeof description !== "string") {
-      throw new Error("Check description is required");
-    }
-    const check = {
-      id: `check-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      receiptId,
-      description,
-      passed: Boolean(passed),
-      evidence,
-      recordedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    this.checks.push(check);
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    return check;
-  }
-  startChecking() {
-    if (this.status !== "active" && this.status !== "sync_failed") {
-      throw new Error(`Cannot transition to checking from state: ${this.status}`);
-    }
-    this.status = "checking";
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  startSyncing() {
-    if (this.status === "active") {
-      this.status = "checking";
-    }
-    if (this.status !== "checking") {
-      throw new Error(`Cannot transition to syncing from state: ${this.status}. Must be active or checking.`);
-    }
-    const verifiedChecks = this.checks.filter(
-      (check) => check.passed && (check.receiptId || String(check.evidence || "").trim())
-    );
-    if (verifiedChecks.length === 0) {
-      throw new Error("Cannot sync task without at least one passing check backed by a receipt or evidence.");
-    }
-    const failedChecks = this.checks.filter((c) => !c.passed);
-    if (failedChecks.length > 0) {
-      throw new Error(`Cannot sync task with ${failedChecks.length} failed checks`);
-    }
-    this.status = "syncing";
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  completeSync(syncResult) {
-    if (this.status !== "syncing") {
-      throw new Error(`Cannot complete sync from state: ${this.status}. Must be syncing.`);
-    }
-    this.status = "completed";
-    this.syncResult = {
-      ...syncResult,
-      completedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  failSync(reason) {
-    this.status = "sync_failed";
-    this.syncResult = {
-      error: reason,
-      failedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  block(reason) {
-    this.status = "blocked";
-    this.addNote({ text: `Task blocked: ${reason}`, kind: "blocked" });
-  }
-  resume() {
-    if (this.status !== "blocked" && this.status !== "sync_failed") {
-      throw new Error(`Cannot resume task from state: ${this.status}`);
-    }
-    this.status = "active";
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  get rules() {
-    return this.references.rules;
-  }
-  set rules(newRules) {
-    this.references.rules = Array.isArray(newRules) ? [...new Set(newRules.filter((r) => typeof r === "string" && r.trim()))] : [];
-    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-  }
-  bindRule(ruleId) {
-    if (!ruleId || typeof ruleId !== "string") return;
-    const clean = ruleId.trim();
-    if (clean && !this.references.rules.includes(clean)) {
-      this.references.rules.push(clean);
-      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    }
-  }
-  unbindRule(ruleId) {
-    if (!ruleId || typeof ruleId !== "string") return;
-    const clean = ruleId.trim();
-    const idx = this.references.rules.indexOf(clean);
-    if (idx !== -1) {
-      this.references.rules.splice(idx, 1);
-      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    }
-  }
-  setRules(rules) {
-    this.rules = rules;
-  }
-  toJSON() {
-    return {
-      id: this.id,
-      planId: this.planId,
-      phaseId: this.phaseId,
-      title: this.title,
-      status: this.status,
-      contextSlice: this.contextSlice,
-      workingSet: this.workingSet,
-      references: this.references,
-      rules: this.references.rules,
-      baseline: this.baseline,
-      notes: this.notes,
-      checks: this.checks,
-      syncResult: this.syncResult,
-      createdAt: this.createdAt,
-      updatedAt: this.updatedAt
-    };
-  }
-};
-
-// packages/domain/src/knowledge.mjs
-var DecisionDocument = class {
-  constructor(rawMarkdown = "") {
-    this.rawMarkdown = rawMarkdown;
-    this.sections = this.parseSections(rawMarkdown);
-  }
-  parseSections(markdown) {
-    const lines = markdown.split(/\r?\n/);
-    const sections = [];
-    let currentSection = null;
-    for (let i2 = 0; i2 < lines.length; i2++) {
-      const line = lines[i2];
-      const match = line.match(/^##\s+\[([a-zA-Z0-9_-]+)\]\s+(.*)$/);
-      if (match) {
-        if (currentSection) {
-          currentSection.content = currentSection.lines.join("\n").trim();
-          sections.push(currentSection);
-        }
-        currentSection = {
-          id: match[1],
-          title: match[2].trim(),
-          startLine: i2 + 1,
-          lines: [],
-          content: ""
-        };
-      } else if (currentSection) {
-        currentSection.lines.push(line);
-      }
-    }
-    if (currentSection) {
-      currentSection.content = currentSection.lines.join("\n").trim();
-      sections.push(currentSection);
-    }
-    return sections;
-  }
-  getSection(sectionId) {
-    return this.sections.find((s) => s.id === sectionId) || null;
-  }
-  listSections() {
-    return this.sections.map((s) => ({
-      id: s.id,
-      title: s.title,
-      startLine: s.startLine
-    }));
-  }
-  upsertSection({ id, title, content }) {
-    const existingIndex = this.sections.findIndex((s) => s.id === id);
-    const formattedContent = `## [${id}] ${title}
-
-${content.trim()}
-`;
-    if (existingIndex >= 0) {
-      const section = this.sections[existingIndex];
-      const regex = new RegExp(`##\\s+\\[${id}\\][\\s\\S]*?(?=(##\\s+\\[|$))`);
-      this.rawMarkdown = this.rawMarkdown.replace(regex, formattedContent);
+    const remaining = maxChars - used - header.length - 2;
+    if (remaining > 160) {
+      const cut = body2.slice(0, remaining - 24);
+      chunks.push(`${header}
+${cut}
+... (+${body2.length - cut.length} chars omitted)`);
+      used = maxChars;
+      included.push(section.key);
+      truncated.push(section.key);
     } else {
-      this.rawMarkdown = `${this.rawMarkdown.trim()}
-
-${formattedContent}`.trim() + "\n";
-    }
-    this.sections = this.parseSections(this.rawMarkdown);
-    return this.getSection(id);
-  }
-  toMarkdown() {
-    return this.rawMarkdown;
-  }
-};
-var Rule = class {
-  constructor({
-    id,
-    title,
-    category = "general",
-    summary = "",
-    content = "",
-    priority = "normal",
-    updatedAt = (/* @__PURE__ */ new Date()).toISOString()
-  }) {
-    if (!id || typeof id !== "string") throw new Error("Rule requires id");
-    if (!title || typeof title !== "string") throw new Error("Rule requires title");
-    this.id = id;
-    this.title = title;
-    this.category = category ? String(category).trim() : "general";
-    this.summary = summary;
-    this.content = content;
-    this.priority = priority;
-    this.updatedAt = updatedAt;
-  }
-  toSummaryJSON() {
-    return {
-      id: this.id,
-      title: this.title,
-      category: this.category,
-      summary: this.summary,
-      priority: this.priority
-    };
-  }
-  toJSON() {
-    return {
-      id: this.id,
-      title: this.title,
-      category: this.category,
-      summary: this.summary,
-      content: this.content,
-      priority: this.priority,
-      updatedAt: this.updatedAt
-    };
-  }
-};
-
-// packages/domain/src/invariants.mjs
-var InvariantViolationError = class extends Error {
-  constructor(message, details = {}) {
-    super(message);
-    this.name = "InvariantViolationError";
-    this.details = details;
-  }
-};
-function assertBlockHasRealCode(block) {
-  if (!block.artifactRefs || block.artifactRefs.length === 0) {
-    throw new InvariantViolationError(
-      `Invariant 1 Violation: Block '${block.id}' has no artifactRefs. Ghost blocks are strictly prohibited.`,
-      { blockId: block.id }
-    );
-  }
-  for (const ref of block.artifactRefs) {
-    if (!ref.path || typeof ref.path !== "string" || !ref.path.trim()) {
-      throw new InvariantViolationError(
-        `Invariant 1 Violation: Block '${block.id}' contains an artifactRef without a valid path.`,
-        { blockId: block.id, ref }
-      );
-    }
-    const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
-    const hasSymbol = typeof ref.symbol === "string" && ref.symbol.trim().length > 0;
-    const hasHash = typeof ref.hash === "string" && ref.hash.trim().length > 0;
-    const hasPlaceholder = ref.symbol === "*" || ref.hash === "untracked";
-    const isValidAnchor = hasHash && !hasPlaceholder && (anchorKind !== "symbol" || hasSymbol) && (anchorKind !== "tree" || (ref.hashMode === "manifest" ? Boolean(ref.manifest) : true));
-    if (!isValidAnchor) {
-      throw new InvariantViolationError(
-        `Invariant 1 Violation: Block '${block.id}' contains unanchored artifactRef for '${ref.path}' (anchorKind: '${anchorKind}', symbol: '${ref.symbol || ""}', hash: '${ref.hash || ""}'). Symbol anchors require 'symbol' and 'hash'; file/tree anchors require 'hash'; manifest tree anchors require 'manifest'. Run 'block(action: "bind_auto", id: "${block.id}", path: "${ref.path}")' to automatically extract anchors before sync.`,
-        { blockId: block.id, ref }
-      );
+      dropped.push(section.key);
     }
   }
-}
-function assertPlanCanBeCompleted(plan) {
-  const failedOrPending = (plan.checkpoints || []).filter((cp) => cp.status !== "passed");
-  if (failedOrPending.length > 0) {
-    throw new InvariantViolationError(
-      `Invariant 4 Violation: Cannot complete Plan '${plan.id}'. Unpassed checkpoints: ${failedOrPending.map((c) => c.id).join(", ")}`,
-      { planId: plan.id, pendingCheckpoints: failedOrPending.map((c) => c.id) }
-    );
-  }
+  return {
+    text: chunks.join("\n\n"),
+    meta: { maxChars, used, included, dropped, truncated }
+  };
 }
 
-// packages/application/src/plan-service.mjs
-var PlanService = class {
-  constructor(db) {
-    this.db = db;
+// packages/orchestrator/src/observer.mjs
+import fs5 from "node:fs";
+import path4 from "node:path";
+import { execFile } from "node:child_process";
+var GIT_TIMEOUT_MS = 5e3;
+var IGNORED_PREFIXES = [".git/"];
+var OS_STATE_PREFIX = ".contextos/";
+function runGit(cwd) {
+  return new Promise((resolve) => {
+    execFile("git", ["status", "--porcelain", "-uall"], { cwd, timeout: GIT_TIMEOUT_MS }, (error2, stdout) => {
+      if (error2) resolve({ available: false, lines: [] });
+      else resolve({ available: true, lines: String(stdout || "").split("\n").filter(Boolean) });
+    });
+  });
+}
+function parsePorcelainLine(line) {
+  const status = line.slice(0, 2);
+  const rest = line.slice(3).trim();
+  const arrow = rest.indexOf(" -> ");
+  const rawPath = arrow >= 0 ? rest.slice(arrow + 4) : rest;
+  const clean = rawPath.replace(/^"|"$/g, "");
+  return { status: status.trim(), filePath: clean, deleted: status.includes("D") };
+}
+function statEntry(projectRoot, filePath) {
+  try {
+    const stat = fs5.statSync(path4.join(projectRoot, filePath));
+    return { path: filePath, mtimeMs: stat.mtimeMs, size: stat.size, source: "mtime" };
+  } catch (_) {
+    return { path: filePath, source: "missing" };
   }
-  createPlan({
-    id,
-    projectId,
-    title,
-    priority = "normal",
-    summary = "",
-    phases = [],
-    checkpoints = [],
-    ruleRefs = [],
-    decisionRefs = [],
-    dependencyRefs = []
-  }) {
-    const planId = id || `plan-${Date.now()}`;
-    const instantiatedTasks = [];
-    const normalizedPhases = (phases || []).map((phaseData, index) => {
-      const pData = typeof phaseData.toJSON === "function" ? phaseData.toJSON() : { ...phaseData };
-      pData.id = pData.id || `phase-${index}`;
-      const phaseTasks = Array.isArray(pData.tasks) ? pData.tasks : [];
-      const taskIds = Array.isArray(pData.taskIds) ? [...pData.taskIds] : [];
-      for (const t of phaseTasks) {
-        const tObj = typeof t === "string" ? { id: t, title: t } : t;
-        const tId = tObj.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        if (!taskIds.includes(tId)) {
-          taskIds.push(tId);
-        }
-        const taskInstance = new Task({
-          ...tObj,
-          id: tId,
-          planId,
-          phaseId: pData.id,
-          title: tObj.title || tId,
-          rules: tObj.rules ?? tObj.ruleRefs ?? tObj.references?.rules ?? []
-        });
-        instantiatedTasks.push(taskInstance);
-      }
-      pData.taskIds = taskIds;
-      return pData;
-    });
-    const plan = new Plan({
-      id: planId,
-      projectId,
-      title,
-      priority,
-      status: "active",
-      summary,
-      phases: normalizedPhases,
-      checkpoints,
-      ruleRefs,
-      decisionRefs,
-      dependencyRefs
-    });
-    this.db.savePlan(plan.toJSON());
-    for (const t of instantiatedTasks) {
-      this.db.saveTask(t.toJSON());
+}
+async function observe({ projectRoot, store }) {
+  const { available, lines } = await runGit(projectRoot);
+  const changed = [];
+  const untracked = [];
+  const systemChanged = [];
+  const deleted = /* @__PURE__ */ new Set();
+  for (const line of lines) {
+    const { status, filePath, deleted: isDeleted } = parsePorcelainLine(line);
+    if (!filePath) continue;
+    if (filePath.startsWith(OS_STATE_PREFIX)) {
+      systemChanged.push(filePath);
+      continue;
     }
-    return plan.toJSON();
+    if (IGNORED_PREFIXES.some((prefix2) => filePath.startsWith(prefix2))) continue;
+    if (status === "??") untracked.push(filePath);
+    else changed.push(filePath);
+    if (isDeleted) deleted.add(filePath);
   }
-  getPlan(planId) {
-    return this.db.getPlan(planId);
-  }
-  listPlans(projectId) {
-    return this.db.listPlans(projectId);
-  }
-  repairStateHygiene(projectId, { staleMs = 6 * 60 * 60 * 1e3 } = {}) {
-    const changedPlanIds = [];
-    const now = Date.now();
-    for (const rawPlan of this.db.listPlans(projectId)) {
-      if (rawPlan.status !== "active") continue;
-      const tasks = this.db.listTasks(rawPlan.id);
-      const hasActiveTask = tasks.some(
-        (task) => ["active", "checking", "syncing"].includes(task.status)
-      );
-      if (hasActiveTask) continue;
-      const updatedAt = Date.parse(rawPlan.updatedAt || "");
-      const stale = Number.isFinite(updatedAt) && now - updatedAt > staleMs;
-      const allCheckpointsPassed = rawPlan.checkpoints.length > 0 && rawPlan.checkpoints.every((checkpoint) => checkpoint.status === "passed");
-      if (allCheckpointsPassed) {
-        rawPlan.status = "completed";
-        rawPlan.completedSummary = rawPlan.completedSummary || "Auto-completed because all checkpoints passed and no active task remains.";
-        rawPlan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        this.db.savePlan(rawPlan);
-        changedPlanIds.push(rawPlan.id);
-      } else if (stale) {
-        rawPlan.status = "archived";
-        rawPlan.completedSummary = rawPlan.completedSummary || "Archived by state hygiene because no active task remained for the stale plan.";
-        rawPlan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        this.db.savePlan(rawPlan);
-        changedPlanIds.push(rawPlan.id);
+  const discovered = [...changed, ...untracked];
+  let reconciled = 0;
+  if (available) {
+    const entries = discovered.map((filePath) => {
+      const entry = statEntry(projectRoot, filePath);
+      return deleted.has(filePath) ? { ...entry, deleted: true } : entry;
+    });
+    const before = new Set((store.current?.touchedFiles || []).map((entry) => entry.path));
+    store.touch(entries, "git");
+    const after = store.current?.touchedFiles || [];
+    reconciled = after.filter((entry) => !before.has(entry.path)).length;
+  } else {
+    const session = store.current;
+    for (const entry of session?.touchedFiles || []) {
+      if (entry.mtimeMs === void 0) continue;
+      const stat = statEntry(projectRoot, entry.path);
+      if (stat.mtimeMs !== void 0 && stat.mtimeMs !== entry.mtimeMs) {
+        changed.push(entry.path);
+        reconciled += 1;
       }
     }
-    return { changed: changedPlanIds.length, changedPlanIds };
   }
-  addCheckpoint(planId, checkpointData) {
-    const rawPlan = this.db.getPlan(planId);
-    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
-    const plan = new Plan(rawPlan);
-    const cp = plan.addCheckpoint(checkpointData);
-    this.db.savePlan(plan.toJSON());
-    return cp.toJSON();
-  }
-  checkCheckpoint(planId, checkpointId, { passed = true, evidenceRef = null, reason = null }) {
-    const rawPlan = this.db.getPlan(planId);
-    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
-    const plan = new Plan(rawPlan);
-    const cp = plan.checkpoints.find((c) => c.id === checkpointId);
-    if (!cp) throw new Error(`Checkpoint '${checkpointId}' not found in plan '${planId}'`);
-    if (passed) {
-      cp.pass(evidenceRef);
-    } else {
-      cp.fail(reason || "Verification failed");
-    }
-    this.db.savePlan(plan.toJSON());
-    return cp.toJSON();
-  }
-  completePlan(planId, { completedSummary = null, historyRef = null } = {}) {
-    const rawPlan = this.db.getPlan(planId);
-    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
-    const plan = new Plan(rawPlan);
-    assertPlanCanBeCompleted(plan);
-    plan.complete({ completedSummary: completedSummary || plan.summary, historyRef });
-    this.db.savePlan(plan.toJSON());
-    for (const rawTask of this.db.listTasks(planId)) {
-      if (rawTask.status === "completed") continue;
-      const task = new Task(rawTask);
-      task.block(`Plan '${planId}' completed before this task reached sync.`);
-      this.db.saveTask(task.toJSON());
-    }
-    return plan.toJSON();
-  }
-  deletePlan(planId) {
-    return this.db.deletePlan(planId);
-  }
-};
+  return { gitAvailable: available, changed, untracked, systemChanged, reconciled };
+}
 
-// packages/application/src/task-service.mjs
-import fs8 from "node:fs";
-import path8 from "node:path";
-import crypto6 from "node:crypto";
-import { execFileSync as execFileSync2 } from "node:child_process";
+// packages/orchestrator/src/module-index.mjs
+import fs7 from "node:fs";
+import path7 from "node:path";
 
 // packages/code-intel/src/language-registry.mjs
-import crypto4 from "node:crypto";
-import path5 from "node:path";
+import crypto3 from "node:crypto";
+import path6 from "node:path";
 import { execFileSync } from "node:child_process";
 
 // node_modules/@babel/parser/lib/index.js
@@ -33448,10 +31930,10 @@ var ExpressionParser = class extends LValParser {
   parseImportMetaPropertyOrPhaseCall(node2) {
     this.next();
     if (this.isContextual(101) || this.isContextual(93)) {
-      const isSource = this.isContextual(101);
-      this.expectPlugin(isSource ? "sourcePhaseImports" : "deferredImportEvaluation");
+      const isSource2 = this.isContextual(101);
+      this.expectPlugin(isSource2 ? "sourcePhaseImports" : "deferredImportEvaluation");
       this.next();
-      node2.phase = isSource ? "source" : "defer";
+      node2.phase = isSource2 ? "source" : "defer";
       return this.parseImportCall(node2);
     } else {
       const id = this.createIdentifierAt(this.startNodeAtNode(node2), "import", this.state.lastTokStartLoc);
@@ -39387,9 +37869,9 @@ function getParserClass(pluginsMap) {
 }
 
 // packages/code-intel/src/tree-sitter-parser.mjs
-import fs5 from "node:fs";
-import path4 from "node:path";
-import crypto3 from "node:crypto";
+import fs6 from "node:fs";
+import path5 from "node:path";
+import crypto2 from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
@@ -40908,8 +39390,8 @@ var Language = class _Language {
     if (input instanceof Uint8Array) {
       binary2 = input;
     } else if (globalThis.process?.versions.node) {
-      const fs22 = await import("fs/promises");
-      binary2 = await fs22.readFile(input);
+      const fs26 = await import("fs/promises");
+      binary2 = await fs26.readFile(input);
     } else {
       const response = await fetch(input);
       if (!response.ok) {
@@ -40971,11 +39453,11 @@ async function Module2(moduleArg = {}) {
   }, "quit_");
   var _scriptName = import.meta.url;
   var scriptDirectory = "";
-  function locateFile(path17) {
+  function locateFile(path27) {
     if (Module["locateFile"]) {
-      return Module["locateFile"](path17, scriptDirectory);
+      return Module["locateFile"](path27, scriptDirectory);
     }
-    return scriptDirectory + path17;
+    return scriptDirectory + path27;
   }
   __name(locateFile, "locateFile");
   var readAsync, readBinary;
@@ -43438,7 +41920,7 @@ var Query = class {
 
 // packages/code-intel/src/tree-sitter-parser.mjs
 function calculateHash(code2) {
-  return crypto3.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
+  return crypto2.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
 }
 function getLines(node2) {
   const startLine = node2.startPosition.row + 1;
@@ -43479,11 +41961,19 @@ async function initTreeSitter() {
   if (!initPromise) {
     initPromise = (async () => {
       try {
-        let wasmPath = null;
-        try {
-          const require2 = createRequire(import.meta.url);
-          wasmPath = require2.resolve("web-tree-sitter/web-tree-sitter.wasm");
-        } catch (_) {
+        const currentDir = path5.dirname(fileURLToPath(import.meta.url));
+        const bundledCandidates = [
+          process.env.CONTEXTOS_TREE_SITTER_WASM,
+          path5.join(currentDir, "web-tree-sitter.wasm"),
+          path5.join(currentDir, "..", "web-tree-sitter.wasm")
+        ].filter(Boolean);
+        let wasmPath = bundledCandidates.find((candidate) => fs6.existsSync(candidate)) || null;
+        if (!wasmPath) {
+          try {
+            const require2 = createRequire(import.meta.url);
+            wasmPath = require2.resolve("web-tree-sitter/web-tree-sitter.wasm");
+          } catch (_) {
+          }
         }
         await Parser2.init({
           locateFile(scriptName) {
@@ -43524,19 +42014,19 @@ function resolveLanguage(langName) {
   if (loadedLanguages.has(normalized)) {
     return loadedLanguages.get(normalized);
   }
-  const currentDir = path4.dirname(fileURLToPath(import.meta.url));
+  const currentDir = path5.dirname(fileURLToPath(import.meta.url));
   const candidatePaths = [
-    path4.join(currentDir, "..", "grammars", `tree-sitter-${normalized}.wasm`),
-    path4.join(currentDir, "..", "..", "..", "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
-    path4.join(process.cwd(), "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
-    path4.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`),
-    path4.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized === "csharp" ? "c_sharp" : normalized, `tree-sitter-${normalized === "csharp" ? "c_sharp" : normalized}.wasm`),
-    path4.join(process.cwd(), "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`)
+    path5.join(currentDir, "..", "grammars", `tree-sitter-${normalized}.wasm`),
+    path5.join(currentDir, "..", "..", "..", "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
+    path5.join(process.cwd(), "packages", "code-intel", "grammars", `tree-sitter-${normalized}.wasm`),
+    path5.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`),
+    path5.join(currentDir, "..", "..", "..", "node_modules", "tree-sitter-wasm", "out", normalized === "csharp" ? "c_sharp" : normalized, `tree-sitter-${normalized === "csharp" ? "c_sharp" : normalized}.wasm`),
+    path5.join(process.cwd(), "node_modules", "tree-sitter-wasm", "out", normalized, `tree-sitter-${normalized}.wasm`)
   ];
   for (const p of candidatePaths) {
-    if (fs5.existsSync(p)) {
+    if (fs6.existsSync(p)) {
       try {
-        const buf = fs5.readFileSync(p);
+        const buf = fs6.readFileSync(p);
         const lang = Language.loadSync(new WebAssembly.Module(buf));
         loadedLanguages.set(normalized, lang);
         return lang;
@@ -43609,7 +42099,7 @@ var TreeSitterParser = class _TreeSitterParser {
       "scoped_call_expression",
       "method_call"
     ]);
-    function walk(node2, isRoot = false) {
+    function walk2(node2, isRoot = false) {
       if (!node2) return;
       if (!isRoot && NESTED_SCOPES.has(node2.type)) {
         return;
@@ -43644,10 +42134,10 @@ var TreeSitterParser = class _TreeSitterParser {
         }
       }
       for (const child of node2.namedChildren) {
-        walk(child, false);
+        walk2(child, false);
       }
     }
-    walk(bodyNode, true);
+    walk2(bodyNode, true);
     return calls;
   }
   static isLanguageSupported(lang) {
@@ -43720,7 +42210,7 @@ var TreeSitterParser = class _TreeSitterParser {
   }
   // --- 1. JS / TS / TSX ---
   static _extractJsTs(rootNode, lines, symbols, imports) {
-    const walk = (node2) => {
+    const walk2 = (node2) => {
       for (const child of node2.namedChildren) {
         let target = child;
         if (target.type === "export_statement") {
@@ -43747,7 +42237,7 @@ var TreeSitterParser = class _TreeSitterParser {
             });
           }
           const body2 = target.childForFieldName("body");
-          if (body2) walk(body2);
+          if (body2) walk2(body2);
           continue;
         }
         if (target.type === "import_statement") {
@@ -43917,7 +42407,7 @@ var TreeSitterParser = class _TreeSitterParser {
         }
       }
     };
-    walk(rootNode);
+    walk2(rootNode);
   }
   // --- 2. Python ---
   static _extractPython(rootNode, lines, symbols, imports) {
@@ -44106,7 +42596,7 @@ var TreeSitterParser = class _TreeSitterParser {
   }
   // --- 4. Rust ---
   static _extractRust(rootNode, lines, symbols, imports) {
-    const walk = (node2) => {
+    const walk2 = (node2) => {
       for (const child of node2.namedChildren) {
         if (child.type === "use_declaration") {
           const arg = child.childForFieldName("argument")?.text || child.text;
@@ -44126,7 +42616,7 @@ var TreeSitterParser = class _TreeSitterParser {
             });
           }
           const body2 = child.childForFieldName("body");
-          if (body2) walk(body2);
+          if (body2) walk2(body2);
         } else if (child.type === "trait_item") {
           const name2 = child.childForFieldName("name")?.text;
           const { startLine, endLine } = getLines(child);
@@ -44233,7 +42723,7 @@ var TreeSitterParser = class _TreeSitterParser {
         }
       }
     };
-    walk(rootNode);
+    walk2(rootNode);
   }
   // --- 5. Swift ---
   static _extractSwift(rootNode, lines, symbols, imports) {
@@ -44332,7 +42822,7 @@ var TreeSitterParser = class _TreeSitterParser {
   }
   // --- 6. Java ---
   static _extractJava(rootNode, lines, symbols, imports) {
-    const walk = (node2, parentName = "") => {
+    const walk2 = (node2, parentName = "") => {
       for (const child of node2.namedChildren) {
         if (child.type === "import_declaration") {
           const srcNode = child.namedChildren.find((c) => c.type === "scoped_identifier" || c.type === "identifier");
@@ -44380,18 +42870,18 @@ var TreeSitterParser = class _TreeSitterParser {
                 symbols.push(mSym);
                 classSym.methods.push(mSym);
               } else if (m.type === "class_declaration" || m.type === "interface_declaration" || m.type === "record_declaration" || m.type === "enum_declaration") {
-                walk({ namedChildren: [m] }, name2);
+                walk2({ namedChildren: [m] }, name2);
               }
             }
           }
         }
       }
     };
-    walk(rootNode);
+    walk2(rootNode);
   }
   // --- 7. Kotlin ---
   static _extractKotlin(rootNode, lines, symbols, imports) {
-    const walk = (node2, parentName = "") => {
+    const walk2 = (node2, parentName = "") => {
       for (const child of node2.namedChildren) {
         if (child.type === "import_header") {
           const pathNode = child.namedChildren.find((c) => c.type === "identifier" || c.type === "scoped_identifier");
@@ -44440,7 +42930,7 @@ var TreeSitterParser = class _TreeSitterParser {
                   classSym.methods.push(mSym);
                 }
               } else if (m.type === "class_declaration" || m.type === "object_declaration") {
-                walk({ namedChildren: [m] }, name2);
+                walk2({ namedChildren: [m] }, name2);
               }
             }
           }
@@ -44464,11 +42954,11 @@ var TreeSitterParser = class _TreeSitterParser {
         }
       }
     };
-    walk(rootNode);
+    walk2(rootNode);
   }
   // --- 8. C / C++ ---
   static _extractCpp(rootNode, lines, symbols, imports) {
-    const walk = (node2, prefix2 = "") => {
+    const walk2 = (node2, prefix2 = "") => {
       for (const child of node2.namedChildren) {
         if (child.type === "preproc_include") {
           const pathNode = child.namedChildren[0];
@@ -44477,11 +42967,11 @@ var TreeSitterParser = class _TreeSitterParser {
           imports.push({ source: src, line: startLine });
         } else if (child.type === "namespace_definition") {
           const body2 = child.childForFieldName("body");
-          if (body2) walk(body2, prefix2);
+          if (body2) walk2(body2, prefix2);
         } else if (child.type === "template_declaration") {
           for (const inner of child.namedChildren) {
             if (inner.type === "class_specifier" || inner.type === "struct_specifier" || inner.type === "function_definition") {
-              walk({ namedChildren: [inner] }, prefix2);
+              walk2({ namedChildren: [inner] }, prefix2);
             }
           }
         } else if (child.type === "type_definition") {
@@ -44562,11 +43052,11 @@ var TreeSitterParser = class _TreeSitterParser {
         }
       }
     };
-    walk(rootNode);
+    walk2(rootNode);
   }
   // --- 9. C# ---
   static _extractCSharp(rootNode, lines, symbols, imports) {
-    const walk = (node2) => {
+    const walk2 = (node2) => {
       for (const child of node2.namedChildren) {
         if (child.type === "using_directive") {
           const nameNode = child.namedChildren.find((c) => c.type === "qualified_name" || c.type === "identifier");
@@ -44630,15 +43120,15 @@ var TreeSitterParser = class _TreeSitterParser {
             }
           }
         } else {
-          walk(child);
+          walk2(child);
         }
       }
     };
-    walk(rootNode);
+    walk2(rootNode);
   }
   // --- 10. PHP ---
   static _extractPhp(rootNode, lines, symbols, imports) {
-    const walk = (node2) => {
+    const walk2 = (node2) => {
       for (const child of node2.namedChildren) {
         if (child.type === "namespace_use_declaration") {
           const clause = child.namedChildren.find((c) => c.type === "namespace_use_clause");
@@ -44705,15 +43195,15 @@ var TreeSitterParser = class _TreeSitterParser {
             });
           }
         } else {
-          walk(child);
+          walk2(child);
         }
       }
     };
-    walk(rootNode);
+    walk2(rootNode);
   }
   // --- 11. Ruby ---
   static _extractRuby(rootNode, lines, symbols, imports) {
-    const walk = (node2, prefix2 = "") => {
+    const walk2 = (node2, prefix2 = "") => {
       for (const child of node2.namedChildren) {
         if (child.type === "call") {
           const method = child.childForFieldName("method")?.text;
@@ -44763,7 +43253,7 @@ var TreeSitterParser = class _TreeSitterParser {
                   classSym.methods.push(mSym);
                 }
               } else if (m.type === "class" || m.type === "module") {
-                walk({ namedChildren: [m] }, name2);
+                walk2({ namedChildren: [m] }, name2);
               }
             }
           }
@@ -44786,17 +43276,17 @@ var TreeSitterParser = class _TreeSitterParser {
         }
       }
     };
-    walk(rootNode);
+    walk2(rootNode);
   }
 };
 
 // packages/code-intel/src/language-registry.mjs
 function calculateHash2(code2) {
-  return crypto4.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
+  return crypto3.createHash("sha256").update(code2, "utf8").digest("hex").slice(0, 16);
 }
 var LanguageRegistry = class {
   static getLanguage(filePath, content = "") {
-    const basename = path5.basename(filePath);
+    const basename = path6.basename(filePath);
     switch (basename) {
       case "Gemfile":
       case "Podfile":
@@ -44805,7 +43295,7 @@ var LanguageRegistry = class {
       case "CMakeLists.txt":
         return { name: "cpp", capability: "L3" };
     }
-    const ext = path5.extname(filePath).toLowerCase();
+    const ext = path6.extname(filePath).toLowerCase();
     switch (ext) {
       case ".js":
       case ".mjs":
@@ -44897,7 +43387,7 @@ var LanguageRegistry = class {
         this._parseRuby(lines, symbols, imports, content);
       } else {
         symbols.push({
-          name: path5.basename(filePath),
+          name: path6.basename(filePath),
           kind: "file",
           startLine: 1,
           endLine: Math.max(1, lines.length),
@@ -45996,9 +44486,341 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
   }
 };
 
+// packages/orchestrator/src/intent-router.mjs
+var STOP_WORDS = /* @__PURE__ */ new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "this",
+  "that",
+  "from",
+  "into",
+  "when",
+  "then",
+  "file",
+  "code",
+  "should",
+  "would",
+  "need",
+  "make",
+  "please",
+  "help",
+  "want",
+  "using",
+  "about",
+  "their"
+]);
+var PATH_EXTENSIONS = "mjs|cjs|js|jsx|ts|tsx|py|swift|go|rs|java|kt|rb|php|c|h|cpp|cs|md|json|toml|yml|yaml|sql|sh";
+function tokenize(text = "") {
+  const tokens = /* @__PURE__ */ new Set();
+  const source = String(text);
+  for (const word of source.toLowerCase().match(/[a-z][a-z0-9_-]{2,}/g) || []) {
+    if (!STOP_WORDS.has(word)) tokens.add(word);
+  }
+  for (const run2 of source.match(/[\u4e00-\u9fff]{2,}/g) || []) {
+    for (let i2 = 0; i2 < run2.length - 1; i2 += 1) tokens.add(run2.slice(i2, i2 + 2));
+  }
+  return tokens;
+}
+function extractPaths(text = "") {
+  const source = String(text);
+  const found = /* @__PURE__ */ new Set();
+  const slashMatch = source.match(/(?:[\w.-]+[/\\])+[\w.-]+/g) || [];
+  const fileMatch = source.match(new RegExp(`[\\w.-]+\\.(?:${PATH_EXTENSIONS})\\b`, "g")) || [];
+  for (const candidate of [...slashMatch, ...fileMatch]) {
+    const clean = candidate.replace(/^[("'`]+|[)"'`.,;:]+$/g, "");
+    if (!clean || /^(https?|www)\b/.test(clean)) continue;
+    found.add(clean);
+  }
+  const paths = Array.from(found);
+  return paths.filter((candidate) => !paths.some((other) => other !== candidate && other.endsWith(`/${candidate}`))).slice(0, 8);
+}
+function extractIdentifiers(text = "") {
+  const source = String(text);
+  const found = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const word of source.match(/\b[A-Za-z_][A-Za-z0-9_]{3,}\b/g) || []) {
+    if (STOP_WORDS.has(word.toLowerCase())) continue;
+    const isSnake = word.includes("_");
+    const isCamel = /[a-z][A-Z]/.test(word);
+    if (!isSnake && !isCamel) continue;
+    if (seen.has(word)) continue;
+    seen.add(word);
+    found.push(word);
+  }
+  return found.slice(0, 6);
+}
+
+// packages/orchestrator/src/module-index.mjs
+var SKIP_DIRS = /* @__PURE__ */ new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  ".nuxt",
+  "coverage",
+  ".contextos",
+  ".cache",
+  ".wrangler",
+  "DerivedData",
+  ".build",
+  "vendor",
+  "Pods",
+  "target",
+  ".venv"
+]);
+var SOURCE_EXT = /* @__PURE__ */ new Set([
+  ".mjs",
+  ".cjs",
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".py",
+  ".swift",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".rb",
+  ".php",
+  ".c",
+  ".h",
+  ".cpp",
+  ".cs"
+]);
+var MAX_SOURCE_FILES = 400;
+var MAX_INDEXED_PER_CALL = 40;
+var MAX_FILE_BYTES = 2e5;
+function slugify2(value) {
+  const slug = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "root";
+}
+function moduleIdFor(relativePath) {
+  const dir = path7.dirname(String(relativePath || "")).split(path7.sep).join("/");
+  return `mod-${slugify2(dir === "." ? "root" : dir)}`;
+}
+function isSource(relativePath) {
+  return SOURCE_EXT.has(path7.extname(relativePath).toLowerCase());
+}
+function walk(dir, root, collected, limit) {
+  if (collected.length >= limit) return;
+  let entries = [];
+  try {
+    entries = fs7.readdirSync(dir, { withFileTypes: true });
+  } catch (_) {
+    return;
+  }
+  for (const entry of entries) {
+    if (collected.length >= limit) return;
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".")) continue;
+      walk(path7.join(dir, entry.name), root, collected, limit);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    const relative = path7.relative(root, path7.join(dir, entry.name)).split(path7.sep).join("/");
+    if (isSource(relative)) collected.push(relative);
+  }
+}
+var ModuleIndex = class {
+  constructor({ projectRoot }) {
+    this.projectRoot = projectRoot;
+    this.cachePath = path7.join(projectRoot, ".contextos", "module-index.json");
+    this.entries = /* @__PURE__ */ new Map();
+    this._load();
+  }
+  _load() {
+    if (!fs7.existsSync(this.cachePath)) return;
+    try {
+      const raw = JSON.parse(fs7.readFileSync(this.cachePath, "utf8"));
+      for (const entry of raw.entries || []) this.entries.set(entry.path, entry);
+    } catch (_) {
+    }
+  }
+  save() {
+    fs7.mkdirSync(path7.dirname(this.cachePath), { recursive: true });
+    fs7.writeFileSync(
+      this.cachePath,
+      JSON.stringify({ updatedAt: (/* @__PURE__ */ new Date()).toISOString(), entries: Array.from(this.entries.values()) }, null, 2) + "\n",
+      "utf8"
+    );
+  }
+  discover({ limit = MAX_SOURCE_FILES } = {}) {
+    const found = [];
+    walk(this.projectRoot, this.projectRoot, found, limit);
+    return found;
+  }
+  _parse(relativePath) {
+    const fullPath = path7.join(this.projectRoot, relativePath);
+    const stat = fs7.statSync(fullPath);
+    if (stat.size > MAX_FILE_BYTES) {
+      return { path: relativePath, mtimeMs: stat.mtimeMs, size: stat.size, symbols: [], imports: [], language: "unknown" };
+    }
+    const content = fs7.readFileSync(fullPath, "utf8");
+    let structure = { symbols: [], imports: [], language: "unknown", capability: "none" };
+    try {
+      structure = LanguageRegistry.parseStructure(relativePath, content) || structure;
+    } catch (_) {
+    }
+    const symbols = [];
+    for (const sym of structure.symbols || []) {
+      symbols.push({ name: sym.name, kind: sym.kind, startLine: sym.startLine });
+      for (const method of sym.methods || []) {
+        symbols.push({ name: method.name, kind: "method", startLine: method.startLine });
+      }
+    }
+    return {
+      path: relativePath,
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      language: structure.language || "unknown",
+      symbols: symbols.slice(0, 40),
+      imports: (structure.imports || []).map((imp) => imp.source).slice(0, 20)
+    };
+  }
+  /** Refresh entries for the given files; parses only what changed. */
+  ensure(relativePaths = []) {
+    let parsed = 0;
+    for (const relativePath of relativePaths) {
+      const fullPath = path7.join(this.projectRoot, relativePath);
+      if (!fs7.existsSync(fullPath) || !isSource(relativePath)) continue;
+      let stat;
+      try {
+        stat = fs7.statSync(fullPath);
+      } catch (_) {
+        continue;
+      }
+      const cached2 = this.entries.get(relativePath);
+      if (cached2 && cached2.mtimeMs === stat.mtimeMs && cached2.size === stat.size) continue;
+      this.entries.set(relativePath, this._parse(relativePath));
+      parsed += 1;
+      if (parsed >= MAX_INDEXED_PER_CALL) break;
+    }
+    if (parsed > 0) this.save();
+    return parsed;
+  }
+  /** Cold start: index a bounded slice of the project so lookup has material. */
+  bootstrapIfEmpty() {
+    if (this.entries.size > 0) return 0;
+    const files = this.discover({ limit: MAX_INDEXED_PER_CALL });
+    return this.ensure(files);
+  }
+  modules() {
+    const grouped = /* @__PURE__ */ new Map();
+    for (const entry of this.entries.values()) {
+      const id = moduleIdFor(entry.path);
+      if (!grouped.has(id)) grouped.set(id, { id, directory: path7.dirname(entry.path).split(path7.sep).join("/"), files: [], symbols: [] });
+      const group = grouped.get(id);
+      group.files.push(entry.path);
+      for (const symbol of entry.symbols.slice(0, 5)) group.symbols.push(symbol.name);
+    }
+    return Array.from(grouped.values());
+  }
+  attribute(relativePaths = []) {
+    const result = /* @__PURE__ */ new Map();
+    for (const relativePath of relativePaths) {
+      result.set(relativePath, moduleIdFor(relativePath));
+    }
+    return result;
+  }
+  lookup(query = "", { limit = 3 } = {}) {
+    const tokens = tokenize(query);
+    if (!tokens.size) return [];
+    return this.modules().map((module2) => {
+      const haystack = tokenize(`${module2.id} ${module2.directory} ${module2.files.join(" ")} ${module2.symbols.join(" ")}`);
+      let score = 0;
+      for (const token of tokens) if (haystack.has(token)) score += 1;
+      return { ...module2, score };
+    }).filter((module2) => module2.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+  }
+};
+
+// packages/process-host/src/sanitizer.mjs
+function stripAnsi(text) {
+  return text.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n");
+}
+function redactSecrets(text) {
+  return text.replace(/(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36}/g, "[REDACTED_GITHUB_TOKEN]").replace(/sk-[a-zA-Z0-9]{32,}/g, "[REDACTED_API_KEY]").replace(
+    /(?:password|token|secret|key|bearer)\s*[:=]\s*['"]?([a-zA-Z0-9_\-.~+]{8,})['"]?/gi,
+    (match, val) => match.replace(val, "[REDACTED]")
+  );
+}
+function sanitizeTerminalOutput(rawText, options = {}) {
+  const maxChars = options.maxChars || 1500;
+  const exitCode = options.exitCode !== void 0 ? options.exitCode : 0;
+  let cleaned = stripAnsi(rawText);
+  cleaned = redactSecrets(cleaned);
+  const lines = cleaned.split("\n").map((l) => l.trimEnd()).filter((l) => l.length > 0);
+  const nonNoiseLines = lines.filter((line) => {
+    if (line.match(/^\[\d+\/\d+\]\s+Compiling/i)) return false;
+    if (line.match(/^\s*\d+%\s+/)) return false;
+    if (line.match(/^(=|-|\*){5,}$/)) return false;
+    return true;
+  });
+  const errors = [];
+  const warnings = [];
+  for (const line of nonNoiseLines) {
+    if (exitCode !== 0 && line.match(/error[:\s]|failed|failure|exception|fatal/i)) {
+      errors.push(line);
+    } else if (line.match(/warning[:\s]|warn[:\s]/i)) {
+      warnings.push(line);
+    }
+  }
+  let summary = "";
+  if (exitCode === 0) {
+    if (lines.length <= 15 && cleaned.length <= maxChars) {
+      summary = `Command succeeded (${lines.length} lines).`;
+    } else {
+      summary = `Command succeeded (${lines.length} lines collapsed).`;
+    }
+    if (warnings.length > 0) {
+      summary += ` ${warnings.length} warning(s).`;
+    }
+  } else {
+    summary = `Command failed with exit code ${exitCode}. Found ${errors.length} error(s).`;
+  }
+  let resultText = "";
+  if (exitCode === 0) {
+    if (lines.length <= 15 && cleaned.length <= maxChars) {
+      resultText = lines.join("\n");
+    } else {
+      resultText = summary;
+    }
+    if (warnings.length > 0) {
+      resultText += "\n\nWarnings:\n" + warnings.slice(0, 5).join("\n");
+    }
+  } else {
+    resultText = `${summary}
+
+Key Failures & Errors:
+` + errors.slice(0, 15).join("\n");
+    const remainingBudget = maxChars - resultText.length;
+    if (remainingBudget > 200) {
+      const tail = nonNoiseLines.slice(-10).join("\n");
+      resultText += `
+
+Tail Output:
+${tail}`;
+    }
+  }
+  if (resultText.length > maxChars) {
+    resultText = resultText.slice(0, maxChars - 30) + "\n...[output truncated]";
+  }
+  return {
+    text: resultText,
+    summary,
+    exitCode,
+    errors: errors.slice(0, 10),
+    warnings: warnings.slice(0, 5)
+  };
+}
+
 // packages/code-intel/src/code-tools.mjs
-import fs6 from "node:fs";
-import path6 from "node:path";
+import fs8 from "node:fs";
+import path8 from "node:path";
 var CodeTools = class {
   /**
    * 1. Outline: Progressive L1 structure view
@@ -46137,43 +44959,74 @@ var CodeTools = class {
   /**
    * 3. Edit: Surgical code edit with automatic relocalization (re-anchoring)
    */
-  static edit(filePath, content, { targetContent, replacementContent, startLine = null, endLine = null, symbol = null }) {
-    if (!targetContent || typeof targetContent !== "string") {
-      throw new Error("CodeTools.edit requires targetContent");
-    }
+  static edit(filePath, content, { targetContent = null, replacementContent, startLine = null, endLine = null, symbol = null } = {}) {
     if (replacementContent === void 0 || typeof replacementContent !== "string") {
       throw new Error("CodeTools.edit requires replacementContent");
     }
-    let newContent = "";
     const lines = content.split(/\r?\n/);
-    if (startLine !== null || endLine !== null) {
-      const effectiveStart = startLine !== null && startLine !== void 0 ? Number(startLine) : 1;
-      const effectiveEnd = endLine !== null && endLine !== void 0 ? Number(endLine) : lines.length;
-      const chunkStart = Math.max(0, effectiveStart - 1);
-      const chunkEnd = Math.min(lines.length, effectiveEnd);
-      const chunk = lines.slice(chunkStart, chunkEnd).join("\n");
-      if (!chunk.includes(targetContent)) {
-        throw new Error(
-          `TargetContent not found in specified range [L${effectiveStart}-L${effectiveEnd}] of ${filePath}`
-        );
+    let effectiveStart = startLine !== null && startLine !== void 0 ? Number(startLine) : null;
+    let effectiveEnd = endLine !== null && endLine !== void 0 ? Number(endLine) : null;
+    if (symbol) {
+      const structure = LanguageRegistry.parseStructure(filePath, content);
+      const matched = structure.symbols.find((s) => s.name === symbol) || structure.symbols.find((s) => s.shortName === symbol) || structure.symbols.find((s) => s.name.endsWith(`.${symbol}`));
+      if (!matched) throw new Error(`Symbol '${symbol}' not found in ${filePath}`);
+      if (effectiveStart === null) effectiveStart = matched.startLine;
+      if (effectiveEnd === null) effectiveEnd = matched.endLine;
+    }
+    const hasRange = effectiveStart !== null || effectiveEnd !== null;
+    let newContent = "";
+    if (!targetContent) {
+      if (!hasRange || effectiveStart === null || effectiveEnd === null) {
+        throw new Error("CodeTools.edit requires targetContent or a complete startLine/endLine (or symbol) range");
       }
-      const replacedChunk = chunk.replace(targetContent, () => replacementContent);
+      if (!Number.isInteger(effectiveStart) || !Number.isInteger(effectiveEnd)) {
+        throw new Error("CodeTools.edit startLine and endLine must be integers");
+      }
+      if (effectiveStart < 1 || effectiveEnd < effectiveStart || effectiveEnd > lines.length) {
+        throw new Error(`CodeTools.edit range [L${effectiveStart}-L${effectiveEnd}] is outside ${filePath} (1-${lines.length})`);
+      }
       newContent = [
-        ...lines.slice(0, chunkStart),
-        replacedChunk,
-        ...lines.slice(chunkEnd)
+        ...lines.slice(0, effectiveStart - 1),
+        ...replacementContent.split(/\r?\n/),
+        ...lines.slice(effectiveEnd)
       ].join("\n");
     } else {
-      const occurrences = content.split(targetContent).length - 1;
-      if (occurrences === 0) {
-        throw new Error(`TargetContent not found in ${filePath}`);
+      if (typeof targetContent !== "string") {
+        throw new Error("CodeTools.edit targetContent must be a string");
       }
-      if (occurrences > 1) {
-        throw new Error(
-          `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
-        );
+      if (hasRange) {
+        const chunkStart = Math.max(0, (effectiveStart ?? 1) - 1);
+        const chunkEnd = Math.min(lines.length, effectiveEnd ?? lines.length);
+        const chunk = lines.slice(chunkStart, chunkEnd).join("\n");
+        const occurrences = chunk.split(targetContent).length - 1;
+        if (occurrences === 0) {
+          throw new Error(
+            `TargetContent not found in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
+          );
+        }
+        if (occurrences > 1) {
+          throw new Error(
+            `TargetContent found ${occurrences} times in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
+          );
+        }
+        const replacedChunk = chunk.replace(targetContent, () => replacementContent);
+        newContent = [
+          ...lines.slice(0, chunkStart),
+          replacedChunk,
+          ...lines.slice(chunkEnd)
+        ].join("\n");
+      } else {
+        const occurrences = content.split(targetContent).length - 1;
+        if (occurrences === 0) {
+          throw new Error(`TargetContent not found in ${filePath}`);
+        }
+        if (occurrences > 1) {
+          throw new Error(
+            `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
+          );
+        }
+        newContent = content.replace(targetContent, () => replacementContent);
       }
-      newContent = content.replace(targetContent, () => replacementContent);
     }
     const updatedStructure = LanguageRegistry.parseStructure(filePath, newContent);
     const newHash = calculateHash2(newContent);
@@ -46229,16 +45082,101 @@ var CodeTools = class {
     };
   }
   /**
-   * 5. Workspace Search: Find symbols/methods across all project files (like VS Code Cmd+T)
+   * Bounded textual grep. Symbol search only matches declarations, which forces
+   * agents to reach for a native `rg`; this covers "where is X mentioned".
+   */
+  static searchText(repoRoot, query, { limit = 8, maxFiles = 1500, root = null, contextChars = 120, perFileLimit = 3 } = {}) {
+    const needle = String(query || "").trim().toLowerCase();
+    if (!needle) return { hits: [], scanned: 0, truncated: false };
+    const skipDirs = /* @__PURE__ */ new Set([
+      "node_modules",
+      ".git",
+      "dist",
+      "build",
+      ".next",
+      ".nuxt",
+      "coverage",
+      ".contextos",
+      ".cache",
+      ".wrangler",
+      "DerivedData",
+      ".build",
+      "vendor",
+      "Pods",
+      "target",
+      ".venv"
+    ]);
+    const allowHiddenDirs = /* @__PURE__ */ new Set([".github"]);
+    const files = [];
+    const walk2 = (dir) => {
+      if (files.length >= maxFiles) return;
+      let entries = [];
+      try {
+        entries = fs8.readdirSync(dir, { withFileTypes: true });
+      } catch (_) {
+        return;
+      }
+      for (const entry of entries) {
+        if (files.length >= maxFiles) return;
+        if (entry.isDirectory()) {
+          if (skipDirs.has(entry.name)) continue;
+          if (entry.name.startsWith(".") && !allowHiddenDirs.has(entry.name)) continue;
+          walk2(path8.join(dir, entry.name));
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const relative = path8.relative(repoRoot, path8.join(dir, entry.name)).split(path8.sep).join("/");
+        files.push(relative);
+      }
+    };
+    walk2(repoRoot);
+    const rootPath = root ? path8.resolve(repoRoot, String(root)) : null;
+    const rootRelative = rootPath ? path8.relative(repoRoot, rootPath).split(path8.sep).join("/").replace(/^\.\//, "").replace(/\/+$/, "") : "";
+    const rootOutsideProject = rootPath ? rootRelative.startsWith("..") || path8.isAbsolute(rootRelative) : false;
+    const rootIsFile = Boolean(rootPath && !rootOutsideProject && fs8.existsSync(rootPath) && fs8.statSync(rootPath).isFile());
+    const hits = [];
+    const perFile = /* @__PURE__ */ new Map();
+    let scanned = 0;
+    for (const relative of files) {
+      if (hits.length >= limit) break;
+      if (rootOutsideProject) break;
+      if (rootPath) {
+        const inRoot = rootIsFile ? relative === rootRelative : !rootRelative || relative === rootRelative || relative.startsWith(`${rootRelative}/`);
+        if (!inRoot) continue;
+      }
+      const fullPath = path8.join(repoRoot, relative);
+      let content;
+      try {
+        if (fs8.statSync(fullPath).size > 2e5) continue;
+        content = fs8.readFileSync(fullPath, "utf8");
+      } catch (_) {
+        continue;
+      }
+      if (content.includes("\0")) continue;
+      scanned += 1;
+      const lines = content.split("\n");
+      for (let i2 = 0; i2 < lines.length; i2 += 1) {
+        if (hits.length >= limit) break;
+        if (!lines[i2].toLowerCase().includes(needle)) continue;
+        const used = perFile.get(relative) || 0;
+        if (used >= perFileLimit) break;
+        perFile.set(relative, used + 1);
+        hits.push({ path: relative, line: i2 + 1, content: lines[i2].trim().slice(0, contextChars) });
+      }
+    }
+    return { hits, scanned, truncated: files.length >= maxFiles };
+  }
+  /**
+   * 5. Workspace Search: find symbols/methods across project files (VS Code Cmd+T).
    */
   static searchWorkspace(repoRoot, query, candidateFiles = []) {
     const queryLower = query.toLowerCase();
     const results = [];
     for (const relPath of candidateFiles) {
-      const fullPath = path6.resolve(repoRoot, relPath);
-      if (!fs6.existsSync(fullPath)) continue;
+      const fullPath = path8.resolve(repoRoot, relPath);
+      if (!fs8.existsSync(fullPath)) continue;
       try {
-        const content = fs6.readFileSync(fullPath, "utf8");
+        const content = fs8.readFileSync(fullPath, "utf8");
         const structure = LanguageRegistry.parseStructure(relPath, content);
         for (const s of structure.symbols) {
           const nameMatch = s.name.toLowerCase().includes(queryLower);
@@ -46264,10 +45202,3506 @@ var CodeTools = class {
   }
 };
 
-// packages/code-intel/src/bindings.mjs
+// packages/orchestrator/src/pipelines.mjs
+var OUTLINE_CLIP = 1200;
+var SEARCH_CLIP = 900;
+function clip(text, max) {
+  const value = typeof text === "string" ? text : JSON.stringify(text, null, 2);
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 24)}
+... (+${value.length - max + 24} chars omitted)`;
+}
+function stringify(value) {
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}
+function countOccurrences(content, target) {
+  if (typeof content !== "string" || typeof target !== "string" || !target) return 0;
+  let count = 0;
+  let offset = 0;
+  while ((offset = content.indexOf(target, offset)) !== -1) {
+    count += 1;
+    offset += target.length;
+  }
+  return count;
+}
+function resolvePreviewPath(projectRoot, inputPath) {
+  if (typeof inputPath !== "string" || !inputPath) {
+    return { error: "path is required" };
+  }
+  const fullPath = path9.resolve(projectRoot, inputPath);
+  const relativePath = path9.relative(projectRoot, fullPath).split(path9.sep).join("/");
+  if (relativePath.startsWith("..") || path9.isAbsolute(relativePath)) {
+    return { error: `path '${inputPath}' is outside project root` };
+  }
+  return { fullPath, relativePath };
+}
+function previewEdit(projectRoot, spec = {}) {
+  const resolved = resolvePreviewPath(projectRoot, spec.path);
+  const fallback = {
+    filePath: resolved.relativePath || spec.path || "(missing)",
+    before: typeof spec.target === "string" ? spec.target : "",
+    after: typeof spec.replacement === "string" ? spec.replacement : "",
+    matches: 0,
+    unique: false
+  };
+  if (resolved.error) return { ...fallback, error: resolved.error };
+  if (!fs9.existsSync(resolved.fullPath)) return { ...fallback, error: "file not found" };
+  try {
+    const content = fs9.readFileSync(resolved.fullPath, "utf8");
+    const target = typeof spec.target === "string" ? spec.target : "";
+    let before = target;
+    let scopeLabel = null;
+    if (spec.startLine !== void 0 || spec.endLine !== void 0) {
+      const lines = content.split(/\r?\n/);
+      const startLine = Math.max(1, Math.min(Number(spec.startLine) || 1, lines.length));
+      const endLine = Math.max(startLine, Math.min(Number(spec.endLine) || lines.length, lines.length));
+      if (!before) before = lines.slice(startLine - 1, endLine).join("\n");
+      scopeLabel = `L${startLine}-L${endLine}`;
+    }
+    CodeTools.edit(resolved.relativePath, content, {
+      targetContent: target || null,
+      replacementContent: spec.replacement ?? "",
+      startLine: spec.startLine ?? null,
+      endLine: spec.endLine ?? null,
+      symbol: spec.symbol ?? null
+    });
+    const matches = target ? countOccurrences(content, target) : 1;
+    return {
+      ...fallback,
+      before,
+      after: spec.replacement ?? "",
+      matches,
+      unique: matches === 1,
+      scope: scopeLabel
+    };
+  } catch (error2) {
+    return { ...fallback, error: error2.message };
+  }
+}
+function renderEditPreview(preview, index) {
+  const matchLabel = `${preview.matches} match${preview.matches === 1 ? "" : "es"}`;
+  const lines = [
+    `### Edit ${index + 1}`,
+    `- File: \`${preview.filePath}\``,
+    `- Target unique: ${preview.unique ? "true" : "false"} (${matchLabel}${preview.scope ? ` in ${preview.scope}` : ""})`
+  ];
+  if (preview.error) lines.push(`- Error: ${preview.error}`);
+  lines.push(
+    "- Before:",
+    "```text",
+    preview.before,
+    "```",
+    "- After:",
+    "```text",
+    preview.after,
+    "```"
+  );
+  return lines.join("\n");
+}
+function overlapScore(tokens, text) {
+  if (!tokens.size) return 0;
+  const haystack = tokenize(text);
+  let score = 0;
+  for (const token of tokens) {
+    if (haystack.has(token)) score += 1;
+  }
+  return score;
+}
+function decisionHeadings(projectRoot, limit = 3) {
+  const docPath = path9.join(projectRoot, "DECISION.md");
+  if (!fs9.existsSync(docPath)) return [];
+  try {
+    const content = fs9.readFileSync(docPath, "utf8");
+    const matches = content.match(/^## \[(DEC-\d+)\]\s+(.+)$/gm) || [];
+    return matches.slice(-limit).map((line) => line.replace(/^##\s+/, "- "));
+  } catch (_) {
+    return [];
+  }
+}
+function suggestVerify(profile) {
+  return profile.verify.length ? profile.verify[0] : null;
+}
+function receiptStatus(receipt) {
+  if (receipt.exitCode === 0) return "passed";
+  return receipt.status === "superseded" ? "superseded" : "unresolved";
+}
+function latinQueries(text = "", exclude = "") {
+  const haystack = String(exclude).toLowerCase();
+  return Array.from(tokenize(text)).filter((token) => /^[a-z][a-z0-9_-]{4,}$/.test(token)).filter((token) => !haystack.includes(token)).slice(0, 2);
+}
+function computeNext({ session, changedCount, profile, stage, intent = "" }) {
+  const receipts = session?.receipts || [];
+  const green = receipts.some((receipt) => receipt.exitCode === 0);
+  const editedHere = (session?.touchedFiles || []).some((entry) => entry.source === "edit");
+  if (stage === "change" || editedHere && !green) {
+    const command = suggestVerify(profile);
+    return command ? `verify(${JSON.stringify({ commands: [command] })})` : 'verify({"commands":["<your command>"]}) \u2014 set `verify` in .contextos/profile.json to auto-infer';
+  }
+  if (green) return `ship(${JSON.stringify({ summary: "<what changed and why>" })})`;
+  if (changedCount > 0) {
+    const command = suggestVerify(profile);
+    return command ? `verify(${JSON.stringify({ commands: [command] })}) \u2014 dirty files exist with no receipt yet` : 'verify({"commands":["<your command>"]}) \u2014 dirty files exist with no receipt yet';
+  }
+  return `change(${JSON.stringify({ intent: intent || "<what you want to change>" })}) \u2014 pass edits: [{ path, target, replacement }]`;
+}
+async function explorePipeline(ctx, input = {}) {
+  const { caps, store, tracer, projectRoot, profile } = ctx;
+  const intent = input.intent || "";
+  const obs = await observe({ projectRoot, store });
+  const session = store.ensureSession(intent);
+  tracer.step("observe", { gitAvailable: obs.gitAvailable, reconciled: obs.reconciled });
+  const explicitPaths = Array.isArray(input.paths) ? input.paths.filter(Boolean) : [];
+  const paths = explicitPaths.length ? explicitPaths : extractPaths(intent);
+  const identifiers = extractIdentifiers(intent);
+  const tokens = tokenize(`${intent} ${paths.join(" ")} ${identifiers.join(" ")}`);
+  const dirty = [...obs.untracked, ...obs.changed];
+  const systemChanged = obs.systemChanged || [];
+  const nowLines = [
+    `- Session: \`${session.id}\` (${session.status})`,
+    `- Intent: ${intent || "(none yet)"}`,
+    `- Code git dirty: ${dirty.length ? dirty.slice(0, 8).map((p) => `\`${p}\``).join(", ") : "clean"}${dirty.length > 8 ? ` (+${dirty.length - 8})` : ""}`,
+    `- OS state dirty: ${systemChanged.length ? systemChanged.slice(0, 8).map((p) => `\`${p}\``).join(", ") : "clean"}${systemChanged.length > 8 ? ` (+${systemChanged.length - 8})` : ""}`
+  ];
+  if (session.touchedFiles.length) {
+    const recentTouches = [...session.touchedFiles].filter((entry) => entry.lastTouchedAt || entry.firstSeenAt).sort((a, b) => Date.parse(b.lastTouchedAt || b.firstSeenAt) - Date.parse(a.lastTouchedAt || a.firstSeenAt)).slice(0, 6);
+    if (recentTouches.length) {
+      nowLines.push(`- Session touch history: ${recentTouches.map((entry) => `\`${entry.path}\` (${entry.source}, ${(entry.lastTouchedAt || entry.firstSeenAt).slice(11, 19)}Z)`).join(", ")}`);
+    }
+  }
+  if (session.receipts.length) {
+    const last = session.receipts[session.receipts.length - 1];
+    nowLines.push(`- Last receipt: \`${last.command}\` exit ${last.exitCode} (${last.id || "n/a"}, ${receiptStatus(last)})`);
+  }
+  const whereLines = [];
+  const index = new ModuleIndex({ projectRoot });
+  index.bootstrapIfEmpty();
+  index.ensure([...paths, ...dirty].slice(0, 12));
+  const resolvedPaths = [];
+  for (const target of paths) {
+    const fullPath = path9.join(projectRoot, target);
+    if (!fs9.existsSync(fullPath)) continue;
+    if (fs9.statSync(fullPath).isDirectory()) {
+      for (const file of index.entries.keys()) {
+        if (file.startsWith(`${target.replace(/\/+$/, "")}/`) && !file.includes("node_modules")) {
+          resolvedPaths.push(file);
+        }
+      }
+    } else {
+      resolvedPaths.push(target);
+    }
+  }
+  const filePaths = Array.from(new Set(resolvedPaths)).slice(0, 3);
+  const modules = index.lookup(`${intent} ${paths.join(" ")}`);
+  for (const module2 of modules) {
+    const files = module2.files.slice(0, 3).map((file) => `\`${file}\``).join(", ");
+    whereLines.push(`- **${module2.id}** (${module2.directory}) \u2014 ${files}${module2.files.length > 3 ? ` (+${module2.files.length - 3})` : ""}`);
+  }
+  tracer.step("modules", { hits: modules.length, indexed: index.entries.size });
+  if (filePaths.length) {
+    for (const target of filePaths) {
+      const outline = await caps.code({ action: "outline", path: target });
+      whereLines.push(outline.ok ? `- \`${target}\`
+${clip(outline.data, OUTLINE_CLIP)}` : `- \`${target}\`: ${outline.error}`);
+    }
+    tracer.step("outline", { paths: filePaths });
+  }
+  const blocks = await caps.blocks();
+  if (blocks.ok && blocks.data.length) {
+    const scored = blocks.data.map((block) => ({
+      block,
+      score: overlapScore(tokens, `${block.title} ${block.summary || ""} ${(block.artifactRefs || []).map((r) => r.path).join(" ")}`)
+    })).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score).slice(0, 2);
+    for (const { block } of scored) {
+      const refs = Array.from(new Set((block.artifactRefs || []).map((ref) => ref.path))).slice(0, 3);
+      whereLines.push(`- curated [${block.id}] **${block.title}** \u2014 ${refs.length ? refs.map((p) => `\`${p}\``).join(", ") : "no refs"}`);
+    }
+    tracer.step("blocks", { candidates: scored.length, total: blocks.data.length });
+  }
+  const searchQueries = Array.from(/* @__PURE__ */ new Set([...identifiers, ...latinQueries(intent, paths.join(" "))]));
+  for (const query of searchQueries.slice(0, 3)) {
+    const search = await caps.code({ action: "search", query });
+    if (!search.ok) continue;
+    whereLines.push(`- symbols \`${query}\`:
+${clip(search.data, SEARCH_CLIP)}`);
+  }
+  if (!whereLines.length) {
+    whereLines.push('- No indexed module matched. Pass `paths` or run `explore({ intent })` after binding blocks via `ops({ capability: "block", action: "bind_auto" })`.');
+  }
+  const rulesLines = [];
+  const rules = await caps.rules();
+  if (rules.ok && rules.data.length) {
+    const scored = rules.data.map((rule) => ({ rule, score: overlapScore(tokens, `${rule.title} ${rule.category} ${rule.summary || ""}`) })).sort((a, b) => b.score - a.score).slice(0, 3);
+    for (const { rule } of scored) {
+      rulesLines.push(`- \`${rule.id}\` **${rule.title}** (${rule.category}) \u2014 ${clip(rule.summary || "", 120)}`);
+    }
+    rulesLines.push('> Full text on demand: `ops({ capability: "knowledge", action: "rule_open", args: { ruleId: "..." } })`');
+  }
+  const memoryLines = [];
+  for (const note of (session.notes || []).slice(-3)) {
+    memoryLines.push(`- (${note.kind}) ${clip(note.text, 160)}`);
+  }
+  for (const past of store.recentHistory(2)) {
+    memoryLines.push(`- last session \`${past.id}\`: ${clip(past.summary || past.intent || "", 160)}`);
+  }
+  const headings = decisionHeadings(projectRoot);
+  if (headings.length) memoryLines.push(...headings);
+  const nextLines = [`\u{1F449} ${computeNext({ session, changedCount: dirty.length, profile, stage: "explore", intent })}`];
+  const budget = resolveBudget(input.depth, ctx.profile?.budget);
+  const { text, meta: meta2 } = fitSections(
+    [
+      { key: "next", title: "Next", priority: 0, lines: nextLines },
+      { key: "now", title: "Now", priority: 1, lines: nowLines },
+      { key: "where", title: "Where to look", priority: 2, lines: whereLines },
+      { key: "rules", title: "Applicable rules", priority: 3, lines: rulesLines },
+      { key: "memory", title: "Memory", priority: 4, lines: memoryLines }
+    ],
+    { maxChars: budget }
+  );
+  tracer.step("explore.response", { budget, ...meta2 });
+  return `# ContextOS explore
+
+${text}
+
+<!-- budget ${meta2.used}/${meta2.maxChars} chars; dropped: ${meta2.dropped.join(",") || "none"} -->`;
+}
+async function changePipeline(ctx, input = {}) {
+  const { caps, store, tracer, profile } = ctx;
+  const creates = Array.isArray(input.create) ? input.create : [];
+  const edits = Array.isArray(input.edits) ? input.edits : [];
+  const resultLines = [];
+  const touched = [];
+  if (input.dryRun === true) {
+    const previewLines = [];
+    creates.forEach((spec, index) => {
+      const resolved = resolvePreviewPath(ctx.projectRoot, spec?.path);
+      if (resolved.error) {
+        previewLines.push(`### Create ${index + 1}
+- File: \`${spec?.path || "(missing)"}\`
+- Error: ${resolved.error}`);
+        return;
+      }
+      const exists = fs9.existsSync(resolved.fullPath);
+      const before = exists ? fs9.readFileSync(resolved.fullPath, "utf8") : "";
+      previewLines.push(
+        [
+          `### Create ${index + 1}`,
+          `- File: \`${resolved.relativePath}\``,
+          `- Target unique: n/a (create)`,
+          `- Would create: ${exists ? "false (file already exists)" : "true"}`,
+          "- Before:",
+          "```text",
+          before,
+          "```",
+          "- After:",
+          "```text",
+          spec?.content ?? "",
+          "```"
+        ].join("\n")
+      );
+    });
+    edits.forEach((spec, index) => {
+      previewLines.push(renderEditPreview(previewEdit(ctx.projectRoot, spec), index));
+    });
+    if (!previewLines.length) {
+      previewLines.push("No edits or creates supplied.");
+    }
+    const { text: text2 } = fitSections(
+      [{ key: "preview", title: "Preview", priority: 0, lines: previewLines }],
+      { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
+    );
+    return `# ContextOS change (dry run)
+
+${text2}`;
+  }
+  if (!creates.length && !edits.length) {
+    const targets = (Array.isArray(input.paths) && input.paths.length ? input.paths : extractPaths(input.intent || "")).slice(0, 2);
+    const previewLines = [];
+    for (const target of targets) {
+      const read = await caps.code({ action: "read", path: target, startLine: 1, endLine: 60 });
+      previewLines.push(read.ok ? `- \`${target}\`
+${clip(read.data, OUTLINE_CLIP)}` : `- \`${target}\`: ${read.error}`);
+    }
+    if (!previewLines.length) {
+      previewLines.push("Pass `edits: [{ path, target, replacement }]` or `create: [{ path, content }]`, or call `explore` first to locate the target.");
+    }
+    const { text: text2 } = fitSections(
+      [
+        { key: "next", title: "Next", priority: 0, lines: ["\u{1F449} change({ edits: [{ path, target, replacement }] })"] },
+        { key: "preview", title: "Preview", priority: 1, lines: previewLines }
+      ],
+      { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
+    );
+    return `# ContextOS change (propose)
+
+${text2}`;
+  }
+  const changes = [
+    ...creates.map((spec) => ({
+      kind: "create",
+      path: spec?.path,
+      content: spec?.content ?? ""
+    })),
+    ...edits.map((spec) => ({
+      kind: "edit",
+      path: spec?.path,
+      target: spec?.target,
+      replacement: spec?.replacement ?? "",
+      startLine: spec?.startLine,
+      endLine: spec?.endLine,
+      symbol: spec?.symbol
+    }))
+  ];
+  const changeset = await caps.code({ action: "changeset", changes, format: "json" });
+  if (!changeset.ok) {
+    tracer.step("changeset", { ok: false, error: changeset.error });
+    resultLines.push(`- \u2717 changeset rejected: ${changeset.error}`);
+    const { text: text2 } = fitSections(
+      [
+        { key: "next", title: "Next", priority: 0, lines: ["Fix the changeset error, then retry `change`; no files were modified."] },
+        { key: "result", title: "Result", priority: 1, lines: resultLines }
+      ],
+      { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
+    );
+    return `# ContextOS change
+
+${text2}`;
+  }
+  const changedFiles = Array.isArray(changeset.data?.files) ? changeset.data.files : [];
+  for (const file of changedFiles) {
+    const action = file.created ? "created" : "edited";
+    resultLines.push(`- ${action} \`${file.path}\` (hash ${file.newHash || "n/a"}, ${(file.locators || []).length} locators re-anchored)`);
+    touched.push(file.path);
+  }
+  tracer.step("changeset", { ok: true, files: touched });
+  const session = store.touch(touched, "edit");
+  const nextLines = [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
+  const touchedLines = session.touchedFiles.slice(-8).map((entry) => `- \`${entry.path}\` (${entry.source})`);
+  const { text } = fitSections(
+    [
+      { key: "next", title: "Next", priority: 0, lines: nextLines },
+      { key: "result", title: "Result", priority: 1, lines: resultLines },
+      { key: "touched", title: "Touched", priority: 2, lines: touchedLines }
+    ],
+    { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
+  );
+  return `# ContextOS change
+
+${text}`;
+}
+async function verifyPipeline(ctx, input = {}) {
+  const { caps, store, tracer, profile } = ctx;
+  const mode = input.mode || "once";
+  if (mode === "logs" && input.id && /^[A-Za-z0-9._-]+$/.test(input.id)) {
+    const logPath = path9.join(ctx.projectRoot, ".contextos", "logs", `${input.id}.log`);
+    if (fs9.existsSync(logPath)) {
+      const lines = fs9.readFileSync(logPath, "utf8").split(/\r?\n/);
+      const filtered = input.grep ? lines.filter((line) => line.toLowerCase().includes(String(input.grep).toLowerCase())) : lines;
+      const limit = Math.max(1, Number(input.lines) || 50);
+      const selected = filtered.slice(-limit);
+      tracer.step("receipt_logs", { id: input.id, lines: selected.length });
+      return `# ContextOS verify (logs)
+
+- Receipt: \`${input.id}\`
+- Log: \`.contextos/logs/${input.id}.log\`
+- Lines: ${selected.length}/${filtered.length}
+
+\`\`\`text
+${selected.join("\n")}
+\`\`\``;
+    }
+  }
+  if (mode !== "once") {
+    const res = await caps.process({
+      action: mode === "serve" ? "start" : mode,
+      command: input.command || (input.commands || [])[0],
+      id: input.id,
+      lines: input.lines ?? 50,
+      grep: input.grep
+    });
+    const body2 = res.ok ? stringify(res.data) : `\u2717 ${res.error}`;
+    tracer.step("process", { mode, ok: res.ok });
+    return `# ContextOS verify (${mode})
+
+${clip(body2, resolveBudget(input.depth, ctx.profile?.budget))}`;
+  }
+  const explicit = Array.isArray(input.commands) && input.commands.length ? input.commands : input.command ? [input.command] : null;
+  const commands = explicit || profile.verify;
+  if (!commands.length) {
+    return '# ContextOS verify\n\nNo verification command available. Pass `command: "npm test"` (or `commands: [...]`) or set `verify` in `.contextos/profile.json`.';
+  }
+  const commandLines = [];
+  const failureLines = [];
+  let passed = true;
+  for (const command of commands) {
+    const res = await caps.run({
+      command,
+      cwd: input.cwd,
+      maxChars: input.maxChars ?? profile.maxChars,
+      timeoutMs: input.timeoutMs ?? profile.timeoutMs
+    });
+    if (!res.ok) {
+      passed = false;
+      commandLines.push(`- \`${command}\` \u2192 \u2717 ${res.error}`);
+      continue;
+    }
+    const receipt = res.data;
+    store.attachReceipt(receipt);
+    const label = redactSecrets(command);
+    commandLines.push(`- \`${label}\` \u2192 exit ${receipt.exitCode} (${receipt.durationMs}ms, receipt ${receipt.id})`);
+    if (receipt.exitCode !== 0) {
+      passed = false;
+      const errors = (receipt.errors || []).slice(0, 5);
+      failureLines.push(`### \`${label}\`
+${errors.length ? errors.join("\n") : clip(receipt.summary || "no stderr captured", 600)}`);
+    }
+    tracer.step("run", { command, exitCode: receipt.exitCode });
+  }
+  const session = store.current;
+  const nextLines = [
+    passed ? `\u{1F449} ship(${JSON.stringify({ summary: "<what changed and why>" })})` : `\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to fix, then verify again`
+  ];
+  const { text } = fitSections(
+    [
+      { key: "next", title: "Next", priority: 0, lines: nextLines },
+      { key: "verdict", title: passed ? "Verdict: PASS" : "Verdict: FAIL", priority: 1, lines: commandLines },
+      { key: "failures", title: "Failures", priority: 2, lines: failureLines }
+    ],
+    { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
+  );
+  return `# ContextOS verify
+
+${text}${session ? `
+
+<!-- session ${session.id}, ${session.receipts.length} receipts -->` : ""}`;
+}
+async function shipPipeline(ctx, input = {}) {
+  const { caps, store, tracer, projectRoot, profile } = ctx;
+  const obs = await observe({ projectRoot, store });
+  let session = store.current || store.ensureSession(input.summary || "session");
+  tracer.step("observe", { gitAvailable: obs.gitAvailable, reconciled: obs.reconciled });
+  if (input.dryRun === true) {
+    const touched = session.touchedFiles || [];
+    const receipts = session.receipts || [];
+    const summaryLines2 = [
+      `- Session \`${session.id}\` will remain open`,
+      `- Planned summary: ${input.summary || session.intent || "session closed"}`,
+      `- Touched files: ${touched.length}`,
+      `- Receipts: ${receipts.length}`
+    ];
+    const touchedLines2 = touched.slice(-10).map((entry) => `- \`${entry.path}\` (${entry.source})`);
+    const receiptLines = receipts.slice(-5).map((receipt) => `- [${receiptStatus(receipt).toUpperCase()}] \`${redactSecrets(receipt.command || "")}\` exit ${receipt.exitCode} (${receipt.id})`);
+    tracer.step("dry_run", { touched: touched.length, receipts: receipts.length });
+    const { text: text2 } = fitSections(
+      [
+        { key: "summary", title: "Planned closure", priority: 0, lines: summaryLines2 },
+        { key: "touched", title: "Touched", priority: 1, lines: touchedLines2 },
+        { key: "receipts", title: "Receipts", priority: 2, lines: receiptLines }
+      ],
+      { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
+    );
+    return `# ContextOS ship (dry run)
+
+${text2}`;
+  }
+  const wantsVerify = input.verify === true || Array.isArray(input.verify) && input.verify.length > 0;
+  const extraLines = [];
+  if (wantsVerify && !session.receipts.some((receipt) => receipt.exitCode === 0)) {
+    const commands = Array.isArray(input.verify) && input.verify.length ? input.verify : profile.verify;
+    for (const command of commands) {
+      const res = await caps.run({ command, maxChars: profile.maxChars, timeoutMs: profile.timeoutMs });
+      if (res.ok) {
+        store.attachReceipt(res.data);
+        extraLines.push(`- \`${redactSecrets(command)}\` \u2192 exit ${res.data.exitCode} (receipt ${res.data.id})`);
+      } else {
+        extraLines.push(`- \`${redactSecrets(command)}\` \u2192 \u2717 ${res.error}`);
+      }
+    }
+    session = store.current;
+  }
+  const green = (session.receipts || []).filter((receipt) => receipt.exitCode === 0);
+  const superseded = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === "superseded");
+  const unresolved = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === "unresolved");
+  const unverified = green.length === 0 && unresolved.length === 0;
+  if (profile.strict && (unverified || unresolved.length > 0)) {
+    return [
+      "# ContextOS ship \u2014 BLOCKED (strict profile)",
+      "",
+      unverified ? "- No passing receipt in this session." : `- ${unresolved.length} unresolved failing receipt(s) remain in this session.`,
+      `- Run \`verify({ commands: [...] })\` until the relevant command passes, or relax \`strict\` in \`.contextos/profile.json\`.`,
+      ...extraLines.length ? ["", "## Attempted", ...extraLines] : []
+    ].join("\n");
+  }
+  const attributionLines = [];
+  const attributablePaths = (session.touchedFiles || []).filter((entry) => entry.deleted !== true).map((entry) => entry.path);
+  const index = new ModuleIndex({ projectRoot });
+  index.ensure(attributablePaths);
+  const attribution = index.attribute(attributablePaths);
+  const known = await caps.blocks();
+  const owned = /* @__PURE__ */ new Set();
+  for (const block of known.ok ? known.data : []) {
+    for (const ref of block.artifactRefs || []) owned.add(ref.path);
+  }
+  const unclassified = attributablePaths.filter((filePath) => !owned.has(filePath));
+  for (const filePath of unclassified.slice(0, 8)) {
+    const moduleId = attribution.get(filePath);
+    const bound = await caps.block({
+      action: "bind_auto",
+      id: moduleId,
+      path: filePath,
+      blockData: { title: `Derived module ${moduleId}`, kind: "module" }
+    });
+    attributionLines.push(bound.ok ? `- \`${filePath}\` \u2192 **${moduleId}** (auto-bound)` : `- \`${filePath}\` \u2192 ${moduleId} (advisory only: ${bound.error})`);
+  }
+  if (unclassified.length > 8) {
+    attributionLines.push(`- (+${unclassified.length - 8} more attributed to derived modules)`);
+  }
+  tracer.step("attribute", { touched: (session.touchedFiles || []).length, unclassified: unclassified.length });
+  const graph = await caps.exportGraph();
+  tracer.step("graph", { ok: graph.ok });
+  if (input.decision?.id) {
+    const written = await caps.knowledge({
+      action: "decision_write",
+      sectionId: input.decision.id,
+      sectionTitle: input.decision.title || input.decision.id,
+      content: input.decision.content || ""
+    });
+    tracer.step("decision", { id: input.decision.id, ok: written.ok });
+  }
+  const closed = store.close(input.summary || session.intent || "session closed");
+  const summaryLines = [
+    `- Session \`${closed.id}\` closed at ${closed.closedAt}`,
+    `- Touched files: ${closed.touchedFiles.length}`,
+    `- Passing receipts: ${green.length}${unverified ? " (unverified \u2014 advisory mode)" : ""}`,
+    `- Superseded failures: ${superseded.length}`,
+    `- Unresolved failures: ${unresolved.length}`,
+    `- Derived attribution: ${unclassified.length} file(s) filed under derived modules${unclassified.length ? "" : " (all already owned by curated Blocks)"}`
+  ];
+  const touchedLines = closed.touchedFiles.slice(-10).map((entry) => `- \`${entry.path}\` (${entry.source})`);
+  const evidenceLines = (closed.receipts || []).slice(-5).map((receipt) => `- [${receiptStatus(receipt).toUpperCase()}] \`${redactSecrets(receipt.command || "")}\` exit ${receipt.exitCode} (${receipt.id})`);
+  const graphLines = [
+    graph.ok ? `- graph.json exported${graph.data?.graphRevision ? ` (rev ${graph.data.graphRevision})` : ""}` : `- graph export pending: ${graph.error}`
+  ];
+  const nextLines = [`\u{1F449} explore(${JSON.stringify({ intent: "<next goal>" })}) to start the next loop`];
+  const { text } = fitSections(
+    [
+      { key: "next", title: "Next", priority: 0, lines: nextLines },
+      { key: "summary", title: "Closure", priority: 1, lines: summaryLines },
+      { key: "evidence", title: "Evidence", priority: 2, lines: evidenceLines },
+      { key: "touched", title: "Touched", priority: 3, lines: touchedLines },
+      { key: "attribution", title: "Attribution (derived)", priority: 4, lines: attributionLines },
+      { key: "graph", title: "Graph", priority: 5, lines: graphLines }
+    ],
+    { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
+  );
+  return `# ContextOS ship
+
+${text}`;
+}
+
+// packages/orchestrator/src/index.mjs
+var OPS_CAPABILITIES = [
+  "os_context",
+  "plan",
+  "task",
+  "block",
+  "chain",
+  "code",
+  "run_command",
+  "process",
+  "knowledge",
+  "session",
+  "system",
+  "profile"
+];
+function render(value) {
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}
+var Orchestrator = class {
+  constructor({ service, projectRoot, projectId, system = {} }) {
+    this.service = service;
+    this.projectRoot = projectRoot;
+    this.projectId = projectId || service?.projectId || "contextos";
+    this.system = system;
+    this.store = new SessionStore({ projectRoot: this.projectRoot, projectId: this.projectId });
+    this.healed = null;
+  }
+  /**
+   * The OS heals itself: a graph.json that diverged from SQLite used to wedge
+   * every read/write entry point, which pushed agents back to reading whole
+   * files by hand. Reconcile, then resolve the divergence before doing work.
+   */
+  async _selfHeal() {
+    const { service } = this;
+    if (!service || typeof service.osContext !== "function") return;
+    try {
+      await service.osContext({ action: "reconcile" });
+    } catch (_) {
+    }
+    if (typeof service.healStateConflict === "function") {
+      try {
+        this.healed = service.healStateConflict();
+      } catch (_) {
+        this.healed = null;
+      }
+    }
+  }
+  _context(tracer) {
+    return {
+      service: this.service,
+      caps: createCapabilities({ service: this.service, projectRoot: this.projectRoot, projectId: this.projectId }),
+      store: this.store,
+      tracer,
+      profile: loadProfile(this.projectRoot),
+      projectRoot: this.projectRoot,
+      projectId: this.projectId
+    };
+  }
+  async dispatch(tool, input = {}) {
+    await this._selfHeal();
+    const seed = this.store.current || this.store.ensureSession(input.intent || input.summary || "");
+    const tracer = new Tracer({ projectRoot: this.projectRoot, sessionId: seed.id });
+    const ctx = this._context(tracer);
+    if (this.healed) tracer.step("heal", this.healed);
+    try {
+      switch (tool) {
+        case "explore":
+          return await explorePipeline(ctx, input);
+        case "change":
+          return await changePipeline(ctx, input);
+        case "verify":
+          return await verifyPipeline(ctx, input);
+        case "ship":
+          return await shipPipeline(ctx, input);
+        case "ops":
+          return await this._ops(ctx, input);
+        default:
+          throw new Error(`Unknown orchestrator tool '${tool}'`);
+      }
+    } finally {
+      try {
+        this.service?.syncEngine?.publishIfDirty(this.projectId, this.projectRoot);
+      } catch (_) {
+      }
+      tracer.flush();
+    }
+  }
+  async _ops(ctx, input = {}) {
+    const { capability, action, args: args2 = {} } = input;
+    const { service, store, tracer } = ctx;
+    tracer.step("ops", { capability, action });
+    switch (capability) {
+      case "os_context":
+        return render(await service.osContext({ ...args2, action }));
+      case "plan":
+        return render(await service.plan({ ...args2, action }));
+      case "task":
+        return render(await service.task({ ...args2, action }));
+      case "block":
+        return render(await service.block({ ...args2, action }));
+      case "chain":
+        return render(await service.chain({ ...args2, action }));
+      case "code":
+        return render(await service.code({ ...args2, action }));
+      case "run_command":
+        return render(await service.runCommand(args2));
+      case "process":
+        return render(await service.process({ ...args2, action }));
+      case "knowledge":
+        return render(await service.knowledge({ ...args2, action }));
+      case "session": {
+        if (action === "note") return render(store.note(args2.text, args2.kind || "note"));
+        if (action === "close") return render(store.close(args2.summary || ""));
+        if (action === "history") return render(store.recentHistory(args2.limit || 5));
+        return render(store.current || { status: "no-open-session" });
+      }
+      case "profile": {
+        if (action === "set") return render(saveProfile(this.projectRoot, args2));
+        return render(loadProfile(this.projectRoot));
+      }
+      case "system": {
+        const fn = this.system[action];
+        if (!fn) {
+          throw new Error(`Unknown system action '${action}'. Available: ${Object.keys(this.system).join(", ")}`);
+        }
+        return render(await fn({ projectRoot: this.projectRoot, ...args2 }));
+      }
+      default:
+        throw new Error(`Unknown capability '${capability}'. Available: ${OPS_CAPABILITIES.join(", ")}`);
+    }
+  }
+};
+
+// packages/mcp/src/admin-cli.mjs
+import path22 from "node:path";
+import fs21 from "node:fs";
+
+// packages/mcp/src/v2-service.mjs
+import path21 from "node:path";
+import fs20 from "node:fs";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+// packages/storage/src/schema.mjs
+var V2_SQL_SCHEMA = `
+CREATE TABLE IF NOT EXISTS projects (
+  id TEXT PRIMARY KEY,
+  repo_root TEXT NOT NULL,
+  graph_revision INTEGER NOT NULL DEFAULT 0,
+  exported_at TEXT,
+  schema_version INTEGER NOT NULL DEFAULT 3
+);
+
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'normal',
+  status TEXT NOT NULL DEFAULT 'active',
+  summary TEXT NOT NULL DEFAULT '',
+  completed_summary TEXT,
+  history_ref TEXT,
+  rule_refs_json TEXT NOT NULL DEFAULT '[]',
+  decision_refs_json TEXT NOT NULL DEFAULT '[]',
+  dependency_refs_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS phases (
+  id TEXT NOT NULL,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  phase_order INTEGER NOT NULL DEFAULT 0,
+  objective TEXT NOT NULL DEFAULT '',
+  scope TEXT NOT NULL DEFAULT '',
+  deliverables_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'pending',
+  task_ids_json TEXT NOT NULL DEFAULT '[]',
+  acceptance_json TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (id, plan_id)
+);
+
+CREATE TABLE IF NOT EXISTS checkpoints (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  phase_id TEXT,
+  title TEXT NOT NULL,
+  criteria TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending',
+  evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+  completed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+  phase_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  context_slice_json TEXT NOT NULL DEFAULT '{}',
+  working_set_json TEXT NOT NULL DEFAULT '{}',
+  references_json TEXT NOT NULL DEFAULT '{}',
+  baseline_json TEXT NOT NULL DEFAULT '{}',
+  notes_json TEXT NOT NULL DEFAULT '[]',
+  checks_json TEXT NOT NULL DEFAULT '[]',
+  sync_result_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS blocks (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'service',
+  summary TEXT NOT NULL DEFAULT '',
+  details TEXT NOT NULL DEFAULT '',
+  artifact_ref_count INTEGER NOT NULL DEFAULT 0,
+  history_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS artifact_refs (
+  id TEXT PRIMARY KEY,
+  block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+  path TEXT NOT NULL,
+  symbol TEXT,
+  anchor_kind TEXT NOT NULL DEFAULT 'symbol',
+  start_line INTEGER,
+  end_line INTEGER,
+  hash TEXT NOT NULL DEFAULT '',
+  role TEXT NOT NULL DEFAULT 'implementation',
+  hash_mode TEXT,
+  manifest TEXT
+);
+
+CREATE TABLE IF NOT EXISTS chains (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  kind TEXT NOT NULL DEFAULT 'leaf',
+  member_ids_json TEXT NOT NULL DEFAULT '[]',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS links (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'depends_on',
+  provenance TEXT NOT NULL DEFAULT 'authored',
+  confidence REAL NOT NULL DEFAULT 1.0,
+  reason TEXT NOT NULL DEFAULT '',
+  revision INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS command_receipts (
+  id TEXT PRIMARY KEY,
+  command TEXT NOT NULL,
+  cwd TEXT NOT NULL,
+  exit_code INTEGER NOT NULL,
+  duration_ms REAL NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  errors_json TEXT NOT NULL DEFAULT '[]',
+  warnings_json TEXT NOT NULL DEFAULT '[]',
+  changed_paths_json TEXT NOT NULL DEFAULT '[]',
+  log_handle TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sync_state (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS graph_outbox (
+  project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+  base_revision INTEGER NOT NULL,
+  target_revision INTEGER NOT NULL,
+  payload_hash TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`;
+
+// packages/storage/src/database.mjs
+import { DatabaseSync } from "node:sqlite";
+import path10 from "node:path";
+import fs10 from "node:fs";
+var V2Database = class {
+  constructor(filePath = ":memory:") {
+    this.filePath = filePath;
+    if (filePath !== ":memory:") {
+      fs10.mkdirSync(path10.dirname(filePath), { recursive: true });
+    }
+    this.db = new DatabaseSync(filePath);
+    this.transactionDepth = 0;
+    this.init();
+  }
+  init() {
+    this.db.exec("PRAGMA journal_mode = WAL;");
+    this.db.exec("PRAGMA busy_timeout = 5000;");
+    this.db.exec("PRAGMA foreign_keys = ON;");
+    this.db.exec(V2_SQL_SCHEMA);
+    this._ensureSchemaMigrations();
+  }
+  _ensureSchemaMigrations() {
+    const refColumns = this.db.prepare("PRAGMA table_info(artifact_refs)").all();
+    if (!refColumns.some((column) => column.name === "anchor_kind")) {
+      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN anchor_kind TEXT NOT NULL DEFAULT 'symbol';");
+    }
+    if (!refColumns.some((column) => column.name === "hash_mode")) {
+      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN hash_mode TEXT;");
+    }
+    if (!refColumns.some((column) => column.name === "manifest")) {
+      this.db.exec("ALTER TABLE artifact_refs ADD COLUMN manifest TEXT;");
+    }
+    this.db.exec(`
+      UPDATE artifact_refs
+      SET anchor_kind = 'file'
+      WHERE anchor_kind = 'symbol'
+        AND (symbol IS NULL OR TRIM(symbol) = '')
+    `);
+    const blockColumns = this.db.prepare("PRAGMA table_info(blocks)").all();
+    if (!blockColumns.some((column) => column.name === "artifact_ref_count")) {
+      this.db.exec("ALTER TABLE blocks ADD COLUMN artifact_ref_count INTEGER NOT NULL DEFAULT 0;");
+    }
+    this.db.exec(`
+      UPDATE blocks
+      SET artifact_ref_count = (
+        SELECT COUNT(*) FROM artifact_refs WHERE artifact_refs.block_id = blocks.id
+      )
+      WHERE artifact_ref_count != (
+        SELECT COUNT(*) FROM artifact_refs WHERE artifact_refs.block_id = blocks.id
+      )
+    `);
+    const receiptColumns = this.db.prepare("PRAGMA table_info(command_receipts)").all();
+    if (!receiptColumns.some((column) => column.name === "changed_paths_json")) {
+      this.db.exec("ALTER TABLE command_receipts ADD COLUMN changed_paths_json TEXT NOT NULL DEFAULT '[]';");
+    }
+    if (receiptColumns.some((column) => column.name === "artifacts_json")) {
+      this.db.exec(`
+        UPDATE command_receipts
+        SET changed_paths_json = artifacts_json
+        WHERE changed_paths_json = '[]' AND artifacts_json != '[]'
+      `);
+    }
+    this.db.exec(`
+      DROP TABLE IF EXISTS artifact_links;
+      DROP TABLE IF EXISTS artifact_records;
+      DROP TABLE IF EXISTS build_runs;
+      UPDATE projects SET schema_version = 3;
+    `);
+    this._ensureGraphSyncTriggers();
+    this._ensureBlockIntegrityTriggers();
+  }
+  _ensureBlockIntegrityTriggers() {
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS blocks_require_artifact_count_insert
+      AFTER INSERT ON blocks
+      WHEN NEW.artifact_ref_count <= 0
+      BEGIN
+        SELECT RAISE(ABORT, 'Ghost Block rejected: blocks must reference real code');
+      END;
+
+      DROP TRIGGER IF EXISTS blocks_require_artifact_count_update;
+      CREATE TRIGGER blocks_require_artifact_count_update
+      AFTER UPDATE OF artifact_ref_count ON blocks
+      WHEN NEW.artifact_ref_count <= 0
+      BEGIN
+        SELECT RAISE(ABORT, 'Ghost Block rejected: blocks must reference real code');
+      END;
+
+      DROP TRIGGER IF EXISTS artifact_refs_validate_insert;
+      CREATE TRIGGER artifact_refs_validate_insert
+      BEFORE INSERT ON artifact_refs
+      WHEN NEW.path IS NULL OR TRIM(NEW.path) = ''
+        OR NEW.hash IS NULL OR TRIM(NEW.hash) = '' OR LOWER(NEW.hash) = 'untracked'
+        OR NEW.anchor_kind NOT IN ('symbol', 'file', 'tree')
+        OR (NEW.anchor_kind = 'symbol' AND (NEW.symbol IS NULL OR TRIM(NEW.symbol) = ''))
+        OR (NEW.anchor_kind = 'tree' AND NEW.hash_mode = 'manifest' AND (NEW.manifest IS NULL OR TRIM(NEW.manifest) = ''))
+      BEGIN
+        SELECT RAISE(ABORT, 'Invalid ArtifactRef: path, anchor and verified hash are required');
+      END;
+
+      DROP TRIGGER IF EXISTS artifact_refs_validate_update;
+      CREATE TRIGGER artifact_refs_validate_update
+      BEFORE UPDATE ON artifact_refs
+      WHEN NEW.path IS NULL OR TRIM(NEW.path) = ''
+        OR NEW.hash IS NULL OR TRIM(NEW.hash) = '' OR LOWER(NEW.hash) = 'untracked'
+        OR NEW.anchor_kind NOT IN ('symbol', 'file', 'tree')
+        OR (NEW.anchor_kind = 'symbol' AND (NEW.symbol IS NULL OR TRIM(NEW.symbol) = ''))
+        OR (NEW.anchor_kind = 'tree' AND NEW.hash_mode = 'manifest' AND (NEW.manifest IS NULL OR TRIM(NEW.manifest) = ''))
+      BEGIN
+        SELECT RAISE(ABORT, 'Invalid ArtifactRef: path, anchor and verified hash are required');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS artifact_refs_sync_count_after_insert
+      AFTER INSERT ON artifact_refs
+      BEGIN
+        UPDATE blocks
+        SET artifact_ref_count = (SELECT COUNT(*) FROM artifact_refs WHERE block_id = NEW.block_id)
+        WHERE id = NEW.block_id;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS artifact_refs_sync_count_after_update
+      AFTER UPDATE OF block_id ON artifact_refs
+      BEGIN
+        UPDATE blocks
+        SET artifact_ref_count = (SELECT COUNT(*) FROM artifact_refs WHERE block_id = OLD.block_id)
+        WHERE id = OLD.block_id;
+        UPDATE blocks
+        SET artifact_ref_count = (SELECT COUNT(*) FROM artifact_refs WHERE block_id = NEW.block_id)
+        WHERE id = NEW.block_id;
+      END;
+
+      DROP TRIGGER IF EXISTS artifact_refs_prevent_last_delete;
+      CREATE TRIGGER artifact_refs_prevent_last_delete
+      BEFORE DELETE ON artifact_refs
+      WHEN EXISTS (SELECT 1 FROM blocks WHERE id = OLD.block_id)
+        AND NOT EXISTS (SELECT 1 FROM artifact_refs WHERE block_id = OLD.block_id AND id <> OLD.id)
+      BEGIN
+        SELECT RAISE(ABORT, 'Ghost Block rejected: cannot delete the final artifactRef');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS artifact_refs_sync_count_after_delete
+      AFTER DELETE ON artifact_refs
+      BEGIN
+        UPDATE blocks
+        SET artifact_ref_count = (SELECT COUNT(*) FROM artifact_refs WHERE block_id = OLD.block_id)
+        WHERE id = OLD.block_id;
+      END;
+    `);
+  }
+  /**
+   * graph.json is a derived projection of SQLite. Instead of trusting every
+   * call site to remember an export, the graph tables mark the project dirty
+   * themselves; only the publisher decides when to write the file.
+   */
+  _ensureGraphSyncTriggers() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS graph_dirty (
+        project_id TEXT PRIMARY KEY,
+        reason TEXT NOT NULL DEFAULT '',
+        marked_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    const direct = ["blocks", "chains", "links", "plans"];
+    for (const table of direct) {
+      for (const event of ["INSERT", "UPDATE", "DELETE"]) {
+        const ref = event === "DELETE" ? "OLD" : "NEW";
+        const key = `${table}_${event.toLowerCase()}`;
+        this.db.exec(`
+          CREATE TRIGGER IF NOT EXISTS ${key}_dirty AFTER ${event} ON ${table}
+          WHEN ${ref}.project_id IS NOT NULL
+          BEGIN
+            INSERT INTO graph_dirty (project_id, reason, marked_at)
+            VALUES (${ref}.project_id, '${key}', datetime('now'))
+            ON CONFLICT(project_id) DO UPDATE SET
+              reason = '${key}', marked_at = datetime('now');
+          END;
+        `);
+      }
+    }
+    for (const event of ["INSERT", "UPDATE", "DELETE"]) {
+      const ref = event === "DELETE" ? "OLD" : "NEW";
+      const key = `tasks_${event.toLowerCase()}`;
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS ${key}_dirty AFTER ${event} ON tasks
+        BEGIN
+          INSERT INTO graph_dirty (project_id, reason, marked_at)
+          SELECT project_id, '${key}', datetime('now') FROM plans WHERE id = ${ref}.plan_id
+          ON CONFLICT(project_id) DO UPDATE SET reason = '${key}', marked_at = datetime('now');
+        END;
+      `);
+    }
+    for (const event of ["INSERT", "UPDATE", "DELETE"]) {
+      const ref = event === "DELETE" ? "OLD" : "NEW";
+      const key = `artifact_refs_${event.toLowerCase()}`;
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS ${key}_dirty AFTER ${event} ON artifact_refs
+        BEGIN
+          INSERT INTO graph_dirty (project_id, reason, marked_at)
+          SELECT project_id, '${key}', datetime('now') FROM blocks WHERE id = ${ref}.block_id
+          ON CONFLICT(project_id) DO UPDATE SET reason = '${key}', marked_at = datetime('now');
+        END;
+      `);
+    }
+  }
+  isGraphDirty(projectId) {
+    return Boolean(this.db.prepare("SELECT 1 FROM graph_dirty WHERE project_id = ?").get(projectId));
+  }
+  clearGraphDirty(projectId) {
+    this.db.prepare("DELETE FROM graph_dirty WHERE project_id = ?").run(projectId);
+  }
+  transaction(fn) {
+    if (this.transactionDepth > 0) {
+      this.transactionDepth += 1;
+      try {
+        return fn(this);
+      } finally {
+        this.transactionDepth -= 1;
+      }
+    }
+    this.db.exec("BEGIN IMMEDIATE;");
+    this.transactionDepth = 1;
+    try {
+      const result = fn(this);
+      this.db.exec("COMMIT;");
+      this.transactionDepth = 0;
+      return result;
+    } catch (err2) {
+      try {
+        this.db.exec("ROLLBACK;");
+      } finally {
+        this.transactionDepth = 0;
+      }
+      throw err2;
+    }
+  }
+  setGraphExported(projectId, revision, sha256, exportedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+    this.transaction((db) => {
+      db.db.prepare("UPDATE projects SET graph_revision = ?, exported_at = ? WHERE id = ?").run(revision, exportedAt, projectId);
+      db.setSyncState(`last_exported_hash:${projectId}`, sha256);
+      db.db.prepare("DELETE FROM graph_outbox WHERE project_id = ?").run(projectId);
+      db.clearGraphDirty(projectId);
+    });
+  }
+  getGraphOutbox(projectId) {
+    const row = this.db.prepare("SELECT * FROM graph_outbox WHERE project_id = ?").get(projectId);
+    if (!row) return null;
+    return {
+      projectId: row.project_id,
+      baseRevision: row.base_revision,
+      targetRevision: row.target_revision,
+      payloadHash: row.payload_hash,
+      payloadJson: row.payload_json,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+  saveGraphOutbox(entry) {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const stmt = this.db.prepare(`
+      INSERT INTO graph_outbox (
+        project_id, base_revision, target_revision, payload_hash, payload_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        base_revision = excluded.base_revision,
+        target_revision = excluded.target_revision,
+        payload_hash = excluded.payload_hash,
+        payload_json = excluded.payload_json,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      entry.projectId,
+      entry.baseRevision,
+      entry.targetRevision,
+      entry.payloadHash,
+      entry.payloadJson,
+      entry.createdAt || now,
+      now
+    );
+    return this.getGraphOutbox(entry.projectId);
+  }
+  deleteGraphOutbox(projectId) {
+    this.db.prepare("DELETE FROM graph_outbox WHERE project_id = ?").run(projectId);
+    return true;
+  }
+  close() {
+    this.db.close();
+  }
+  // --- Project ---
+  getProject(projectId) {
+    const stmt = this.db.prepare("SELECT * FROM projects WHERE id = ?");
+    return stmt.get(projectId) || null;
+  }
+  ensureProject(projectId, repoRoot) {
+    const existing = this.getProject(projectId);
+    if (existing) return existing;
+    const stmt = this.db.prepare(
+      "INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, 0, ?, 3)"
+    );
+    stmt.run(projectId, repoRoot, (/* @__PURE__ */ new Date()).toISOString());
+    return this.getProject(projectId);
+  }
+  /**
+   * Atomically adopt state created by the old bootstrap identity ('contextos')
+   * when a workspace later acquires its directory-derived identity. Never merge
+   * two non-empty projects: refusing is safer than silently mixing histories.
+   */
+  adoptLegacyProject(projectId, { legacyProjectId = "contextos", repoRoot = null } = {}) {
+    if (!projectId || !legacyProjectId || projectId === legacyProjectId) {
+      return { adopted: false, removedEmptyLegacy: false, sourceCounts: {}, targetCounts: {} };
+    }
+    return this.transaction((db) => {
+      const legacy = db.getProject(legacyProjectId);
+      if (!legacy) return { adopted: false, removedEmptyLegacy: false, sourceCounts: {}, targetCounts: {} };
+      const scopedTables = ["plans", "blocks", "chains", "links", "graph_outbox"];
+      const countRows = (id) => Object.fromEntries(scopedTables.map((table) => [
+        table,
+        db.db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE project_id = ?`).get(id).count
+      ]));
+      const sourceCounts = countRows(legacyProjectId);
+      const sourceTotal = Object.values(sourceCounts).reduce((sum, count) => sum + count, 0);
+      const resolvedRepoRoot = repoRoot ? path10.resolve(repoRoot) : null;
+      const legacyRepoRoot = legacy.repo_root ? path10.resolve(legacy.repo_root) : null;
+      if (sourceTotal > 0 && resolvedRepoRoot && legacyRepoRoot && resolvedRepoRoot !== legacyRepoRoot) {
+        throw new Error(
+          `Refusing to adopt project '${legacyProjectId}': it belongs to '${legacyRepoRoot}', not '${resolvedRepoRoot}'.`
+        );
+      }
+      const target = db.getProject(projectId) || db.ensureProject(projectId, resolvedRepoRoot || legacyRepoRoot || "");
+      const targetCounts = countRows(projectId);
+      const targetTotal = Object.values(targetCounts).reduce((sum, count) => sum + count, 0);
+      if (sourceTotal > 0 && targetTotal > 0) {
+        throw new Error(
+          `Refusing to merge project '${legacyProjectId}' into '${projectId}': both contain plans or graph state. Export or migrate one project explicitly.`
+        );
+      }
+      if (sourceTotal === 0) {
+        const sameRepo = !resolvedRepoRoot || !legacyRepoRoot || resolvedRepoRoot === legacyRepoRoot;
+        if (sameRepo) db.db.prepare("DELETE FROM projects WHERE id = ?").run(legacyProjectId);
+        return { adopted: false, removedEmptyLegacy: sameRepo, sourceCounts, targetCounts };
+      }
+      for (const table of scopedTables) {
+        db.db.prepare(`UPDATE ${table} SET project_id = ? WHERE project_id = ?`).run(projectId, legacyProjectId);
+      }
+      const graphRevision = Math.max(target.graph_revision || 0, legacy.graph_revision || 0);
+      const exportedAt = (legacy.graph_revision || 0) >= (target.graph_revision || 0) ? legacy.exported_at : target.exported_at;
+      db.db.prepare(`
+        UPDATE projects
+        SET repo_root = ?, graph_revision = ?, exported_at = ?, schema_version = MAX(schema_version, ?)
+        WHERE id = ?
+      `).run(
+        resolvedRepoRoot || legacyRepoRoot || target.repo_root,
+        graphRevision,
+        exportedAt,
+        legacy.schema_version || 3,
+        projectId
+      );
+      db.db.prepare("DELETE FROM projects WHERE id = ?").run(legacyProjectId);
+      db.db.prepare("DELETE FROM graph_dirty WHERE project_id = ?").run(legacyProjectId);
+      db.db.prepare(`
+        INSERT INTO graph_dirty (project_id, reason, marked_at)
+        VALUES (?, 'project-identity-adopted', datetime('now'))
+        ON CONFLICT(project_id) DO UPDATE SET reason = excluded.reason, marked_at = excluded.marked_at
+      `).run(projectId);
+      return { adopted: true, removedEmptyLegacy: false, sourceCounts, targetCounts, graphRevision };
+    });
+  }
+  setGraphRevision(projectId, revision) {
+    const stmt = this.db.prepare("UPDATE projects SET graph_revision = ? WHERE id = ?");
+    stmt.run(revision, projectId);
+  }
+  // --- Sync State ---
+  getSyncState(key) {
+    const stmt = this.db.prepare("SELECT value FROM sync_state WHERE key = ?");
+    const row = stmt.get(key);
+    return row ? row.value : null;
+  }
+  setSyncState(key, value) {
+    const stmt = this.db.prepare("INSERT OR REPLACE INTO sync_state (key, value) VALUES (?, ?)");
+    stmt.run(key, value);
+  }
+  // --- Plan ---
+  savePlan(plan) {
+    return this.transaction((db) => db._savePlan(plan));
+  }
+  _savePlan(plan) {
+    const stmt = this.db.prepare(`
+      INSERT INTO plans (
+        id, project_id, title, priority, status, summary, completed_summary,
+        history_ref, rule_refs_json, decision_refs_json, dependency_refs_json,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        priority = excluded.priority,
+        status = excluded.status,
+        summary = excluded.summary,
+        completed_summary = excluded.completed_summary,
+        history_ref = excluded.history_ref,
+        rule_refs_json = excluded.rule_refs_json,
+        decision_refs_json = excluded.decision_refs_json,
+        dependency_refs_json = excluded.dependency_refs_json,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      plan.id,
+      plan.projectId || plan.project_id || "contextos",
+      plan.title || plan.id,
+      plan.priority || "normal",
+      plan.status || "active",
+      plan.summary || "",
+      plan.completedSummary || plan.completed_summary || null,
+      plan.historyRef || plan.history_ref || null,
+      JSON.stringify(plan.ruleRefs || plan.rule_refs || []),
+      JSON.stringify(plan.decisionRefs || plan.decision_refs || []),
+      JSON.stringify(plan.dependencyRefs || plan.dependency_refs || []),
+      plan.createdAt || plan.created_at || (/* @__PURE__ */ new Date()).toISOString(),
+      plan.updatedAt || plan.updated_at || (/* @__PURE__ */ new Date()).toISOString()
+    );
+    const deletePhases = this.db.prepare("DELETE FROM phases WHERE plan_id = ?");
+    deletePhases.run(plan.id);
+    const insertPhase = this.db.prepare(`
+      INSERT INTO phases (
+        id, plan_id, phase_order, objective, scope, deliverables_json,
+        status, task_ids_json, acceptance_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const phase of plan.phases || []) {
+      insertPhase.run(
+        phase.id,
+        plan.id,
+        phase.order || 0,
+        phase.objective || "",
+        phase.scope || "",
+        JSON.stringify(phase.deliverables || []),
+        phase.status || "pending",
+        JSON.stringify(phase.taskIds || []),
+        JSON.stringify(phase.acceptance || [])
+      );
+    }
+    const deleteCheckpoints = this.db.prepare("DELETE FROM checkpoints WHERE plan_id = ?");
+    deleteCheckpoints.run(plan.id);
+    const insertCp = this.db.prepare(`
+      INSERT INTO checkpoints (
+        id, plan_id, phase_id, title, criteria, status, evidence_refs_json, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const cp of plan.checkpoints || []) {
+      insertCp.run(
+        cp.id,
+        plan.id,
+        cp.phaseId || null,
+        cp.title,
+        cp.criteria || "",
+        cp.status || "pending",
+        JSON.stringify(cp.evidenceRefs || []),
+        cp.completedAt || null
+      );
+    }
+  }
+  getPlan(planId) {
+    const stmt = this.db.prepare("SELECT * FROM plans WHERE id = ?");
+    const row = stmt.get(planId);
+    if (!row) return null;
+    const phasesStmt = this.db.prepare("SELECT * FROM phases WHERE plan_id = ? ORDER BY phase_order ASC");
+    const phases = phasesStmt.all(planId).map((p) => ({
+      id: p.id,
+      order: p.phase_order,
+      objective: p.objective,
+      scope: p.scope,
+      deliverables: JSON.parse(p.deliverables_json || "[]"),
+      status: p.status,
+      taskIds: JSON.parse(p.task_ids_json || "[]"),
+      acceptance: JSON.parse(p.acceptance_json || "[]")
+    }));
+    const cpStmt = this.db.prepare("SELECT * FROM checkpoints WHERE plan_id = ?");
+    const checkpoints = cpStmt.all(planId).map((c) => ({
+      id: c.id,
+      planId: c.plan_id,
+      phaseId: c.phase_id,
+      title: c.title,
+      criteria: c.criteria,
+      status: c.status,
+      evidenceRefs: JSON.parse(c.evidence_refs_json || "[]"),
+      completedAt: c.completed_at
+    }));
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      title: row.title,
+      priority: row.priority,
+      status: row.status,
+      summary: row.summary,
+      completedSummary: row.completed_summary,
+      historyRef: row.history_ref,
+      ruleRefs: JSON.parse(row.rule_refs_json || "[]"),
+      decisionRefs: JSON.parse(row.decision_refs_json || "[]"),
+      dependencyRefs: JSON.parse(row.dependency_refs_json || "[]"),
+      phases,
+      checkpoints,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+  listPlans(projectId) {
+    const stmt = projectId ? this.db.prepare("SELECT id FROM plans WHERE project_id = ? ORDER BY created_at DESC") : this.db.prepare("SELECT id FROM plans ORDER BY created_at DESC");
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
+    return rows.map((r) => this.getPlan(r.id));
+  }
+  deletePlan(planId) {
+    return this.transaction((db) => {
+      db.db.prepare("DELETE FROM checkpoints WHERE plan_id = ?").run(planId);
+      db.db.prepare("DELETE FROM phases WHERE plan_id = ?").run(planId);
+      db.db.prepare("DELETE FROM tasks WHERE plan_id = ?").run(planId);
+      const result = db.db.prepare("DELETE FROM plans WHERE id = ?").run(planId);
+      return result.changes > 0;
+    });
+  }
+  replaceProjectState(projectId, snapshot) {
+    return this.transaction((db) => {
+      db.db.exec(`
+        DROP TRIGGER IF EXISTS artifact_refs_prevent_last_delete;
+        DROP TRIGGER IF EXISTS blocks_require_artifact_count_update;
+      `);
+      db.db.prepare("DELETE FROM artifact_refs WHERE block_id IN (SELECT id FROM blocks WHERE project_id = ?)").run(projectId);
+      db.db.prepare("DELETE FROM blocks WHERE project_id = ?").run(projectId);
+      db.db.prepare("DELETE FROM links WHERE project_id = ?").run(projectId);
+      db.db.prepare("DELETE FROM chains WHERE project_id = ?").run(projectId);
+      db.db.prepare("DELETE FROM checkpoints WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)").run(projectId);
+      db.db.prepare("DELETE FROM tasks WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)").run(projectId);
+      db.db.prepare("DELETE FROM phases WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)").run(projectId);
+      db.db.prepare("DELETE FROM plans WHERE project_id = ?").run(projectId);
+      db.ensureProject(projectId, snapshot.project?.root || "");
+      const phasesByPlan = /* @__PURE__ */ new Map();
+      for (const phase of snapshot.phases || []) {
+        if (!phasesByPlan.has(phase.planId)) phasesByPlan.set(phase.planId, []);
+        phasesByPlan.get(phase.planId).push(phase);
+      }
+      const checkpointsByPlan = /* @__PURE__ */ new Map();
+      for (const checkpoint of snapshot.checkpoints || []) {
+        const planId = checkpoint.targetId || checkpoint.planId;
+        if (!planId) continue;
+        if (!checkpointsByPlan.has(planId)) checkpointsByPlan.set(planId, []);
+        checkpointsByPlan.get(planId).push(checkpoint);
+      }
+      for (const plan of snapshot.plans || []) {
+        db.savePlan({
+          ...plan,
+          projectId,
+          phases: phasesByPlan.get(plan.id) || [],
+          checkpoints: checkpointsByPlan.get(plan.id) || []
+        });
+      }
+      for (const task of snapshot.tasks || []) db.saveTask({ ...task, projectId });
+      for (const block of snapshot.blocks || []) {
+        db.saveBlock({ ...block, projectId, details: block.details ?? block.body ?? "" });
+      }
+      for (const chain of snapshot.chains || []) {
+        db.saveChain({
+          ...chain,
+          projectId,
+          summary: chain.summary ?? chain.purpose ?? "",
+          kind: chain.kind ?? chain.chainType ?? "leaf"
+        });
+      }
+      for (const link of snapshot.links || []) {
+        db.saveLink({
+          ...link,
+          projectId,
+          from: link.from ?? link.fromId ?? link.from_id ?? link.sourceId,
+          to: link.to ?? link.toId ?? link.to_id ?? link.targetId,
+          reason: link.reason ?? link.label ?? ""
+        });
+      }
+      db.setGraphRevision(projectId, snapshot.project?.graphRevision || snapshot.changeSequence || 0);
+      db._ensureBlockIntegrityTriggers();
+      return true;
+    });
+  }
+  // --- Task ---
+  saveTask(task) {
+    const stmt = this.db.prepare(`
+      INSERT INTO tasks (
+        id, plan_id, phase_id, title, status, context_slice_json,
+        working_set_json, references_json, baseline_json, notes_json,
+        checks_json, sync_result_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        plan_id = excluded.plan_id,
+        phase_id = excluded.phase_id,
+        title = excluded.title,
+        status = excluded.status,
+        context_slice_json = excluded.context_slice_json,
+        working_set_json = excluded.working_set_json,
+        references_json = excluded.references_json,
+        baseline_json = excluded.baseline_json,
+        notes_json = excluded.notes_json,
+        checks_json = excluded.checks_json,
+        sync_result_json = excluded.sync_result_json,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      task.id,
+      task.planId || task.plan_id || "plan-default",
+      task.phaseId || task.phase_id || "P0",
+      task.title || task.id,
+      task.status || "draft",
+      JSON.stringify(task.contextSlice || task.context_slice || {}),
+      JSON.stringify(task.workingSet || task.working_set || {}),
+      JSON.stringify(task.references || {}),
+      JSON.stringify(task.baseline || {}),
+      JSON.stringify(task.notes || []),
+      JSON.stringify(task.checks || []),
+      task.syncResult ? JSON.stringify(task.syncResult) : task.sync_result ? JSON.stringify(task.sync_result) : null,
+      task.createdAt || task.created_at || (/* @__PURE__ */ new Date()).toISOString(),
+      task.updatedAt || task.updated_at || (/* @__PURE__ */ new Date()).toISOString()
+    );
+  }
+  getTask(taskId) {
+    const stmt = this.db.prepare("SELECT * FROM tasks WHERE id = ?");
+    const row = stmt.get(taskId);
+    if (!row) return null;
+    const references = JSON.parse(row.references_json || "{}");
+    return {
+      id: row.id,
+      planId: row.plan_id,
+      phaseId: row.phase_id,
+      title: row.title,
+      status: row.status,
+      contextSlice: JSON.parse(row.context_slice_json || "{}"),
+      workingSet: JSON.parse(row.working_set_json || "{}"),
+      references,
+      rules: references.rules || [],
+      baseline: JSON.parse(row.baseline_json || "{}"),
+      notes: JSON.parse(row.notes_json || "[]"),
+      checks: JSON.parse(row.checks_json || "[]"),
+      syncResult: row.sync_result_json ? JSON.parse(row.sync_result_json) : null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+  listTasks(planId) {
+    const stmt = planId ? this.db.prepare("SELECT * FROM tasks WHERE plan_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM tasks ORDER BY created_at ASC");
+    const rows = planId ? stmt.all(planId) : stmt.all();
+    return rows.map((r) => {
+      const references = JSON.parse(r.references_json || "{}");
+      return {
+        id: r.id,
+        planId: r.plan_id,
+        phaseId: r.phase_id,
+        title: r.title,
+        status: r.status,
+        contextSlice: JSON.parse(r.context_slice_json || "{}"),
+        workingSet: JSON.parse(r.working_set_json || "{}"),
+        references,
+        rules: references.rules || [],
+        baseline: JSON.parse(r.baseline_json || "{}"),
+        notes: JSON.parse(r.notes_json || "[]"),
+        checks: JSON.parse(r.checks_json || "[]"),
+        syncResult: r.sync_result_json ? JSON.parse(r.sync_result_json) : null,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      };
+    });
+  }
+  // --- Block & ArtifactRefs ---
+  saveBlock(block) {
+    return this.transaction((db) => db._saveBlock(block));
+  }
+  _saveBlock(block) {
+    const refs = block.artifactRefs || block.artifact_refs || [];
+    if (!block.id || typeof block.id !== "string") {
+      throw new Error("Block requires a valid string id");
+    }
+    if (!block.title || typeof block.title !== "string") {
+      throw new Error(`Block '${block.id}' requires a title`);
+    }
+    if (!Array.isArray(refs) || refs.length === 0) {
+      throw new Error(`Ghost Block rejected: Block '${block.id}' must have at least one artifactRef`);
+    }
+    const normalizedRefs = refs.map((ref, index) => {
+      const anchorKind = ref?.anchorKind || ref?.anchor_kind || (ref?.symbol ? "symbol" : "file");
+      const hash = typeof ref?.hash === "string" ? ref.hash.trim() : "";
+      const symbol = typeof ref?.symbol === "string" ? ref.symbol.trim() : "";
+      const hashMode = ref?.hashMode || ref?.hash_mode || null;
+      const manifest = ref?.manifest || null;
+      if (!ref?.path || typeof ref.path !== "string" || !ref.path.trim()) {
+        throw new Error(`Block '${block.id}' artifactRef ${index} requires a valid path`);
+      }
+      if (path10.isAbsolute(ref.path)) {
+        throw new Error(`Block '${block.id}' artifactRef path must be relative: '${ref.path}'`);
+      }
+      if (!hash || hash === "untracked") {
+        throw new Error(`Block '${block.id}' artifactRef '${ref.path}' requires a verified hash`);
+      }
+      if (anchorKind === "symbol" && !symbol) {
+        throw new Error(`Block '${block.id}' symbol anchor '${ref.path}' requires a symbol`);
+      }
+      if (anchorKind === "tree" && hashMode === "manifest" && !manifest) {
+        throw new Error(`Block '${block.id}' manifest tree anchor '${ref.path}' requires a manifest path`);
+      }
+      return {
+        id: `${block.id}-ref-${index}`,
+        path: ref.path.trim(),
+        symbol: anchorKind === "tree" ? null : symbol || null,
+        anchorKind,
+        startLine: anchorKind === "tree" ? null : ref.startLine ?? ref.start_line ?? null,
+        endLine: anchorKind === "tree" ? null : ref.endLine ?? ref.end_line ?? null,
+        hash,
+        role: ref.role || "implementation",
+        hashMode,
+        manifest: anchorKind === "tree" ? manifest : null
+      };
+    });
+    const stmt = this.db.prepare(`
+      INSERT INTO blocks (
+        id, project_id, title, kind, summary, details, artifact_ref_count, history_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        kind = excluded.kind,
+        summary = excluded.summary,
+        details = excluded.details,
+        artifact_ref_count = excluded.artifact_ref_count,
+        history_json = excluded.history_json,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      block.id,
+      block.projectId || block.project_id || "contextos",
+      block.title,
+      block.kind ?? "",
+      block.summary || "",
+      block.details || "",
+      normalizedRefs.length,
+      JSON.stringify(block.history || []),
+      block.createdAt || block.created_at || (/* @__PURE__ */ new Date()).toISOString(),
+      block.updatedAt || block.updated_at || (/* @__PURE__ */ new Date()).toISOString()
+    );
+    const upsertRef = this.db.prepare(`
+      INSERT INTO artifact_refs (
+        id, block_id, path, symbol, anchor_kind, start_line, end_line, hash, role, hash_mode, manifest
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        block_id = excluded.block_id,
+        path = excluded.path,
+        symbol = excluded.symbol,
+        anchor_kind = excluded.anchor_kind,
+        start_line = excluded.start_line,
+        end_line = excluded.end_line,
+        hash = excluded.hash,
+        role = excluded.role,
+        hash_mode = excluded.hash_mode,
+        manifest = excluded.manifest
+    `);
+    const desiredRefIds = /* @__PURE__ */ new Set();
+    for (const ref of normalizedRefs) {
+      desiredRefIds.add(ref.id);
+      upsertRef.run(
+        ref.id,
+        block.id,
+        ref.path,
+        ref.symbol,
+        ref.anchorKind,
+        ref.startLine,
+        ref.endLine,
+        ref.hash,
+        ref.role,
+        ref.hashMode,
+        ref.manifest
+      );
+    }
+    const existingRefIds = this.db.prepare("SELECT id FROM artifact_refs WHERE block_id = ?").all(block.id).map((row) => row.id);
+    const deleteRef = this.db.prepare("DELETE FROM artifact_refs WHERE id = ?");
+    for (const refId of existingRefIds) {
+      if (!desiredRefIds.has(refId)) deleteRef.run(refId);
+    }
+  }
+  getBlock(blockId) {
+    const stmt = this.db.prepare("SELECT * FROM blocks WHERE id = ?");
+    const row = stmt.get(blockId);
+    if (!row) return null;
+    const refsStmt = this.db.prepare("SELECT * FROM artifact_refs WHERE block_id = ?");
+    const refs = refsStmt.all(blockId).map((r) => ({
+      path: r.path,
+      symbol: r.symbol,
+      anchorKind: r.anchor_kind || (r.symbol ? "symbol" : "file"),
+      startLine: r.start_line,
+      endLine: r.end_line,
+      hash: r.hash,
+      role: r.role,
+      hashMode: r.hash_mode || null,
+      manifest: r.manifest || null
+    }));
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      title: row.title,
+      kind: row.kind ?? "",
+      summary: row.summary,
+      details: row.details,
+      artifactRefs: refs,
+      history: JSON.parse(row.history_json || "[]"),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+  listBlocks(projectId) {
+    const stmt = projectId ? this.db.prepare("SELECT id FROM blocks WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT id FROM blocks ORDER BY created_at ASC");
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
+    return rows.map((r) => this.getBlock(r.id));
+  }
+  deleteBlock(blockId) {
+    this.transaction((self) => {
+      self.db.exec(`
+        DROP TRIGGER IF EXISTS artifact_refs_prevent_last_delete;
+        DROP TRIGGER IF EXISTS blocks_require_artifact_count_update;
+      `);
+      self.db.prepare("DELETE FROM links WHERE from_id = ? OR to_id = ?").run(blockId, blockId);
+      self.db.prepare("DELETE FROM artifact_refs WHERE block_id = ?").run(blockId);
+      self.db.prepare("DELETE FROM blocks WHERE id = ?").run(blockId);
+      const chains = self.listChains();
+      for (const c of chains) {
+        if (c.memberIds?.includes(blockId)) {
+          c.memberIds = c.memberIds.filter((m) => m !== blockId);
+          self.saveChain(c);
+        }
+      }
+      self._ensureBlockIntegrityTriggers();
+    });
+    return true;
+  }
+  // --- Chain ---
+  saveChain(chain) {
+    const stmt = this.db.prepare(`
+      INSERT INTO chains (
+        id, project_id, title, summary, kind, member_ids_json, metadata_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        summary = excluded.summary,
+        kind = excluded.kind,
+        member_ids_json = excluded.member_ids_json,
+        metadata_json = excluded.metadata_json,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      chain.id,
+      chain.projectId || chain.project_id || "contextos",
+      chain.title || chain.id,
+      chain.summary || "",
+      chain.kind || "leaf",
+      JSON.stringify(chain.memberIds || chain.member_ids || []),
+      JSON.stringify(chain.metadata || {}),
+      chain.createdAt || chain.created_at || (/* @__PURE__ */ new Date()).toISOString(),
+      chain.updatedAt || chain.updated_at || (/* @__PURE__ */ new Date()).toISOString()
+    );
+  }
+  getChain(chainId) {
+    const stmt = this.db.prepare("SELECT * FROM chains WHERE id = ?");
+    const row = stmt.get(chainId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      title: row.title,
+      summary: row.summary,
+      kind: row.kind,
+      memberIds: JSON.parse(row.member_ids_json || "[]"),
+      metadata: JSON.parse(row.metadata_json || "{}"),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+  listChains(projectId) {
+    const stmt = projectId ? this.db.prepare("SELECT * FROM chains WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM chains ORDER BY created_at ASC");
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
+    return rows.map((r) => ({
+      id: r.id,
+      projectId: r.project_id,
+      title: r.title,
+      summary: r.summary,
+      kind: r.kind,
+      memberIds: JSON.parse(r.member_ids_json || "[]"),
+      metadata: JSON.parse(r.metadata_json || "{}"),
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  }
+  deleteChain(chainId) {
+    const stmt = this.db.prepare("DELETE FROM chains WHERE id = ?");
+    stmt.run(chainId);
+    return true;
+  }
+  // --- Link ---
+  saveLink(link) {
+    const stmt = this.db.prepare(`
+      INSERT INTO links (
+        id, project_id, from_id, to_id, kind, provenance, confidence, reason, revision, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        from_id = excluded.from_id,
+        to_id = excluded.to_id,
+        kind = excluded.kind,
+        provenance = excluded.provenance,
+        confidence = excluded.confidence,
+        reason = excluded.reason,
+        revision = excluded.revision,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      link.id || `${link.from || link.source_id}->${link.to || link.target_id}`,
+      link.projectId || link.project_id || "contextos",
+      link.from || link.from_id || link.source_id || link.sourceId,
+      link.to || link.to_id || link.target_id || link.targetId,
+      link.kind || link.link_type || link.linkType || "depends_on",
+      link.provenance || "authored",
+      link.confidence !== void 0 ? link.confidence : 1,
+      link.reason || "",
+      link.revision || 1,
+      link.createdAt || link.created_at || (/* @__PURE__ */ new Date()).toISOString(),
+      link.updatedAt || link.updated_at || (/* @__PURE__ */ new Date()).toISOString()
+    );
+  }
+  listLinks(projectId) {
+    const stmt = projectId ? this.db.prepare("SELECT * FROM links WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT * FROM links ORDER BY created_at ASC");
+    const rows = projectId ? stmt.all(projectId) : stmt.all();
+    return rows.map((r) => ({
+      id: r.id,
+      projectId: r.project_id,
+      from: r.from_id,
+      to: r.to_id,
+      kind: r.kind,
+      provenance: r.provenance,
+      confidence: r.confidence,
+      reason: r.reason,
+      revision: r.revision,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }));
+  }
+  getLink(linkId) {
+    const row = this.db.prepare("SELECT * FROM links WHERE id = ?").get(linkId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      from: row.from_id,
+      to: row.to_id,
+      kind: row.kind,
+      provenance: row.provenance,
+      confidence: row.confidence,
+      reason: row.reason,
+      revision: row.revision,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+  deleteLink(linkId) {
+    const stmt = this.db.prepare("DELETE FROM links WHERE id = ?");
+    stmt.run(linkId);
+    return true;
+  }
+  deleteLinkBetween(fromId, toId) {
+    const stmt = this.db.prepare("DELETE FROM links WHERE (from_id = ? AND to_id = ?) OR (id = ?)");
+    stmt.run(fromId, toId, `${fromId}->${toId}`);
+    return true;
+  }
+  // --- Command Receipts ---
+  saveCommandReceipt(receipt) {
+    const stmt = this.db.prepare(`
+      INSERT INTO command_receipts (
+        id, command, cwd, exit_code, duration_ms, summary, errors_json, warnings_json, changed_paths_json, log_handle, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        command = excluded.command,
+        cwd = excluded.cwd,
+        exit_code = excluded.exit_code,
+        duration_ms = excluded.duration_ms,
+        summary = excluded.summary,
+        errors_json = excluded.errors_json,
+        warnings_json = excluded.warnings_json,
+        changed_paths_json = excluded.changed_paths_json,
+        log_handle = excluded.log_handle
+    `);
+    stmt.run(
+      receipt.id,
+      receipt.command,
+      receipt.cwd || process.cwd(),
+      receipt.exitCode,
+      receipt.durationMs || 0,
+      receipt.summary || "",
+      JSON.stringify(receipt.errors || []),
+      JSON.stringify(receipt.warnings || []),
+      JSON.stringify(receipt.changedPaths || []),
+      receipt.logHandle || null,
+      receipt.createdAt || (/* @__PURE__ */ new Date()).toISOString()
+    );
+  }
+  getCommandReceipt(receiptId) {
+    const stmt = this.db.prepare("SELECT * FROM command_receipts WHERE id = ?");
+    const row = stmt.get(receiptId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      command: row.command,
+      cwd: row.cwd,
+      exitCode: row.exit_code,
+      durationMs: row.duration_ms,
+      summary: row.summary,
+      errors: JSON.parse(row.errors_json || "[]"),
+      warnings: JSON.parse(row.warnings_json || "[]"),
+      changedPaths: JSON.parse(row.changed_paths_json || "[]"),
+      logHandle: row.log_handle,
+      createdAt: row.created_at
+    };
+  }
+};
+
+// packages/storage/src/sync-engine.mjs
+import crypto4 from "node:crypto";
+import fs11 from "node:fs";
+import path11 from "node:path";
+function calculateSha256(text) {
+  return crypto4.createHash("sha256").update(text, "utf8").digest("hex");
+}
+var SyncEngine = class {
+  constructor(db) {
+    this.db = db;
+  }
+  _lastExportedHash(projectId) {
+    return this.db.getSyncState(`last_exported_hash:${projectId}`) || this.db.getSyncState("last_exported_hash");
+  }
+  /**
+   * graph.json is the versioned artifact (it rides in git). If someone rewrote
+   * it after our last export (git checkout / revert / pull), that copy wins even
+   * when its revision is older: the code was reverted, so the OS rolls back too.
+   */
+  graphEditedExternally(projectId, projectRoot) {
+    const targetFile = path11.join(projectRoot, ".contextos", "graph.json");
+    if (!fs11.existsSync(targetFile)) return false;
+    const lastHash = this._lastExportedHash(projectId);
+    if (!lastHash) return true;
+    return calculateSha256(fs11.readFileSync(targetFile, "utf8")) !== lastHash;
+  }
+  _buildGraph(projectId, graphRevision) {
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project ${projectId} not found in database`);
+    const plans = this.db.listPlans(projectId).sort((a, b) => a.id.localeCompare(b.id));
+    const planIds = new Set(plans.map((plan) => plan.id));
+    const tasks = this.db.listTasks().filter((task) => planIds.has(task.planId)).map((task) => ({
+      id: task.id,
+      planId: task.planId,
+      phaseId: task.phaseId,
+      title: task.title,
+      status: task.status,
+      contextSlice: {
+        objective: task.contextSlice?.objective || "",
+        constraints: task.contextSlice?.constraints || [],
+        references: task.contextSlice?.references || [],
+        nextSteps: task.contextSlice?.nextSteps || [],
+        openQuestions: task.contextSlice?.openQuestions || []
+      },
+      workingSet: task.workingSet || {},
+      references: task.references || {},
+      rules: task.rules || task.references?.rules || [],
+      notes: task.notes || [],
+      checks: task.checks || [],
+      syncResult: task.syncResult || null,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    })).sort((a, b) => a.id.localeCompare(b.id));
+    const blocks = this.db.listBlocks(projectId).sort((a, b) => a.id.localeCompare(b.id));
+    const chains = this.db.listChains(projectId).sort((a, b) => a.id.localeCompare(b.id));
+    const links = this.db.listLinks(projectId).sort((a, b) => a.id.localeCompare(b.id));
+    const graph = {
+      schemaVersion: 3,
+      projectId,
+      graphRevision,
+      exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      data: {
+        plans,
+        tasks,
+        blocks,
+        chains,
+        links
+      }
+    };
+    const jsonText = JSON.stringify(graph, null, 2) + "\n";
+    return {
+      project,
+      graph,
+      jsonText,
+      sha256: calculateSha256(jsonText)
+    };
+  }
+  _writeGraphFile(projectRoot, jsonText) {
+    const targetDir = path11.join(projectRoot, ".contextos");
+    fs11.mkdirSync(targetDir, { recursive: true });
+    const targetFile = path11.join(targetDir, "graph.json");
+    const tempFile = path11.join(targetDir, `graph.json.tmp.${process.pid}.${Date.now()}`);
+    let fd = null;
+    try {
+      fd = fs11.openSync(tempFile, "w");
+      fs11.writeFileSync(fd, jsonText, "utf8");
+      fs11.fsyncSync(fd);
+      fs11.closeSync(fd);
+      fd = null;
+      fs11.renameSync(tempFile, targetFile);
+      return targetFile;
+    } catch (err2) {
+      if (fd !== null) {
+        try {
+          fs11.closeSync(fd);
+        } catch (_) {
+        }
+      }
+      try {
+        fs11.rmSync(tempFile, { force: true });
+      } catch (_) {
+      }
+      throw err2;
+    }
+  }
+  flushGraphOutbox(projectId, projectRoot) {
+    const outbox = this.db.getGraphOutbox(projectId);
+    if (!outbox) return null;
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project ${projectId} not found in database`);
+    if ((project.graph_revision || 0) !== outbox.baseRevision) {
+      if ((project.graph_revision || 0) >= outbox.targetRevision) {
+        this.db.deleteGraphOutbox(projectId);
+        return {
+          graphRevision: project.graph_revision,
+          sha256: this._lastExportedHash(projectId),
+          targetFile: path11.join(projectRoot, ".contextos", "graph.json")
+        };
+      }
+      throw new Error(
+        `Graph export revision conflict for '${projectId}': database=${project.graph_revision}, base=${outbox.baseRevision}`
+      );
+    }
+    const lastHash = this._lastExportedHash(projectId);
+    if (lastHash && outbox.payloadHash === lastHash) {
+      this.db.deleteGraphOutbox(projectId);
+      return {
+        changed: false,
+        reason: "Payload identical to last export",
+        graphRevision: project.graph_revision,
+        sha256: lastHash,
+        targetFile: path11.join(projectRoot, ".contextos", "graph.json")
+      };
+    }
+    const targetFile = this._writeGraphFile(projectRoot, outbox.payloadJson);
+    const actualSha256 = calculateSha256(fs11.readFileSync(targetFile, "utf8"));
+    if (actualSha256 !== outbox.payloadHash) {
+      throw new Error(`Graph export hash verification failed for '${projectId}'`);
+    }
+    this.db.setGraphExported(projectId, outbox.targetRevision, outbox.payloadHash);
+    return {
+      graphRevision: outbox.targetRevision,
+      sha256: outbox.payloadHash,
+      targetFile
+    };
+  }
+  recoverGraphOutbox(projectId, projectRoot) {
+    const result = this.flushGraphOutbox(projectId, projectRoot);
+    return result ? { recovered: true, ...result } : { recovered: false };
+  }
+  queueGraphToJson(projectId) {
+    const project = this.db.getProject(projectId);
+    if (!project) throw new Error(`Project ${projectId} not found in database`);
+    const targetRevision = (project.graph_revision || 0) + 1;
+    const payload = this._buildGraph(projectId, targetRevision);
+    return this.db.saveGraphOutbox({
+      projectId,
+      baseRevision: project.graph_revision || 0,
+      targetRevision,
+      payloadHash: payload.sha256,
+      payloadJson: payload.jsonText
+    });
+  }
+  exportGraphToJson(projectId, projectRoot) {
+    this.flushGraphOutbox(projectId, projectRoot);
+    this.queueGraphToJson(projectId);
+    return this.flushGraphOutbox(projectId, projectRoot);
+  }
+  /**
+   * The one and only publisher: SQLite marks the project dirty through
+   * triggers, callers just give it a moment to run (end of a dispatch, end of
+   * a daemon message). Nothing else has to remember to export.
+   */
+  publishIfDirty(projectId, projectRoot) {
+    if (!this.db.isGraphDirty(projectId)) return { changed: false, reason: "clean" };
+    this.queueGraphToJson(projectId);
+    const result = this.flushGraphOutbox(projectId, projectRoot);
+    this.db.clearGraphDirty(projectId);
+    return result || { changed: false, reason: "no outbox" };
+  }
+  importGraphFromJson(jsonText, projectRoot) {
+    let graph;
+    try {
+      graph = JSON.parse(jsonText);
+    } catch (err2) {
+      throw new Error(`Invalid JSON syntax in graph: ${err2.message}`);
+    }
+    const projectId = graph.projectId || graph.project?.id || graph.id || "contextos";
+    const graphRevision = graph.graphRevision || graph.project?.graphRevision || 0;
+    const sha256 = calculateSha256(jsonText);
+    const data = graph.data || {};
+    let blocks = data.blocks || [];
+    if (graph.schemaVersion === 1 && Array.isArray(data.source_refs)) {
+      const refsByBlock = /* @__PURE__ */ new Map();
+      for (const ref of data.source_refs) {
+        const bId = ref.block_id || ref.blockId;
+        if (!refsByBlock.has(bId)) refsByBlock.set(bId, []);
+        refsByBlock.get(bId).push({
+          path: ref.path,
+          symbol: ref.symbol,
+          startLine: ref.start_line ?? ref.startLine,
+          endLine: ref.end_line ?? ref.endLine,
+          hash: ref.hash || "",
+          role: ref.role || "implementation"
+        });
+      }
+      blocks = blocks.map((b) => {
+        const refs = b.artifactRefs || refsByBlock.get(b.id);
+        if (!Array.isArray(refs) || refs.length === 0) {
+          throw new Error(`Ghost Block rejected during graph import: Block '${b.id}' has no artifactRefs.`);
+        }
+        return { ...b, artifactRefs: refs };
+      });
+    }
+    this.db.transaction((db) => {
+      db.ensureProject(projectId, projectRoot);
+      db.setGraphRevision(projectId, graphRevision);
+      db.db.prepare("DELETE FROM plans WHERE project_id = ?").run(projectId);
+      db.db.prepare("DELETE FROM blocks WHERE project_id = ?").run(projectId);
+      db.db.prepare("DELETE FROM chains WHERE project_id = ?").run(projectId);
+      db.db.prepare("DELETE FROM links WHERE project_id = ?").run(projectId);
+      const plans = data.plans || [];
+      const planIds = new Set(plans.map((plan) => plan.id));
+      for (const plan of plans) {
+        db.savePlan({ ...plan, projectId });
+      }
+      for (const task of data.tasks || []) {
+        const planId = task.planId || task.plan_id;
+        if (!planIds.has(planId)) continue;
+        db.saveTask({ ...task, planId, phaseId: task.phaseId || task.phase_id || "P0" });
+      }
+      for (const block of blocks) {
+        db.saveBlock({ ...block, projectId });
+      }
+      for (const chain of data.chains || []) {
+        db.saveChain({ ...chain, projectId });
+      }
+      for (const link of data.links || []) {
+        db.saveLink({ ...link, projectId });
+      }
+      db.setGraphExported(projectId, graphRevision, sha256);
+    });
+    return {
+      projectId,
+      graphRevision,
+      sha256
+    };
+  }
+  reconcileExternalChange(projectId, projectRoot) {
+    this.recoverGraphOutbox(projectId, projectRoot);
+    const targetFile = path11.join(projectRoot, ".contextos", "graph.json");
+    if (!fs11.existsSync(targetFile)) {
+      return { changed: false, reason: "File does not exist" };
+    }
+    const jsonText = fs11.readFileSync(targetFile, "utf8");
+    const currentSha256 = calculateSha256(jsonText);
+    const lastHash = this._lastExportedHash(projectId);
+    if (currentSha256 === lastHash) {
+      return { changed: false, reason: "Hash identical to last export" };
+    }
+    let graph;
+    try {
+      graph = JSON.parse(jsonText);
+    } catch (err2) {
+      throw new Error(`Invalid JSON syntax in graph: ${err2.message}`);
+    }
+    const project = this.db.getProject(projectId);
+    const currentRevision = project?.graph_revision || 0;
+    const incomingRevision = graph.graphRevision || graph.project?.graphRevision || 0;
+    const externallyEdited = this.graphEditedExternally(projectId, projectRoot);
+    if (incomingRevision === currentRevision && !externallyEdited) {
+      return {
+        changed: false,
+        conflict: true,
+        reason: `Graph revision ${incomingRevision} diverged without a newer revision`,
+        graphRevision: incomingRevision,
+        databaseRevision: currentRevision
+      };
+    }
+    if (incomingRevision < currentRevision && !externallyEdited) {
+      return {
+        changed: false,
+        conflict: true,
+        reason: `Refusing stale graph rollback: graph revision ${incomingRevision} is older than database revision ${currentRevision}`,
+        graphRevision: incomingRevision,
+        databaseRevision: currentRevision
+      };
+    }
+    const importResult = this.importGraphFromJson(jsonText, projectRoot);
+    return {
+      changed: true,
+      revision: importResult.graphRevision,
+      sha256: currentSha256,
+      rolledBack: incomingRevision < currentRevision
+    };
+  }
+};
+
+// packages/storage/src/project-lock.mjs
 import crypto5 from "node:crypto";
-import fs7 from "node:fs";
-import path7 from "node:path";
+import fs12 from "node:fs";
+import path12 from "node:path";
+var LOCK_DIR_NAME = "project.lock";
+function lockPath(projectRoot) {
+  return path12.join(path12.resolve(projectRoot), ".contextos", LOCK_DIR_NAME);
+}
+function readOwner(lockDir) {
+  try {
+    return JSON.parse(fs12.readFileSync(path12.join(lockDir, "owner.json"), "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err2) {
+    return err2.code === "EPERM";
+  }
+}
+function isStale(lockDir, owner, staleMs) {
+  const createdAt = owner?.createdAt ? Date.parse(owner.createdAt) : NaN;
+  let stat = null;
+  try {
+    stat = fs12.statSync(lockDir);
+  } catch (_) {
+    return true;
+  }
+  const timestamp = Number.isFinite(createdAt) ? createdAt : stat?.mtimeMs || 0;
+  if (!timestamp || Date.now() - timestamp <= staleMs) return false;
+  if (owner?.pid && processIsAlive(owner.pid)) return false;
+  return true;
+}
+function removeLockDirectory(lockDir) {
+  try {
+    fs12.rmSync(lockDir, { recursive: true, force: true });
+  } catch (_) {
+  }
+}
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+function inspectProjectWriteLock(projectRoot) {
+  const lockDir = lockPath(projectRoot);
+  if (!fs12.existsSync(lockDir)) return null;
+  const owner = readOwner(lockDir);
+  let stat;
+  try {
+    stat = fs12.statSync(lockDir);
+  } catch (_) {
+    return null;
+  }
+  return {
+    path: lockDir,
+    owner,
+    ageMs: Date.now() - stat.mtimeMs,
+    alive: owner?.pid ? processIsAlive(owner.pid) : false
+  };
+}
+async function withProjectWriteLock(projectRoot, callback, { timeoutMs = 15e3, staleMs = 6e4, label = "write" } = {}) {
+  const absoluteRoot = path12.resolve(projectRoot);
+  const lockDir = lockPath(absoluteRoot);
+  const token = crypto5.randomBytes(12).toString("hex");
+  const startedAt = Date.now();
+  const owner = {
+    token,
+    pid: process.pid,
+    label,
+    projectRoot: absoluteRoot,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  fs12.mkdirSync(path12.dirname(lockDir), { recursive: true });
+  while (true) {
+    try {
+      fs12.mkdirSync(lockDir);
+      fs12.writeFileSync(path12.join(lockDir, "owner.json"), JSON.stringify(owner, null, 2) + "\n", "utf8");
+      break;
+    } catch (err2) {
+      if (err2.code !== "EEXIST") throw err2;
+      const currentOwner = readOwner(lockDir);
+      if (isStale(lockDir, currentOwner, staleMs)) {
+        const staleDir = `${lockDir}.stale-${token}-${Date.now()}`;
+        try {
+          fs12.renameSync(lockDir, staleDir);
+          removeLockDirectory(staleDir);
+          continue;
+        } catch (_) {
+        }
+      }
+      if (Date.now() - startedAt >= timeoutMs) {
+        const holder = currentOwner ? `pid=${currentOwner.pid || "unknown"} label=${currentOwner.label || "unknown"}` : "unknown holder";
+        throw new Error(`Project write lock timeout in ${label}: ${holder}`);
+      }
+      await sleep(40);
+    }
+  }
+  const release = () => {
+    const currentOwner = readOwner(lockDir);
+    if (currentOwner?.token !== token) return;
+    const releasedDir = `${lockDir}.released-${token}`;
+    try {
+      fs12.renameSync(lockDir, releasedDir);
+      removeLockDirectory(releasedDir);
+    } catch (_) {
+      removeLockDirectory(lockDir);
+    }
+  };
+  try {
+    return await callback();
+  } finally {
+    release();
+  }
+}
+
+// packages/domain/src/plan.mjs
+var PLAN_PRIORITIES = ["critical", "high", "normal", "low"];
+var PLAN_STATUSES = ["draft", "active", "completed", "archived"];
+var PHASE_STATUSES = ["pending", "active", "completed"];
+var CHECKPOINT_STATUSES = ["pending", "passed", "failed", "stale"];
+var PlanCheckpoint = class {
+  constructor({
+    id,
+    planId,
+    phaseId = null,
+    title,
+    criteria = "",
+    status = "pending",
+    evidenceRefs = [],
+    completedAt = null
+  }) {
+    if (!id || typeof id !== "string") throw new Error("PlanCheckpoint requires a valid string id");
+    if (!planId || typeof planId !== "string") throw new Error("PlanCheckpoint requires planId");
+    if (!title || typeof title !== "string") throw new Error("PlanCheckpoint requires title");
+    if (!CHECKPOINT_STATUSES.includes(status)) {
+      throw new Error(`Invalid checkpoint status: ${status}. Must be one of ${CHECKPOINT_STATUSES.join(", ")}`);
+    }
+    this.id = id;
+    this.planId = planId;
+    this.phaseId = phaseId;
+    this.title = title;
+    this.criteria = criteria;
+    this.status = status;
+    this.evidenceRefs = Array.isArray(evidenceRefs) ? [...evidenceRefs] : [];
+    this.completedAt = completedAt;
+  }
+  pass(evidenceRef) {
+    if (evidenceRef) this.evidenceRefs.push(evidenceRef);
+    this.status = "passed";
+    this.completedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  fail(reason) {
+    this.status = "failed";
+    this.criteria = reason ? `${this.criteria}
+Failure: ${reason}`.trim() : this.criteria;
+  }
+  markStale() {
+    this.status = "stale";
+  }
+  toJSON() {
+    return {
+      id: this.id,
+      planId: this.planId,
+      phaseId: this.phaseId,
+      title: this.title,
+      criteria: this.criteria,
+      status: this.status,
+      evidenceRefs: this.evidenceRefs,
+      completedAt: this.completedAt
+    };
+  }
+};
+var Phase = class {
+  constructor({
+    id,
+    order = 0,
+    objective = "",
+    scope = "",
+    deliverables = [],
+    status = "pending",
+    taskIds = [],
+    acceptance = []
+  }) {
+    if (!id || typeof id !== "string") throw new Error("Phase requires a valid string id (e.g. P0, P1)");
+    if (!PHASE_STATUSES.includes(status)) {
+      throw new Error(`Invalid phase status: ${status}. Must be one of ${PHASE_STATUSES.join(", ")}`);
+    }
+    this.id = id;
+    this.order = order;
+    this.objective = objective;
+    this.scope = scope;
+    this.deliverables = Array.isArray(deliverables) ? [...deliverables] : [];
+    this.status = status;
+    this.taskIds = Array.isArray(taskIds) ? [...taskIds] : [];
+    this.acceptance = Array.isArray(acceptance) ? [...acceptance] : [];
+  }
+  activate() {
+    this.status = "active";
+  }
+  complete() {
+    this.status = "completed";
+  }
+  toJSON() {
+    return {
+      id: this.id,
+      order: this.order,
+      objective: this.objective,
+      scope: this.scope,
+      deliverables: this.deliverables,
+      status: this.status,
+      taskIds: this.taskIds,
+      acceptance: this.acceptance
+    };
+  }
+};
+var Plan = class {
+  constructor({
+    id,
+    projectId,
+    title,
+    priority = "normal",
+    status = "active",
+    summary = "",
+    phases = [],
+    ruleRefs = [],
+    decisionRefs = [],
+    dependencyRefs = [],
+    checkpoints = [],
+    completedSummary = null,
+    historyRef = null,
+    createdAt = (/* @__PURE__ */ new Date()).toISOString(),
+    updatedAt = (/* @__PURE__ */ new Date()).toISOString()
+  }) {
+    if (!id || typeof id !== "string") throw new Error("Plan requires a valid string id");
+    if (!projectId || typeof projectId !== "string") throw new Error("Plan requires projectId");
+    if (!title || typeof title !== "string") throw new Error("Plan requires title");
+    if (!PLAN_PRIORITIES.includes(priority)) {
+      throw new Error(`Invalid plan priority: ${priority}. Must be one of ${PLAN_PRIORITIES.join(", ")}`);
+    }
+    if (!PLAN_STATUSES.includes(status)) {
+      throw new Error(`Invalid plan status: ${status}. Must be one of ${PLAN_STATUSES.join(", ")}`);
+    }
+    this.id = id;
+    this.projectId = projectId;
+    this.title = title;
+    this.priority = priority;
+    this.status = status;
+    this.summary = summary;
+    this.phases = phases.map((p) => p instanceof Phase ? p : new Phase(p));
+    this.ruleRefs = Array.isArray(ruleRefs) ? [...ruleRefs] : [];
+    this.decisionRefs = Array.isArray(decisionRefs) ? [...decisionRefs] : [];
+    this.dependencyRefs = Array.isArray(dependencyRefs) ? [...dependencyRefs] : [];
+    this.checkpoints = checkpoints.map((c) => c instanceof PlanCheckpoint ? c : new PlanCheckpoint({ ...c, planId: id }));
+    this.completedSummary = completedSummary;
+    this.historyRef = historyRef;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+  addPhase(phaseData) {
+    const phase = phaseData instanceof Phase ? phaseData : new Phase(phaseData);
+    if (this.phases.some((p) => p.id === phase.id)) {
+      throw new Error(`Phase ${phase.id} already exists in plan ${this.id}`);
+    }
+    this.phases.push(phase);
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return phase;
+  }
+  getPhase(phaseId) {
+    return this.phases.find((p) => p.id === phaseId) || null;
+  }
+  addCheckpoint(checkpointData) {
+    const cp = checkpointData instanceof PlanCheckpoint ? checkpointData : new PlanCheckpoint({ ...checkpointData, planId: this.id });
+    if (this.checkpoints.some((c) => c.id === cp.id)) {
+      throw new Error(`Checkpoint ${cp.id} already exists in plan ${this.id}`);
+    }
+    this.checkpoints.push(cp);
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return cp;
+  }
+  canComplete() {
+    if (this.checkpoints.length === 0) return true;
+    return this.checkpoints.every((cp) => cp.status === "passed");
+  }
+  complete({ completedSummary, historyRef = null }) {
+    if (!this.canComplete()) {
+      const pending = this.checkpoints.filter((cp) => cp.status !== "passed").map((cp) => cp.id);
+      throw new Error(`Cannot complete Plan ${this.id}: checkpoints not passed: ${pending.join(", ")}`);
+    }
+    this.status = "completed";
+    for (const phase of this.phases) {
+      phase.complete();
+    }
+    this.completedSummary = completedSummary || this.summary;
+    this.historyRef = historyRef;
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  toJSON() {
+    return {
+      id: this.id,
+      projectId: this.projectId,
+      title: this.title,
+      priority: this.priority,
+      status: this.status,
+      summary: this.summary,
+      phases: this.phases.map((p) => p.toJSON()),
+      ruleRefs: this.ruleRefs,
+      decisionRefs: this.decisionRefs,
+      dependencyRefs: this.dependencyRefs,
+      checkpoints: this.checkpoints.map((c) => c.toJSON()),
+      completedSummary: this.completedSummary,
+      historyRef: this.historyRef,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt
+    };
+  }
+};
+
+// packages/domain/src/task.mjs
+var TASK_STATUSES = [
+  "draft",
+  "active",
+  "checking",
+  "syncing",
+  "completed",
+  "blocked",
+  "sync_failed"
+];
+var Task = class {
+  constructor({
+    id,
+    planId,
+    phaseId,
+    title,
+    status = "draft",
+    contextSlice = {},
+    workingSet = {},
+    references = {},
+    rules = null,
+    ruleRefs = null,
+    baseline = {},
+    notes = [],
+    checks = [],
+    syncResult = null,
+    createdAt = (/* @__PURE__ */ new Date()).toISOString(),
+    updatedAt = (/* @__PURE__ */ new Date()).toISOString()
+  }) {
+    if (!id || typeof id !== "string") throw new Error("Task requires a valid string id");
+    if (!planId || typeof planId !== "string") throw new Error("Task requires planId");
+    if (!phaseId || typeof phaseId !== "string") throw new Error("Task requires phaseId");
+    if (!title || typeof title !== "string") throw new Error("Task requires title");
+    if (!TASK_STATUSES.includes(status)) {
+      throw new Error(`Invalid task status: ${status}. Must be one of ${TASK_STATUSES.join(", ")}`);
+    }
+    this.id = id;
+    this.planId = planId;
+    this.phaseId = phaseId;
+    this.title = title;
+    this.status = status;
+    this.contextSlice = {
+      objective: contextSlice.objective || "",
+      constraints: Array.isArray(contextSlice.constraints) ? [...contextSlice.constraints] : [],
+      references: contextSlice.references || {},
+      locators: Array.isArray(contextSlice.locators) ? [...contextSlice.locators] : [],
+      nextSteps: Array.isArray(contextSlice.nextSteps) ? [...contextSlice.nextSteps] : [],
+      openQuestions: Array.isArray(contextSlice.openQuestions) ? [...contextSlice.openQuestions] : []
+    };
+    const normalizedWorkingSet = Array.isArray(workingSet) ? { files: workingSet } : workingSet || {};
+    this.workingSet = {
+      files: Array.isArray(normalizedWorkingSet.files) ? [...normalizedWorkingSet.files] : [],
+      symbols: Array.isArray(normalizedWorkingSet.symbols) ? [...normalizedWorkingSet.symbols] : [],
+      candidateBlockIds: Array.isArray(normalizedWorkingSet.candidateBlockIds) ? [...normalizedWorkingSet.candidateBlockIds] : [],
+      scopeDirs: Array.isArray(normalizedWorkingSet.scopeDirs) ? [...normalizedWorkingSet.scopeDirs] : []
+    };
+    const initialRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references?.rules) ? references.rules : [];
+    this.references = {
+      rules: [...new Set(initialRules.filter((r) => typeof r === "string" && r.trim()))],
+      decisionSections: Array.isArray(references?.decisionSections) ? [...references.decisionSections] : [],
+      blockIds: Array.isArray(references?.blockIds) ? [...references.blockIds] : []
+    };
+    this.baseline = {
+      gitHead: baseline.gitHead || null,
+      dirtyHash: baseline.dirtyHash || null,
+      indexRevision: baseline.indexRevision || 0,
+      fileSnapshots: baseline.fileSnapshots ? { ...baseline.fileSnapshots } : {},
+      initializedAt: baseline.initializedAt || null
+    };
+    this.notes = Array.isArray(notes) ? [...notes] : [];
+    this.checks = Array.isArray(checks) ? [...checks] : [];
+    this.syncResult = syncResult;
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+  activate() {
+    if (this.status !== "draft" && this.status !== "blocked") {
+      throw new Error(`Cannot activate task in ${this.status} state`);
+    }
+    this.status = "active";
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  addNote({ text, kind = "journal" }) {
+    if (!text || typeof text !== "string") throw new Error("Note text is required");
+    const note = {
+      id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      text,
+      kind,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    this.notes.push(note);
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return note;
+  }
+  addFileToWorkingSet(filePath) {
+    if (filePath && !this.workingSet.files.includes(filePath)) {
+      this.workingSet.files.push(filePath);
+      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
+  addCheck({ receiptId = null, description, passed = true, evidence = "" }) {
+    if (!description || typeof description !== "string") {
+      throw new Error("Check description is required");
+    }
+    const check = {
+      id: `check-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      receiptId,
+      description,
+      passed: Boolean(passed),
+      evidence,
+      recordedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    this.checks.push(check);
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return check;
+  }
+  startChecking() {
+    if (this.status !== "active" && this.status !== "sync_failed") {
+      throw new Error(`Cannot transition to checking from state: ${this.status}`);
+    }
+    this.status = "checking";
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  startSyncing() {
+    if (this.status === "active") {
+      this.status = "checking";
+    }
+    if (this.status !== "checking") {
+      throw new Error(`Cannot transition to syncing from state: ${this.status}. Must be active or checking.`);
+    }
+    const verifiedChecks = this.checks.filter(
+      (check) => check.passed && (check.receiptId || String(check.evidence || "").trim())
+    );
+    if (verifiedChecks.length === 0) {
+      throw new Error("Cannot sync task without at least one passing check backed by a receipt or evidence.");
+    }
+    const failedChecks = this.checks.filter((c) => !c.passed);
+    if (failedChecks.length > 0) {
+      throw new Error(`Cannot sync task with ${failedChecks.length} failed checks`);
+    }
+    this.status = "syncing";
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  completeSync(syncResult) {
+    if (this.status !== "syncing") {
+      throw new Error(`Cannot complete sync from state: ${this.status}. Must be syncing.`);
+    }
+    this.status = "completed";
+    this.syncResult = {
+      ...syncResult,
+      completedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  failSync(reason) {
+    if (this.status !== "checking" && this.status !== "syncing") {
+      throw new Error(`Cannot fail sync from state: ${this.status}. Must be checking or syncing.`);
+    }
+    this.status = "sync_failed";
+    this.syncResult = {
+      error: reason,
+      failedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  block(reason) {
+    if (this.status === "completed") {
+      throw new Error("Cannot block a completed task");
+    }
+    this.status = "blocked";
+    this.addNote({ text: `Task blocked: ${reason}`, kind: "blocked" });
+  }
+  resume() {
+    if (this.status !== "blocked" && this.status !== "sync_failed") {
+      throw new Error(`Cannot resume task from state: ${this.status}`);
+    }
+    this.status = "active";
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  get rules() {
+    return this.references.rules;
+  }
+  set rules(newRules) {
+    this.references.rules = Array.isArray(newRules) ? [...new Set(newRules.filter((r) => typeof r === "string" && r.trim()))] : [];
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  bindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== "string") return;
+    const clean = ruleId.trim();
+    if (clean && !this.references.rules.includes(clean)) {
+      this.references.rules.push(clean);
+      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
+  unbindRule(ruleId) {
+    if (!ruleId || typeof ruleId !== "string") return;
+    const clean = ruleId.trim();
+    const idx = this.references.rules.indexOf(clean);
+    if (idx !== -1) {
+      this.references.rules.splice(idx, 1);
+      this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+  }
+  setRules(rules) {
+    this.rules = rules;
+  }
+  toJSON() {
+    return {
+      id: this.id,
+      planId: this.planId,
+      phaseId: this.phaseId,
+      title: this.title,
+      status: this.status,
+      contextSlice: this.contextSlice,
+      workingSet: this.workingSet,
+      references: this.references,
+      rules: this.references.rules,
+      baseline: this.baseline,
+      notes: this.notes,
+      checks: this.checks,
+      syncResult: this.syncResult,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt
+    };
+  }
+};
+
+// packages/domain/src/block.mjs
+var ArtifactRef = class {
+  constructor({
+    path: path27,
+    symbol = null,
+    anchorKind = symbol ? "symbol" : "file",
+    startLine = null,
+    endLine = null,
+    hash = "",
+    role = "implementation",
+    hashMode = null,
+    manifest = null
+  }) {
+    if (!path27 || typeof path27 !== "string") throw new Error("ArtifactRef requires a valid string path");
+    if (!["symbol", "file", "tree"].includes(anchorKind)) {
+      throw new Error(`ArtifactRef requires a valid anchorKind, received '${anchorKind}'`);
+    }
+    const resolvedHashMode = anchorKind === "tree" ? hashMode || (manifest ? "manifest" : "content") : null;
+    if (resolvedHashMode && !["content", "manifest"].includes(resolvedHashMode)) {
+      throw new Error(`ArtifactRef requires a valid tree hashMode, received '${resolvedHashMode}'`);
+    }
+    if (anchorKind === "tree" && resolvedHashMode === "manifest" && !manifest) {
+      throw new Error("ArtifactRef tree manifest anchors require a manifest path");
+    }
+    this.path = path27;
+    this.symbol = anchorKind === "tree" ? null : symbol;
+    this.anchorKind = anchorKind;
+    this.startLine = anchorKind === "tree" || startLine === null ? null : Number(startLine);
+    this.endLine = anchorKind === "tree" || endLine === null ? null : Number(endLine);
+    this.hash = hash;
+    this.role = role;
+    this.hashMode = resolvedHashMode;
+    this.manifest = anchorKind === "tree" ? manifest : null;
+  }
+  toJSON() {
+    return {
+      path: this.path,
+      symbol: this.symbol,
+      anchorKind: this.anchorKind,
+      startLine: this.startLine,
+      endLine: this.endLine,
+      hash: this.hash,
+      role: this.role,
+      hashMode: this.hashMode,
+      manifest: this.manifest
+    };
+  }
+};
+var Block = class {
+  constructor({
+    id,
+    projectId,
+    title,
+    kind = "service",
+    summary = "",
+    details = "",
+    artifactRefs = [],
+    history = [],
+    createdAt = (/* @__PURE__ */ new Date()).toISOString(),
+    updatedAt = (/* @__PURE__ */ new Date()).toISOString()
+  }) {
+    if (!id || typeof id !== "string") throw new Error("Block requires a valid string id");
+    if (!projectId || typeof projectId !== "string") throw new Error("Block requires projectId");
+    if (!title || typeof title !== "string") throw new Error("Block requires title");
+    if (!Array.isArray(artifactRefs) || artifactRefs.length === 0) {
+      throw new Error(
+        `Ghost Block rejected: Block '${id}' must have at least one valid artifactRef pointing to real code.`
+      );
+    }
+    this.id = id;
+    this.projectId = projectId;
+    this.title = title;
+    this.kind = kind;
+    this.summary = summary;
+    this.details = details;
+    this.artifactRefs = artifactRefs.map((ref) => ref instanceof ArtifactRef ? ref : new ArtifactRef(ref));
+    this.history = Array.isArray(history) ? [...history] : [];
+    this.createdAt = createdAt;
+    this.updatedAt = updatedAt;
+  }
+  updateArtifactRefs(newRefs) {
+    if (!Array.isArray(newRefs) || newRefs.length === 0) {
+      throw new Error(`Cannot clear all artifactRefs from Block '${this.id}'. Blocks cannot become ghosts.`);
+    }
+    this.artifactRefs = newRefs.map((ref) => ref instanceof ArtifactRef ? ref : new ArtifactRef(ref));
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  recordHistory({ revision, description, author = "agent" }) {
+    this.history.push({
+      revision,
+      description,
+      author,
+      changedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      artifactCount: this.artifactRefs.length
+    });
+    this.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  }
+  toJSON() {
+    return {
+      id: this.id,
+      projectId: this.projectId,
+      title: this.title,
+      kind: this.kind,
+      summary: this.summary,
+      details: this.details,
+      artifactRefs: this.artifactRefs.map((ref) => ref.toJSON()),
+      history: this.history,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt
+    };
+  }
+};
+
+// packages/domain/src/knowledge.mjs
+var DecisionDocument = class {
+  constructor(rawMarkdown = "") {
+    this.rawMarkdown = rawMarkdown;
+    this.sections = this.parseSections(rawMarkdown);
+  }
+  parseSections(markdown) {
+    const lines = markdown.split(/\r?\n/);
+    const sections = [];
+    let currentSection = null;
+    for (let i2 = 0; i2 < lines.length; i2++) {
+      const line = lines[i2];
+      const match = line.match(/^##\s+\[([a-zA-Z0-9_-]+)\]\s+(.*)$/);
+      if (match) {
+        if (currentSection) {
+          currentSection.content = currentSection.lines.join("\n").trim();
+          sections.push(currentSection);
+        }
+        currentSection = {
+          id: match[1],
+          title: match[2].trim(),
+          startLine: i2 + 1,
+          lines: [],
+          content: ""
+        };
+      } else if (currentSection) {
+        currentSection.lines.push(line);
+      }
+    }
+    if (currentSection) {
+      currentSection.content = currentSection.lines.join("\n").trim();
+      sections.push(currentSection);
+    }
+    return sections;
+  }
+  getSection(sectionId) {
+    return this.sections.find((s) => s.id === sectionId) || null;
+  }
+  listSections() {
+    return this.sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      startLine: s.startLine
+    }));
+  }
+  upsertSection({ id, title, content }) {
+    const existingIndex = this.sections.findIndex((s) => s.id === id);
+    const formattedContent = `## [${id}] ${title}
+
+${content.trim()}
+`;
+    if (existingIndex >= 0) {
+      const section = this.sections[existingIndex];
+      const regex = new RegExp(`##\\s+\\[${id}\\][\\s\\S]*?(?=(##\\s+\\[|$))`);
+      this.rawMarkdown = this.rawMarkdown.replace(regex, formattedContent);
+    } else {
+      this.rawMarkdown = `${this.rawMarkdown.trim()}
+
+${formattedContent}`.trim() + "\n";
+    }
+    this.sections = this.parseSections(this.rawMarkdown);
+    return this.getSection(id);
+  }
+  toMarkdown() {
+    return this.rawMarkdown;
+  }
+};
+var Rule = class {
+  constructor({
+    id,
+    title,
+    category = "general",
+    summary = "",
+    content = "",
+    priority = "normal",
+    updatedAt = (/* @__PURE__ */ new Date()).toISOString()
+  }) {
+    if (!id || typeof id !== "string") throw new Error("Rule requires id");
+    if (!title || typeof title !== "string") throw new Error("Rule requires title");
+    this.id = id;
+    this.title = title;
+    this.category = category ? String(category).trim() : "general";
+    this.summary = summary;
+    this.content = content;
+    this.priority = priority;
+    this.updatedAt = updatedAt;
+  }
+  toSummaryJSON() {
+    return {
+      id: this.id,
+      title: this.title,
+      category: this.category,
+      summary: this.summary,
+      priority: this.priority
+    };
+  }
+  toJSON() {
+    return {
+      id: this.id,
+      title: this.title,
+      category: this.category,
+      summary: this.summary,
+      content: this.content,
+      priority: this.priority,
+      updatedAt: this.updatedAt
+    };
+  }
+};
+
+// packages/domain/src/invariants.mjs
+var InvariantViolationError = class extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = "InvariantViolationError";
+    this.details = details;
+  }
+};
+function assertBlockHasRealCode(block) {
+  if (!block.artifactRefs || block.artifactRefs.length === 0) {
+    throw new InvariantViolationError(
+      `Invariant 1 Violation: Block '${block.id}' has no artifactRefs. Ghost blocks are strictly prohibited.`,
+      { blockId: block.id }
+    );
+  }
+  for (const ref of block.artifactRefs) {
+    if (!ref.path || typeof ref.path !== "string" || !ref.path.trim()) {
+      throw new InvariantViolationError(
+        `Invariant 1 Violation: Block '${block.id}' contains an artifactRef without a valid path.`,
+        { blockId: block.id, ref }
+      );
+    }
+    const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
+    const hasSymbol = typeof ref.symbol === "string" && ref.symbol.trim().length > 0;
+    const hasHash = typeof ref.hash === "string" && ref.hash.trim().length > 0;
+    const hasPlaceholder = ref.symbol === "*" || ref.hash === "untracked";
+    const isValidAnchor = hasHash && !hasPlaceholder && (anchorKind !== "symbol" || hasSymbol) && (anchorKind !== "tree" || (ref.hashMode === "manifest" ? Boolean(ref.manifest) : true));
+    if (!isValidAnchor) {
+      throw new InvariantViolationError(
+        `Invariant 1 Violation: Block '${block.id}' contains unanchored artifactRef for '${ref.path}' (anchorKind: '${anchorKind}', symbol: '${ref.symbol || ""}', hash: '${ref.hash || ""}'). Symbol anchors require 'symbol' and 'hash'; file/tree anchors require 'hash'; manifest tree anchors require 'manifest'. Run 'block(action: "bind_auto", id: "${block.id}", path: "${ref.path}")' to automatically extract anchors before sync.`,
+        { blockId: block.id, ref }
+      );
+    }
+  }
+}
+function assertPlanCanBeCompleted(plan) {
+  const failedOrPending = (plan.checkpoints || []).filter((cp) => cp.status !== "passed");
+  if (failedOrPending.length > 0) {
+    throw new InvariantViolationError(
+      `Invariant 4 Violation: Cannot complete Plan '${plan.id}'. Unpassed checkpoints: ${failedOrPending.map((c) => c.id).join(", ")}`,
+      { planId: plan.id, pendingCheckpoints: failedOrPending.map((c) => c.id) }
+    );
+  }
+}
+var PLAN_STATUS_TRANSITIONS = Object.freeze({
+  draft: ["active", "archived"],
+  active: ["completed", "archived"],
+  completed: ["archived"],
+  archived: []
+});
+var TASK_STATUS_TRANSITIONS = Object.freeze({
+  draft: ["active", "blocked"],
+  active: ["checking", "syncing", "blocked"],
+  checking: ["syncing", "sync_failed", "active", "blocked"],
+  syncing: ["completed", "sync_failed", "blocked"],
+  completed: [],
+  blocked: ["active"],
+  sync_failed: ["checking", "active", "blocked"]
+});
+function assertKnownStatus(value, allowed, entity, id) {
+  if (!allowed.includes(value)) {
+    throw new InvariantViolationError(
+      `${entity} '${id}' has unsupported status '${value}'. Must be one of ${allowed.join(", ")}`,
+      { id, status: value }
+    );
+  }
+}
+function assertPlanStatusTransition(previousStatus, nextStatus, planId = "<unknown>") {
+  const allowed = PLAN_STATUS_TRANSITIONS[previousStatus];
+  assertKnownStatus(previousStatus, Object.keys(PLAN_STATUS_TRANSITIONS), "Plan", planId);
+  assertKnownStatus(nextStatus, Object.keys(PLAN_STATUS_TRANSITIONS), "Plan", planId);
+  if (previousStatus !== nextStatus && !allowed.includes(nextStatus)) {
+    throw new InvariantViolationError(
+      `Plan '${planId}' cannot transition from '${previousStatus}' to '${nextStatus}'.`,
+      { planId, previousStatus, nextStatus, allowed }
+    );
+  }
+}
+function assertPlanStructure(plan, { allowLightweight = false } = {}) {
+  const phases = plan.phases || [];
+  if (!allowLightweight && phases.length === 0) {
+    throw new InvariantViolationError(
+      `Plan '${plan.id}' requires at least one phase.`,
+      { planId: plan.id }
+    );
+  }
+  const phaseIds = /* @__PURE__ */ new Set();
+  const phaseOrders = /* @__PURE__ */ new Set();
+  for (const phase of phases) {
+    if (phaseIds.has(phase.id)) {
+      throw new InvariantViolationError(`Plan '${plan.id}' contains duplicate phase id '${phase.id}'.`, {
+        planId: plan.id,
+        phaseId: phase.id
+      });
+    }
+    phaseIds.add(phase.id);
+    if (!Number.isInteger(phase.order) || phase.order < 0) {
+      throw new InvariantViolationError(
+        `Phase '${phase.id}' in Plan '${plan.id}' requires a non-negative integer order.`,
+        { planId: plan.id, phaseId: phase.id, order: phase.order }
+      );
+    }
+    if (phaseOrders.has(phase.order)) {
+      throw new InvariantViolationError(
+        `Plan '${plan.id}' contains duplicate phase order ${phase.order}; orders must be unique.`,
+        { planId: plan.id, order: phase.order }
+      );
+    }
+    phaseOrders.add(phase.order);
+    if (!allowLightweight) {
+      if (!String(phase.objective || "").trim()) {
+        throw new InvariantViolationError(
+          `Phase '${phase.id}' in Plan '${plan.id}' requires a non-empty objective.`,
+          { planId: plan.id, phaseId: phase.id }
+        );
+      }
+      if (!Array.isArray(phase.acceptance) || phase.acceptance.filter((item) => String(item || "").trim()).length === 0) {
+        throw new InvariantViolationError(
+          `Phase '${phase.id}' in Plan '${plan.id}' requires at least one acceptance criterion.`,
+          { planId: plan.id, phaseId: phase.id }
+        );
+      }
+    }
+  }
+}
+function assertPlanTaskLinks(plan, tasks = []) {
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const referencedTaskIds = /* @__PURE__ */ new Set();
+  for (const phase of plan.phases || []) {
+    const phaseTaskIds = Array.isArray(phase.taskIds) ? phase.taskIds : [];
+    for (const taskId of phaseTaskIds) {
+      const task = taskById.get(taskId);
+      if (!task) {
+        throw new InvariantViolationError(
+          `Plan '${plan.id}' phase '${phase.id}' references missing Task '${taskId}'.`,
+          { planId: plan.id, phaseId: phase.id, taskId }
+        );
+      }
+      if (task.planId !== plan.id || task.phaseId !== phase.id) {
+        throw new InvariantViolationError(
+          `Task '${taskId}' is linked to '${task.planId}/${task.phaseId}', not '${plan.id}/${phase.id}'.`,
+          { planId: plan.id, phaseId: phase.id, taskId, taskPlanId: task.planId, taskPhaseId: task.phaseId }
+        );
+      }
+      referencedTaskIds.add(taskId);
+    }
+  }
+  for (const task of tasks) {
+    if (!referencedTaskIds.has(task.id)) {
+      throw new InvariantViolationError(
+        `Task '${task.id}' belongs to Plan '${plan.id}' but is not linked from phase '${task.phaseId}'.`,
+        { planId: plan.id, phaseId: task.phaseId, taskId: task.id }
+      );
+    }
+  }
+}
+function assertPlanCanBeCompletedWithTasks(plan, tasks = [], { allowLightweight = false } = {}) {
+  assertPlanStructure(plan, { allowLightweight });
+  assertPlanTaskLinks(plan, tasks);
+  assertPlanCanBeCompleted(plan);
+  const unfinished = tasks.filter((task) => task.status !== "completed");
+  if (unfinished.length > 0) {
+    throw new InvariantViolationError(
+      `Cannot complete Plan '${plan.id}' while non-terminal tasks remain: ${unfinished.map((task) => `${task.id}(${task.status})`).join(", ")}`,
+      { planId: plan.id, unfinishedTaskIds: unfinished.map((task) => task.id) }
+    );
+  }
+}
+
+// packages/application/src/plan-service.mjs
+var PlanService = class {
+  constructor(db) {
+    this.db = db;
+  }
+  createPlan({
+    id,
+    projectId,
+    title,
+    priority = "normal",
+    summary = "",
+    phases = [],
+    checkpoints = [],
+    ruleRefs = [],
+    decisionRefs = [],
+    dependencyRefs = []
+  }) {
+    const planId = id || `plan-${Date.now()}`;
+    const allowLightweight = planId.startsWith("plan-light-");
+    const instantiatedTasks = [];
+    const normalizedPhases = (phases || []).map((phaseData, index) => {
+      const pData = typeof phaseData.toJSON === "function" ? phaseData.toJSON() : { ...phaseData };
+      pData.id = pData.id || `phase-${index}`;
+      pData.order = Number.isInteger(pData.order) ? pData.order : index;
+      const phaseTasks = Array.isArray(pData.tasks) ? pData.tasks : [];
+      const taskIds = Array.isArray(pData.taskIds) ? [...pData.taskIds] : [];
+      for (const t of phaseTasks) {
+        const tObj = typeof t === "string" ? { id: t, title: t } : t;
+        const tId = tObj.id || `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!taskIds.includes(tId)) taskIds.push(tId);
+        instantiatedTasks.push(new Task({
+          ...tObj,
+          id: tId,
+          planId,
+          phaseId: pData.id,
+          title: tObj.title || tId,
+          rules: tObj.rules ?? tObj.ruleRefs ?? tObj.references?.rules ?? []
+        }));
+      }
+      pData.taskIds = taskIds;
+      delete pData.tasks;
+      return pData;
+    });
+    const plan = new Plan({
+      id: planId,
+      projectId,
+      title,
+      priority,
+      status: "active",
+      summary,
+      phases: normalizedPhases,
+      checkpoints,
+      ruleRefs,
+      decisionRefs,
+      dependencyRefs
+    });
+    assertPlanStructure(plan, { allowLightweight });
+    assertPlanTaskLinks(plan, instantiatedTasks);
+    this.db.transaction(() => {
+      this.db.savePlan(plan.toJSON());
+      for (const task of instantiatedTasks) this.db.saveTask(task.toJSON());
+    });
+    return plan.toJSON();
+  }
+  getPlan(planId) {
+    return this.db.getPlan(planId);
+  }
+  listPlans(projectId) {
+    return this.db.listPlans(projectId);
+  }
+  repairStateHygiene(projectId, { staleMs = 6 * 60 * 60 * 1e3 } = {}) {
+    const changedPlanIds = [];
+    const now = Date.now();
+    for (const rawPlan of this.db.listPlans(projectId)) {
+      if (rawPlan.status !== "active") continue;
+      const tasks = this.db.listTasks(rawPlan.id);
+      const hasActiveTask = tasks.some(
+        (task) => ["active", "checking", "syncing"].includes(task.status)
+      );
+      if (hasActiveTask) continue;
+      const updatedAt = Date.parse(rawPlan.updatedAt || "");
+      const stale = Number.isFinite(updatedAt) && now - updatedAt > staleMs;
+      const allCheckpointsPassed = rawPlan.checkpoints.length > 0 && rawPlan.checkpoints.every((checkpoint) => checkpoint.status === "passed");
+      const allTasksCompleted = tasks.every((task) => task.status === "completed");
+      if (allCheckpointsPassed && allTasksCompleted) {
+        rawPlan.status = "completed";
+        rawPlan.completedSummary = rawPlan.completedSummary || "Auto-completed because all checkpoints passed and no active task remains.";
+        rawPlan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        this.db.savePlan(rawPlan);
+        changedPlanIds.push(rawPlan.id);
+      } else if (stale) {
+        rawPlan.status = "archived";
+        rawPlan.completedSummary = rawPlan.completedSummary || "Archived by state hygiene because no active task remained for the stale plan.";
+        rawPlan.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        this.db.savePlan(rawPlan);
+        changedPlanIds.push(rawPlan.id);
+      }
+    }
+    return { changed: changedPlanIds.length, changedPlanIds };
+  }
+  addCheckpoint(planId, checkpointData) {
+    const rawPlan = this.db.getPlan(planId);
+    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
+    const plan = new Plan(rawPlan);
+    const cp = plan.addCheckpoint(checkpointData);
+    this.db.savePlan(plan.toJSON());
+    return cp.toJSON();
+  }
+  checkCheckpoint(planId, checkpointId, { passed = true, evidenceRef = null, reason = null }) {
+    const rawPlan = this.db.getPlan(planId);
+    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
+    const plan = new Plan(rawPlan);
+    const cp = plan.checkpoints.find((c) => c.id === checkpointId);
+    if (!cp) throw new Error(`Checkpoint '${checkpointId}' not found in plan '${planId}'`);
+    if (passed) {
+      cp.pass(evidenceRef);
+    } else {
+      cp.fail(reason || "Verification failed");
+    }
+    this.db.savePlan(plan.toJSON());
+    return cp.toJSON();
+  }
+  updatePlan(planId, planData = {}) {
+    const rawPlan = this.db.getPlan(planId);
+    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
+    const tasks = this.db.listTasks(planId);
+    const updated = new Plan({
+      ...rawPlan,
+      ...planData,
+      id: rawPlan.id,
+      projectId: rawPlan.projectId,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    });
+    const allowLightweight = planId.startsWith("plan-light-");
+    assertPlanStatusTransition(rawPlan.status, updated.status, planId);
+    assertPlanStructure(updated, { allowLightweight });
+    assertPlanTaskLinks(updated, tasks);
+    if (updated.status === "completed" && rawPlan.status !== "completed") {
+      assertPlanCanBeCompletedWithTasks(updated, tasks, { allowLightweight });
+      updated.complete({
+        completedSummary: planData.completedSummary || updated.completedSummary || updated.summary,
+        historyRef: planData.historyRef || updated.historyRef
+      });
+    }
+    this.db.savePlan(updated.toJSON());
+    return updated.toJSON();
+  }
+  completePlan(planId, { completedSummary = null, historyRef = null } = {}) {
+    const rawPlan = this.db.getPlan(planId);
+    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
+    const tasks = this.db.listTasks(planId);
+    const plan = new Plan(rawPlan);
+    assertPlanCanBeCompletedWithTasks(plan, tasks, {
+      allowLightweight: planId.startsWith("plan-light-")
+    });
+    plan.complete({ completedSummary: completedSummary || plan.summary, historyRef });
+    this.db.savePlan(plan.toJSON());
+    return plan.toJSON();
+  }
+  deletePlan(planId) {
+    return this.db.deletePlan(planId);
+  }
+};
+
+// packages/application/src/task-service.mjs
+import fs15 from "node:fs";
+import path15 from "node:path";
+import crypto7 from "node:crypto";
+import { execFileSync as execFileSync2 } from "node:child_process";
+
+// packages/code-intel/src/changeset.mjs
+import fs13 from "node:fs";
+import path13 from "node:path";
+import { randomUUID } from "node:crypto";
+function resolveWorkspacePath(projectRoot, inputPath, label = "path") {
+  if (typeof inputPath !== "string" || !inputPath.trim()) {
+    throw new Error(`${label} is required`);
+  }
+  const fullPath = path13.resolve(projectRoot, inputPath);
+  const relativePath = path13.relative(projectRoot, fullPath).split(path13.sep).join("/");
+  if (!relativePath || relativePath.startsWith("..") || path13.isAbsolute(relativePath)) {
+    throw new Error(`${label} '${inputPath}' is outside project root '${projectRoot}'`);
+  }
+  if (fs13.existsSync(fullPath) && fs13.lstatSync(fullPath).isSymbolicLink()) {
+    throw new Error(`${label} '${inputPath}' is a symbolic link; refusing to modify it`);
+  }
+  return { fullPath, relativePath };
+}
+function ensureParentDirectory(fullPath, createdDirectories) {
+  const parent = path13.dirname(fullPath);
+  const missing = [];
+  let current = parent;
+  while (!fs13.existsSync(current)) {
+    missing.push(current);
+    current = path13.dirname(current);
+  }
+  fs13.mkdirSync(parent, { recursive: true });
+  for (const directory of missing.reverse()) createdDirectories.push(directory);
+}
+function planChangeset(projectRoot, changes = []) {
+  if (!Array.isArray(changes) || changes.length === 0) {
+    throw new Error("Changeset requires at least one create or edit operation");
+  }
+  const states = /* @__PURE__ */ new Map();
+  const results = [];
+  for (let index = 0; index < changes.length; index += 1) {
+    const change = changes[index] || {};
+    const resolved = resolveWorkspacePath(projectRoot, change.path, "changeset path");
+    let state = states.get(resolved.fullPath);
+    if (change.kind === "create") {
+      if (state) throw new Error(`Changeset operation ${index + 1} cannot create '${resolved.relativePath}' twice`);
+      if (fs13.existsSync(resolved.fullPath)) {
+        throw new Error(`Changeset operation ${index + 1} cannot create existing file '${resolved.relativePath}'`);
+      }
+      if (typeof change.content !== "string") {
+        throw new Error(`Changeset operation ${index + 1} requires string content for '${resolved.relativePath}'`);
+      }
+      const created = CodeTools.create(resolved.relativePath, change.content);
+      state = {
+        path: resolved.relativePath,
+        fullPath: resolved.fullPath,
+        existed: false,
+        originalContent: null,
+        newContent: change.content,
+        newHash: created.newHash,
+        locators: created.locators,
+        mode: 420
+      };
+      states.set(resolved.fullPath, state);
+      results.push({ index, kind: "create", path: resolved.relativePath, newHash: created.newHash, locators: created.locators });
+      continue;
+    }
+    if (change.kind !== "edit") {
+      throw new Error(`Changeset operation ${index + 1} has unknown kind '${change.kind || ""}'`);
+    }
+    if (!fs13.existsSync(resolved.fullPath)) {
+      throw new Error(`Changeset operation ${index + 1} cannot edit missing file '${resolved.relativePath}'`);
+    }
+    if (!fs13.statSync(resolved.fullPath).isFile()) {
+      throw new Error(`Changeset operation ${index + 1} cannot edit non-file '${resolved.relativePath}'`);
+    }
+    if (!state) {
+      const originalContent = fs13.readFileSync(resolved.fullPath, "utf8");
+      state = {
+        path: resolved.relativePath,
+        fullPath: resolved.fullPath,
+        existed: true,
+        originalContent,
+        newContent: originalContent,
+        newHash: "",
+        locators: [],
+        mode: fs13.statSync(resolved.fullPath).mode
+      };
+      states.set(resolved.fullPath, state);
+    }
+    const edited = CodeTools.edit(resolved.relativePath, state.newContent, {
+      targetContent: change.target ?? null,
+      replacementContent: change.replacement ?? "",
+      startLine: change.startLine ?? null,
+      endLine: change.endLine ?? null,
+      symbol: change.symbol ?? null
+    });
+    state.newContent = edited.newContent;
+    state.newHash = edited.newHash;
+    state.locators = edited.updatedLocators;
+    results.push({ index, kind: "edit", path: resolved.relativePath, newHash: edited.newHash, locators: edited.updatedLocators });
+  }
+  return { files: Array.from(states.values()), results };
+}
+function commitChangeset(plan) {
+  const prepared = [];
+  const createdDirectories = [];
+  try {
+    for (const file of plan.files) {
+      ensureParentDirectory(file.fullPath, createdDirectories);
+      const token = `${process.pid}-${randomUUID()}`;
+      const tempPath = path13.join(path13.dirname(file.fullPath), `.${path13.basename(file.fullPath)}.contextos-${token}.tmp`);
+      const backupPath = file.existed ? path13.join(path13.dirname(file.fullPath), `.${path13.basename(file.fullPath)}.contextos-${token}.bak`) : null;
+      fs13.writeFileSync(tempPath, file.newContent, { encoding: "utf8", mode: file.mode || 420 });
+      prepared.push({ ...file, tempPath, backupPath, committed: false });
+    }
+    for (const file of prepared) {
+      if (file.existed) {
+        fs13.renameSync(file.fullPath, file.backupPath);
+        fs13.renameSync(file.tempPath, file.fullPath);
+      } else {
+        fs13.renameSync(file.tempPath, file.fullPath);
+      }
+      file.committed = true;
+    }
+    for (const file of prepared) {
+      if (file.backupPath && fs13.existsSync(file.backupPath)) fs13.rmSync(file.backupPath, { force: true });
+    }
+    return {
+      files: prepared.map((file) => ({
+        path: file.path,
+        newHash: file.newHash,
+        locators: file.locators,
+        created: !file.existed
+      })),
+      results: plan.results
+    };
+  } catch (error2) {
+    const rollbackErrors = [];
+    for (const file of [...prepared].reverse()) {
+      try {
+        if (file.backupPath && fs13.existsSync(file.backupPath)) {
+          if (fs13.existsSync(file.fullPath)) fs13.rmSync(file.fullPath, { force: true });
+          fs13.renameSync(file.backupPath, file.fullPath);
+        } else if (!file.existed && file.committed && fs13.existsSync(file.fullPath)) {
+          fs13.rmSync(file.fullPath, { force: true });
+        }
+      } catch (rollbackError) {
+        rollbackErrors.push({ path: file.path, error: rollbackError.message });
+      }
+    }
+    for (const file of prepared) {
+      try {
+        if (fs13.existsSync(file.tempPath)) fs13.rmSync(file.tempPath, { force: true });
+        if (file.backupPath && fs13.existsSync(file.backupPath)) fs13.rmSync(file.backupPath, { force: true });
+      } catch (_) {
+      }
+    }
+    for (const directory of createdDirectories.reverse()) {
+      try {
+        if (fs13.existsSync(directory) && fs13.readdirSync(directory).length === 0) fs13.rmdirSync(directory);
+      } catch (_) {
+      }
+    }
+    const failure = new Error(
+      rollbackErrors.length > 0 ? `Changeset commit failed and rollback was incomplete: ${error2.message}` : `Changeset commit failed and was rolled back: ${error2.message}`
+    );
+    failure.partial = rollbackErrors.length > 0;
+    failure.rollbackErrors = rollbackErrors;
+    failure.cause = error2;
+    throw failure;
+  } finally {
+    for (const file of prepared) {
+      try {
+        if (fs13.existsSync(file.tempPath)) fs13.rmSync(file.tempPath, { force: true });
+      } catch (_) {
+      }
+    }
+  }
+}
+function applyChangeset(projectRoot, changes = []) {
+  const plan = planChangeset(projectRoot, changes);
+  return commitChangeset(plan);
+}
+
+// packages/code-intel/src/bindings.mjs
+import crypto6 from "node:crypto";
+import fs14 from "node:fs";
+import path14 from "node:path";
 var MANIFEST_CANDIDATES = [
   "package-lock.json",
   "pnpm-lock.yaml",
@@ -46293,52 +48727,52 @@ function bindingMatchesPath(refPath, anchorKind, targetPath) {
   return target === binding;
 }
 function hashFile(fullPath) {
-  const hash = crypto5.createHash("sha256");
-  const file = fs7.openSync(fullPath, "r");
+  const hash = crypto6.createHash("sha256");
+  const file = fs14.openSync(fullPath, "r");
   const buffer = Buffer.allocUnsafe(1024 * 1024);
   try {
     let bytesRead = 0;
-    while ((bytesRead = fs7.readSync(file, buffer, 0, buffer.length, null)) > 0) {
+    while ((bytesRead = fs14.readSync(file, buffer, 0, buffer.length, null)) > 0) {
       hash.update(buffer.subarray(0, bytesRead));
     }
   } finally {
-    fs7.closeSync(file);
+    fs14.closeSync(file);
   }
   return hash.digest("hex").slice(0, 16);
 }
 function collectDirectoryFiles(root, maxFiles) {
   const files = [];
-  const walk = (directory, relativeDir = "") => {
+  const walk2 = (directory, relativeDir = "") => {
     if (files.length >= maxFiles) {
       throw new Error(`Directory binding exceeds ${maxFiles} files; use hashMode='manifest' for dependency trees.`);
     }
-    const entries = fs7.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+    const entries = fs14.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       if (entry.name === ".git" || entry.name === ".contextos") continue;
-      const fullPath = path7.join(directory, entry.name);
+      const fullPath = path14.join(directory, entry.name);
       const relativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
-        walk(fullPath, relativePath);
+        walk2(fullPath, relativePath);
       } else if (entry.isFile()) {
         files.push({ fullPath, relativePath });
         if (files.length >= maxFiles) break;
       }
     }
   };
-  walk(root);
+  walk2(root);
   return files;
 }
 function findDirectoryManifest(projectRoot, relativeDir) {
   const normalized = normalizeBindingPath(relativeDir);
-  const candidateDirs = /* @__PURE__ */ new Set([path7.join(projectRoot, normalized)]);
-  if (path7.basename(normalized) === "node_modules") {
-    candidateDirs.add(path7.dirname(path7.join(projectRoot, normalized)));
+  const candidateDirs = /* @__PURE__ */ new Set([path14.join(projectRoot, normalized)]);
+  if (path14.basename(normalized) === "node_modules") {
+    candidateDirs.add(path14.dirname(path14.join(projectRoot, normalized)));
   }
   for (const directory of candidateDirs) {
     for (const name2 of MANIFEST_CANDIDATES) {
-      const fullPath = path7.join(directory, name2);
-      if (!fs7.existsSync(fullPath) || !fs7.statSync(fullPath).isFile()) continue;
-      const relative = path7.relative(projectRoot, fullPath).split(path7.sep).join("/");
+      const fullPath = path14.join(directory, name2);
+      if (!fs14.existsSync(fullPath) || !fs14.statSync(fullPath).isFile()) continue;
+      const relative = path14.relative(projectRoot, fullPath).split(path14.sep).join("/");
       return relative;
     }
   }
@@ -46350,13 +48784,13 @@ function calculateTreeHash(projectRoot, relativeDir, {
   maxFiles = 5e3
 } = {}) {
   const normalized = normalizeBindingPath(relativeDir);
-  const fullPath = path7.resolve(projectRoot, normalized);
-  const resolvedRoot = path7.resolve(projectRoot);
-  const relativeToRoot = path7.relative(resolvedRoot, fullPath);
-  if (relativeToRoot.startsWith("..") || path7.isAbsolute(relativeToRoot)) {
+  const fullPath = path14.resolve(projectRoot, normalized);
+  const resolvedRoot = path14.resolve(projectRoot);
+  const relativeToRoot = path14.relative(resolvedRoot, fullPath);
+  if (relativeToRoot.startsWith("..") || path14.isAbsolute(relativeToRoot)) {
     throw new Error(`Directory binding '${relativeDir}' is outside project root`);
   }
-  if (!fs7.existsSync(fullPath) || !fs7.statSync(fullPath).isDirectory()) {
+  if (!fs14.existsSync(fullPath) || !fs14.statSync(fullPath).isDirectory()) {
     throw new Error(`Directory binding not found: '${normalized}'`);
   }
   const resolvedMode = hashMode || (manifest ? "manifest" : "content");
@@ -46365,13 +48799,13 @@ function calculateTreeHash(projectRoot, relativeDir, {
     if (!manifestPath) {
       throw new Error(`No manifest found for directory binding '${normalized}'. Pass manifest explicitly.`);
     }
-    const manifestFullPath = path7.resolve(projectRoot, manifestPath);
-    if (!fs7.existsSync(manifestFullPath) || !fs7.statSync(manifestFullPath).isFile()) {
+    const manifestFullPath = path14.resolve(projectRoot, manifestPath);
+    if (!fs14.existsSync(manifestFullPath) || !fs14.statSync(manifestFullPath).isFile()) {
       throw new Error(`Manifest not found for directory binding '${normalized}': '${manifestPath}'`);
     }
     return { hash: hashFile(manifestFullPath), hashMode: "manifest", manifest: manifestPath, fileCount: 0 };
   }
-  const hash = crypto5.createHash("sha256");
+  const hash = crypto6.createHash("sha256");
   const files = collectDirectoryFiles(fullPath, maxFiles);
   for (const file of files) {
     hash.update(`${file.relativePath}\0`);
@@ -46482,21 +48916,21 @@ function normalizeRelPath(filePath) {
   return String(filePath).replace(/\\/g, "/").replace(/^\.\//, "");
 }
 function isInsideProject(projectRoot, filePath) {
-  const fullPath = path8.isAbsolute(filePath) ? path8.resolve(filePath) : path8.resolve(projectRoot, filePath);
-  const relative = path8.relative(path8.resolve(projectRoot), fullPath);
-  return relative === "" || !relative.startsWith("..") && !path8.isAbsolute(relative);
+  const fullPath = path15.isAbsolute(filePath) ? path15.resolve(filePath) : path15.resolve(projectRoot, filePath);
+  const relative = path15.relative(path15.resolve(projectRoot), fullPath);
+  return relative === "" || !relative.startsWith("..") && !path15.isAbsolute(relative);
 }
 function taskScopeFromWorkingSet(files = [], projectRoot = process.cwd(), scopeDirs = []) {
   const dirs = /* @__PURE__ */ new Set();
   const exactFiles = /* @__PURE__ */ new Set();
   for (const filePath of files) {
     const normalized = normalizeRelPath(filePath);
-    const fullPath = path8.resolve(projectRoot, normalized);
-    const relativeToRoot = path8.relative(path8.resolve(projectRoot), fullPath);
-    if (relativeToRoot.startsWith("..") || path8.isAbsolute(relativeToRoot)) continue;
+    const fullPath = path15.resolve(projectRoot, normalized);
+    const relativeToRoot = path15.relative(path15.resolve(projectRoot), fullPath);
+    if (relativeToRoot.startsWith("..") || path15.isAbsolute(relativeToRoot)) continue;
     let isDirectory = false;
     try {
-      isDirectory = fs8.existsSync(fullPath) && fs8.statSync(fullPath).isDirectory();
+      isDirectory = fs15.existsSync(fullPath) && fs15.statSync(fullPath).isDirectory();
     } catch (_) {
     }
     if (isDirectory) {
@@ -46508,9 +48942,9 @@ function taskScopeFromWorkingSet(files = [], projectRoot = process.cwd(), scopeD
   }
   for (const scopeDir of scopeDirs) {
     const normalized = normalizeRelPath(scopeDir).replace(/\/+$/, "");
-    const fullPath = path8.resolve(projectRoot, normalized || ".");
-    const relativeToRoot = path8.relative(path8.resolve(projectRoot), fullPath);
-    if (!relativeToRoot.startsWith("..") && !path8.isAbsolute(relativeToRoot)) {
+    const fullPath = path15.resolve(projectRoot, normalized || ".");
+    const relativeToRoot = path15.relative(path15.resolve(projectRoot), fullPath);
+    if (!relativeToRoot.startsWith("..") && !path15.isAbsolute(relativeToRoot)) {
       if (!normalized.split("/").some((segment) => IGNORED_DIRS.has(segment.toLowerCase()))) {
         dirs.add(normalized);
       }
@@ -46526,33 +48960,33 @@ function isPathInScope(relativePath, scope) {
 function scanScopedSourceFiles(projectRoot, workingSetFiles, scopeDirs = [], maxFiles = 300) {
   const result = [];
   const searchDirs = taskScopeFromWorkingSet(workingSetFiles, projectRoot, scopeDirs).dirs;
-  const walk = (dir, relDir = "", depth = 0) => {
+  const walk2 = (dir, relDir = "", depth = 0) => {
     if (depth > 5 || result.length >= maxFiles) return;
     let entries = [];
     try {
-      entries = fs8.readdirSync(dir, { withFileTypes: true });
+      entries = fs15.readdirSync(dir, { withFileTypes: true });
     } catch (_) {
       return;
     }
     for (const ent of entries) {
       if (IGNORED_DIRS.has(ent.name.toLowerCase())) continue;
-      const childRel = relDir ? path8.posix.join(relDir, ent.name) : ent.name;
-      const childFull = path8.join(dir, ent.name);
+      const childRel = relDir ? path15.posix.join(relDir, ent.name) : ent.name;
+      const childFull = path15.join(dir, ent.name);
       if (ent.isDirectory()) {
-        walk(childFull, childRel, depth + 1);
-      } else if (ent.isFile() && CODE_EXTENSIONS.has(path8.extname(ent.name).toLowerCase())) {
+        walk2(childFull, childRel, depth + 1);
+      } else if (ent.isFile() && CODE_EXTENSIONS.has(path15.extname(ent.name).toLowerCase())) {
         result.push(childRel);
       }
     }
   };
   for (const sDir of searchDirs) {
-    const full = path8.join(projectRoot, sDir);
-    const relativeToRoot = path8.relative(path8.resolve(projectRoot), path8.resolve(full));
-    if (relativeToRoot.startsWith("..") || path8.isAbsolute(relativeToRoot)) continue;
-    if (fs8.existsSync(full)) {
-      const stat = fs8.statSync(full);
-      if (stat.isDirectory()) walk(full, sDir, 0);
-      else if (CODE_EXTENSIONS.has(path8.extname(full).toLowerCase())) result.push(sDir);
+    const full = path15.join(projectRoot, sDir);
+    const relativeToRoot = path15.relative(path15.resolve(projectRoot), path15.resolve(full));
+    if (relativeToRoot.startsWith("..") || path15.isAbsolute(relativeToRoot)) continue;
+    if (fs15.existsSync(full)) {
+      const stat = fs15.statSync(full);
+      if (stat.isDirectory()) walk2(full, sDir, 0);
+      else if (CODE_EXTENSIONS.has(path15.extname(full).toLowerCase())) result.push(sDir);
     }
   }
   return result;
@@ -46621,13 +49055,13 @@ var TaskService = class {
     for (const relPath of filesToSnapshot) {
       if (!isInsideProject(projectRoot, relPath)) continue;
       if (task.baseline.fileSnapshots[relPath]) continue;
-      const fullPath = path8.isAbsolute(relPath) ? relPath : path8.join(projectRoot, relPath);
-      if (fs8.existsSync(fullPath)) {
+      const fullPath = path15.isAbsolute(relPath) ? relPath : path15.join(projectRoot, relPath);
+      if (fs15.existsSync(fullPath)) {
         try {
-          const stat = fs8.statSync(fullPath);
+          const stat = fs15.statSync(fullPath);
           if (stat.isDirectory()) continue;
-          const content = fs8.readFileSync(fullPath);
-          const hash = crypto6.createHash("sha256").update(content).digest("hex").slice(0, 16);
+          const content = fs15.readFileSync(fullPath);
+          const hash = crypto7.createHash("sha256").update(content).digest("hex").slice(0, 16);
           task.baseline.fileSnapshots[relPath] = {
             mtimeMs: stat.mtimeMs,
             size: stat.size,
@@ -46643,7 +49077,7 @@ var TaskService = class {
   _refreshFileAstAndLocators(relPath, content, dbBlocks, task) {
     try {
       const structure = LanguageRegistry.parseStructure(relPath, content);
-      const fileHash = crypto6.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
+      const fileHash = crypto7.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
       const newLocators = (structure.symbols || []).map((s) => ({
         path: relPath,
         symbol: s.name,
@@ -46690,7 +49124,7 @@ var TaskService = class {
     }
   }
   _reconcileWorkingSet(task, projectRoot, dbBlocks = []) {
-    if (!projectRoot || !fs8.existsSync(projectRoot)) return;
+    if (!projectRoot || !fs15.existsSync(projectRoot)) return;
     if (!task.baseline) {
       task.baseline = { fileSnapshots: {} };
     }
@@ -46717,12 +49151,12 @@ var TaskService = class {
     ]);
     for (const relPath of candidateFiles) {
       if (!isInsideProject(projectRoot, relPath)) continue;
-      const fullPath = path8.isAbsolute(relPath) ? relPath : path8.join(projectRoot, relPath);
-      if (!fs8.existsSync(fullPath)) {
+      const fullPath = path15.isAbsolute(relPath) ? relPath : path15.join(projectRoot, relPath);
+      if (!fs15.existsSync(fullPath)) {
         if (task.baseline.fileSnapshots[relPath]) {
           delete task.baseline.fileSnapshots[relPath];
           task.workingSet.files = (task.workingSet.files || []).filter((file) => file !== relPath);
-          const parent = path8.posix.dirname(normalizeRelPath(relPath));
+          const parent = path15.posix.dirname(normalizeRelPath(relPath));
           if (parent && parent !== ".") {
             task.workingSet.scopeDirs = [.../* @__PURE__ */ new Set([...task.workingSet.scopeDirs || [], parent])];
           }
@@ -46738,7 +49172,7 @@ var TaskService = class {
       }
       let stat;
       try {
-        stat = fs8.statSync(fullPath);
+        stat = fs15.statSync(fullPath);
       } catch (_) {
         continue;
       }
@@ -46748,11 +49182,11 @@ var TaskService = class {
       if (statChanged) {
         let content;
         try {
-          content = fs8.readFileSync(fullPath);
+          content = fs15.readFileSync(fullPath);
         } catch (_) {
           continue;
         }
-        const currentHash = crypto6.createHash("sha256").update(content).digest("hex").slice(0, 16);
+        const currentHash = crypto7.createHash("sha256").update(content).digest("hex").slice(0, 16);
         const blockRef = dbBlocks.flatMap((b) => b.artifactRefs || []).find((r) => r.path === relPath);
         const baseHash = snapshot ? snapshot.hash : blockRef?.hash || null;
         if (!baseHash || currentHash !== baseHash) {
@@ -46799,6 +49233,10 @@ var TaskService = class {
       ruleRefs,
       baseline = {}
     } = taskData;
+    const plan = planId ? this.db.getPlan(planId) : null;
+    if (!plan) throw new Error(`Task requires an existing Plan; Plan '${planId || "<missing>"}' not found`);
+    const phase = (plan.phases || []).find((item) => item.id === phaseId);
+    if (!phase) throw new Error(`Task requires an existing Phase; Phase '${phaseId || "<missing>"}' not found in Plan '${planId}'.`);
     const taskRules = Array.isArray(rules) ? rules : Array.isArray(ruleRefs) ? ruleRefs : Array.isArray(references?.rules) ? references.rules : [];
     const task = new Task({
       id: id || `task-${Date.now()}`,
@@ -46812,7 +49250,7 @@ var TaskService = class {
       rules: taskRules,
       baseline
     });
-    if (projectRoot && fs8.existsSync(projectRoot)) {
+    if (projectRoot && fs15.existsSync(projectRoot)) {
       this._initializeFileSnapshots(task, projectRoot);
     }
     this.db.saveTask(task.toJSON());
@@ -46851,6 +49289,15 @@ var TaskService = class {
   updateTask(taskId, taskData = {}) {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
+    if (taskData.planId !== void 0 && taskData.planId !== raw.planId) {
+      throw new Error(`Task '${taskId}' cannot be moved to another Plan through update; create a new Task in the target phase.`);
+    }
+    if (taskData.phaseId !== void 0 && taskData.phaseId !== raw.phaseId) {
+      throw new Error(`Task '${taskId}' cannot be moved to another Phase through update; create a new Task in the target phase.`);
+    }
+    if (taskData.status !== void 0 && taskData.status !== raw.status) {
+      throw new Error(`Task '${taskId}' status is managed by lifecycle actions; raw update ${raw.status} -> ${taskData.status} is not allowed.`);
+    }
     const updated = { ...raw };
     if (taskData.title !== void 0) updated.title = taskData.title;
     if (taskData.status !== void 0) updated.status = taskData.status;
@@ -46942,7 +49389,7 @@ var TaskService = class {
     }
     const task = new Task(raw);
     task.activate();
-    if (projectRoot && fs8.existsSync(projectRoot)) {
+    if (projectRoot && fs15.existsSync(projectRoot)) {
       this._initializeFileSnapshots(task, projectRoot);
       this._reconcileWorkingSet(task, projectRoot, this.db.listBlocks(raw.projectId));
     }
@@ -46982,8 +49429,8 @@ var TaskService = class {
       receipt = this.db.getCommandReceipt(receiptId);
       if (!receipt) throw new Error(`Command receipt '${receiptId}' not found`);
       if (projectRoot && receipt.cwd) {
-        const relative = path8.relative(path8.resolve(projectRoot), path8.resolve(receipt.cwd));
-        if (relative.startsWith("..") || path8.isAbsolute(relative)) {
+        const relative = path15.relative(path15.resolve(projectRoot), path15.resolve(receipt.cwd));
+        if (relative.startsWith("..") || path15.isAbsolute(relative)) {
           throw new Error(`Command receipt '${receiptId}' belongs to a different project`);
         }
       }
@@ -46992,7 +49439,7 @@ var TaskService = class {
       }
     }
     const task = new Task(raw);
-    if (projectRoot && fs8.existsSync(projectRoot)) {
+    if (projectRoot && fs15.existsSync(projectRoot)) {
       const dbBlocks = (projectId ? this.db.listBlocks(projectId) : this.db.listBlocks(raw.projectId)) || [];
       this._reconcileWorkingSet(task, projectRoot, dbBlocks);
     }
@@ -47146,24 +49593,24 @@ var TaskService = class {
 };
 
 // packages/application/src/knowledge-service.mjs
-import path9 from "node:path";
-import fs9 from "node:fs";
+import path16 from "node:path";
+import fs16 from "node:fs";
 var KnowledgeService = class {
   static getDecisionPath(projectRoot) {
-    const defaultPath = path9.join(projectRoot, "DECISION.md");
-    if (fs9.existsSync(defaultPath)) return defaultPath;
-    const dotPath = path9.join(projectRoot, ".contextos", "DECISION.md");
-    return fs9.existsSync(dotPath) ? dotPath : defaultPath;
+    const defaultPath = path16.join(projectRoot, "DECISION.md");
+    if (fs16.existsSync(defaultPath)) return defaultPath;
+    const dotPath = path16.join(projectRoot, ".contextos", "DECISION.md");
+    return fs16.existsSync(dotPath) ? dotPath : defaultPath;
   }
   static getDecision(projectRoot) {
     const docPath = this.getDecisionPath(projectRoot);
-    if (!fs9.existsSync(docPath)) {
+    if (!fs16.existsSync(docPath)) {
       return {
         path: docPath,
         document: new DecisionDocument("# Project Decisions\n")
       };
     }
-    const raw = fs9.readFileSync(docPath, "utf8");
+    const raw = fs16.readFileSync(docPath, "utf8");
     return {
       path: docPath,
       document: new DecisionDocument(raw)
@@ -47172,27 +49619,27 @@ var KnowledgeService = class {
   static patchDecisionSection(projectRoot, { id, title, content }) {
     const { path: docPath, document } = this.getDecision(projectRoot);
     const updatedSection = document.upsertSection({ id, title, content });
-    fs9.mkdirSync(path9.dirname(docPath), { recursive: true });
-    fs9.writeFileSync(docPath, document.toMarkdown(), "utf8");
+    fs16.mkdirSync(path16.dirname(docPath), { recursive: true });
+    fs16.writeFileSync(docPath, document.toMarkdown(), "utf8");
     return {
       docPath,
       section: updatedSection
     };
   }
   static getRulesDir(projectRoot) {
-    const dotDir = path9.join(projectRoot, ".contextos", "rules");
-    if (fs9.existsSync(dotDir)) return dotDir;
-    const standardDir = path9.join(projectRoot, "rules");
-    return fs9.existsSync(standardDir) ? standardDir : dotDir;
+    const dotDir = path16.join(projectRoot, ".contextos", "rules");
+    if (fs16.existsSync(dotDir)) return dotDir;
+    const standardDir = path16.join(projectRoot, "rules");
+    return fs16.existsSync(standardDir) ? standardDir : dotDir;
   }
   static listRules(projectRoot) {
     const rulesDir = this.getRulesDir(projectRoot);
-    if (!fs9.existsSync(rulesDir)) return [];
-    const files = fs9.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+    if (!fs16.existsSync(rulesDir)) return [];
+    const files = fs16.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
     const rules = [];
     for (const file of files) {
-      const filePath = path9.join(rulesDir, file);
-      const raw = fs9.readFileSync(filePath, "utf8");
+      const filePath = path16.join(rulesDir, file);
+      const raw = fs16.readFileSync(filePath, "utf8");
       const rule = this.parseRuleFile(file, raw);
       rules.push(rule.toSummaryJSON());
     }
@@ -47200,25 +49647,26 @@ var KnowledgeService = class {
   }
   static getRule(projectRoot, ruleId) {
     const rulesDir = this.getRulesDir(projectRoot);
-    const targetFile = path9.join(rulesDir, `${ruleId}.md`);
-    if (!fs9.existsSync(targetFile)) {
-      const files = fs9.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+    if (!fs16.existsSync(rulesDir)) return null;
+    const targetFile = path16.join(rulesDir, `${ruleId}.md`);
+    if (!fs16.existsSync(targetFile)) {
+      const files = fs16.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
       for (const file of files) {
-        const filePath = path9.join(rulesDir, file);
-        const raw2 = fs9.readFileSync(filePath, "utf8");
+        const filePath = path16.join(rulesDir, file);
+        const raw2 = fs16.readFileSync(filePath, "utf8");
         const rule = this.parseRuleFile(file, raw2);
         if (rule.id === ruleId) return rule.toJSON();
       }
       return null;
     }
-    const raw = fs9.readFileSync(targetFile, "utf8");
+    const raw = fs16.readFileSync(targetFile, "utf8");
     return this.parseRuleFile(`${ruleId}.md`, raw).toJSON();
   }
   static saveRule(projectRoot, { id, title, category, summary, content, priority = "normal" }) {
     const rule = new Rule({ id, title, category, summary, content, priority });
     const rulesDir = this.getRulesDir(projectRoot);
-    fs9.mkdirSync(rulesDir, { recursive: true });
-    const targetFile = path9.join(rulesDir, `${id}.md`);
+    fs16.mkdirSync(rulesDir, { recursive: true });
+    const targetFile = path16.join(rulesDir, `${id}.md`);
     const markdown = `---
 id: ${rule.id}
 title: ${rule.title}
@@ -47231,7 +49679,7 @@ summary: ${rule.summary}
 
 ${rule.content}
 `;
-    fs9.writeFileSync(targetFile, markdown, "utf8");
+    fs16.writeFileSync(targetFile, markdown, "utf8");
     return rule.toJSON();
   }
   static parseRuleFile(fileName, rawText) {
@@ -47263,91 +49711,75 @@ ${rule.content}
   }
 };
 
-// packages/process-host/src/sanitizer.mjs
-function stripAnsi(text) {
-  return text.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n");
-}
-function redactSecrets(text) {
-  return text.replace(/(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36}/g, "[REDACTED_GITHUB_TOKEN]").replace(/sk-[a-zA-Z0-9]{32,}/g, "[REDACTED_API_KEY]").replace(
-    /(?:password|token|secret|key|bearer)\s*[:=]\s*['"]?([a-zA-Z0-9_\-.~+]{8,})['"]?/gi,
-    (match, val) => match.replace(val, "[REDACTED]")
-  );
-}
-function sanitizeTerminalOutput(rawText, options = {}) {
-  const maxChars = options.maxChars || 1500;
-  const exitCode = options.exitCode !== void 0 ? options.exitCode : 0;
-  let cleaned = stripAnsi(rawText);
-  cleaned = redactSecrets(cleaned);
-  const lines = cleaned.split("\n").map((l) => l.trimEnd()).filter((l) => l.length > 0);
-  const nonNoiseLines = lines.filter((line) => {
-    if (line.match(/^\[\d+\/\d+\]\s+Compiling/i)) return false;
-    if (line.match(/^\s*\d+%\s+/)) return false;
-    if (line.match(/^(=|-|\*){5,}$/)) return false;
-    return true;
-  });
-  const errors = [];
-  const warnings = [];
-  for (const line of nonNoiseLines) {
-    if (exitCode !== 0 && line.match(/error[:\s]|failed|failure|exception|fatal/i)) {
-      errors.push(line);
-    } else if (line.match(/warning[:\s]|warn[:\s]/i)) {
-      warnings.push(line);
-    }
-  }
-  let summary = "";
-  if (exitCode === 0) {
-    if (lines.length <= 15 && cleaned.length <= maxChars) {
-      summary = `Command succeeded (${lines.length} lines).`;
-    } else {
-      summary = `Command succeeded (${lines.length} lines collapsed).`;
-    }
-    if (warnings.length > 0) {
-      summary += ` ${warnings.length} warning(s).`;
-    }
-  } else {
-    summary = `Command failed with exit code ${exitCode}. Found ${errors.length} error(s).`;
-  }
-  let resultText = "";
-  if (exitCode === 0) {
-    if (lines.length <= 15 && cleaned.length <= maxChars) {
-      resultText = lines.join("\n");
-    } else {
-      resultText = summary;
-    }
-    if (warnings.length > 0) {
-      resultText += "\n\nWarnings:\n" + warnings.slice(0, 5).join("\n");
-    }
-  } else {
-    resultText = `${summary}
+// packages/process-host/src/runner.mjs
+import { spawn, execSync } from "node:child_process";
+import path18 from "node:path";
+import crypto8 from "node:crypto";
 
-Key Failures & Errors:
-` + errors.slice(0, 15).join("\n");
-    const remainingBudget = maxChars - resultText.length;
-    if (remainingBudget > 200) {
-      const tail = nonNoiseLines.slice(-10).join("\n");
-      resultText += `
-
-Tail Output:
-${tail}`;
+// packages/process-host/src/log-store.mjs
+import fs17 from "node:fs";
+import path17 from "node:path";
+var DEFAULT_MAX_FILES = 500;
+var DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
+var DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+function ensureLogDir(projectRoot) {
+  const logDir = path17.join(projectRoot, ".contextos", "logs");
+  fs17.mkdirSync(logDir, { recursive: true, mode: 448 });
+  try {
+    fs17.chmodSync(logDir, 448);
+  } catch (_) {
+  }
+  return logDir;
+}
+function secureLogFile(filePath) {
+  try {
+    fs17.chmodSync(filePath, 384);
+  } catch (_) {
+  }
+  return filePath;
+}
+function writeSecureLog(filePath, content) {
+  fs17.writeFileSync(filePath, content, { encoding: "utf8", mode: 384 });
+  return secureLogFile(filePath);
+}
+function pruneLogDir(logDir, {
+  maxFiles = DEFAULT_MAX_FILES,
+  maxBytes = DEFAULT_MAX_BYTES,
+  maxAgeMs = DEFAULT_MAX_AGE_MS,
+  now = Date.now()
+} = {}) {
+  let entries = [];
+  try {
+    entries = fs17.readdirSync(logDir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".log")).map((entry) => {
+      const filePath = path17.join(logDir, entry.name);
+      const stat = fs17.statSync(filePath);
+      return { filePath, mtimeMs: stat.mtimeMs, size: stat.size };
+    }).sort((a, b) => b.mtimeMs - a.mtimeMs);
+  } catch (_) {
+    return { removed: 0, kept: 0 };
+  }
+  const kept = [];
+  let totalBytes = 0;
+  let removed = 0;
+  for (const entry of entries) {
+    const expired = now - entry.mtimeMs > maxAgeMs;
+    const exceedsCount = kept.length >= maxFiles;
+    const exceedsBytes = totalBytes + entry.size > maxBytes && kept.length > 0;
+    if (expired || exceedsCount || exceedsBytes) {
+      try {
+        fs17.rmSync(entry.filePath, { force: true });
+        removed += 1;
+      } catch (_) {
+      }
+      continue;
     }
+    kept.push(entry);
+    totalBytes += entry.size;
   }
-  if (resultText.length > maxChars) {
-    resultText = resultText.slice(0, maxChars - 30) + "\n...[output truncated]";
-  }
-  return {
-    text: resultText,
-    summary,
-    exitCode,
-    errors: errors.slice(0, 10),
-    warnings: warnings.slice(0, 5)
-  };
+  return { removed, kept: kept.length };
 }
 
 // packages/process-host/src/runner.mjs
-import { spawn, execSync } from "node:child_process";
-import path10 from "node:path";
-import fs10 from "node:fs";
-import crypto7 from "node:crypto";
 async function runCommand({
   command,
   cwd = process.cwd(),
@@ -47356,11 +49788,11 @@ async function runCommand({
   timeoutMs = 6e4,
   projectRoot = cwd
 }) {
-  const receiptId = `receipt-${Date.now()}-${crypto7.randomBytes(3).toString("hex")}`;
+  const receiptId = `receipt-${Date.now()}-${crypto8.randomBytes(3).toString("hex")}`;
   const startTime = Date.now();
-  const logDir = path10.join(projectRoot, ".contextos", "logs");
-  fs10.mkdirSync(logDir, { recursive: true });
-  const logFile = path10.join(logDir, `${receiptId}.log`);
+  const logDir = ensureLogDir(projectRoot);
+  const logFile = path18.join(logDir, `${receiptId}.log`);
+  pruneLogDir(logDir);
   const maxCaptureChars = 1e7;
   return new Promise((resolve) => {
     let stdoutData = "";
@@ -47415,12 +49847,12 @@ async function runCommand({
 --- STDERR ---
 ${stderrData}` : "") + (captureTruncated ? "\n--- CAPTURE TRUNCATED ---\n" : "");
       try {
-        fs10.writeFileSync(logFile, redactSecrets(rawOutput), "utf8");
+        writeSecureLog(logFile, redactSecrets(rawOutput));
       } catch (_) {
       }
       const exitCode = killedByTimeout ? 124 : code2 !== null ? code2 : 1;
       const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars });
-      const relativeLogHandle = path10.relative(projectRoot, logFile);
+      const relativeLogHandle = path18.relative(projectRoot, logFile);
       resolve({
         id: receiptId,
         command: redactSecrets(command),
@@ -47457,20 +49889,20 @@ ${stderrData}` : "") + (captureTruncated ? "\n--- CAPTURE TRUNCATED ---\n" : "")
 
 // packages/process-host/src/process-manager.mjs
 import { spawn as spawn2, execSync as execSync2 } from "node:child_process";
-import path11 from "node:path";
-import fs11 from "node:fs";
-import crypto8 from "node:crypto";
+import path19 from "node:path";
+import fs18 from "node:fs";
+import crypto9 from "node:crypto";
 var ProcessManager = class {
   constructor({ projectRoot = process.cwd() } = {}) {
-    this.projectRoot = path11.resolve(projectRoot);
+    this.projectRoot = path19.resolve(projectRoot);
     this.sessions = /* @__PURE__ */ new Map();
     this._healZombieProcesses();
   }
   _healZombieProcesses() {
     try {
-      const procFile = path11.join(this.projectRoot, ".contextos", "processes.json");
-      if (!fs11.existsSync(procFile)) return;
-      const data = JSON.parse(fs11.readFileSync(procFile, "utf8"));
+      const procFile = path19.join(this.projectRoot, ".contextos", "processes.json");
+      if (!fs18.existsSync(procFile)) return;
+      const data = JSON.parse(fs18.readFileSync(procFile, "utf8"));
       if (!Array.isArray(data)) return;
       let hasChanges = false;
       for (const item of data) {
@@ -47498,7 +49930,7 @@ var ProcessManager = class {
             exitCode: null,
             port: item.port || null,
             url: item.url || null,
-            logFile: item.logFile || path11.join(this.projectRoot, ".contextos", "logs", `${item.id}.log`),
+            logFile: item.logFile || path19.join(this.projectRoot, ".contextos", "logs", `${item.id}.log`),
             child: null
           });
         } else {
@@ -47519,14 +49951,15 @@ var ProcessManager = class {
     readyRegex = null,
     portRegex = null
   }) {
-    const sessionId = id || `proc-${Date.now()}-${crypto8.randomBytes(3).toString("hex")}`;
+    const sessionId = id || `proc-${Date.now()}-${crypto9.randomBytes(3).toString("hex")}`;
     if (this.sessions.has(sessionId)) {
       throw new Error(`Process session '${sessionId}' already exists`);
     }
-    const logDir = path11.join(this.projectRoot, ".contextos", "logs");
-    fs11.mkdirSync(logDir, { recursive: true });
-    const logFile = path11.join(logDir, `${sessionId}.log`);
-    const logStream = fs11.createWriteStream(logFile, { flags: "a" });
+    const logDir = ensureLogDir(this.projectRoot);
+    pruneLogDir(logDir);
+    const logFile = path19.join(logDir, `${sessionId}.log`);
+    const logStream = fs18.createWriteStream(logFile, { flags: "a", mode: 384 });
+    logStream.on("open", () => secureLogFile(logFile));
     const isWin = process.platform === "win32";
     const shell = isWin ? process.env.ComSpec || "cmd.exe" : "/bin/sh";
     const shellArgs = isWin ? ["/d", "/s", "/c", command] : ["-c", command];
@@ -47594,9 +50027,9 @@ var ProcessManager = class {
   }
   _persistProcesses() {
     try {
-      const procFile = path11.join(this.projectRoot, ".contextos", "processes.json");
-      fs11.mkdirSync(path11.dirname(procFile), { recursive: true });
-      fs11.writeFileSync(procFile, JSON.stringify(this.listProcesses(), null, 2), "utf8");
+      const procFile = path19.join(this.projectRoot, ".contextos", "processes.json");
+      fs18.mkdirSync(path19.dirname(procFile), { recursive: true });
+      fs18.writeFileSync(procFile, JSON.stringify(this.listProcesses(), null, 2), "utf8");
     } catch (_) {
     }
   }
@@ -47610,10 +50043,10 @@ var ProcessManager = class {
   getLogs(sessionId, { lines = 100, grep = null, startLine = null, endLine = null } = {}) {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Process session '${sessionId}' not found`);
-    if (!fs11.existsSync(session.logFile)) {
+    if (!fs18.existsSync(session.logFile)) {
       return { lines: [], total: 0 };
     }
-    const content = fs11.readFileSync(session.logFile, "utf8");
+    const content = fs18.readFileSync(session.logFile, "utf8");
     let allLines = content.split(/\r?\n/);
     if (grep) {
       const query = grep.toLowerCase();
@@ -47630,7 +50063,7 @@ var ProcessManager = class {
       sessionId,
       lines: allLines,
       total: allLines.length,
-      logFile: path11.relative(this.projectRoot, session.logFile)
+      logFile: path19.relative(this.projectRoot, session.logFile)
     };
   }
   async stopProcess(sessionId, { graceMs = 2e3 } = {}) {
@@ -47828,8 +50261,8 @@ var NetworkLayoutEngine = class {
 };
 
 // packages/context/src/markdown-renderer.mjs
-import fs12 from "node:fs";
-import path12 from "node:path";
+import fs19 from "node:fs";
+import path20 from "node:path";
 function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
   if (!ruleId || typeof ruleId !== "string") return null;
   const cleanId = ruleId.trim();
@@ -47865,18 +50298,18 @@ function resolveRuleMeta(ruleId, rulesMap = {}, projectRoot = null) {
   }
   if (root && typeof root === "string") {
     try {
-      const dotDir = path12.join(root, ".contextos", "rules");
-      const stdDir = path12.join(root, "rules");
-      const rulesDir = fs12.existsSync(dotDir) ? dotDir : fs12.existsSync(stdDir) ? stdDir : null;
-      if (rulesDir && fs12.existsSync(rulesDir)) {
+      const dotDir = path20.join(root, ".contextos", "rules");
+      const stdDir = path20.join(root, "rules");
+      const rulesDir = fs19.existsSync(dotDir) ? dotDir : fs19.existsSync(stdDir) ? stdDir : null;
+      if (rulesDir && fs19.existsSync(rulesDir)) {
         let content = null;
-        const targetFile = path12.join(rulesDir, `${cleanId}.md`);
-        if (fs12.existsSync(targetFile)) {
-          content = fs12.readFileSync(targetFile, "utf8");
+        const targetFile = path20.join(rulesDir, `${cleanId}.md`);
+        if (fs19.existsSync(targetFile)) {
+          content = fs19.readFileSync(targetFile, "utf8");
         } else {
-          const files = fs12.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
+          const files = fs19.readdirSync(rulesDir).filter((f) => f.endsWith(".md"));
           for (const f of files) {
-            const fc = fs12.readFileSync(path12.join(rulesDir, f), "utf8");
+            const fc = fs19.readFileSync(path20.join(rulesDir, f), "utf8");
             if (f.replace(/\.md$/, "") === cleanId || fc.includes(`id: ${cleanId}`)) {
               content = fc;
               break;
@@ -48190,15 +50623,25 @@ ${block.details}`);
 };
 
 // packages/mcp/src/v2-service.mjs
+var READ_ONLY_ACTIONS = {
+  code: /* @__PURE__ */ new Set(["outline", "read", "search"]),
+  block: /* @__PURE__ */ new Set(["list", "open", "search"]),
+  chain: /* @__PURE__ */ new Set(["list", "open", "links", "validate", "validate_layout"]),
+  knowledge: /* @__PURE__ */ new Set(["rule_list", "rule_open", "decision_open"])
+};
 var ContextOSV2Service = class {
   constructor({ projectRoot = process.cwd(), projectId = "contextos" } = {}) {
-    this.projectRoot = path13.resolve(projectRoot);
+    this.projectRoot = path21.resolve(projectRoot);
     this.projectId = projectId;
     this.writeContext = new AsyncLocalStorage();
     this.stateConflict = null;
-    const dbPath2 = path13.join(this.projectRoot, ".contextos", "state.sqlite");
-    this.db = new V2Database(dbPath2);
+    const dbPath = path21.join(this.projectRoot, ".contextos", "state.sqlite");
+    this.db = new V2Database(dbPath);
     this.db.ensureProject(this.projectId, this.projectRoot);
+    this.db.adoptLegacyProject(this.projectId, {
+      legacyProjectId: "contextos",
+      repoRoot: this.projectRoot
+    });
     this.syncEngine = new SyncEngine(this.db);
     this.planService = new PlanService(this.db);
     this.taskService = new TaskService(this.db, this.syncEngine);
@@ -48223,6 +50666,38 @@ var ContextOSV2Service = class {
     }
     return true;
   }
+  _isReadOnly(facade, action) {
+    return Boolean(READ_ONLY_ACTIONS[facade]?.has(action));
+  }
+  _validateRuleRefs(value) {
+    const refs = value === void 0 || value === null ? [] : Array.isArray(value) ? value : [value];
+    const clean = [...new Set(refs.filter((ruleId) => typeof ruleId === "string" && ruleId.trim()).map((ruleId) => ruleId.trim()))];
+    const unknown2 = clean.filter((ruleId) => !KnowledgeService.getRule(this.projectRoot, ruleId));
+    if (unknown2.length) throw new Error(`Unknown Rule reference(s): ${unknown2.join(", ")}`);
+    return clean;
+  }
+  /**
+   * Resolve a graph/SQLite divergence instead of leaving the OS wedged.
+   * graph.json is the versioned artifact: whenever it was rewritten after our
+   * last export (git checkout, revert, pull), it is imported even if its
+   * revision is older, so reverting code also reverts the OS. Only a stale copy
+   * we never wrote is overwritten by a fresh export.
+   */
+  healStateConflict() {
+    if (!this.stateConflict) return null;
+    const before = this.stateConflict.reason;
+    const diskRevision = this.stateConflict.graphRevision ?? 0;
+    const dbRevision = this.stateConflict.databaseRevision ?? 0;
+    if (diskRevision > dbRevision || this.syncEngine.graphEditedExternally(this.projectId, this.projectRoot)) {
+      const graphPath = path21.join(this.projectRoot, ".contextos", "graph.json");
+      this.syncEngine.importGraphFromJson(fs20.readFileSync(graphPath, "utf8"), this.projectRoot);
+    } else {
+      this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+    }
+    const after = this.syncEngine.reconcileExternalChange(this.projectId, this.projectRoot);
+    this.stateConflict = after.conflict ? after : null;
+    return { reason: before, healed: !after.conflict };
+  }
   async _withWriteLock(label, callback, { allowConflict = false } = {}) {
     if (this.writeContext.getStore() === true) return callback();
     return withProjectWriteLock(
@@ -48237,12 +50712,82 @@ var ContextOSV2Service = class {
     );
   }
   _resolveProjectPath(inputPath, label = "path") {
-    const fullPath = path13.resolve(this.projectRoot, inputPath);
-    const relativePath = path13.relative(this.projectRoot, fullPath).split(path13.sep).join("/");
-    if (relativePath.startsWith("..") || path13.isAbsolute(relativePath)) {
+    const fullPath = path21.resolve(this.projectRoot, inputPath);
+    const relativePath = path21.relative(this.projectRoot, fullPath).split(path21.sep).join("/");
+    if (relativePath.startsWith("..") || path21.isAbsolute(relativePath)) {
       throw new Error(`${label} '${inputPath}' is outside project root '${this.projectRoot}'`);
     }
     return { fullPath, relativePath };
+  }
+  // A curated Block must anchor to real code: fill the line range + hash for a
+  // `{ path, symbol }` ref, or the file hash for a whole-file ref, so the graph
+  // never stores an empty locator.
+  _anchorSymbolRef(ref) {
+    if (!ref?.path) throw new Error("ArtifactRef requires a path");
+    const resolved = this._resolveProjectPath(ref.path, "artifactRef path");
+    const { fullPath, relativePath } = resolved;
+    if (!fs20.existsSync(fullPath)) {
+      throw new Error(`ArtifactRef path does not exist: '${relativePath}'`);
+    }
+    const stat = fs20.statSync(fullPath);
+    if (stat.isDirectory()) {
+      const hashMode = ref.hashMode || (ref.manifest ? "manifest" : "content");
+      const manifest = ref.manifest ? this._resolveProjectPath(ref.manifest, "artifactRef manifest").relativePath : null;
+      const resolvedTree = calculateTreeHash(this.projectRoot, relativePath, { hashMode, manifest });
+      if (ref.hash && ref.hash !== resolvedTree.hash) {
+        throw new Error(`ArtifactRef hash is stale for '${relativePath}'. Re-run bind_auto to refresh it.`);
+      }
+      return {
+        ...ref,
+        path: relativePath,
+        symbol: null,
+        anchorKind: "tree",
+        startLine: null,
+        endLine: null,
+        hash: resolvedTree.hash,
+        hashMode: resolvedTree.hashMode,
+        manifest: resolvedTree.manifest
+      };
+    }
+    const content = fs20.readFileSync(fullPath, "utf8");
+    const lines = content.split(/\r?\n/);
+    if (!ref.symbol) {
+      const hash = calculateHash2(content);
+      if (ref.hash && ref.hash !== hash) {
+        throw new Error(`ArtifactRef hash is stale for '${relativePath}'. Re-run bind_auto to refresh it.`);
+      }
+      return {
+        ...ref,
+        path: relativePath,
+        symbol: null,
+        anchorKind: "file",
+        startLine: 1,
+        endLine: lines.length || 1,
+        hash,
+        hashMode: null,
+        manifest: null
+      };
+    }
+    const structure = LanguageRegistry.parseStructure(relativePath, content);
+    const bare = ref.symbol.includes("#") ? ref.symbol.split("#").pop().trim() : ref.symbol;
+    const match = structure.symbols.find((s) => s.name === bare) || structure.symbols.find((s) => s.shortName === bare) || structure.symbols.find((s) => s.name.endsWith(`.${bare}`)) || structure.symbols.find((s) => s.containerName && `${s.containerName}.${s.shortName || s.name}`.endsWith(`.${bare}`));
+    if (!match) {
+      throw new Error(`Symbol '${ref.symbol}' not found in '${relativePath}'. Drop 'symbol' to bind the whole file.`);
+    }
+    if (ref.hash && ref.hash !== match.hash) {
+      throw new Error(`ArtifactRef hash is stale for '${relativePath}'. Re-run bind_auto to refresh it.`);
+    }
+    return {
+      ...ref,
+      path: relativePath,
+      symbol: match.name,
+      anchorKind: "symbol",
+      startLine: match.startLine,
+      endLine: match.endLine,
+      hash: match.hash,
+      hashMode: null,
+      manifest: null
+    };
   }
   // ================= 1. os_context =================
   async osContext({ action = "brief", query = "", entityId = "", format = "markdown" }) {
@@ -48371,7 +50916,6 @@ Members: ${chain.memberIds.join(", ")}`;
           const hygiene = res.conflict ? { changed: 0, blockedTaskIds: [] } : this.taskService.repairStateHygiene(this.projectId);
           const planHygiene = res.conflict ? { changed: 0, changedPlanIds: [] } : this.planService.repairStateHygiene(this.projectId);
           if (hygiene.changed > 0 || planHygiene.changed > 0) {
-            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
           }
           if (res.changed) {
             return `External Git/JSON change applied! Graph revision updated to ${res.revision}.`;
@@ -48399,9 +50943,26 @@ Members: ${chain.memberIds.join(", ")}`;
         return "# Project Plans\n" + (plans.length ? plans.map((p) => `- [${p.status.toUpperCase()}] **${p.title}** (${p.id}) - ${p.summary}`).join("\n") : "No plans yet.");
       }
       case "create": {
-        const created = this.planService.createPlan({ ...planData, projectId: this.projectId });
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        const ruleRefs = this._validateRuleRefs(planData.ruleRefs ?? planData.rule_refs);
+        const created = this.planService.createPlan({
+          ...planData,
+          id: id || planData.id,
+          projectId: this.projectId,
+          ruleRefs
+        });
         return format === "json" ? created : MarkdownRenderer.renderPlan(created);
+      }
+      case "update": {
+        const updates = { ...planData };
+        if (updates.ruleRefs !== void 0 || updates.rule_refs !== void 0) {
+          updates.ruleRefs = this._validateRuleRefs(updates.ruleRefs ?? updates.rule_refs);
+        }
+        const updated = this.planService.updatePlan(id, updates);
+        return format === "json" ? updated : MarkdownRenderer.renderPlan(updated);
+      }
+      case "upsert": {
+        if (!this.db.getPlan(id)) return this._plan({ action: "create", id, planData: { ...planData, id }, format });
+        return this._plan({ action: "update", id, planData, format });
       }
       case "open": {
         const plan = this.db.getPlan(id);
@@ -48410,18 +50971,15 @@ Members: ${chain.memberIds.join(", ")}`;
       }
       case "check": {
         const cp = this.planService.checkCheckpoint(id, checkpointId, { passed, evidenceRef });
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Checkpoint '${checkpointId}' in Plan '${id}' marked as ${cp.status}.`;
       }
       case "complete": {
         const completed = this.planService.completePlan(id, planData);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === "json" ? completed : `Plan '${id}' completed successfully!
 Summary: ${completed.completedSummary}`;
       }
       case "delete": {
         const deleted = this.planService.deletePlan(id);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === "json" ? { deleted, id } : `Plan '${id}' deleted successfully.`;
       }
       default:
@@ -48479,11 +51037,23 @@ Summary: ${completed.completedSummary}`;
   }) {
     switch (action) {
       case "start": {
+        const targetId = taskData.id || id;
+        const existing = targetId ? this.db.getTask(targetId) : null;
+        if (existing) {
+          const patch = {};
+          if (taskData.title !== void 0) patch.title = taskData.title;
+          if (taskData.contextSlice !== void 0) patch.contextSlice = taskData.contextSlice;
+          const incomingRules2 = rules ?? taskData.rules ?? taskData.ruleRefs ?? taskData.references?.rules ?? (ruleId ? [ruleId] : void 0);
+          if (incomingRules2 !== void 0) patch.rules = this._validateRuleRefs(incomingRules2);
+          if (Object.keys(patch).length) this.taskService.updateTask(existing.id, patch);
+          const started2 = this.taskService.activateTask(existing.id, this.projectRoot);
+          return format === "json" ? { task: started2, autoPlanId: null, lightweight: false, preserved: true } : `Task '${started2.id}' started in state '${started2.status}'.`;
+        }
         const payload = { ...taskData };
-        payload.id = payload.id || `task-${Date.now()}`;
+        payload.id = payload.id || id || `task-${Date.now()}`;
         payload.title = payload.title || "Untitled task";
-        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
-        if (rules && !payload.rules) payload.rules = rules;
+        const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : void 0);
+        if (incomingRules !== void 0) payload.rules = this._validateRuleRefs(incomingRules);
         let autoPlanId = null;
         if (!payload.planId) {
           const activePlan = this.db.listPlans(this.projectId).filter((plan) => plan.status === "active").at(-1);
@@ -48505,7 +51075,6 @@ Summary: ${completed.completedSummary}`;
         payload.phaseId = this._ensurePlanPhase(payload.planId, payload.phaseId);
         const created = this.taskService.createTask(payload, this.projectRoot);
         const started = this.taskService.activateTask(created.id, this.projectRoot);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         if (format === "json") {
           return {
             task: started,
@@ -48517,8 +51086,8 @@ Summary: ${completed.completedSummary}`;
       }
       case "create": {
         const payload = { ...taskData };
-        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
-        if (rules && !payload.rules) payload.rules = rules;
+        const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : void 0);
+        if (incomingRules !== void 0) payload.rules = this._validateRuleRefs(incomingRules);
         const created = this.taskService.createTask(payload, this.projectRoot);
         return format === "json" ? created : MarkdownRenderer.renderTask(created, { projectRoot: this.projectRoot });
       }
@@ -48536,19 +51105,21 @@ Summary: ${completed.completedSummary}`;
       case "bind_rule": {
         const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
         if (!targetRule) throw new Error("ruleId is required to bind a rule");
+        this._validateRuleRefs(targetRule);
         const updated = this.taskService.bindRule(id, targetRule);
         return format === "json" ? updated : `Rule '${targetRule}' bound to Task '${id}'.`;
       }
       case "unbind_rule": {
         const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
         if (!targetRule) throw new Error("ruleId is required to unbind a rule");
+        this._validateRuleRefs(targetRule);
         const updated = this.taskService.unbindRule(id, targetRule);
         return format === "json" ? updated : `Rule '${targetRule}' unbound from Task '${id}'.`;
       }
       case "update": {
         const payload = { ...taskData };
-        if (rules && payload.rules === void 0) payload.rules = rules;
-        if (ruleId && payload.ruleId === void 0) payload.ruleId = ruleId;
+        const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : void 0);
+        if (incomingRules !== void 0) payload.rules = this._validateRuleRefs(incomingRules);
         const updated = this.taskService.updateTask(id, payload);
         return format === "json" ? updated : MarkdownRenderer.renderTask(updated, { projectRoot: this.projectRoot });
       }
@@ -48604,7 +51175,6 @@ Summary: ${completed.completedSummary}`;
             completedPlan = this.planService.completePlan(plan.id, {
               completedSummary: `Lightweight task '${result.task.title}' completed.`
             });
-            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
           }
         }
         if (format === "json") {
@@ -48722,6 +51292,7 @@ ${bindRes}`;
     }
   }
   async block(input) {
+    if (this._isReadOnly("block", input.action)) return this._block(input);
     return this._withWriteLock("block", () => this._block(input));
   }
   async _block({
@@ -48800,19 +51371,26 @@ ${bindRes}`;
         const existingRefs = existing?.artifactRefs || [];
         const mergedRefs = [...existingRefs];
         for (const nr of normalizedRefs) {
-          if (!mergedRefs.some((r) => r.path === nr.path && (!nr.symbol || r.symbol === nr.symbol))) {
-            mergedRefs.push(nr);
+          const anchored = this._anchorSymbolRef(nr);
+          if (anchored.symbolUnresolved) {
+            throw new Error(`Symbol '${anchored.symbol}' not found in '${anchored.path}'. Drop 'symbol' to bind the whole file.`);
+          }
+          const at = mergedRefs.findIndex((r) => r.path === anchored.path && (!anchored.symbol || r.symbol === anchored.symbol));
+          if (at < 0) {
+            mergedRefs.push(anchored);
+          } else if (!mergedRefs[at].hash || mergedRefs[at].startLine == null) {
+            mergedRefs[at] = { ...mergedRefs[at], ...anchored };
           }
         }
-        const block = {
+        const block = new Block({
           ...existing || {},
           ...blockData,
           id: targetId,
           projectId: this.projectId,
           artifactRefs: mergedRefs
-        };
-        this.db.saveBlock(block);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        });
+        assertBlockHasRealCode(block);
+        this.db.saveBlock(block.toJSON());
         return `Block '${block.id}' bound with ${block.artifactRefs.length} code locators.`;
       }
       case "bind_auto": {
@@ -48838,19 +51416,28 @@ ${bindRes}`;
           throw new Error("Missing 'path' or 'paths' parameter for bind_auto (e.g. path: 'SceneRenderer.swift')");
         }
         const symbolFilters = new Set(
-          (symbols || blockData?.symbols || []).map((s) => {
-            return s.includes("#") ? s.split("#")[1].trim() : s.trim();
-          }).filter(Boolean)
+          (symbols || blockData?.symbols || []).map((s) => String(s).trim()).filter(Boolean)
         );
+        const matchesFilter = (sym, fileBase = "") => {
+          for (const filter of symbolFilters) {
+            const bare = filter.includes("#") ? filter.split("#").pop().trim() : filter;
+            if (sym.name === bare || sym.shortName === bare) return true;
+            if (sym.name.endsWith(`.${bare}`)) return true;
+            if (`${fileBase}.${sym.shortName || sym.name}` === filter) return true;
+            const qualified = sym.containerName ? `${sym.containerName}.${sym.shortName || sym.name}` : null;
+            if (qualified && (qualified === bare || qualified.endsWith(`.${bare}`))) return true;
+          }
+          return false;
+        };
         const autoArtifactRefs = [];
         for (const inputPath of rawPaths) {
           const resolvedPath = this._resolveProjectPath(inputPath, "path");
           const cleanRelPath = resolvedPath.relativePath;
           const fullPath = resolvedPath.fullPath;
-          if (!fs13.existsSync(fullPath)) {
+          if (!fs20.existsSync(fullPath)) {
             throw new Error(`File not found on disk: '${cleanRelPath}' (resolved at: ${fullPath})`);
           }
-          const stat = fs13.statSync(fullPath);
+          const stat = fs20.statSync(fullPath);
           if (stat.isDirectory()) {
             const resolvedManifest = manifest ? this._resolveProjectPath(manifest, "manifest").relativePath : findDirectoryManifest(this.projectRoot, cleanRelPath);
             const resolved = calculateTreeHash(this.projectRoot, cleanRelPath, {
@@ -48867,7 +51454,7 @@ ${bindRes}`;
             });
             continue;
           }
-          const content = fs13.readFileSync(fullPath, "utf8");
+          const content = fs20.readFileSync(fullPath, "utf8");
           const fileHash = calculateHash2(content);
           const lines = content.split(/\r?\n/);
           let structure = null;
@@ -48880,7 +51467,8 @@ ${bindRes}`;
           const declaredSymbols = fileSymbols.filter((symbol) => symbol.kind !== "file");
           let matchedSymbols = declaredSymbols;
           if (symbolFilters.size > 0) {
-            matchedSymbols = declaredSymbols.filter((s) => symbolFilters.has(s.name));
+            const fileBase = path21.basename(cleanRelPath).replace(/\.[^.]+$/, "");
+            matchedSymbols = declaredSymbols.filter((sym) => matchesFilter(sym, fileBase));
           }
           if (matchedSymbols.length > 0) {
             const CONTAINER_KINDS = /* @__PURE__ */ new Set(["class", "struct", "trait", "interface", "extension", "impl", "record", "object", "enum"]);
@@ -48898,7 +51486,12 @@ ${bindRes}`;
               });
             }
           } else {
-            const baseSymbol = path13.basename(cleanRelPath);
+            if (symbolFilters.size > 0) {
+              throw new Error(
+                `Symbol(s) ${[...symbolFilters].map((s) => `'${s}'`).join(", ")} not found in '${cleanRelPath}'. Use a fully qualified name like 'ClassName.method', or drop 'symbols' to bind the file.`
+              );
+            }
+            const baseSymbol = path21.basename(cleanRelPath);
             autoArtifactRefs.push({
               path: cleanRelPath,
               anchorKind: "file",
@@ -48923,15 +51516,15 @@ ${bindRes}`;
             mergedRefs.push(autoRef);
           }
         }
-        const updatedBlock = {
+        const updatedBlock = new Block({
           ...existing,
           ...blockData,
           id: targetId,
           projectId: this.projectId,
           artifactRefs: mergedRefs
-        };
-        this.db.saveBlock(updatedBlock);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        });
+        assertBlockHasRealCode(updatedBlock);
+        this.db.saveBlock(updatedBlock.toJSON());
         if (format === "json") {
           return { block: updatedBlock, addedRefs: autoArtifactRefs };
         }
@@ -48944,7 +51537,6 @@ ${bindRes}`;
       }
       case "delete": {
         this.db.deleteBlock(id);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Block '${id}' deleted successfully.`;
       }
       default:
@@ -48953,6 +51545,7 @@ ${bindRes}`;
   }
   // ================= 5. chain =================
   async chain(input) {
+    if (this._isReadOnly("chain", input.action)) return this._chain(input);
     return this._withWriteLock("chain", () => this._chain(input));
   }
   async _chain({ action, id, chainData = {}, linkData = {}, format = "markdown" }) {
@@ -48970,17 +51563,14 @@ Members: ${chain.memberIds.join(", ")}`;
       }
       case "compose": {
         this.db.saveChain({ ...chainData, projectId: this.projectId });
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Chain '${chainData.id}' composed successfully.`;
       }
       case "delete": {
         this.db.deleteChain(id);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Chain '${id}' deleted successfully.`;
       }
       case "link": {
         this.db.saveLink({ ...linkData, projectId: this.projectId });
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Link created: ${linkData.from} -[${linkData.kind}]-> ${linkData.to}`;
       }
       case "unlink": {
@@ -48993,7 +51583,6 @@ Members: ${chain.memberIds.join(", ")}`;
         } else {
           throw new Error("Action 'unlink' requires link id or { from, to } in linkData");
         }
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Link between '${from}' and '${to}' removed.`;
       }
       case "links": {
@@ -49016,7 +51605,8 @@ Members: ${chain.memberIds.join(", ")}`;
         const missingMembers = chains.flatMap(
           (chain) => (chain.memberIds || []).filter((blockId) => !blockIds.has(blockId)).map((blockId) => ({ chainId: chain.id, blockId }))
         );
-        const orphanBlocks = blocks.filter((block) => !chainedIds.has(block.id)).map((block) => block.id);
+        const derivedBlocks = blocks.filter((block) => String(block.id).startsWith("mod-")).map((block) => block.id);
+        const orphanBlocks = blocks.filter((block) => !chainedIds.has(block.id) && !String(block.id).startsWith("mod-")).map((block) => block.id);
         const danglingLinks = links.filter((link) => !blockIds.has(link.from) || !blockIds.has(link.to)).map((link) => link.id);
         const layout = NetworkLayoutEngine.computeLayout({ blocks, chains, links });
         return {
@@ -49024,6 +51614,7 @@ Members: ${chain.memberIds.join(", ")}`;
           nodeCount: layout.nodes.length,
           edgeCount: layout.edges.length,
           bounds: layout.bounds,
+          derivedBlocks: derivedBlocks.length,
           orphanBlocks,
           missingMembers,
           danglingLinks
@@ -49035,27 +51626,104 @@ Members: ${chain.memberIds.join(", ")}`;
   }
   // ================= 6. code =================
   async code(input) {
+    if (this._isReadOnly("code", input.action)) return this._code(input);
     return this._withWriteLock("code", () => this._code(input));
   }
-  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, format = "markdown" }) {
+  _recordChangedFiles(files = []) {
+    const activeTask = this.taskService.findActiveTask(this.projectId);
+    if (!activeTask) return;
+    for (const file of files) {
+      this.taskService.addFileToWorkingSet(activeTask.id, file.path);
+      try {
+        const fullPath = this._resolveProjectPath(file.path, "changed file").fullPath;
+        const stat = fs20.statSync(fullPath);
+        activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
+        activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
+        activeTask.baseline.fileSnapshots[file.path] = {
+          mtimeMs: stat.mtimeMs,
+          size: stat.size,
+          hash: file.newHash,
+          snapshottedAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
+      } catch (_) {
+      }
+    }
+    this.db.saveTask(activeTask);
+  }
+  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = "markdown", changes = [] }) {
+    if (action === "changeset") {
+      const result = applyChangeset(this.projectRoot, changes);
+      this._recordChangedFiles(result.files);
+      if (format === "json") return result;
+      return [
+        "# ContextOS changeset",
+        "",
+        ...result.files.map((file) => `- ${file.created ? "created" : "edited"} \`${file.path}\` (hash ${file.newHash || "n/a"})`)
+      ].join("\n");
+    }
     if (action === "search" && !relPath) {
+      if (!String(query || "").trim()) {
+        return '# Search\n\n`query` is required. Example: `ops({ capability: "code", action: "search", args: { query: "observer", root: "packages/orchestrator" } })`';
+      }
+      const rootPath = root ? path21.resolve(this.projectRoot, String(root)) : null;
+      const rootRelative = rootPath ? path21.relative(this.projectRoot, rootPath).split(path21.sep).join("/").replace(/^\.\//, "").replace(/\/+$/, "") : "";
+      const rootIsFile = Boolean(rootPath && fs20.existsSync(rootPath) && fs20.statSync(rootPath).isFile());
+      const isArtifact = (p) => p.startsWith("dist/") || p.startsWith("plugins/contextos/server/") || p.includes("node_modules/");
       const blocks = this.db.listBlocks(this.projectId);
       const allFiles = /* @__PURE__ */ new Set();
       for (const b of blocks) {
         for (const ref of b.artifactRefs) {
+          if (isArtifact(ref.path)) continue;
+          if (rootPath) {
+            const inRoot = rootIsFile ? ref.path === rootRelative : !rootRelative || ref.path === rootRelative || ref.path.startsWith(`${rootRelative}/`);
+            if (!inRoot) continue;
+          }
           allFiles.add(ref.path);
         }
       }
       const results = CodeTools.searchWorkspace(this.projectRoot, query || "", Array.from(allFiles));
-      if (format === "json") return results;
-      const lines = [`# Workspace Symbols matching: \`${query}\``];
-      if (results.length === 0) {
-        lines.push("No matching symbols found.");
-      } else {
-        for (const r of results) {
+      const wanted = Number(limit || maxResults || 8);
+      const runText = (needle) => CodeTools.searchText(this.projectRoot, needle, {
+        limit: Math.max(1, wanted - results.length),
+        root
+      });
+      let text = runText(query || "");
+      let retriedWith = null;
+      if (!results.length && !text.hits.length && /\s/.test(String(query || "").trim())) {
+        const token = String(query).split(/[\s,，、]+/).filter(Boolean).sort((a, b) => b.length - a.length)[0];
+        if (token) {
+          const retry = runText(token);
+          if (retry.hits.length) {
+            text = retry;
+            retriedWith = token;
+          }
+        }
+      }
+      if (format === "json") {
+        return { symbols: results, text: text.hits, scannedFiles: text.scanned, truncated: text.truncated, retriedWith };
+      }
+      const lines = [`# Search: \`${query}\`${root ? ` (root: \`${root}\`)` : ""}`];
+      if (results.length > 0) {
+        lines.push("\n## Symbols");
+        for (const r of results.slice(0, wanted)) {
           const sig = r.signature ? ` - \`${r.signature}\`` : "";
           lines.push(`- **${r.kind}** \`${r.symbol}\`${sig} [\`${r.path}\`:L${r.startLine}-L${r.endLine}]`);
         }
+      }
+      if (text.hits.length > 0) {
+        lines.push(`
+## Textual matches${retriedWith ? ` (retried with \`${retriedWith}\`)` : ""}`);
+        for (const hit of text.hits) {
+          lines.push(`- \`${hit.path}\`:L${hit.line}: \`${hit.content}\``);
+        }
+      }
+      if (results.length === 0 && text.hits.length === 0) {
+        lines.push(`
+No symbol or text match. Scanned ${text.scanned} files${text.truncated ? " (walk budget reached)" : ""}.`);
+        lines.push("Next: shorten the query to a single token, drop `root` to search the whole repo, or run `explore` with the intent.");
+      } else {
+        lines.push(`
+> scanned ${text.scanned} files${text.truncated ? " (walk budget reached, narrow with `root`)" : ""}; want more? raise \`maxResults\`.`);
       }
       return lines.join("\n");
     }
@@ -49064,18 +51732,18 @@ Members: ${chain.memberIds.join(", ")}`;
     relPath = resolvedPath.relativePath;
     const fullPath = resolvedPath.fullPath;
     if (action === "create") {
-      if (fs13.existsSync(fullPath)) {
+      if (fs20.existsSync(fullPath)) {
         throw new Error(`File already exists: ${relPath}. Use action 'edit' for existing files.`);
       }
-      fs13.mkdirSync(path13.dirname(fullPath), { recursive: true });
+      fs20.mkdirSync(path21.dirname(fullPath), { recursive: true });
       const initialContent = replacementContent || rawContent || "";
-      fs13.writeFileSync(fullPath, initialContent, "utf8");
+      fs20.writeFileSync(fullPath, initialContent, "utf8");
       const res = CodeTools.create(relPath, initialContent);
       const activeTask = this.taskService.findActiveTask(this.projectId);
       if (activeTask) {
         this.taskService.addFileToWorkingSet(activeTask.id, relPath);
         try {
-          const stat = fs13.statSync(fullPath);
+          const stat = fs20.statSync(fullPath);
           activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
           activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
           activeTask.baseline.fileSnapshots[relPath] = {
@@ -49095,8 +51763,8 @@ Members: ${chain.memberIds.join(", ")}`;
         message: `File '${relPath}' created successfully with AST anchors initialized.`
       };
     }
-    if (!fs13.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
-    const content = fs13.readFileSync(fullPath, "utf8");
+    if (!fs20.existsSync(fullPath)) throw new Error(`File not found: ${relPath}`);
+    const content = fs20.readFileSync(fullPath, "utf8");
     switch (action) {
       case "outline": {
         const res = CodeTools.outline(relPath, content);
@@ -49104,12 +51772,16 @@ Members: ${chain.memberIds.join(", ")}`;
       }
       case "read": {
         const effectiveSelector = selector || (startLine !== void 0 || endLine !== void 0 ? { startLine, endLine } : null);
-        const res = CodeTools.read(relPath, content, effectiveSelector);
+        const res = CodeTools.read(relPath, content, effectiveSelector || { fullFile: true });
         if (format === "json") return res;
-        return `\`\`\`${path13.extname(relPath).slice(1) || "text"}
+        const fence = (code2) => `\`\`\`${path21.extname(relPath).slice(1) || "text"}
 // ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})
-${res.code}
+${code2}
 \`\`\``;
+        if (res.code.length <= 2e4) return fence(res.code);
+        return `${fence(res.code.slice(0, 2e4))}
+
+<!-- \u5168\u6587 ${res.totalLines} \u884C / ${res.code.length} \u5B57\u7B26\uFF0C\u5DF2\u622A\u65AD\u5230\u524D 20000 \u5B57\u7B26 -->`;
       }
       case "edit": {
         let selectorObj = {};
@@ -49135,12 +51807,12 @@ ${res.code}
           startLine: effectiveStartLine,
           endLine: effectiveEndLine
         });
-        fs13.writeFileSync(fullPath, res.newContent, "utf8");
+        fs20.writeFileSync(fullPath, res.newContent, "utf8");
         const activeTask = this.taskService.findActiveTask(this.projectId);
         if (activeTask) {
           this.taskService.addFileToWorkingSet(activeTask.id, relPath);
           try {
-            const stat = fs13.statSync(fullPath);
+            const stat = fs20.statSync(fullPath);
             activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
             activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
             activeTask.baseline.fileSnapshots[relPath] = {
@@ -49228,6 +51900,7 @@ ${res.code}
   }
   // ================= 9. knowledge =================
   async knowledge(input) {
+    if (this._isReadOnly("knowledge", input.action)) return this._knowledge(input);
     return this._withWriteLock("knowledge", () => this._knowledge(input));
   }
   async _knowledge({ action, ruleId, ruleData = {}, sectionId, sectionTitle, content, format = "markdown" }) {
@@ -49272,6 +51945,86 @@ ${sec.content}`;
     }
   }
 };
+
+// packages/mcp/src/admin-cli.mjs
+function parseArgs(tokens) {
+  const options = {};
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token.startsWith("--")) continue;
+    const key = token.slice(2).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    const next = tokens[index + 1];
+    if (next === void 0 || next.startsWith("--")) {
+      options[key] = true;
+      continue;
+    }
+    options[key] = next;
+    index += 1;
+  }
+  for (const key of ["paths"]) {
+    if (!options[key]) continue;
+    try {
+      options[key] = JSON.parse(options[key]);
+    } catch (_) {
+      options[key] = String(options[key]).split(",").map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  if (options.ttlDays !== void 0) options.ttlDays = Number(options.ttlDays);
+  if (options.dryRun !== void 0) options.dryRun = options.dryRun !== "false";
+  if (options.purge !== void 0) options.purge = options.purge !== "false";
+  return options;
+}
+function writeJson(value) {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}
+`);
+}
+async function runAdminCli(argv = process.argv.slice(2)) {
+  const [command, ...tokens] = argv;
+  if (!command || command === "help" || command === "--help") {
+    process.stdout.write(
+      [
+        "Usage: contextos-mcp.mjs <command> [options]",
+        "  sync",
+        "  context"
+      ].join("\n") + "\n"
+    );
+    return 0;
+  }
+  const options = parseArgs(tokens);
+  const projectRoot = path22.resolve(options.projectRoot || process.cwd());
+  delete options.projectRoot;
+  let projectId = options.projectId;
+  delete options.projectId;
+  if (!projectId) {
+    try {
+      const projectConfig = JSON.parse(
+        fs21.readFileSync(path22.join(projectRoot, ".contextos", "project.json"), "utf8")
+      );
+      projectId = projectConfig.id;
+    } catch (_) {
+    }
+  }
+  const service = new ContextOSV2Service({ projectRoot, projectId: projectId || "contextos" });
+  try {
+    if (command === "sync" || command === "reconcile" || command === "context") {
+      service.syncEngine.publishIfDirty(service.projectId, projectRoot);
+      const result = await service.osContext({ action: "reconcile", format: "json" });
+      writeJson({ ok: true, command: "sync", result });
+      return 0;
+    }
+    throw new Error(`Unknown admin command: ${command}`);
+  } catch (err2) {
+    writeJson({ ok: false, command, error: err2.message });
+    return 1;
+  } finally {
+    service.close({ stopProcesses: false });
+  }
+}
+
+// packages/mcp/src/service-factory.mjs
+import fs23 from "node:fs";
+import path24 from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/mcp/src/cloud-client.mjs
 var ContextOSCloudClient = class {
@@ -49340,7 +52093,11 @@ var ContextOSCloudClient = class {
       if (!response.ok) {
         throw new Error(`Cloud server returned HTTP ${response.status}: ${response.statusText}`);
       }
-      return await response.json();
+      const data = await response.json();
+      if (!data || data.schemaVersion !== 4) {
+        throw new Error(`Unsupported cloud snapshot schemaVersion: ${data?.schemaVersion ?? "missing"}`);
+      }
+      return data;
     } catch (err2) {
       clearTimeout(timeout);
       throw new Error(`[ContextOS Cloud Error] Failed to fetch snapshot from ${url}: ${err2.message}`);
@@ -49355,48 +52112,26 @@ var ContextOSCloudClient = class {
       const response = await fetch(url, {
         method: "POST",
         headers: this.getHeaders(),
-        body: JSON.stringify(snapshot),
+        body: JSON.stringify({ ...snapshot, schemaVersion: snapshot.schemaVersion || 4 }),
         signal: controller.signal
       });
       clearTimeout(timeout);
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.status === "ok") {
-          return data;
-        }
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Cloud server returned HTTP ${response.status}: ${errorText || response.statusText}`);
       }
-    } catch {
+      const data = await response.json();
+      if (!data || data.status !== "ok" || data.schemaVersion !== 4) {
+        throw new Error("Cloud snapshot replacement did not confirm schemaVersion 4.");
+      }
+      return data;
+    } catch (err2) {
       clearTimeout(timeout);
+      if (err2.name === "AbortError") {
+        throw new Error(`[ContextOS Cloud] Snapshot push to ${url} timed out after ${this.timeoutMs}ms.`);
+      }
+      throw new Error(`[ContextOS Cloud Error] Failed to replace snapshot at ${url}: ${err2.message}`);
     }
-    let pushedPlans = 0;
-    for (const p of snapshot.plans || []) {
-      await this.call("plan", {
-        action: "create",
-        planData: {
-          id: p.id,
-          title: p.title || p.id,
-          summary: p.summary || "",
-          priority: p.priority || "normal"
-        }
-      });
-      pushedPlans++;
-    }
-    let pushedBlocks = 0;
-    for (const b of snapshot.blocks || []) {
-      await this.call("block", {
-        action: "bind",
-        id: b.id,
-        blockData: {
-          title: b.title || b.id,
-          kind: b.kind || "service",
-          summary: b.summary || "",
-          details: b.details || b.body || "",
-          artifactRefs: b.artifactRefs || []
-        }
-      });
-      pushedBlocks++;
-    }
-    return { status: "ok", pushedBlocks, pushedPlans, mode: "call_fallback" };
   }
   async checkHealth() {
     const url = `${this.cloudUrl}/api/v2/health`;
@@ -49511,56 +52246,18 @@ ${localBrief}` : localBrief;
   }
 };
 
-// packages/mcp/src/tool-contract.mjs
-var TOOL_ACTIONS = Object.freeze({
-  os_context: Object.freeze(["brief", "search", "open", "reconcile"]),
-  plan: Object.freeze(["list", "create", "open", "check", "complete", "delete"]),
-  task: Object.freeze([
-    "create",
-    "start",
-    "open",
-    "note",
-    "check",
-    "finish",
-    "sync",
-    "resume",
-    "activate",
-    "develop",
-    "bind_rule",
-    "unbind_rule",
-    "update",
-    "probe",
-    "graduate_probe",
-    "reconcile"
-  ]),
-  block: Object.freeze(["list", "open", "search", "bind", "bind_auto", "delete"]),
-  chain: Object.freeze([
-    "list",
-    "open",
-    "compose",
-    "delete",
-    "link",
-    "unlink",
-    "links",
-    "validate_layout",
-    "validate"
-  ]),
-  code: Object.freeze(["outline", "read", "edit", "search", "create"]),
-  run_command: Object.freeze([]),
-  process: Object.freeze(["start", "list", "status", "logs", "stop", "clear"]),
-  knowledge: Object.freeze(["rule_list", "rule_open", "rule_write", "decision_open", "decision_write"]),
-  contextos_init: Object.freeze([]),
-  contextos_doctor: Object.freeze([]),
-  contextos_switch: Object.freeze([])
-});
-var MCP_TOOL_NAMES = Object.freeze(Object.keys(TOOL_ACTIONS));
-
 // packages/mcp/src/bootstrap-util.mjs
-import fs14 from "node:fs";
-import path14 from "node:path";
+import fs22 from "node:fs";
+import path23 from "node:path";
 import os from "node:os";
-import { execSync as execSync3 } from "node:child_process";
+import { execFileSync as execFileSync3 } from "node:child_process";
+import { randomUUID as randomUUID2 } from "node:crypto";
 var HOME = os.homedir();
+function deriveProjectId(projectRoot) {
+  const baseName = path23.basename(path23.resolve(projectRoot || process.cwd())).trim();
+  const slug = baseName.toLowerCase().replace(/ +/g, "-");
+  return slug || "contextos";
+}
 function resolveNodeExecutable() {
   const isWin = process.platform === "win32";
   const isMac = process.platform === "darwin";
@@ -49568,22 +52265,22 @@ function resolveNodeExecutable() {
   if (isWin) {
     const programFiles = process.env.ProgramFiles || "C:\\Program Files";
     const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
-    const localAppData = process.env.LOCALAPPDATA || path14.join(HOME, "AppData\\Local");
-    const appData = process.env.APPDATA || path14.join(HOME, "AppData\\Roaming");
+    const localAppData = process.env.LOCALAPPDATA || path23.join(HOME, "AppData\\Local");
+    const appData = process.env.APPDATA || path23.join(HOME, "AppData\\Roaming");
     candidates.push(
-      path14.join(programFiles, "nodejs\\node.exe"),
-      path14.join(programFilesX86, "nodejs\\node.exe"),
-      path14.join(appData, "nvm\\current\\node.exe"),
-      path14.join(localAppData, "Programs\\node\\node.exe"),
-      path14.join(localAppData, "ContextOS\\bin\\node.exe")
+      path23.join(programFiles, "nodejs\\node.exe"),
+      path23.join(programFilesX86, "nodejs\\node.exe"),
+      path23.join(appData, "nvm\\current\\node.exe"),
+      path23.join(localAppData, "Programs\\node\\node.exe"),
+      path23.join(localAppData, "ContextOS\\bin\\node.exe")
     );
   } else if (isMac) {
     candidates.push(
       "/Applications/ContextOS.app/Contents/Resources/bin/node",
-      path14.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
+      path23.join(HOME, "Applications/ContextOS.app/Contents/Resources/bin/node"),
       "/opt/homebrew/bin/node",
       "/usr/local/bin/node",
-      path14.join(HOME, ".nvm/current/bin/node"),
+      path23.join(HOME, ".nvm/current/bin/node"),
       "/usr/bin/node"
     );
   } else {
@@ -49591,54 +52288,54 @@ function resolveNodeExecutable() {
       "/usr/bin/node",
       "/usr/local/bin/node",
       "/snap/bin/node",
-      path14.join(HOME, ".nvm/current/bin/node"),
-      path14.join(HOME, ".local/share/nvm/current/bin/node"),
-      path14.join(HOME, ".local/bin/node")
+      path23.join(HOME, ".nvm/current/bin/node"),
+      path23.join(HOME, ".local/share/nvm/current/bin/node"),
+      path23.join(HOME, ".local/bin/node")
     );
   }
   for (const candidate of candidates) {
-    if (candidate && fs14.existsSync(candidate)) {
+    if (candidate && fs22.existsSync(candidate)) {
       try {
-        fs14.accessSync(candidate, fs14.constants.X_OK);
+        fs22.accessSync(candidate, fs22.constants.X_OK);
         return candidate;
       } catch (_) {
       }
     }
   }
-  return "node";
+  throw new Error("Unable to locate an executable Node.js runtime. Install Node.js 22+ or use the full ContextOS edition.");
 }
 function resolveCodexExecutable() {
   const isWin = process.platform === "win32";
   const isMac = process.platform === "darwin";
   const candidates = [];
   if (isWin) {
-    const localAppData = process.env.LOCALAPPDATA || path14.join(HOME, "AppData\\Local");
+    const localAppData = process.env.LOCALAPPDATA || path23.join(HOME, "AppData\\Local");
     candidates.push(
-      path14.join(localAppData, "Programs\\Codex\\codex.exe"),
-      path14.join(HOME, ".cargo\\bin\\codex.exe")
+      path23.join(localAppData, "Programs\\Codex\\codex.exe"),
+      path23.join(HOME, ".cargo\\bin\\codex.exe")
     );
   } else if (isMac) {
     candidates.push(
       "/Applications/Codex.app/Contents/Resources/codex",
       "/Applications/ChatGPT.app/Contents/Resources/codex",
-      path14.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
+      path23.join(HOME, "Applications/Codex.app/Contents/Resources/codex"),
       "/opt/homebrew/bin/codex",
       "/usr/local/bin/codex",
-      path14.join(HOME, ".cargo/bin/codex"),
-      path14.join(HOME, ".local/bin/codex")
+      path23.join(HOME, ".cargo/bin/codex"),
+      path23.join(HOME, ".local/bin/codex")
     );
   } else {
     candidates.push(
       "/usr/bin/codex",
       "/usr/local/bin/codex",
-      path14.join(HOME, ".cargo/bin/codex"),
-      path14.join(HOME, ".local/bin/codex")
+      path23.join(HOME, ".cargo/bin/codex"),
+      path23.join(HOME, ".local/bin/codex")
     );
   }
   for (const c of candidates) {
-    if (c && fs14.existsSync(c)) {
+    if (c && fs22.existsSync(c)) {
       try {
-        fs14.accessSync(c, fs14.constants.X_OK);
+        fs22.accessSync(c, fs22.constants.X_OK);
         return c;
       } catch (_) {
       }
@@ -49647,64 +52344,146 @@ function resolveCodexExecutable() {
   return null;
 }
 function deployCanonicalServer(sourceScriptPath = null) {
-  const canonicalDir = path14.join(HOME, ".contextos", "server");
-  const canonicalScript = path14.join(canonicalDir, "contextos-mcp.mjs");
-  fs14.mkdirSync(canonicalDir, { recursive: true });
+  const canonicalDir = path23.join(HOME, ".contextos", "server");
+  const canonicalScript = path23.join(canonicalDir, "contextos-mcp.mjs");
+  fs22.mkdirSync(canonicalDir, { recursive: true });
   const candidates = [
     sourceScriptPath,
     "/Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs",
-    path14.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
+    path23.join(HOME, "Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
   ].filter(Boolean);
-  const found = candidates.find((p) => fs14.existsSync(p));
-  if (found && found !== canonicalScript) {
-    fs14.copyFileSync(found, canonicalScript);
+  const found = candidates.find((p) => fs22.existsSync(p));
+  if (!found) {
+    throw new Error("Cannot locate the ContextOS MCP server bundle. Install the app or pass a valid source script path.");
+  }
+  if (path23.resolve(found) !== path23.resolve(canonicalScript)) {
+    const tempPath = `${canonicalScript}.contextos-${process.pid}-${randomUUID2()}.tmp`;
+    fs22.copyFileSync(found, tempPath);
+    fs22.renameSync(tempPath, canonicalScript);
   }
   return canonicalScript;
 }
 function copyDirectoryRecursive(src, dest) {
-  if (!fs14.existsSync(src)) return;
-  fs14.mkdirSync(dest, { recursive: true });
-  const entries = fs14.readdirSync(src, { withFileTypes: true });
+  if (!fs22.existsSync(src)) return;
+  fs22.mkdirSync(dest, { recursive: true });
+  const entries = fs22.readdirSync(src, { withFileTypes: true });
   for (const entry of entries) {
-    const srcPath = path14.join(src, entry.name);
-    const destPath = path14.join(dest, entry.name);
+    const srcPath = path23.join(src, entry.name);
+    const destPath = path23.join(dest, entry.name);
     if (entry.isDirectory()) {
       copyDirectoryRecursive(srcPath, destPath);
     } else {
-      fs14.copyFileSync(srcPath, destPath);
+      fs22.copyFileSync(srcPath, destPath);
     }
   }
 }
-function configureJsonMcp({ configPath, serverScript, nodePath, env = null, version: version2 = "2.1.0" }) {
-  const dir = path14.dirname(configPath);
-  fs14.mkdirSync(dir, { recursive: true });
-  let json = {};
-  if (fs14.existsSync(configPath)) {
-    try {
-      json = JSON.parse(fs14.readFileSync(configPath, "utf8"));
-    } catch (_) {
-      json = {};
+function backupFile(filePath) {
+  if (!fs22.existsSync(filePath)) return null;
+  const backupPath = `${filePath}.contextos.bak`;
+  fs22.copyFileSync(filePath, backupPath);
+  return backupPath;
+}
+function writeFileAtomic(filePath, content, mode = null) {
+  fs22.mkdirSync(path23.dirname(filePath), { recursive: true });
+  backupFile(filePath);
+  const tempPath = `${filePath}.contextos-${process.pid}-${randomUUID2()}.tmp`;
+  fs22.writeFileSync(tempPath, content, { encoding: "utf8", mode: mode ?? 420 });
+  if (mode !== null) fs22.chmodSync(tempPath, mode);
+  fs22.renameSync(tempPath, filePath);
+}
+function readJsonObject(filePath, label) {
+  if (!fs22.existsSync(filePath)) return {};
+  try {
+    const parsed = JSON.parse(fs22.readFileSync(filePath, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("root value must be an object");
     }
+    return parsed;
+  } catch (error2) {
+    throw new Error(`Refusing to overwrite invalid JSON at '${filePath}' (${label}): ${error2.message}`);
   }
-  json.mcpServers = json.mcpServers || {};
+}
+function mergePersonalMarketplaceDocument(parsed) {
+  let marketplaces = [];
+  let marketplaceWasArray = false;
+  if (Array.isArray(parsed)) {
+    marketplaces = parsed;
+    marketplaceWasArray = true;
+  } else if (parsed && typeof parsed === "object") {
+    marketplaces = [parsed];
+  } else {
+    throw new Error("Marketplace root must be an object or array");
+  }
+  const existingPersonal = marketplaces.find((entry) => entry?.name === "personal");
+  const existingPlugins = Array.isArray(existingPersonal?.plugins) ? existingPersonal.plugins : [];
+  const contextosEntry = {
+    name: "contextos",
+    source: { source: "local", path: "./plugins/contextos" },
+    policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
+    category: "Productivity"
+  };
+  const mergedPlugins = existingPlugins.filter((plugin) => plugin?.name !== "contextos");
+  mergedPlugins.push(contextosEntry);
+  const personalEntry = {
+    ...existingPersonal || {},
+    name: "personal",
+    interface: existingPersonal?.interface || { displayName: "Personal" },
+    plugins: mergedPlugins
+  };
+  const filtered = marketplaces.filter((m) => m?.name !== "personal");
+  filtered.push(personalEntry);
+  return marketplaceWasArray || filtered.length > 1 ? filtered : filtered[0];
+}
+function replaceDirectoryAtomically(source, destination) {
+  if (!fs22.existsSync(source)) throw new Error(`Plugin source does not exist: '${source}'`);
+  fs22.mkdirSync(path23.dirname(destination), { recursive: true });
+  const token = `${process.pid}-${randomUUID2()}`;
+  const tempDestination = `${destination}.contextos-${token}.tmp`;
+  const backupDestination = `${destination}.contextos-${token}.bak`;
+  copyDirectoryRecursive(source, tempDestination);
+  let movedExisting = false;
+  try {
+    if (fs22.existsSync(destination)) {
+      fs22.renameSync(destination, backupDestination);
+      movedExisting = true;
+    }
+    fs22.renameSync(tempDestination, destination);
+    if (movedExisting) fs22.rmSync(backupDestination, { recursive: true, force: true });
+  } catch (error2) {
+    try {
+      if (fs22.existsSync(destination)) fs22.rmSync(destination, { recursive: true, force: true });
+      if (movedExisting && fs22.existsSync(backupDestination)) fs22.renameSync(backupDestination, destination);
+    } catch (_) {
+    }
+    try {
+      fs22.rmSync(tempDestination, { recursive: true, force: true });
+    } catch (_) {
+    }
+    throw error2;
+  }
+}
+function configureJsonMcp({ configPath, serverScript, nodePath, env = null, version: version2 = null }) {
+  const json = readJsonObject(configPath, "MCP config");
+  json.mcpServers = json.mcpServers && typeof json.mcpServers === "object" && !Array.isArray(json.mcpServers) ? json.mcpServers : {};
   const serverEntry = {
     command: nodePath,
-    args: ["--no-warnings=ExperimentalWarning", serverScript],
-    _version: version2
+    args: ["--no-warnings=ExperimentalWarning", serverScript]
   };
+  if (version2) serverEntry._version = version2;
   if (env && Object.keys(env).length > 0) {
     serverEntry.env = env;
-  } else {
-    delete serverEntry.env;
   }
   json.mcpServers.contextos = serverEntry;
-  fs14.writeFileSync(configPath, JSON.stringify(json, null, 2) + "\n", "utf8");
+  writeFileAtomic(configPath, JSON.stringify(json, null, 2) + "\n");
   return true;
 }
+function tomlString(value) {
+  return JSON.stringify(String(value));
+}
 function configureTomlCodex({ configPath, serverScript, nodePath, env = null }) {
-  const dir = path14.dirname(configPath);
-  fs14.mkdirSync(dir, { recursive: true });
-  let content = fs14.existsSync(configPath) ? fs14.readFileSync(configPath, "utf8") : "";
+  const dir = path23.dirname(configPath);
+  fs22.mkdirSync(dir, { recursive: true });
+  let content = fs22.existsSync(configPath) ? fs22.readFileSync(configPath, "utf8") : "";
   const sectionHeader = "[mcp_servers.contextos]";
   const startIndex = content.indexOf(sectionHeader);
   if (startIndex !== -1) {
@@ -49716,84 +52495,63 @@ function configureTomlCodex({ configPath, serverScript, nodePath, env = null }) 
     }
   }
   content = content.trimEnd();
-  const safeNodePath = nodePath.replace(/\\/g, "\\\\");
-  const safeServerScript = serverScript.replace(/\\/g, "\\\\");
   let tomlBlock = `
 
 [mcp_servers.contextos]
-command = "${safeNodePath}"
-args = ["--no-warnings=ExperimentalWarning", "${safeServerScript}"]
+command = ${tomlString(nodePath)}
+args = ["--no-warnings=ExperimentalWarning", ${tomlString(serverScript)}]
 `;
   if (env && Object.keys(env).length > 0) {
     tomlBlock += `[mcp_servers.contextos.env]
 `;
     for (const [k, v] of Object.entries(env)) {
-      tomlBlock += `${k} = "${String(v).replace(/\\/g, "\\\\")}"
+      tomlBlock += `${k} = ${tomlString(v)}
 `;
     }
   }
-  fs14.writeFileSync(configPath, (content + tomlBlock).trim() + "\n", "utf8");
+  fs22.writeFileSync(`${configPath}.contextos.tmp`, (content + tomlBlock).trim() + "\n", "utf8");
+  backupFile(configPath);
+  fs22.renameSync(`${configPath}.contextos.tmp`, configPath);
 }
 function cleanTomlCodex({ configPath }) {
-  if (!fs14.existsSync(configPath)) return;
-  let content = fs14.readFileSync(configPath, "utf8");
+  if (!fs22.existsSync(configPath)) return;
+  let content = fs22.readFileSync(configPath, "utf8");
   const regex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
   content = content.replace(regex, "");
-  fs14.writeFileSync(configPath, content.trim() + "\n", "utf8");
+  writeFileAtomic(configPath, content.trim() + "\n");
 }
 function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
-  const userPluginsContextOS = path14.join(HOME, "plugins", "contextos");
-  const personalMarketplaceDir = path14.join(HOME, ".agents", "plugins");
-  const personalMarketplaceURL = path14.join(personalMarketplaceDir, "marketplace.json");
-  const codexConfigURL = path14.join(HOME, ".codex", "config.toml");
-  if (pluginSource && fs14.existsSync(pluginSource)) {
-    try {
-      fs14.rmSync(userPluginsContextOS, { recursive: true, force: true });
-    } catch (_) {
-    }
-    copyDirectoryRecursive(pluginSource, userPluginsContextOS);
-  } else if (!fs14.existsSync(userPluginsContextOS)) {
-    fs14.mkdirSync(path14.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
-    fs14.mkdirSync(path14.join(userPluginsContextOS, "server"), { recursive: true });
-    fs14.copyFileSync(serverScript, path14.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
+  const userPluginsContextOS = path23.join(HOME, "plugins", "contextos");
+  const personalMarketplaceDir = path23.join(HOME, ".agents", "plugins");
+  const personalMarketplaceURL = path23.join(personalMarketplaceDir, "marketplace.json");
+  const codexConfigURL = path23.join(HOME, ".codex", "config.toml");
+  if (pluginSource && fs22.existsSync(pluginSource)) {
+    replaceDirectoryAtomically(pluginSource, userPluginsContextOS);
+  } else if (!fs22.existsSync(userPluginsContextOS)) {
+    fs22.mkdirSync(path23.join(userPluginsContextOS, ".codex-plugin"), { recursive: true });
+    fs22.mkdirSync(path23.join(userPluginsContextOS, "server"), { recursive: true });
+    fs22.copyFileSync(serverScript, path23.join(userPluginsContextOS, "server", "contextos-mcp.mjs"));
   }
-  fs14.mkdirSync(personalMarketplaceDir, { recursive: true });
-  let marketplaces = [];
-  if (fs14.existsSync(personalMarketplaceURL)) {
+  fs22.mkdirSync(personalMarketplaceDir, { recursive: true });
+  let parsedMarketplace = null;
+  if (fs22.existsSync(personalMarketplaceURL)) {
     try {
-      const parsed = JSON.parse(fs14.readFileSync(personalMarketplaceURL, "utf8"));
-      marketplaces = Array.isArray(parsed) ? parsed : [parsed];
-    } catch (_) {
+      parsedMarketplace = JSON.parse(fs22.readFileSync(personalMarketplaceURL, "utf8"));
+    } catch (error2) {
+      throw new Error(`Refusing to overwrite invalid marketplace JSON at '${personalMarketplaceURL}': ${error2.message}`);
     }
   }
-  const personalEntry = {
-    name: "personal",
-    interface: { displayName: "Personal" },
-    plugins: [
-      {
-        name: "contextos",
-        source: { source: "local", path: "./plugins/contextos" },
-        policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" },
-        category: "Productivity"
-      }
-    ]
-  };
-  const filtered = marketplaces.filter((m) => m.name !== "personal");
-  filtered.push(personalEntry);
-  fs14.writeFileSync(
-    personalMarketplaceURL,
-    JSON.stringify(filtered.length === 1 ? filtered[0] : filtered, null, 2) + "\n",
-    "utf8"
-  );
+  const output = mergePersonalMarketplaceDocument(parsedMarketplace ?? {});
+  writeFileAtomic(personalMarketplaceURL, JSON.stringify(output, null, 2) + "\n");
   const codexBin = resolveCodexExecutable();
   let installedViaCli = false;
   if (codexBin) {
     try {
       try {
-        execSync3(`"${codexBin}" plugin remove contextos@personal --json`, { stdio: "ignore" });
+        execFileSync3(codexBin, ["plugin", "remove", "contextos@personal", "--json"], { stdio: "ignore" });
       } catch (_) {
       }
-      execSync3(`"${codexBin}" plugin add contextos@personal --json`, { stdio: "pipe" });
+      execFileSync3(codexBin, ["plugin", "add", "contextos@personal", "--json"], { stdio: "pipe" });
       installedViaCli = true;
     } catch (_) {
     }
@@ -49810,23 +52568,23 @@ function detectInstalledPlatforms() {
   const isMac = process.platform === "darwin";
   const isWin = process.platform === "win32";
   const platforms = [];
-  const localAppData = isWin ? process.env.LOCALAPPDATA || path14.join(HOME, "AppData\\Local") : "";
-  const appData = isWin ? process.env.APPDATA || path14.join(HOME, "AppData\\Roaming") : "";
+  const localAppData = isWin ? process.env.LOCALAPPDATA || path23.join(HOME, "AppData\\Local") : "";
+  const appData = isWin ? process.env.APPDATA || path23.join(HOME, "AppData\\Roaming") : "";
   let claudeConfigPath = "";
   if (isMac) {
-    claudeConfigPath = path14.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
+    claudeConfigPath = path23.join(HOME, "Library/Application Support/Claude/claude_desktop_config.json");
   } else if (isWin) {
-    claudeConfigPath = path14.join(appData, "Claude\\claude_desktop_config.json");
+    claudeConfigPath = path23.join(appData, "Claude\\claude_desktop_config.json");
   } else {
-    claudeConfigPath = path14.join(HOME, ".config/Claude/claude_desktop_config.json");
+    claudeConfigPath = path23.join(HOME, ".config/Claude/claude_desktop_config.json");
   }
   let claudeAppExists = false;
   if (isMac) {
-    claudeAppExists = fs14.existsSync("/Applications/Claude.app") || fs14.existsSync(path14.join(HOME, "Applications/Claude.app")) || fs14.existsSync(path14.dirname(claudeConfigPath));
+    claudeAppExists = fs22.existsSync("/Applications/Claude.app") || fs22.existsSync(path23.join(HOME, "Applications/Claude.app")) || fs22.existsSync(path23.dirname(claudeConfigPath));
   } else if (isWin) {
-    claudeAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\Claude\\Claude.exe")) || fs14.existsSync(path14.dirname(claudeConfigPath));
+    claudeAppExists = fs22.existsSync(path23.join(localAppData, "Programs\\Claude\\Claude.exe")) || fs22.existsSync(path23.dirname(claudeConfigPath));
   } else {
-    claudeAppExists = fs14.existsSync("/usr/bin/claude") || fs14.existsSync("/snap/bin/claude") || fs14.existsSync(path14.dirname(claudeConfigPath));
+    claudeAppExists = fs22.existsSync("/usr/bin/claude") || fs22.existsSync("/snap/bin/claude") || fs22.existsSync(path23.dirname(claudeConfigPath));
   }
   platforms.push({
     id: "claude",
@@ -49835,71 +52593,71 @@ function detectInstalledPlatforms() {
     configPath: claudeConfigPath,
     type: "json"
   });
-  const cursorDir = path14.join(HOME, ".cursor");
+  const cursorDir = path23.join(HOME, ".cursor");
   let cursorAppExists = false;
   if (isMac) {
-    cursorAppExists = fs14.existsSync("/Applications/Cursor.app") || fs14.existsSync(path14.join(HOME, "Applications/Cursor.app")) || fs14.existsSync(cursorDir);
+    cursorAppExists = fs22.existsSync("/Applications/Cursor.app") || fs22.existsSync(path23.join(HOME, "Applications/Cursor.app")) || fs22.existsSync(cursorDir);
   } else if (isWin) {
-    cursorAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\cursor\\Cursor.exe")) || fs14.existsSync(cursorDir);
+    cursorAppExists = fs22.existsSync(path23.join(localAppData, "Programs\\cursor\\Cursor.exe")) || fs22.existsSync(cursorDir);
   } else {
-    cursorAppExists = fs14.existsSync("/usr/bin/cursor") || fs14.existsSync("/opt/Cursor/cursor") || fs14.existsSync(path14.join(HOME, ".local/share/cursor")) || fs14.existsSync(cursorDir);
+    cursorAppExists = fs22.existsSync("/usr/bin/cursor") || fs22.existsSync("/opt/Cursor/cursor") || fs22.existsSync(path23.join(HOME, ".local/share/cursor")) || fs22.existsSync(cursorDir);
   }
   platforms.push({
     id: "cursor",
     name: "Cursor",
     isInstalled: cursorAppExists,
-    configPath: path14.join(cursorDir, "mcp.json"),
-    skillPath: path14.join(cursorDir, "skills", "contextos"),
+    configPath: path23.join(cursorDir, "mcp.json"),
+    skillPath: path23.join(cursorDir, "skills", "contextos"),
     type: "json"
   });
-  const geminiDir = path14.join(HOME, ".gemini/config");
+  const geminiDir = path23.join(HOME, ".gemini/config");
   let antigravityAppExists = false;
   if (isMac) {
-    antigravityAppExists = fs14.existsSync("/Applications/Antigravity.app") || fs14.existsSync(path14.join(HOME, "Applications/Antigravity.app")) || fs14.existsSync(geminiDir);
+    antigravityAppExists = fs22.existsSync("/Applications/Antigravity.app") || fs22.existsSync(path23.join(HOME, "Applications/Antigravity.app")) || fs22.existsSync(geminiDir);
   } else if (isWin) {
-    antigravityAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\Antigravity\\Antigravity.exe")) || fs14.existsSync(geminiDir);
+    antigravityAppExists = fs22.existsSync(path23.join(localAppData, "Programs\\Antigravity\\Antigravity.exe")) || fs22.existsSync(geminiDir);
   } else {
-    antigravityAppExists = fs14.existsSync("/usr/bin/antigravity") || fs14.existsSync(path14.join(HOME, ".local/share/antigravity")) || fs14.existsSync(geminiDir);
+    antigravityAppExists = fs22.existsSync("/usr/bin/antigravity") || fs22.existsSync(path23.join(HOME, ".local/share/antigravity")) || fs22.existsSync(geminiDir);
   }
   platforms.push({
     id: "antigravity",
     name: "Antigravity",
     isInstalled: antigravityAppExists,
-    configPath: path14.join(geminiDir, "mcp_config.json"),
-    skillPath: path14.join(geminiDir, "skills", "contextos"),
+    configPath: path23.join(geminiDir, "mcp_config.json"),
+    skillPath: path23.join(geminiDir, "skills", "contextos"),
     type: "json"
   });
-  const opencodeDir = path14.join(HOME, ".config/opencode");
+  const opencodeDir = path23.join(HOME, ".config/opencode");
   let opencodeAppExists = false;
   if (isMac) {
-    opencodeAppExists = fs14.existsSync("/Applications/OpenCode.app") || fs14.existsSync(path14.join(HOME, "Applications/OpenCode.app")) || fs14.existsSync(opencodeDir);
+    opencodeAppExists = fs22.existsSync("/Applications/OpenCode.app") || fs22.existsSync(path23.join(HOME, "Applications/OpenCode.app")) || fs22.existsSync(opencodeDir);
   } else if (isWin) {
-    opencodeAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\OpenCode\\OpenCode.exe")) || fs14.existsSync(opencodeDir);
+    opencodeAppExists = fs22.existsSync(path23.join(localAppData, "Programs\\OpenCode\\OpenCode.exe")) || fs22.existsSync(opencodeDir);
   } else {
-    opencodeAppExists = fs14.existsSync("/usr/bin/opencode") || fs14.existsSync(path14.join(HOME, ".local/share/opencode")) || fs14.existsSync(opencodeDir);
+    opencodeAppExists = fs22.existsSync("/usr/bin/opencode") || fs22.existsSync(path23.join(HOME, ".local/share/opencode")) || fs22.existsSync(opencodeDir);
   }
   platforms.push({
     id: "opencode",
     name: "OpenCode",
     isInstalled: opencodeAppExists,
-    configPath: path14.join(opencodeDir, "mcp.json"),
-    skillPath: path14.join(opencodeDir, "skills", "contextos"),
+    configPath: path23.join(opencodeDir, "mcp.json"),
+    skillPath: path23.join(opencodeDir, "skills", "contextos"),
     type: "json"
   });
-  const codexDir = path14.join(HOME, ".codex");
+  const codexDir = path23.join(HOME, ".codex");
   let codexAppExists = false;
   if (isMac) {
-    codexAppExists = fs14.existsSync("/Applications/ChatGPT.app") || fs14.existsSync("/Applications/Codex.app") || fs14.existsSync(codexDir) || fs14.existsSync(path14.join(HOME, ".agents/plugins"));
+    codexAppExists = fs22.existsSync("/Applications/ChatGPT.app") || fs22.existsSync("/Applications/Codex.app") || fs22.existsSync(codexDir) || fs22.existsSync(path23.join(HOME, ".agents/plugins"));
   } else if (isWin) {
-    codexAppExists = fs14.existsSync(path14.join(localAppData, "Programs\\Codex\\Codex.exe")) || fs14.existsSync(codexDir) || fs14.existsSync(path14.join(HOME, ".agents/plugins"));
+    codexAppExists = fs22.existsSync(path23.join(localAppData, "Programs\\Codex\\Codex.exe")) || fs22.existsSync(codexDir) || fs22.existsSync(path23.join(HOME, ".agents/plugins"));
   } else {
-    codexAppExists = fs14.existsSync("/usr/bin/codex") || fs14.existsSync(path14.join(HOME, ".local/bin/codex")) || fs14.existsSync(codexDir) || fs14.existsSync(path14.join(HOME, ".agents/plugins"));
+    codexAppExists = fs22.existsSync("/usr/bin/codex") || fs22.existsSync(path23.join(HOME, ".local/bin/codex")) || fs22.existsSync(codexDir) || fs22.existsSync(path23.join(HOME, ".agents/plugins"));
   }
   platforms.push({
     id: "codex",
     name: "Codex",
     isInstalled: codexAppExists,
-    configPath: path14.join(codexDir, "config.toml"),
+    configPath: path23.join(codexDir, "config.toml"),
     type: "codex-plugin"
   });
   return platforms;
@@ -49912,11 +52670,20 @@ function syncAllPlatforms({
   skillSource = null,
   pluginSource = null,
   forceAll = false,
-  selectedPlatforms = null
+  selectedPlatforms = null,
+  version: version2 = null
 }) {
   const allPlatforms = detectInstalledPlatforms();
+  const knownPlatformIds = new Set(allPlatforms.map((platform) => platform.id));
+  const requestedPlatforms = selectedPlatforms && selectedPlatforms.length > 0 ? [...new Set(selectedPlatforms)] : null;
+  if (requestedPlatforms) {
+    const unknown2 = requestedPlatforms.filter((id) => !knownPlatformIds.has(id));
+    if (unknown2.length > 0) {
+      throw new Error(`Unknown platform id(s): ${unknown2.join(", ")}. Supported: ${[...knownPlatformIds].join(", ")}`);
+    }
+  }
   const modified = [];
-  const platforms = selectedPlatforms && selectedPlatforms.length > 0 ? allPlatforms.filter((p) => selectedPlatforms.includes(p.id)) : allPlatforms;
+  const platforms = requestedPlatforms ? allPlatforms.filter((p) => requestedPlatforms.includes(p.id)) : allPlatforms;
   for (const platform of platforms) {
     if (!platform.isInstalled && !forceAll) continue;
     if (platform.id === "codex") {
@@ -49929,7 +52696,7 @@ function syncAllPlatforms({
       modified.push(resultName);
       continue;
     }
-    if (platform.skillPath && skillSource && fs14.existsSync(skillSource)) {
+    if (platform.skillPath && skillSource && fs22.existsSync(skillSource)) {
       copyDirectoryRecursive(skillSource, platform.skillPath);
     }
     if (platform.type === "json") {
@@ -49937,7 +52704,8 @@ function syncAllPlatforms({
         configPath: platform.configPath,
         serverScript,
         nodePath,
-        env
+        env,
+        version: version2
       });
       modified.push(platform.name);
     }
@@ -49947,37 +52715,40 @@ function syncAllPlatforms({
     const shouldSyncAntigravity = !selectedPlatforms || selectedPlatforms.includes("antigravity");
     const shouldSyncOpencode = !selectedPlatforms || selectedPlatforms.includes("opencode");
     if (shouldSyncCursor) {
-      const wsCursor = path14.join(targetRoot, ".cursor");
-      if (fs14.existsSync(wsCursor)) {
+      const wsCursor = path23.join(targetRoot, ".cursor");
+      if (fs22.existsSync(wsCursor)) {
         configureJsonMcp({
-          configPath: path14.join(wsCursor, "mcp.json"),
+          configPath: path23.join(wsCursor, "mcp.json"),
           serverScript,
           nodePath,
-          env
+          env,
+          version: version2
         });
         modified.push("Workspace .cursor/mcp.json");
       }
     }
     if (shouldSyncAntigravity) {
-      const wsAgents = path14.join(targetRoot, ".agents");
-      if (fs14.existsSync(wsAgents)) {
+      const wsAgents = path23.join(targetRoot, ".agents");
+      if (fs22.existsSync(wsAgents)) {
         configureJsonMcp({
-          configPath: path14.join(wsAgents, "mcp_config.json"),
+          configPath: path23.join(wsAgents, "mcp_config.json"),
           serverScript,
           nodePath,
-          env
+          env,
+          version: version2
         });
         modified.push("Workspace .agents/mcp_config.json");
       }
     }
     if (shouldSyncOpencode) {
-      const wsOpencode = path14.join(targetRoot, ".opencode");
-      if (fs14.existsSync(wsOpencode)) {
+      const wsOpencode = path23.join(targetRoot, ".opencode");
+      if (fs22.existsSync(wsOpencode)) {
         configureJsonMcp({
-          configPath: path14.join(wsOpencode, "mcp.json"),
+          configPath: path23.join(wsOpencode, "mcp.json"),
           serverScript,
           nodePath,
-          env
+          env,
+          version: version2
         });
         modified.push("Workspace .opencode/mcp.json");
       }
@@ -49986,25 +52757,27 @@ function syncAllPlatforms({
   return modified;
 }
 function getGlobalCloudConfig() {
-  const globalCloudPath = path14.join(HOME, ".contextos", "cloud.json");
-  if (fs14.existsSync(globalCloudPath)) {
+  const globalCloudPath = path23.join(HOME, ".contextos", "cloud.json");
+  if (fs22.existsSync(globalCloudPath)) {
     try {
-      return JSON.parse(fs14.readFileSync(globalCloudPath, "utf8"));
+      return JSON.parse(fs22.readFileSync(globalCloudPath, "utf8"));
     } catch (_) {
     }
   }
   return null;
 }
-function saveGlobalCloudConfig({ cloudUrl, token }) {
-  const dotContextos = path14.join(HOME, ".contextos");
-  fs14.mkdirSync(dotContextos, { recursive: true });
-  const globalCloudPath = path14.join(dotContextos, "cloud.json");
+function saveGlobalCloudConfig({ cloudUrl, token, homeDir = HOME }) {
+  const dotContextos = path23.join(homeDir, ".contextos");
+  fs22.mkdirSync(dotContextos, { recursive: true, mode: 448 });
+  const globalCloudPath = path23.join(dotContextos, "cloud.json");
+  const existing = readJsonObject(globalCloudPath, "global cloud config");
   const config2 = {
+    ...existing,
     cloudUrl: cloudUrl ? cloudUrl.replace(/\/+$/, "") : "",
     token: token || "",
     updatedAt: (/* @__PURE__ */ new Date()).toISOString()
   };
-  fs14.writeFileSync(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", "utf8");
+  writeFileAtomic(globalCloudPath, JSON.stringify(config2, null, 2) + "\n", 384);
   return config2;
 }
 function initProjectWorkspace({
@@ -50012,26 +52785,21 @@ function initProjectWorkspace({
   mode = "local",
   cloudUrl = "",
   token: _token = "",
-  projectId = "contextos"
+  projectId = null
 }) {
-  const dotContextos = path14.join(projectRoot, ".contextos");
-  fs14.mkdirSync(dotContextos, { recursive: true });
-  const projectJsonPath = path14.join(dotContextos, "project.json");
-  let existing = {};
-  if (fs14.existsSync(projectJsonPath)) {
-    try {
-      existing = JSON.parse(fs14.readFileSync(projectJsonPath, "utf8"));
-    } catch (_) {
-    }
-  }
+  const resolvedProjectId = projectId || deriveProjectId(projectRoot);
+  const dotContextos = path23.join(projectRoot, ".contextos");
+  fs22.mkdirSync(dotContextos, { recursive: true });
+  const projectJsonPath = path23.join(dotContextos, "project.json");
+  const existing = readJsonObject(projectJsonPath, "project metadata");
   const isCloud = mode === "cloud";
   if (isCloud && !cloudUrl) {
     throw new Error("Cloud mode requires a cloudUrl. Configure a compatible Cloud Hub before switching.");
   }
   const projectConfig = {
     ...existing,
-    id: projectId || existing.id || "contextos",
-    name: existing.name || (projectId === "contextos" ? "ContextOS" : projectId),
+    id: resolvedProjectId || existing.id || "contextos",
+    name: existing.name || (resolvedProjectId === "contextos" ? "ContextOS" : resolvedProjectId),
     storage: isCloud ? "cloud" : "local",
     isCloud,
     createdAt: existing.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
@@ -50045,114 +52813,43 @@ function initProjectWorkspace({
     delete projectConfig.cloudUrl;
     delete projectConfig.token;
   }
-  fs14.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n", "utf8");
+  writeFileAtomic(projectJsonPath, JSON.stringify(projectConfig, null, 2) + "\n");
   return projectConfig;
 }
 
-// packages/mcp/src/admin-cli.mjs
-import path15 from "node:path";
-import fs15 from "node:fs";
-function parseArgs(tokens) {
-  const options = {};
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (!token.startsWith("--")) continue;
-    const key = token.slice(2).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
-    const next = tokens[index + 1];
-    if (next === void 0 || next.startsWith("--")) {
-      options[key] = true;
-      continue;
-    }
-    options[key] = next;
-    index += 1;
-  }
-  for (const key of ["paths"]) {
-    if (!options[key]) continue;
-    try {
-      options[key] = JSON.parse(options[key]);
-    } catch (_) {
-      options[key] = String(options[key]).split(",").map((item) => item.trim()).filter(Boolean);
-    }
-  }
-  if (options.ttlDays !== void 0) options.ttlDays = Number(options.ttlDays);
-  if (options.dryRun !== void 0) options.dryRun = options.dryRun !== "false";
-  if (options.purge !== void 0) options.purge = options.purge !== "false";
-  return options;
-}
-function writeJson(value) {
-  process.stdout.write(`${JSON.stringify(value, null, 2)}
-`);
-}
-async function runAdminCli(argv = process.argv.slice(2)) {
-  const [command, ...tokens] = argv;
-  if (!command || command === "help" || command === "--help") {
-    process.stdout.write(
-      [
-        "Usage: contextos-mcp.mjs <command> [options]",
-        "  sync",
-        "  context"
-      ].join("\n") + "\n"
-    );
-    return 0;
-  }
-  const options = parseArgs(tokens);
-  const projectRoot = path15.resolve(options.projectRoot || process.cwd());
-  delete options.projectRoot;
-  let projectId = options.projectId;
-  delete options.projectId;
-  if (!projectId) {
-    try {
-      const projectConfig = JSON.parse(
-        fs15.readFileSync(path15.join(projectRoot, ".contextos", "project.json"), "utf8")
-      );
-      projectId = projectConfig.id;
-    } catch (_) {
-    }
-  }
-  const service = new ContextOSV2Service({ projectRoot, projectId: projectId || "contextos" });
-  try {
-    if (command === "sync" || command === "reconcile" || command === "context") {
-      const result = await service.osContext({ action: "reconcile", format: "json" });
-      writeJson({ ok: true, command: "sync", result });
-      return 0;
-    }
-    throw new Error(`Unknown admin command: ${command}`);
-  } catch (err2) {
-    writeJson({ ok: false, command, error: err2.message });
-    return 1;
-  } finally {
-    service.close({ stopProcesses: false });
-  }
-}
-
-// packages/mcp/src/v2-server.mjs
+// packages/mcp/src/service-factory.mjs
 var serviceCache = /* @__PURE__ */ new Map();
-function findDefaultProjectRoot() {
-  if (process.env.CONTEXTOS_PROJECT_ROOT && fs16.existsSync(process.env.CONTEXTOS_PROJECT_ROOT)) {
-    return process.env.CONTEXTOS_PROJECT_ROOT;
+function requireProjectRoot(inputRoot) {
+  if (!inputRoot || typeof inputRoot !== "string") {
+    throw new Error("Explicit projectRoot is required. Pass the absolute path of the active workspace.");
   }
-  let cur = process.cwd();
-  while (cur && cur !== path16.dirname(cur)) {
-    if (fs16.existsSync(path16.join(cur, ".contextos")) || fs16.existsSync(path16.join(cur, ".git")) || fs16.existsSync(path16.join(cur, "package.json"))) {
-      return cur;
-    }
-    cur = path16.dirname(cur);
+  const root = path24.resolve(inputRoot);
+  if (!fs23.existsSync(root) || !fs23.statSync(root).isDirectory()) {
+    throw new Error(`projectRoot does not exist or is not a directory: '${root}'`);
   }
-  if (cur && (fs16.existsSync(path16.join(cur, ".contextos")) || fs16.existsSync(path16.join(cur, ".git")) || fs16.existsSync(path16.join(cur, "package.json")))) {
-    return cur;
-  }
-  return process.cwd();
+  return root;
 }
-function getService(projectRoot) {
-  const root = projectRoot || findDefaultProjectRoot();
+function findBundledPluginRoot() {
+  const moduleDirectory = path24.dirname(fileURLToPath2(import.meta.url));
+  const candidates = [
+    process.env.CONTEXTOS_REPOSITORY_ROOT,
+    path24.resolve(moduleDirectory, "../../.."),
+    path24.resolve(moduleDirectory, "..")
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (fs23.existsSync(path24.join(candidate, "plugins", "contextos"))) return candidate;
+  }
+  throw new Error("Cannot locate the bundled ContextOS plugin assets; set CONTEXTOS_REPOSITORY_ROOT explicitly.");
+}
+function resolveProjectTransport(root) {
   let mode = "local";
   let cloudUrl = null;
   let token = null;
-  let projectId = "contextos";
-  const projJsonPath = path16.join(root, ".contextos", "project.json");
-  if (fs16.existsSync(projJsonPath)) {
+  let projectId = deriveProjectId(root);
+  const projJsonPath = path24.join(root, ".contextos", "project.json");
+  if (fs23.existsSync(projJsonPath)) {
     try {
-      const proj = JSON.parse(fs16.readFileSync(projJsonPath, "utf8"));
+      const proj = JSON.parse(fs23.readFileSync(projJsonPath, "utf8"));
       if (proj.id) projectId = proj.id;
       if (proj.storage === "cloud" || proj.isCloud === true) {
         mode = "cloud";
@@ -50169,20 +52866,20 @@ function getService(projectRoot) {
       mode = "cloud";
       cloudUrl = process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
       token = process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
-      projectId = process.env.CONTEXTOS_PROJECT_ID || "contextos";
+      projectId = process.env.CONTEXTOS_PROJECT_ID || deriveProjectId(root);
     }
   }
+  return { mode, cloudUrl, token, projectId };
+}
+function getService(projectRoot) {
+  const root = requireProjectRoot(projectRoot);
+  const { mode, cloudUrl, token, projectId } = resolveProjectTransport(root);
   const cacheKey = mode === "cloud" && cloudUrl ? `cloud:${cloudUrl}:${projectId}:${root}` : `local:${root}:${projectId}`;
   if (!serviceCache.has(cacheKey)) {
     if (mode === "cloud" && cloudUrl) {
       serviceCache.set(
         cacheKey,
-        new HybridContextOSService({
-          cloudUrl,
-          token,
-          projectId,
-          projectRoot: root
-        })
+        new HybridContextOSService({ cloudUrl, token, projectId, projectRoot: root })
       );
     } else {
       serviceCache.set(cacheKey, new ContextOSV2Service({ projectRoot: root, projectId }));
@@ -50190,526 +52887,338 @@ function getService(projectRoot) {
   }
   return serviceCache.get(cacheKey);
 }
-function textResult(content) {
-  const text = typeof content === "string" ? content : JSON.stringify(content, null, 2);
-  return {
-    content: [{ type: "text", text }]
-  };
+function evictServices(projectRoot) {
+  for (const key of Array.from(serviceCache.keys())) {
+    if (key.endsWith(`:${projectRoot}`) || key.includes(`:${projectRoot}:`)) {
+      try {
+        serviceCache.get(key).close();
+      } catch (_) {
+      }
+      serviceCache.delete(key);
+    }
+  }
 }
-function createV2Server() {
-  const server = new McpServer(
-    { name: "contextos", version: "2.4.0" },
-    {
-      instructions: "ContextOS V2 is a context operating system for AI coding agents (Local & Cloud compatible). Follow the C-D-C-S workflow: Create Plan & Task -> Develop (outline, surgical code read/edit, run_command, task note) -> Check (record test verification) -> Sync (bind real Blocks, commit state). Never read whole files unless outline/read is insufficient. Local shell and AST code edits execute locally, while project plans and architecture graphs synchronize with local SQLite or remote Cloud Hub."
+function projectDbPath(projectRoot) {
+  return path24.join(projectRoot, ".contextos", "state.sqlite");
+}
+
+// packages/mcp/src/system-tools.mjs
+import fs24 from "node:fs";
+import path25 from "node:path";
+function runInit(input) {
+  const root = requireProjectRoot(input.projectRoot);
+  if (input.saveGlobalCloud && input.cloudUrl) {
+    saveGlobalCloudConfig({ cloudUrl: input.cloudUrl, token: input.token });
+  }
+  let resolvedCloudUrl = input.cloudUrl;
+  let resolvedToken = input.token;
+  if (input.mode === "cloud" && !resolvedCloudUrl) {
+    const globalCloud = getGlobalCloudConfig();
+    if (globalCloud?.cloudUrl) {
+      resolvedCloudUrl = globalCloud.cloudUrl;
+      if (!resolvedToken && globalCloud.token) resolvedToken = globalCloud.token;
     }
-  );
-  server.registerTool(
-    "os_context",
-    {
-      description: "Project context gateway. Use action=brief on session start or resume; search to find entities; open to read an entity; reconcile to check external Git/JSON changes.",
-      inputSchema: {
-        action: _enum(TOOL_ACTIONS.os_context).default("brief"),
-        query: string2().optional(),
-        entityId: string2().optional(),
-        format: _enum(["markdown", "json"]).default("markdown"),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.osContext(input);
-      return textResult(res);
+  }
+  const config2 = initProjectWorkspace({
+    projectRoot: root,
+    mode: input.mode,
+    cloudUrl: resolvedCloudUrl,
+    token: resolvedToken,
+    projectId: input.projectId || deriveProjectId(root)
+  });
+  evictServices(root);
+  let editorSummary = "";
+  if (input.injectEditors) {
+    const nodePath = resolveNodeExecutable();
+    const serverScript = deployCanonicalServer();
+    let env = null;
+    if (input.mode === "cloud" && resolvedCloudUrl) {
+      env = {
+        CONTEXTOS_MODE: "cloud",
+        CONTEXTOS_CLOUD_URL: resolvedCloudUrl.replace(/\/+$/, ""),
+        CONTEXTOS_PROJECT_ID: input.projectId || deriveProjectId(root)
+      };
+      if (resolvedToken) env.CONTEXTOS_CLOUD_TOKEN = resolvedToken;
     }
-  );
-  server.registerTool(
-    "plan",
-    {
-      description: "Manage delivery Plans, Phases and Plan Checkpoints (formal acceptance). Checkpoints belong strictly to Plans.",
-      inputSchema: {
-        action: _enum(TOOL_ACTIONS.plan),
-        id: string2().optional(),
-        planData: record(any()).optional(),
-        checkpointId: string2().optional(),
-        passed: boolean2().optional(),
-        evidenceRef: string2().optional(),
-        format: _enum(["markdown", "json"]).default("markdown"),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.plan(input);
-      return textResult(res);
-    }
-  );
-  server.registerTool(
-    "task",
-    {
-      description: "C-D-C-S task lifecycle. Use task=start for a lightweight create+activate path and task=finish for check+sync; full create/develop/check/sync remains available. Sync requires 100% Block coverage.",
-      inputSchema: {
-        action: _enum(TOOL_ACTIONS.task),
-        id: string2().optional(),
-        taskData: record(any()).optional(),
-        ruleId: string2().optional(),
-        rules: array(string2()).optional(),
-        text: string2().optional(),
-        kind: string2().optional(),
-        checkData: record(any()).optional(),
-        syncData: record(any()).optional(),
-        hypothesis: string2().optional(),
-        script: string2().optional(),
-        findings: string2().optional(),
-        targetBlockId: string2().optional(),
-        files: array(string2()).optional(),
-        format: _enum(["markdown", "json"]).default("markdown"),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.task(input);
-      return textResult(res);
-    }
-  );
-  server.registerTool(
-    "block",
-    {
-      description: "Manage code functional Blocks. Blocks bind to real files, AST symbols, or directory trees; ghost blocks are rejected. Use bind_auto for symbols and dependency/resource directories.",
-      inputSchema: {
-        action: _enum(TOOL_ACTIONS.block),
-        id: string2().optional(),
-        path: string2().optional(),
-        paths: array(string2()).optional(),
-        symbols: array(string2()).optional(),
-        hashMode: _enum(["content", "manifest"]).optional(),
-        manifest: string2().optional(),
-        query: string2().optional(),
-        blockData: record(any()).optional(),
-        format: _enum(["markdown", "json"]).default("markdown"),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.block(input);
-      return textResult(res);
-    }
-  );
-  server.registerTool(
-    "chain",
-    {
-      description: "Feature chains and dependency links. Link kind reflects true semantics: depends_on, calls, imports, implements.",
-      inputSchema: {
-        action: _enum(TOOL_ACTIONS.chain),
-        id: string2().optional(),
-        chainData: record(any()).optional(),
-        linkData: record(any()).optional(),
-        format: _enum(["markdown", "json"]).default("markdown"),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.chain(input);
-      return textResult(res);
-    }
-  );
-  server.registerTool(
-    "code",
-    {
-      description: "Code Gateway: read outline first, surgical read by symbol or line range, surgical edit with automatic re-anchoring, symbol search, and create new files with AST registration.",
-      inputSchema: {
-        action: _enum(TOOL_ACTIONS.code),
-        path: string2().optional(),
-        selector: union([string2(), record(any())]).optional(),
-        startLine: number2().optional(),
-        endLine: number2().optional(),
-        targetContent: string2().optional(),
-        replacementContent: string2().optional(),
-        content: string2().optional(),
-        query: string2().optional(),
-        format: _enum(["markdown", "json"]).default("markdown"),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.code(input);
-      return textResult(res);
-    }
-  );
-  server.registerTool(
-    "run_command",
-    {
-      description: "Run finite shell command. Sanitizes terminal noise, saves raw logs out-of-context in .contextos/logs, and returns compressed receipt.",
-      inputSchema: {
-        command: string2(),
-        cwd: string2().optional(),
-        maxChars: number2().default(1500),
-        timeoutMs: number2().default(6e4),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.runCommand(input);
-      return textResult(res);
-    }
-  );
-  server.registerTool(
-    "process",
-    {
-      description: "Manage long-running daemon background processes (dev servers, watchers). Stop terminates entire process group.",
-      inputSchema: {
-        action: _enum(TOOL_ACTIONS.process),
-        id: string2().optional(),
-        command: string2().optional(),
-        lines: number2().default(50),
-        grep: string2().optional(),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.process(input);
-      return textResult(res);
-    }
-  );
-  server.registerTool(
-    "knowledge",
-    {
-      description: "Project knowledge management: categorized Rules and single-narrative project Decision (DECISION.md).",
-      inputSchema: {
-        action: _enum(TOOL_ACTIONS.knowledge),
-        ruleId: string2().optional(),
-        ruleData: record(any()).optional(),
-        sectionId: string2().optional(),
-        sectionTitle: string2().optional(),
-        content: string2().optional(),
-        format: _enum(["markdown", "json"]).default("markdown"),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const service = getService(input.projectRoot);
-      const res = await service.knowledge(input);
-      return textResult(res);
-    }
-  );
-  server.registerTool(
-    "contextos_init",
-    {
-      description: "Initialize or switch ContextOS mode (local or cloud) for a project. User only chooses mode; AI performs setup.",
-      inputSchema: {
-        mode: _enum(["local", "cloud"]).default("local"),
-        projectId: string2().default("contextos"),
-        cloudUrl: string2().optional(),
-        token: string2().optional(),
-        saveGlobalCloud: boolean2().default(false),
-        platforms: array(string2()).optional(),
-        injectEditors: boolean2().default(false),
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const root = input.projectRoot || findDefaultProjectRoot();
-      if (input.saveGlobalCloud && input.cloudUrl) {
-        saveGlobalCloudConfig({ cloudUrl: input.cloudUrl, token: input.token });
-      }
-      let resolvedCloudUrl = input.cloudUrl;
-      let resolvedToken = input.token;
-      if (input.mode === "cloud" && !resolvedCloudUrl) {
-        const globalCloud = getGlobalCloudConfig();
-        if (globalCloud?.cloudUrl) {
-          resolvedCloudUrl = globalCloud.cloudUrl;
-          if (!resolvedToken && globalCloud.token) resolvedToken = globalCloud.token;
-        }
-      }
-      const config2 = initProjectWorkspace({
-        projectRoot: root,
-        mode: input.mode,
-        cloudUrl: resolvedCloudUrl,
-        token: resolvedToken,
-        projectId: input.projectId || "contextos"
-      });
-      for (const k of Array.from(serviceCache.keys())) {
-        if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
-          try {
-            serviceCache.get(k).close();
-          } catch (_) {
-          }
-          serviceCache.delete(k);
-        }
-      }
-      let editorSummary = "";
-      if (input.injectEditors) {
-        const nodePath = resolveNodeExecutable();
-        const serverScript = deployCanonicalServer();
-        let env = null;
-        if (input.mode === "cloud" && resolvedCloudUrl) {
-          env = {
-            CONTEXTOS_MODE: "cloud",
-            CONTEXTOS_CLOUD_URL: resolvedCloudUrl.replace(/\/+$/, ""),
-            CONTEXTOS_PROJECT_ID: input.projectId || "contextos"
-          };
-          if (resolvedToken) env.CONTEXTOS_CLOUD_TOKEN = resolvedToken;
-        }
-        const skillSource = path16.join(findDefaultProjectRoot(), "plugins", "contextos", "skills", "contextos");
-        const pluginSource = path16.join(findDefaultProjectRoot(), "plugins", "contextos");
-        const modified = syncAllPlatforms({
-          serverScript,
-          nodePath,
-          env,
-          targetRoot: root,
-          skillSource,
-          pluginSource,
-          selectedPlatforms: input.platforms
-        });
-        editorSummary = `
+    const pluginRoot = findBundledPluginRoot();
+    const skillSource = path25.join(pluginRoot, "plugins", "contextos", "skills", "contextos");
+    const pluginSource = path25.join(findBundledPluginRoot(), "plugins", "contextos");
+    const modified = syncAllPlatforms({
+      serverScript,
+      nodePath,
+      env,
+      targetRoot: root,
+      skillSource,
+      pluginSource,
+      selectedPlatforms: input.platforms,
+      version: process.env.CONTEXTOS_VERSION || null
+    });
+    editorSummary = `
 
 Injected MCP & Skills into:
 ${modified.map((m) => `  \u2713 ${m}`).join("\n")}`;
-      }
-      return textResult(
-        `\u2713 Initialized ContextOS in **${config2.storage.toUpperCase()}** mode for project \`${config2.id}\` at \`${root}\`.${editorSummary}`
-      );
+  }
+  return `\u2713 Initialized ContextOS in **${config2.storage.toUpperCase()}** mode for project \`${config2.id}\` at \`${root}\`.${editorSummary}`;
+}
+async function runDoctor(input) {
+  const root = requireProjectRoot(input.projectRoot);
+  const nodePath = resolveNodeExecutable();
+  const nodeVer = process.version;
+  const projJsonPath = path25.join(root, ".contextos", "project.json");
+  let projectConfig = null;
+  if (fs24.existsSync(projJsonPath)) {
+    try {
+      projectConfig = JSON.parse(fs24.readFileSync(projJsonPath, "utf8"));
+    } catch (_) {
     }
-  );
-  server.registerTool(
-    "contextos_doctor",
-    {
-      description: "Diagnose ContextOS environment, storage routing, and editor integrations.",
-      inputSchema: {
-        projectRoot: string2().optional()
-      }
-    },
-    async (input) => {
-      const root = input.projectRoot || findDefaultProjectRoot();
-      const nodePath = resolveNodeExecutable();
-      let nodeVer = process.version;
-      const projJsonPath = path16.join(root, ".contextos", "project.json");
-      let projectConfig = null;
-      if (fs16.existsSync(projJsonPath)) {
-        try {
-          projectConfig = JSON.parse(fs16.readFileSync(projJsonPath, "utf8"));
-        } catch (_) {
-        }
-      }
-      const globalCloud = getGlobalCloudConfig();
-      const mode = projectConfig?.storage || (process.env.CONTEXTOS_CLOUD_URL ? "cloud (env)" : "local (default)");
-      const projectId = projectConfig?.id || process.env.CONTEXTOS_PROJECT_ID || "contextos";
-      const cloudUrl = projectConfig?.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || "N/A";
-      let cloudHealth = "N/A";
-      if (mode.startsWith("cloud") && cloudUrl !== "N/A") {
-        try {
-          const res = await fetch(`${cloudUrl.replace(/\/+$/, "")}/api/v2/health`, {
-            headers: globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN ? { Authorization: `Bearer ${globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` } : {}
-          });
-          cloudHealth = res.ok ? "\u{1F7E2} Connected (200 OK)" : `\u{1F534} HTTP ${res.status}`;
-        } catch (err2) {
-          cloudHealth = `\u{1F534} Connection failed: ${err2.message}`;
-        }
-      }
-      const platforms = detectInstalledPlatforms();
-      const editorStatuses = platforms.map((p) => `  - **${p.name}**: ${p.isInstalled ? "Installed" : "Not detected"} (\`${p.configPath}\`)`).join("\n");
-      const lines = [
-        `# ContextOS Doctor Report`,
-        `- **Node Runtime**: \`${nodePath}\` (${nodeVer})`,
-        `- **Project Root**: \`${root}\``,
-        `- **Project ID**: \`${projectId}\``,
-        `- **Active Storage Mode**: \`${mode}\``,
-        `- **Cloud Hub URL**: \`${cloudUrl}\``,
-        `- **Global Cloud Config**: ${globalCloud ? `Configured (\`${globalCloud.cloudUrl}\`)` : "None"}`,
-        `- **Cloud Hub Connectivity**: ${cloudHealth}`,
-        ``,
-        `## Detected Editors on System:`,
-        editorStatuses
-      ];
-      return textResult(lines.join("\n"));
+  }
+  const globalCloud = getGlobalCloudConfig();
+  const mode = projectConfig?.storage || (process.env.CONTEXTOS_CLOUD_URL ? "cloud (env)" : "local (default)");
+  const projectId = projectConfig?.id || process.env.CONTEXTOS_PROJECT_ID || deriveProjectId(root);
+  const cloudUrl = projectConfig?.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || "N/A";
+  let cloudHealth = "N/A";
+  if (mode.startsWith("cloud") && cloudUrl !== "N/A") {
+    try {
+      const res = await fetch(`${cloudUrl.replace(/\/+$/, "")}/api/v2/health`, {
+        headers: globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN ? { Authorization: `Bearer ${globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN}` } : {}
+      });
+      cloudHealth = res.ok ? "\u{1F7E2} Connected (200 OK)" : `\u{1F534} HTTP ${res.status}`;
+    } catch (err2) {
+      cloudHealth = `\u{1F534} Connection failed: ${err2.message}`;
     }
-  );
-  server.registerTool(
-    "contextos_switch",
-    {
-      description: "Losslessly switch project between Local (offline SQLite) and Cloud (Cloudflare Edge D1) modes, bidirectionally synchronizing all architecture data.",
-      inputSchema: {
-        targetMode: _enum(["local", "cloud"]),
-        cloudUrl: string2().optional(),
-        token: string2().optional(),
-        projectId: string2().default("contextos"),
-        projectRoot: string2().optional()
+  }
+  const platforms = detectInstalledPlatforms();
+  const editorStatuses = platforms.map((p) => `  - **${p.name}**: ${p.isInstalled ? "Installed" : "Not detected"} (\`${p.configPath}\`)`).join("\n");
+  return [
+    `# ContextOS Doctor Report`,
+    `- **Node Runtime**: \`${nodePath}\` (${nodeVer})`,
+    `- **Project Root**: \`${root}\``,
+    `- **Project ID**: \`${projectId}\``,
+    `- **Active Storage Mode**: \`${mode}\``,
+    `- **Cloud Hub URL**: \`${cloudUrl}\``,
+    `- **Global Cloud Config**: ${globalCloud ? `Configured (\`${globalCloud.cloudUrl}\`)` : "None"}`,
+    `- **Cloud Hub Connectivity**: ${cloudHealth}`,
+    ``,
+    `## Detected Editors on System:`,
+    editorStatuses
+  ].join("\n");
+}
+async function runSwitch(input) {
+  const root = requireProjectRoot(input.projectRoot);
+  const dotContextos = path25.join(root, ".contextos");
+  const projJsonPath = path25.join(dotContextos, "project.json");
+  let proj = {};
+  if (fs24.existsSync(projJsonPath)) {
+    try {
+      proj = JSON.parse(fs24.readFileSync(projJsonPath, "utf8"));
+    } catch (_) {
+    }
+  }
+  const globalCloud = getGlobalCloudConfig();
+  const resolvedCloudUrl = input.targetMode === "cloud" ? input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL : input.cloudUrl || proj.cloudUrl;
+  const resolvedToken = input.token || (input.targetMode === "cloud" ? globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN : null);
+  const pid = input.projectId || proj.id || "contextos";
+  if (input.targetMode === "cloud") {
+    if (!resolvedCloudUrl) {
+      throw new Error("Switching to cloud requires a cloudUrl. Provide cloudUrl or configure global credentials via ~/.contextos/cloud.json.");
+    }
+    let localSnapshot = { schemaVersion: 4, blocks: [], chains: [], links: [], plans: [], phases: [], checkpoints: [], tasks: [] };
+    const dbFile = projectDbPath(root);
+    if (fs24.existsSync(dbFile)) {
+      let localService;
+      try {
+        localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
+        const blocks = localService.db.listBlocks(pid);
+        const chains = localService.db.listChains(pid);
+        const links = localService.db.listLinks(pid);
+        const plans = localService.db.listPlans(pid);
+        const tasks = plans.flatMap((plan) => localService.db.listTasks(plan.id));
+        localSnapshot = {
+          schemaVersion: 4,
+          project: { id: pid, name: pid, root, graphRevision: localService.db.getProject(pid)?.graph_revision || 0 },
+          changeSequence: localService.db.getProject(pid)?.graph_revision || 0,
+          blocks,
+          chains,
+          links,
+          plans,
+          phases: plans.flatMap((plan) => (plan.phases || []).map((phase) => ({ ...phase, planId: plan.id }))),
+          checkpoints: plans.flatMap((plan) => (plan.checkpoints || []).map((checkpoint) => ({ ...checkpoint, targetId: plan.id }))),
+          tasks
+        };
+      } catch (error2) {
+        throw new Error(`Cannot switch to cloud because the local graph could not be read: ${error2.message}`);
+      } finally {
+        localService?.close();
       }
-    },
-    async (input) => {
-      const root = input.projectRoot || findDefaultProjectRoot();
-      const dotContextos = path16.join(root, ".contextos");
-      const projJsonPath = path16.join(dotContextos, "project.json");
-      let proj = {};
-      if (fs16.existsSync(projJsonPath)) {
-        try {
-          proj = JSON.parse(fs16.readFileSync(projJsonPath, "utf8"));
-        } catch (_) {
-        }
-      }
-      const globalCloud = getGlobalCloudConfig();
-      const resolvedCloudUrl = input.targetMode === "cloud" ? input.cloudUrl || proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL : input.cloudUrl || proj.cloudUrl;
-      const resolvedToken = input.token || (input.targetMode === "cloud" ? globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN : null);
-      const pid = input.projectId || proj.id || "contextos";
-      if (input.targetMode === "cloud") {
-        if (!resolvedCloudUrl) {
-          throw new Error("Switching to cloud requires a cloudUrl. Provide cloudUrl or configure global credentials via ~/.contextos/cloud.json.");
-        }
-        let localSnapshot = { blocks: [], chains: [], links: [], plans: [], tasks: [] };
-        if (fs16.existsSync(dbPath)) {
-          try {
-            const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
-            const blocks = localService.db.listBlocks(pid);
-            const chains = localService.db.listChains(pid);
-            const links = localService.db.listLinks(pid);
-            const plans = localService.db.listPlans(pid);
-            const tasks = localService.db.listTasks();
-            localSnapshot = { blocks, chains, links, plans, tasks };
-            localService.close();
-          } catch (_) {
-          }
-        }
-        const cloudClient = new ContextOSCloudClient({
-          cloudUrl: resolvedCloudUrl,
-          token: resolvedToken,
-          projectId: pid
-        });
-        await cloudClient.pushSnapshot(localSnapshot, pid);
-        proj.storage = "cloud";
-        proj.isCloud = true;
-        proj.cloudUrl = resolvedCloudUrl.replace(/\/+$/, "");
-        delete proj.token;
-        delete proj.cloudToken;
-        proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        fs16.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
-        for (const k of Array.from(serviceCache.keys())) {
-          if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
-            try {
-              serviceCache.get(k).close();
-            } catch (_) {
-            }
-            serviceCache.delete(k);
-          }
-        }
-        return textResult(
-          `\u2713 Successfully migrated project \`${pid}\` to **CLOUD** mode.
+    }
+    const cloudClient = new ContextOSCloudClient({ cloudUrl: resolvedCloudUrl, token: resolvedToken, projectId: pid });
+    await cloudClient.pushSnapshot(localSnapshot, pid);
+    proj.storage = "cloud";
+    proj.isCloud = true;
+    proj.cloudUrl = resolvedCloudUrl.replace(/\/+$/, "");
+    delete proj.token;
+    delete proj.cloudToken;
+    proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    fs24.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+    evictServices(root);
+    return `\u2713 Successfully migrated project \`${pid}\` to **CLOUD** mode.
 - Uploaded ${localSnapshot.blocks.length} blocks, ${localSnapshot.chains.length} chains, ${localSnapshot.plans.length} plans, and ${localSnapshot.tasks?.length || 0} tasks to ${resolvedCloudUrl}.
-- All future task & plan changes will synchronize with Cloudflare D1.`
-        );
-      } else {
-        if (resolvedCloudUrl) {
-          try {
-            const cloudClient = new ContextOSCloudClient({
-              cloudUrl: resolvedCloudUrl,
-              token: resolvedToken,
-              projectId: pid
-            });
-            const cloudSnapshot = await cloudClient.fetchSnapshot(pid);
-            if (cloudSnapshot) {
-              const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
-              for (const b of cloudSnapshot.blocks || []) {
-                localService.db.saveBlock({
-                  id: b.id,
-                  projectId: pid,
-                  title: b.title,
-                  kind: b.kind || "service",
-                  summary: b.summary || "",
-                  details: b.body || "",
-                  artifactRefs: b.artifactRefs || b.artifact_refs || []
-                });
-              }
-              for (const c of cloudSnapshot.chains || []) {
-                localService.db.saveChain({
-                  id: c.id,
-                  projectId: pid,
-                  title: c.title,
-                  summary: c.purpose || "",
-                  kind: c.chainType || "linear",
-                  memberIds: c.memberIds || c.member_ids || []
-                });
-              }
-              for (const l of cloudSnapshot.links || []) {
-                localService.db.saveLink({
-                  id: l.id,
-                  projectId: pid,
-                  fromBlockId: l.fromBlockId || l.from_block_id || l.from,
-                  toBlockId: l.toBlockId || l.to_block_id || l.to,
-                  kind: l.kind || "calls"
-                });
-              }
-              for (const p of cloudSnapshot.plans || []) {
-                localService.db.savePlan({
-                  id: p.id,
-                  projectId: pid,
-                  title: p.title,
-                  summary: p.summary || "",
-                  status: p.status || "active",
-                  priority: p.priority || "normal"
-                });
-              }
-              for (const t of cloudSnapshot.tasks || []) {
-                localService.db.saveTask({
-                  id: t.id,
-                  planId: t.planId || t.plan_id || "plan-v2-rebuild",
-                  phaseId: t.phaseId || t.phase_id || "P0",
-                  title: t.title || "Untitled Task",
-                  status: t.status || "draft",
-                  contextSlice: t.contextSlice || t.context_slice || {},
-                  workingSet: t.workingSet || t.working_set || {},
-                  references: t.references || {},
-                  baseline: t.baseline || {},
-                  notes: t.notes || [],
-                  checks: t.checks || [],
-                  syncResult: t.syncResult || t.sync_result || null,
-                  createdAt: t.createdAt || t.created_at,
-                  updatedAt: t.updatedAt || t.updated_at
-                });
-              }
-              localService.close();
-            }
-          } catch (e) {
-            throw new Error(
-              `Cannot switch to local because the cloud snapshot could not be pulled: ${e.message}`
-            );
-          }
-        }
-        proj.storage = "local";
-        proj.isCloud = false;
-        delete proj.cloudUrl;
-        delete proj.token;
-        proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        fs16.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
-        for (const k of Array.from(serviceCache.keys())) {
-          if (k.endsWith(`:${root}`) || k.includes(`:${root}:`)) {
-            try {
-              serviceCache.get(k).close();
-            } catch (_) {
-            }
-            serviceCache.delete(k);
-          }
-        }
-        return textResult(
-          `\u2713 Successfully switched project \`${pid}\` to **LOCAL** mode.
-- Architecture snapshot is now stored in local SQLite.
-- Fully offline, private, and decoupled from Cloud Hub.`
-        );
+- All future task & plan changes will synchronize with Cloudflare D1.`;
+  }
+  if (resolvedCloudUrl) {
+    try {
+      const cloudClient = new ContextOSCloudClient({ cloudUrl: resolvedCloudUrl, token: resolvedToken, projectId: pid });
+      const cloudSnapshot = await cloudClient.fetchSnapshot(pid);
+      if (cloudSnapshot) {
+        const localService = new ContextOSV2Service({ projectRoot: root, projectId: pid });
+        localService.db.replaceProjectState(pid, cloudSnapshot);
+        localService.syncEngine.exportGraphToJson(pid, root);
+        localService.close();
       }
+    } catch (e) {
+      throw new Error(`Cannot switch to local because the cloud snapshot could not be pulled: ${e.message}`);
     }
+  }
+  proj.storage = "local";
+  proj.isCloud = false;
+  delete proj.cloudUrl;
+  delete proj.token;
+  proj.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  fs24.writeFileSync(projJsonPath, JSON.stringify(proj, null, 2) + "\n", "utf8");
+  evictServices(root);
+  return `\u2713 Successfully switched project \`${pid}\` to **LOCAL** mode.
+- Architecture snapshot is now stored in local SQLite.
+- Fully offline, private, and decoupled from Cloud Hub.`;
+}
+
+// packages/mcp/src/v3-server.mjs
+var VERSION = "2.5.0";
+function ensureWorkspace(projectRoot) {
+  const marker = path26.join(projectRoot, ".contextos", "project.json");
+  if (fs25.existsSync(marker)) return false;
+  runInit({ projectRoot, mode: "local" });
+  return true;
+}
+function textResult(content) {
+  const text = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+  return { content: [{ type: "text", text }] };
+}
+var editSpec = object2({
+  path: string2(),
+  target: string2().optional(),
+  replacement: string2().optional(),
+  symbol: string2().optional(),
+  startLine: number2().optional(),
+  endLine: number2().optional()
+});
+function createV3Server() {
+  const server = new McpServer(
+    { name: "contextos", version: VERSION },
+    {
+      instructions: "ContextOS is a context operating system for AI coding agents. State your intent and let the OS run the internals: explore(intent) to locate and resume, change(edits|create) to patch code surgically, verify(commands) to prove it runs, ship(summary) to close the loop with evidence. Use ops({capability, action, args}) only when you need a legacy facade explicitly. Never read whole files: the OS returns budgeted slices."
+    }
+  );
+  const dispatch = async (tool, input) => {
+    const root = requireProjectRoot(input.projectRoot);
+    ensureWorkspace(root);
+    const service = getService(root);
+    const orchestrator = new Orchestrator({
+      service,
+      projectRoot: root,
+      projectId: service.projectId,
+      system: { init: runInit, doctor: runDoctor, switch: runSwitch }
+    });
+    return orchestrator.dispatch(tool, input);
+  };
+  server.registerTool(
+    "explore",
+    {
+      description: "Understand, locate or resume. The OS inspects git state, picks candidate modules, outlines symbols and injects the applicable rules, all inside one context budget.",
+      inputSchema: {
+        intent: string2().describe("What you want to understand or find, in plain language."),
+        paths: array(string2()).optional().describe("Optional file paths to focus on instead of letting the OS infer them."),
+        depth: _enum(["shallow", "normal", "deep"]).default("normal"),
+        projectRoot: string2().describe("Absolute path of the active workspace.")
+      }
+    },
+    async (input) => textResult(await dispatch("explore", input))
+  );
+  server.registerTool(
+    "change",
+    {
+      description: "Modify or create code. The OS locates the anchor, applies a surgical AST edit, re-anchors symbols and records the touched files.",
+      inputSchema: {
+        intent: string2().optional().describe("What the change should accomplish."),
+        edits: array(editSpec).optional().describe("Surgical replacements. `target` must uniquely match existing text (or pass symbol/startLine/endLine)."),
+        create: array(object2({ path: string2(), content: string2() })).optional(),
+        dryRun: boolean2().optional().describe("true to preview edits without writing files, touching the session, or running verification."),
+        paths: array(string2()).optional().describe("Used for a read-only preview when no edits are supplied."),
+        depth: _enum(["shallow", "normal", "deep"]).default("normal"),
+        projectRoot: string2().describe("Absolute path of the active workspace.")
+      }
+    },
+    async (input) => textResult(await dispatch("change", input))
+  );
+  server.registerTool(
+    "verify",
+    {
+      description: "Prove the change runs. With no commands the OS uses .contextos/profile.json or package.json scripts. Output stays out of context; only receipts and failures come back.",
+      inputSchema: {
+        commands: array(string2()).optional(),
+        command: string2().optional(),
+        mode: _enum(["once", "serve", "list", "status", "logs", "stop"]).default("once"),
+        id: string2().optional(),
+        lines: number2().optional(),
+        grep: string2().optional(),
+        cwd: string2().optional(),
+        maxChars: number2().optional(),
+        timeoutMs: number2().optional(),
+        projectRoot: string2().describe("Absolute path of the active workspace.")
+      }
+    },
+    async (input) => textResult(await dispatch("verify", input))
+  );
+  server.registerTool(
+    "ship",
+    {
+      description: "Close the loop: collect touched files and receipts, optionally verify first, export the architecture graph and archive the session.",
+      inputSchema: {
+        summary: string2().optional().describe("What changed and why; archived with the session."),
+        verify: union([boolean2(), array(string2())]).optional().describe("true to run profile commands, or an explicit list."),
+        dryRun: boolean2().optional().describe("true to preview the planned closure (touched files + receipts) without closing the session, writing history or exporting the graph."),
+        decision: object2({
+          id: string2(),
+          title: string2().optional(),
+          content: string2().optional()
+        }).optional(),
+        projectRoot: string2().describe("Absolute path of the active workspace.")
+      }
+    },
+    async (input) => textResult(await dispatch("ship", input))
+  );
+  server.registerTool(
+    "ops",
+    {
+      description: "Manual passthrough to the internal capabilities (legacy facades, session, profile, system). Use only when the intent-level tools are not enough.",
+      inputSchema: {
+        capability: _enum(OPS_CAPABILITIES),
+        action: string2().optional(),
+        args: record(any()).optional(),
+        projectRoot: string2().describe("Absolute path of the active workspace.")
+      }
+    },
+    async (input) => textResult(await dispatch("ops", input))
   );
   return server;
 }
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fs25.realpathSync(fileURLToPath3(import.meta.url)) === fs25.realpathSync(process.argv[1])) {
   const cliArgs = process.argv.slice(2);
   if (cliArgs.length > 0) {
     runAdminCli(cliArgs).then((code2) => {
       process.exitCode = code2;
     });
   } else {
-    const server = createV2Server();
+    const server = createV3Server();
     const transport = new StdioServerTransport();
     server.connect(transport).catch((err2) => {
       console.error("Fatal MCP Server error:", err2);
@@ -50718,5 +53227,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
 }
 export {
-  createV2Server
+  createV3Server
 };

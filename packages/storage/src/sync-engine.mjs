@@ -18,6 +18,21 @@ export class SyncEngine {
     );
   }
 
+  /**
+   * graph.json is the versioned artifact (it rides in git). If someone rewrote
+   * it after our last export (git checkout / revert / pull), that copy wins even
+   * when its revision is older: the code was reverted, so the OS rolls back too.
+   */
+  graphEditedExternally(projectId, projectRoot) {
+    const targetFile = path.join(projectRoot, '.contextos', 'graph.json');
+    if (!fs.existsSync(targetFile)) return false;
+    const lastHash = this._lastExportedHash(projectId);
+    if (!lastHash) return true;
+    // Every OS write ends with an export that records the hash, so anything
+    // else on disk came from outside: git checkout, revert, pull, hand edit.
+    return calculateSha256(fs.readFileSync(targetFile, 'utf8')) !== lastHash;
+  }
+
   _buildGraph(projectId, graphRevision) {
     const project = this.db.getProject(projectId);
     if (!project) throw new Error(`Project ${projectId} not found in database`);
@@ -124,6 +139,20 @@ export class SyncEngine {
       );
     }
 
+    // Idempotent: an export that would rewrite the same bytes must not bump
+    // the graph revision (the canvas and git both watch that number).
+    const lastHash = this._lastExportedHash(projectId);
+    if (lastHash && outbox.payloadHash === lastHash) {
+      this.db.deleteGraphOutbox(projectId);
+      return {
+        changed: false,
+        reason: 'Payload identical to last export',
+        graphRevision: project.graph_revision,
+        sha256: lastHash,
+        targetFile: path.join(projectRoot, '.contextos', 'graph.json'),
+      };
+    }
+
     const targetFile = this._writeGraphFile(projectRoot, outbox.payloadJson);
     const actualSha256 = calculateSha256(fs.readFileSync(targetFile, 'utf8'));
     if (actualSha256 !== outbox.payloadHash) {
@@ -165,6 +194,19 @@ export class SyncEngine {
     this.queueGraphToJson(projectId);
 
     return this.flushGraphOutbox(projectId, projectRoot);
+  }
+
+  /**
+   * The one and only publisher: SQLite marks the project dirty through
+   * triggers, callers just give it a moment to run (end of a dispatch, end of
+   * a daemon message). Nothing else has to remember to export.
+   */
+  publishIfDirty(projectId, projectRoot) {
+    if (!this.db.isGraphDirty(projectId)) return { changed: false, reason: 'clean' };
+    this.queueGraphToJson(projectId);
+    const result = this.flushGraphOutbox(projectId, projectRoot);
+    this.db.clearGraphDirty(projectId);
+    return result || { changed: false, reason: 'no outbox' };
   }
 
   importGraphFromJson(jsonText, projectRoot) {
@@ -277,22 +319,23 @@ export class SyncEngine {
     const project = this.db.getProject(projectId);
     const currentRevision = project?.graph_revision || 0;
     const incomingRevision = graph.graphRevision || graph.project?.graphRevision || 0;
+    const externallyEdited = this.graphEditedExternally(projectId, projectRoot);
 
-    if (incomingRevision < currentRevision) {
+    if (incomingRevision === currentRevision && !externallyEdited) {
       return {
         changed: false,
         conflict: true,
-        reason: `Refusing stale graph rollback: graph revision ${incomingRevision} is older than database revision ${currentRevision}`,
+        reason: `Graph revision ${incomingRevision} diverged without a newer revision`,
         graphRevision: incomingRevision,
         databaseRevision: currentRevision,
       };
     }
 
-    if (incomingRevision === currentRevision) {
+    if (incomingRevision < currentRevision && !externallyEdited) {
       return {
         changed: false,
         conflict: true,
-        reason: `Graph revision ${incomingRevision} diverged without a newer revision`,
+        reason: `Refusing stale graph rollback: graph revision ${incomingRevision} is older than database revision ${currentRevision}`,
         graphRevision: incomingRevision,
         databaseRevision: currentRevision,
       };
@@ -303,6 +346,7 @@ export class SyncEngine {
       changed: true,
       revision: importResult.graphRevision,
       sha256: currentSha256,
+      rolledBack: incomingRevision < currentRevision,
     };
   }
 }

@@ -38,7 +38,7 @@ enum PluginInstaller {
         var errorDescription: String? { output }
     }
 
-    static let fallbackVersion = "2.4.0"
+    static let fallbackVersion = "2.5.0"
 
     static var canonicalServerDirectoryURL: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -270,19 +270,11 @@ enum PluginInstaller {
             throw CommandFailure(output: "未在 App 内部找到 MCP 服务端脚本: \(sourceServerScript.path)")
         }
 
-        // 2. Deploy canonical user-level server script: ~/.contextos/server/contextos-mcp.mjs
-        // Always delete old canonical file first, then copy fresh file
+        // 2. Atomically deploy canonical user-level server script with rollback backup.
         let canonicalDir = canonicalServerDirectoryURL
         let canonicalServer = canonicalServerScriptURL
-        try? FileManager.default.createDirectory(at: canonicalDir, withIntermediateDirectories: true)
-        if FileManager.default.fileExists(atPath: canonicalServer.path) {
-            try? FileManager.default.removeItem(at: canonicalServer)
-        }
-        do {
-            try FileManager.default.copyItem(at: sourceServerScript, to: canonicalServer)
-        } catch {
-            throw CommandFailure(output: "部署 MCP 服务端到 \(canonicalServer.path) 失败: \(error.localizedDescription)")
-        }
+        try FileManager.default.createDirectory(at: canonicalDir, withIntermediateDirectories: true)
+        try replaceFileAtomically(from: sourceServerScript, to: canonicalServer)
         let serverScript = canonicalServer.path
 
         let skillSource = marketplaceRoot
@@ -309,8 +301,8 @@ enum PluginInstaller {
         case "claude":
             let claudeConfigURL = home.appending(path: "Library/Application Support/Claude/claude_desktop_config.json")
             try? FileManager.default.createDirectory(at: claudeConfigURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            cleanJsonMcp(at: claudeConfigURL)
-            _ = configureJsonMcp(at: claudeConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+            try cleanJsonMcp(at: claudeConfigURL)
+            _ = try configureJsonMcp(at: claudeConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
 
         case "cursor":
             // 1. Clean old skill and MCP config
@@ -318,19 +310,18 @@ enum PluginInstaller {
             let userSkillDest = userCursorDir.appending(path: "skills/contextos")
             let userMcpConfig = userCursorDir.appending(path: "mcp.json")
             try? FileManager.default.createDirectory(at: userCursorDir, withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: userSkillDest)
-            cleanJsonMcp(at: userMcpConfig)
+            try cleanJsonMcp(at: userMcpConfig)
 
             // 2. Copy fresh skill and write fresh MCP config
-            syncDirectory(from: skillSource, to: userSkillDest)
-            _ = configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+            try syncDirectory(from: skillSource, to: userSkillDest)
+            _ = try configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
 
             // 3. Update project root IF .cursor directory already explicitly existed
             if let root = projectRoot {
                 let projectCursorDir = root.appending(path: ".cursor")
                 if FileManager.default.fileExists(atPath: projectCursorDir.path) {
-                    cleanJsonMcp(at: projectCursorDir.appending(path: "mcp.json"))
-                    _ = configureJsonMcp(at: projectCursorDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                    try cleanJsonMcp(at: projectCursorDir.appending(path: "mcp.json"))
+                    _ = try configureJsonMcp(at: projectCursorDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
                 }
             }
 
@@ -340,19 +331,18 @@ enum PluginInstaller {
             let userSkillDest = geminiConfigDir.appending(path: "skills/contextos")
             let userMcpConfig = geminiConfigDir.appending(path: "mcp_config.json")
             try? FileManager.default.createDirectory(at: geminiConfigDir, withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: userSkillDest)
-            cleanJsonMcp(at: userMcpConfig)
+            try cleanJsonMcp(at: userMcpConfig)
 
             // 2. Copy fresh skill and write fresh MCP config
-            syncDirectory(from: skillSource, to: userSkillDest)
-            _ = configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+            try syncDirectory(from: skillSource, to: userSkillDest)
+            _ = try configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
 
             // 3. Update project root IF .agents/mcp_config.json already explicitly existed
             if let root = projectRoot {
                 let projectAgentsConfig = root.appending(path: ".agents/mcp_config.json")
                 if FileManager.default.fileExists(atPath: projectAgentsConfig.path) {
-                    cleanJsonMcp(at: projectAgentsConfig)
-                    _ = configureJsonMcp(at: projectAgentsConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                    try cleanJsonMcp(at: projectAgentsConfig)
+                    _ = try configureJsonMcp(at: projectAgentsConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
                 }
             }
 
@@ -362,19 +352,18 @@ enum PluginInstaller {
             let userSkillDest = userOpencodeDir.appending(path: "skills/contextos")
             let userMcpConfig = userOpencodeDir.appending(path: "mcp.json")
             try? FileManager.default.createDirectory(at: userOpencodeDir, withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: userSkillDest)
-            cleanJsonMcp(at: userMcpConfig)
+            try cleanJsonMcp(at: userMcpConfig)
 
             // 2. Copy fresh skill and write fresh MCP config
-            syncDirectory(from: skillSource, to: userSkillDest)
-            _ = configureJsonMcp(at: userOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+            try syncDirectory(from: skillSource, to: userSkillDest)
+            _ = try configureJsonMcp(at: userOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
 
             // 3. Update project root IF .opencode directory already explicitly existed
             if let root = projectRoot {
                 let projectOpencodeDir = root.appending(path: ".opencode")
                 if FileManager.default.fileExists(atPath: projectOpencodeDir.path) {
-                    cleanJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"))
-                    _ = configureJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                    try cleanJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"))
+                    _ = try configureJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
                 }
             }
 
@@ -385,7 +374,7 @@ enum PluginInstaller {
             let personalMarketplaceURL = personalMarketplaceDir.appending(path: "marketplace.json")
 
             // 1. Clean up legacy marketplace and cache
-            cleanCodexLegacyMarketplace(configURL: codexConfigURL)
+            try cleanCodexLegacyMarketplace(configURL: codexConfigURL)
             try? FileManager.default.removeItem(at: home.appending(path: ".codex/plugins/cache/contextos-development"))
             try? FileManager.default.removeItem(at: home.appending(path: ".codex/plugins/cache/contextos-personal"))
             if let executable = try? codexExecutable() {
@@ -400,12 +389,9 @@ enum PluginInstaller {
                 }
             }
 
-            // 2. Delete old plugin bundles completely
-            try? FileManager.default.removeItem(at: userPluginsContextOS)
-
-            // 3. Sync fresh plugin bundle to ~/plugins/contextos
+            // 2. Atomically stage the new plugin bundle while retaining a rollback copy.
             let pluginSource = marketplaceRoot.appending(path: "plugins/contextos")
-            syncDirectory(from: pluginSource, to: userPluginsContextOS)
+            try syncDirectory(from: pluginSource, to: userPluginsContextOS)
 
             // Update version in ~/plugins/contextos/.codex-plugin/plugin.json only if changed
             let pluginJsonURL = userPluginsContextOS.appending(path: ".codex-plugin/plugin.json")
@@ -421,39 +407,27 @@ enum PluginInstaller {
             }
 
             // 4. Ensure ~/.agents/plugins/marketplace.json has personal marketplace with contextos
-            try? FileManager.default.createDirectory(at: personalMarketplaceDir, withIntermediateDirectories: true)
-            let marketplaceEntry: [String: Any] = [
-                "name": "personal",
-                "interface": [
-                    "displayName": "Personal"
-                ],
-                "plugins": [
-                    [
-                        "name": "contextos",
-                        "source": [
-                            "source": "local",
-                            "path": "./plugins/contextos"
-                        ],
-                        "policy": [
-                            "installation": "AVAILABLE",
-                            "authentication": "ON_INSTALL"
-                        ],
-                        "category": "Productivity"
-                    ]
-                ]
-            ]
-            if let mpData = try? JSONSerialization.data(withJSONObject: marketplaceEntry, options: [.prettyPrinted, .sortedKeys]) {
-                try? mpData.write(to: personalMarketplaceURL)
+            try FileManager.default.createDirectory(at: personalMarketplaceDir, withIntermediateDirectories: true)
+            var marketplace: [String: Any] = [:]
+            if FileManager.default.fileExists(atPath: personalMarketplaceURL.path) {
+                let existingData = try Data(contentsOf: personalMarketplaceURL)
+                guard let existing = (try? JSONSerialization.jsonObject(with: existingData)) as? [String: Any] else {
+                    throw CommandFailure(output: "Refusing to overwrite invalid marketplace JSON at \(personalMarketplaceURL.path)")
+                }
+                marketplace = existing
             }
+            let mergedMarketplace = mergePersonalMarketplace(existing: marketplace)
+            let mpData = try JSONSerialization.data(withJSONObject: mergedMarketplace, options: [.prettyPrinted, .sortedKeys])
+            try atomicWrite(mpData, to: personalMarketplaceURL)
 
             // 5. Install plugin via official codex plugin add contextos@personal
             if let executable = try? codexExecutable() {
                 let installResult = try? run(executable, arguments: ["plugin", "add", "contextos@personal", "--json"])
                 if installResult?.status != 0 {
-                    configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                    try configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
                 }
             } else {
-                configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                try configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
             }
 
         default:
@@ -501,19 +475,108 @@ enum PluginInstaller {
         return (version, contextos["_build"] as? String)
     }
 
-    private static func cleanJsonMcp(at configURL: URL) {
-        guard FileManager.default.fileExists(atPath: configURL.path),
-              let data = try? Data(contentsOf: configURL),
-              var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              var mcpServers = json["mcpServers"] as? [String: Any] else { return }
-        var removed = false
-        if mcpServers.removeValue(forKey: "contextos") != nil { removed = true }
-        if removed {
-            json["mcpServers"] = mcpServers
-            if let outputData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
-                try? outputData.write(to: configURL)
-            }
+    static func mergePersonalMarketplace(existing: [String: Any]) -> [String: Any] {
+        var marketplace = existing
+        var plugins = marketplace["plugins"] as? [[String: Any]] ?? []
+        plugins.removeAll { ($0["name"] as? String) == "contextos" }
+        plugins.append([
+            "name": "contextos",
+            "source": [
+                "source": "local",
+                "path": "./plugins/contextos"
+            ],
+            "policy": [
+                "installation": "AVAILABLE",
+                "authentication": "ON_INSTALL"
+            ],
+            "category": "Productivity"
+        ])
+        marketplace["name"] = "personal"
+        marketplace["interface"] = marketplace["interface"] ?? ["displayName": "Personal"]
+        marketplace["plugins"] = plugins
+        return marketplace
+    }
+
+    private static func backupFile(at url: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return }
+        let backupURL = url.appendingPathExtension("contextos.bak")
+        try? fm.removeItem(at: backupURL)
+        try fm.copyItem(at: url, to: backupURL)
+    }
+
+    private static func atomicWrite(_ data: Data, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try backupFile(at: url)
+        try data.write(to: url, options: .atomic)
+    }
+
+    private static func replaceFileAtomically(from sourceURL: URL, to destURL: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: sourceURL.path) else {
+            throw CommandFailure(output: "Source file does not exist: \(sourceURL.path)")
         }
+        if sourceURL.standardizedFileURL == destURL.standardizedFileURL { return }
+        try fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let token = UUID().uuidString
+        let tempURL = destURL.deletingLastPathComponent().appending(path: ".\(destURL.lastPathComponent).tmp-\(token)")
+        let backupURL = destURL.appendingPathExtension("contextos-backup-\(token)")
+        var movedExisting = false
+        do {
+            try fm.copyItem(at: sourceURL, to: tempURL)
+            if fm.fileExists(atPath: destURL.path) {
+                try fm.moveItem(at: destURL, to: backupURL)
+                movedExisting = true
+            }
+            try fm.moveItem(at: tempURL, to: destURL)
+            if movedExisting { try? fm.removeItem(at: backupURL) }
+        } catch {
+            try? fm.removeItem(at: tempURL)
+            if movedExisting, !fm.fileExists(atPath: destURL.path) {
+                try? fm.moveItem(at: backupURL, to: destURL)
+            }
+            throw error
+        }
+    }
+
+    static func replaceDirectoryAtomically(from sourceURL: URL, to destURL: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: sourceURL.path) else {
+            throw CommandFailure(output: "Source directory does not exist: \(sourceURL.path)")
+        }
+        try fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let token = UUID().uuidString
+        let temporaryURL = destURL.deletingLastPathComponent().appending(path: ".\(destURL.lastPathComponent).tmp-\(token)")
+        let backupURL = destURL.appendingPathExtension("contextos-backup-\(token)")
+        var movedExisting = false
+        do {
+            try fm.copyItem(at: sourceURL, to: temporaryURL)
+            if fm.fileExists(atPath: destURL.path) {
+                try fm.moveItem(at: destURL, to: backupURL)
+                movedExisting = true
+            }
+            try fm.moveItem(at: temporaryURL, to: destURL)
+            if movedExisting { try? fm.removeItem(at: backupURL) }
+        } catch {
+            try? fm.removeItem(at: temporaryURL)
+            if movedExisting, !fm.fileExists(atPath: destURL.path) {
+                try? fm.moveItem(at: backupURL, to: destURL)
+            }
+            throw error
+        }
+    }
+
+    private static func cleanJsonMcp(at configURL: URL) throws {
+        guard FileManager.default.fileExists(atPath: configURL.path) else { return }
+        let data = try Data(contentsOf: configURL)
+        guard var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              var mcpServers = json["mcpServers"] as? [String: Any] else {
+            throw CommandFailure(output: "Refusing to overwrite invalid MCP JSON at \(configURL.path)")
+        }
+        guard mcpServers.removeValue(forKey: "contextos") != nil else { return }
+        json["mcpServers"] = mcpServers
+        let outputData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try atomicWrite(outputData, to: configURL)
     }
 
     private static func nodeExecutablePath() -> String {
@@ -556,11 +619,13 @@ enum PluginInstaller {
         return "node"
     }
 
-    private static func configureJsonMcp(at configURL: URL, serverScript: String, version: String, build: String, env: [String: String]? = nil) -> Bool {
+    static func configureJsonMcp(at configURL: URL, serverScript: String, version: String, build: String, env: [String: String]? = nil) throws -> Bool {
         var json: [String: Any] = [:]
-        if FileManager.default.fileExists(atPath: configURL.path),
-           let data = try? Data(contentsOf: configURL),
-           let existing = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+        if FileManager.default.fileExists(atPath: configURL.path) {
+            let data = try Data(contentsOf: configURL)
+            guard let existing = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                throw CommandFailure(output: "Refusing to overwrite invalid MCP JSON at \(configURL.path)")
+            }
             json = existing
         }
         var mcpServers = json["mcpServers"] as? [String: Any] ?? [:]
@@ -576,15 +641,9 @@ enum PluginInstaller {
         }
         mcpServers["contextos"] = entry
         json["mcpServers"] = mcpServers
-        guard let outputData = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) else {
-            return false
-        }
-        do {
-            try outputData.write(to: configURL)
-            return true
-        } catch {
-            return false
-        }
+        let outputData = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try atomicWrite(outputData, to: configURL)
+        return true
     }
 
     private static func codexExecutable() throws -> URL {
@@ -619,22 +678,8 @@ enum PluginInstaller {
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
     }
 
-    private static func syncDirectory(from sourceURL: URL, to destURL: URL) {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: sourceURL.path) else { return }
-        try? fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let temporaryURL = destURL.deletingLastPathComponent()
-            .appending(path: ".\(destURL.lastPathComponent).tmp-\(UUID().uuidString)")
-        do {
-            try? fm.removeItem(at: temporaryURL)
-            try fm.copyItem(at: sourceURL, to: temporaryURL)
-            if fm.fileExists(atPath: destURL.path) {
-                try fm.removeItem(at: destURL)
-            }
-            try fm.moveItem(at: temporaryURL, to: destURL)
-        } catch {
-            try? fm.removeItem(at: temporaryURL)
-        }
+    private static func syncDirectory(from sourceURL: URL, to destURL: URL) throws {
+        try replaceDirectoryAtomically(from: sourceURL, to: destURL)
     }
 
     private static func readCodexStatus(targetVersion: String, targetBuild: String) -> (isInstalled: Bool, isSynced: Bool, isOutdated: Bool, version: String?, build: String?) {
@@ -710,7 +755,7 @@ enum PluginInstaller {
         return (true, isSynced, isOutdated, ver, detectedBuild)
     }
 
-    private static func cleanCodexLegacyMarketplace(configURL: URL) {
+    private static func cleanCodexLegacyMarketplace(configURL: URL) throws {
         let legacySections: Set<String> = [
             "[marketplaces.contextos-development]",
             "[plugins.\"contextos@contextos-development\"]",
@@ -732,10 +777,10 @@ enum PluginInstaller {
                 cleanedLines.append(line)
             }
         }
-        try? cleanedLines.joined(separator: "\n").write(to: configURL, atomically: true, encoding: .utf8)
+        try atomicWrite(Data(cleanedLines.joined(separator: "\n").utf8), to: configURL)
     }
 
-    private static func cleanTomlMcp(at configURL: URL) {
+    private static func cleanTomlMcp(at configURL: URL) throws {
         guard let content = try? String(contentsOf: configURL, encoding: .utf8),
               content.contains("[mcp_servers.contextos]") else { return }
         var cleanedLines: [String] = []
@@ -753,28 +798,37 @@ enum PluginInstaller {
                 cleanedLines.append(line)
             }
         }
-        try? cleanedLines.joined(separator: "\n").write(to: configURL, atomically: true, encoding: .utf8)
+        try atomicWrite(Data(cleanedLines.joined(separator: "\n").utf8), to: configURL)
     }
 
-    private static func configureTomlMcp(at configURL: URL, serverScript: String, version: String, build: String, env: [String: String]? = nil) {
-        cleanTomlMcp(at: configURL)
+    static func tomlString(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+        return "\"\(escaped)\""
+    }
+
+    private static func configureTomlMcp(at configURL: URL, serverScript: String, version: String, build: String, env: [String: String]? = nil) throws {
+        try cleanTomlMcp(at: configURL)
         var content = (try? String(contentsOf: configURL, encoding: .utf8)) ?? ""
         let nodeCmd = nodeExecutablePath()
         content += """
         
         [mcp_servers.contextos]
-        command = "\(nodeCmd)"
-        args = ["--no-warnings=ExperimentalWarning", "\(serverScript)"]
+        command = \(tomlString(nodeCmd))
+        args = ["--no-warnings=ExperimentalWarning", \(tomlString(serverScript))]
         
         [mcp_servers.contextos.env]
-        CONTEXTOS_VERSION = "\(version)"
-        CONTEXTOS_BUILD = "\(build)"
+        CONTEXTOS_VERSION = \(tomlString(version))
+        CONTEXTOS_BUILD = \(tomlString(build))
         """
         if let env {
             for (k, v) in env.sorted(by: { $0.key < $1.key }) {
-                content += "\n\(k) = \"\(v)\""
+                content += "\n\(k) = \(tomlString(v))"
             }
         }
-        try? content.write(to: configURL, atomically: true, encoding: .utf8)
+        try atomicWrite(Data(content.utf8), to: configURL)
     }
 }

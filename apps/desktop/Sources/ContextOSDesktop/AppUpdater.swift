@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import SwiftUI
+import CryptoKit
 
 // MARK: - Models
 
@@ -23,6 +24,28 @@ public struct AppReleaseAsset: Identifiable, Equatable, Sendable {
         let lower = name.lowercased()
         return lower.hasSuffix(".zip") && !isFullEdition
     }
+
+    public var isChecksum: Bool {
+        let lower = name.lowercased()
+        return lower.contains("sha256sums") || lower.contains("checksum")
+    }
+
+    public var hasArchitectureToken: Bool {
+        let lower = name.lowercased()
+        return lower.contains("arm64") || lower.contains("x64") || lower.contains("x86_64") || lower.contains("amd64")
+    }
+
+    public func matchesArchitecture(_ architecture: String) -> Bool {
+        let lower = name.lowercased()
+        switch architecture {
+        case "arm64":
+            return lower.contains("arm64") || lower.contains("aarch64")
+        case "x64":
+            return lower.contains("x64") || lower.contains("x86_64") || lower.contains("amd64")
+        default:
+            return false
+        }
+    }
 }
 
 public struct AppRelease: Identifiable, Equatable, Sendable {
@@ -36,13 +59,42 @@ public struct AppRelease: Identifiable, Equatable, Sendable {
     public let isPrerelease: Bool
     public let assets: [AppReleaseAsset]
 
-    public func asset(for edition: UpdateEdition) -> AppReleaseAsset? {
+    public func asset(for edition: UpdateEdition, architecture: String = AppRelease.hostArchitecture()) -> AppReleaseAsset? {
+        let candidates: [AppReleaseAsset]
         switch edition {
         case .full:
-            return assets.first(where: { $0.isFullEdition }) ?? assets.first
+            candidates = assets.filter(\.isFullEdition)
         case .standard:
-            return assets.first(where: { $0.isStandardEdition }) ?? assets.first
+            candidates = assets.filter(\.isStandardEdition)
         }
+        return Self.preferredAsset(from: candidates, architecture: architecture)
+    }
+
+    public var checksumAsset: AppReleaseAsset? {
+        checksumAsset(for: Self.hostArchitecture())
+    }
+
+    public func checksumAsset(for architecture: String) -> AppReleaseAsset? {
+        let checksums = assets.filter(\.isChecksum)
+        if let combined = checksums.first(where: { !$0.hasArchitectureToken }) {
+            return combined
+        }
+        return Self.preferredAsset(from: checksums, architecture: architecture)
+    }
+
+    public static func hostArchitecture() -> String {
+#if arch(arm64)
+        return "arm64"
+#elseif arch(x86_64)
+        return "x64"
+#else
+        return "unknown"
+#endif
+    }
+
+    private static func preferredAsset(from candidates: [AppReleaseAsset], architecture: String) -> AppReleaseAsset? {
+        candidates.first(where: { $0.matchesArchitecture(architecture) })
+            ?? candidates.first(where: { !$0.hasArchitectureToken })
     }
 }
 
@@ -124,7 +176,7 @@ public final class AppUpdater: NSObject, ObservableObject {
         if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, !version.isEmpty {
             return version
         }
-        return "2.4.0"
+        return "2.5.0"
     }
 
     public var currentBuildNumber: String {
@@ -329,31 +381,46 @@ public final class AppUpdater: NSObject, ObservableObject {
         }
 
         guard let asset = release.asset(for: edition) else {
-            state = .failed(message: "该版本未提供所选规格的下载产物")
+            state = .failed(message: "该版本未提供所选规格与当前架构的下载产物")
+            return
+        }
+        guard let checksumAsset = release.checksumAsset(for: AppRelease.hostArchitecture()) else {
+            state = .failed(message: "发布包缺少 SHA256SUMS 校验文件，已拒绝自动更新")
             return
         }
 
         cancelDownload()
         state = .downloading(progress: 0.0, bytesWritten: 0, totalBytes: asset.size)
 
+        Task { [weak self] in
+            do {
+                let expectedSHA256 = try await Self.fetchExpectedSHA256(for: asset, checksumAsset: checksumAsset)
+                await MainActor.run { [weak self] in
+                    self?.beginDownload(asset: asset, release: release, expectedSHA256: expectedSHA256)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.state = .failed(message: "获取更新校验文件失败: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+
+    private func beginDownload(asset: AppReleaseAsset, release: AppRelease, expectedSHA256: String) {
         let sessionConfig = URLSessionConfiguration.default
         let handler = DownloadProgressHandler { [weak self] progress, written, total in
             Task { @MainActor [weak self] in
                 self?.state = .downloading(progress: progress, bytesWritten: written, totalBytes: total)
             }
-        } onCompletion: { [weak self] tempFileURL, error in
+        } onCompletion: { [weak self] result in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if let error {
+                switch result {
+                case .failure(let error):
                     self.state = .failed(message: "下载失败: \(error.localizedDescription)")
-                    return
+                case .success(let tempFileURL):
+                    self.unpackAndStage(downloadedZipURL: tempFileURL, release: release, expectedSHA256: expectedSHA256)
                 }
-                guard let tempFileURL else {
-                    self.state = .failed(message: "下载文件丢失")
-                    return
-                }
-
-                self.unpackAndStage(downloadedZipURL: tempFileURL, release: release)
             }
         }
 
@@ -372,7 +439,7 @@ public final class AppUpdater: NSObject, ObservableObject {
 
     // MARK: - Unpack & Stage
 
-    private func unpackAndStage(downloadedZipURL: URL, release: AppRelease) {
+    private func unpackAndStage(downloadedZipURL: URL, release: AppRelease, expectedSHA256: String) {
         state = .installing
 
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -381,8 +448,14 @@ public final class AppUpdater: NSObject, ObservableObject {
 
             do {
                 try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                defer {
+                    try? fm.removeItem(at: tempDir)
+                    try? fm.removeItem(at: downloadedZipURL)
+                }
                 let zipDest = tempDir.appendingPathComponent("update.zip")
                 try fm.copyItem(at: downloadedZipURL, to: zipDest)
+                let actualSHA256 = try Self.sha256(forFileAt: zipDest)
+                try Self.validateSHA256(actual: actualSHA256, expected: expectedSHA256)
 
                 // Unpack with ditto (preserves symlinks, extended attributes, and permissions)
                 let extractDir = tempDir.appendingPathComponent("extracted")
@@ -416,6 +489,10 @@ public final class AppUpdater: NSObject, ObservableObject {
                     throw NSError(domain: "AppUpdater", code: 3, userInfo: [NSLocalizedDescriptionKey: "解压的 ContextOS.app 缺少可执行程序"])
                 }
 
+                if Bundle.main.bundleURL.pathExtension == "app" {
+                    try Self.verifyCodeSignature(stagedApp: stagedApp, currentApp: Bundle.main.bundleURL)
+                }
+
                 await self?.updateStateOnMain(.readyToInstall(stagedAppURL: stagedApp, version: release.version))
             } catch {
                 await self?.updateStateOnMain(.failed(message: error.localizedDescription))
@@ -425,6 +502,122 @@ public final class AppUpdater: NSObject, ObservableObject {
 
     private func updateStateOnMain(_ newState: UpdateState) {
         self.state = newState
+    }
+
+    // MARK: - Release Integrity Verification
+
+    nonisolated private static func fetchExpectedSHA256(for asset: AppReleaseAsset, checksumAsset: AppReleaseAsset) async throws -> String {
+        let (data, response) = try await URLSession.shared.data(from: checksumAsset.downloadUrl)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw NSError(domain: "AppUpdater", code: 5, userInfo: [
+                NSLocalizedDescriptionKey: "校验文件下载失败（HTTP \(http.statusCode)）",
+            ])
+        }
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw NSError(domain: "AppUpdater", code: 6, userInfo: [NSLocalizedDescriptionKey: "校验文件不是 UTF-8 文本"])
+        }
+        return try parseChecksum(text, assetName: asset.name)
+    }
+
+    nonisolated static func parseChecksum(_ text: String, assetName: String) throws -> String {
+        for line in text.split(whereSeparator: \.isNewline) {
+            let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
+            guard parts.count >= 2, let rawFile = parts.last else { continue }
+            var fileName = String(rawFile).trimmingCharacters(in: .whitespacesAndNewlines)
+            if fileName.hasPrefix("*") { fileName = String(fileName.dropFirst()) }
+            let matchesName = fileName == assetName || URL(fileURLWithPath: fileName).lastPathComponent == assetName
+            guard matchesName else { continue }
+
+            let hash = String(parts[0]).lowercased()
+            guard hash.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
+                throw NSError(domain: "AppUpdater", code: 7, userInfo: [NSLocalizedDescriptionKey: "SHA256SUMS 中的哈希格式无效"])
+            }
+            return hash
+        }
+        throw NSError(domain: "AppUpdater", code: 8, userInfo: [
+            NSLocalizedDescriptionKey: "SHA256SUMS 中找不到资产 '\(assetName)' 的校验值",
+        ])
+    }
+
+    nonisolated static func sha256(forFileAt url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while true {
+            let data = try handle.read(upToCount: 1_048_576) ?? Data()
+            if data.isEmpty { break }
+            hasher.update(data: data)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    nonisolated static func validateSHA256(actual: String, expected: String) throws {
+        guard actual.caseInsensitiveCompare(expected) == .orderedSame else {
+            throw NSError(domain: "AppUpdater", code: 4, userInfo: [
+                NSLocalizedDescriptionKey: "更新包 SHA-256 校验失败，已删除临时文件并保留当前版本",
+            ])
+        }
+    }
+
+    nonisolated private static func runTool(_ executable: String, arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: data, encoding: .utf8) ?? ""
+        guard process.terminationStatus == 0 else {
+            throw NSError(domain: "AppUpdater", code: 9, userInfo: [
+                NSLocalizedDescriptionKey: "签名验证命令失败: \(output.trimmingCharacters(in: .whitespacesAndNewlines))",
+            ])
+        }
+        return output
+    }
+
+    nonisolated private static func teamIdentifier(for appURL: URL) -> String? {
+        guard let output = try? runTool("/usr/bin/codesign", arguments: ["-dv", "--verbose=4", appURL.path]) else {
+            return nil
+        }
+        for line in output.split(whereSeparator: \.isNewline) {
+            let value = String(line)
+            if value.hasPrefix("TeamIdentifier=") {
+                let team = String(value.dropFirst("TeamIdentifier=".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                return team.isEmpty ? nil : team
+            }
+        }
+        return nil
+    }
+
+    nonisolated private static func verifyCodeSignature(stagedApp: URL, currentApp: URL) throws {
+        _ = try runTool("/usr/bin/codesign", arguments: ["--verify", "--deep", "--strict", "--verbose=2", stagedApp.path])
+        guard let currentTeam = teamIdentifier(for: currentApp), !currentTeam.isEmpty else {
+            throw NSError(domain: "AppUpdater", code: 10, userInfo: [
+                NSLocalizedDescriptionKey: "当前应用没有 Developer ID TeamIdentifier，已拒绝自动更新",
+            ])
+        }
+        guard let stagedTeam = teamIdentifier(for: stagedApp), stagedTeam == currentTeam else {
+            throw NSError(domain: "AppUpdater", code: 11, userInfo: [
+                NSLocalizedDescriptionKey: "更新包签名 TeamIdentifier 与当前应用不一致",
+            ])
+        }
+        let details = try runTool("/usr/bin/codesign", arguments: ["-dv", "--verbose=4", stagedApp.path])
+        let hasDeveloperIDAuthority = details.split(whereSeparator: \.isNewline).contains { line in
+            line.hasPrefix("Authority=Developer ID Application")
+        }
+        guard hasDeveloperIDAuthority else {
+            throw NSError(domain: "AppUpdater", code: 12, userInfo: [
+                NSLocalizedDescriptionKey: "更新包不是 Developer ID Application 签名",
+            ])
+        }
+        guard Bundle(url: stagedApp)?.bundleIdentifier == Bundle(url: currentApp)?.bundleIdentifier else {
+            throw NSError(domain: "AppUpdater", code: 13, userInfo: [
+                NSLocalizedDescriptionKey: "更新包 Bundle Identifier 与当前应用不一致",
+            ])
+        }
     }
 
     // MARK: - Final Swap & Relaunch
@@ -444,37 +637,45 @@ public final class AppUpdater: NSObject, ObservableObject {
         let pid = ProcessInfo.processInfo.processIdentifier
         let scriptContent = """
         #!/bin/bash
-        # ContextOS In-Place Update Script
-        PID=\(pid)
-        STAGED="\(stagedAppURL.path)"
-        TARGET="\(currentBundleURL.path)"
+        set -u
+        PID="$CONTEXTOS_UPDATE_PID"
+        STAGED="$CONTEXTOS_UPDATE_STAGED"
+        TARGET="$CONTEXTOS_UPDATE_TARGET"
 
-        # Wait for host process to quit
-        while kill -0 $PID 2>/dev/null; do
+        while kill -0 "$PID" 2>/dev/null; do
             sleep 0.2
         done
 
-        # Atomic replacement
+        BACKUP="${TARGET}.contextos-backup-$$"
+        if ! mv "$TARGET" "$BACKUP"; then
+            exit 1
+        fi
+        if /usr/bin/ditto "$STAGED" "$TARGET"; then
+            rm -rf "$BACKUP"
+            /usr/bin/open "$TARGET"
+            rm -f "$0"
+            exit 0
+        fi
+
         rm -rf "$TARGET"
-        cp -R "$STAGED" "$TARGET"
-
-        # Remove Gatekeeper quarantine flag
-        /usr/bin/xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
-
-        # Relaunch updated application
-        /usr/bin/open "$TARGET"
-
-        exit 0
+        mv "$BACKUP" "$TARGET"
+        rm -f "$0"
+        exit 1
         """
 
         let scriptPath = FileManager.default.temporaryDirectory.appendingPathComponent("contextos-updater-\(pid).sh")
         do {
             try scriptContent.write(to: scriptPath, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptPath.path)
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptPath.path)
 
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/bash")
             process.arguments = [scriptPath.path]
+            var environment = ProcessInfo.processInfo.environment
+            environment["CONTEXTOS_UPDATE_PID"] = String(pid)
+            environment["CONTEXTOS_UPDATE_STAGED"] = stagedAppURL.path
+            environment["CONTEXTOS_UPDATE_TARGET"] = currentBundleURL.path
+            process.environment = environment
             try process.run()
 
             // Gracefully terminate current app
@@ -587,12 +788,22 @@ public final class AppUpdater: NSObject, ObservableObject {
 
 private final class DownloadProgressHandler: NSObject, URLSessionDownloadDelegate {
     private let onProgress: (Double, Int64, Int64) -> Void
-    private let onCompletion: (URL?, Error?) -> Void
+    private let onCompletion: (Result<URL, Error>) -> Void
+    private let lock = NSLock()
+    private var completed = false
 
     init(onProgress: @escaping (Double, Int64, Int64) -> Void,
-         onCompletion: @escaping (URL?, Error?) -> Void) {
+         onCompletion: @escaping (Result<URL, Error>) -> Void) {
         self.onProgress = onProgress
         self.onCompletion = onCompletion
+    }
+
+    private func finish(_ result: Result<URL, Error>) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !completed else { return }
+        completed = true
+        onCompletion(result)
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
@@ -603,12 +814,26 @@ private final class DownloadProgressHandler: NSObject, URLSessionDownloadDelegat
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        onCompletion(location, nil)
+        if let response = downloadTask.response as? HTTPURLResponse,
+           !(200..<300).contains(response.statusCode) {
+            finish(.failure(NSError(domain: "AppUpdater", code: 14, userInfo: [
+                NSLocalizedDescriptionKey: "下载更新包失败（HTTP \(response.statusCode)）",
+            ])))
+            return
+        }
+        let stableURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("contextos-update-download-\(UUID().uuidString).zip")
+        do {
+            try FileManager.default.copyItem(at: location, to: stableURL)
+            finish(.success(stableURL))
+        } catch {
+            finish(.failure(error))
+        }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error {
-            onCompletion(nil, error)
+            finish(.failure(error))
         }
     }
 }

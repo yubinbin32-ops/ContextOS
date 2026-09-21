@@ -16,6 +16,8 @@ LABEL org.opencontainers.image.description="Context OS for AI coding agents: tas
 
 WORKDIR /workspace
 COPY --from=build /src/plugins/contextos/server/contextos-mcp.mjs /opt/contextos/contextos-mcp.mjs
+COPY --from=build /src/node_modules/web-tree-sitter/web-tree-sitter.wasm /opt/contextos/web-tree-sitter.wasm
+COPY packages/code-intel/grammars /opt/grammars
 
 ENV CONTEXTOS_PROJECT_ROOT=/workspace
 

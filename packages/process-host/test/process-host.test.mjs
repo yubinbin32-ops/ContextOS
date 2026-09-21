@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { sanitizeTerminalOutput, stripAnsi, redactSecrets, runCommand, ProcessManager } from '../src/index.mjs';
+import { sanitizeTerminalOutput, stripAnsi, redactSecrets, runCommand, ProcessManager, ensureLogDir, pruneLogDir, writeSecureLog } from '../src/index.mjs';
 
 test('Sanitizer strips ANSI, redacts secrets, and collapses build noise', () => {
   const secretText = 'Connecting with token: ghp_123456789012345678901234567890123456';
@@ -35,12 +35,63 @@ test('runCommand executes command, logs out-of-context, and compresses context',
 
   const fullLogPath = path.join(tempDir, receipt.logHandle);
   assert.ok(fs.existsSync(fullLogPath));
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(fullLogPath).mode & 0o777, 0o600);
+  }
   const fullContent = fs.readFileSync(fullLogPath, 'utf8');
   assert.ok(fullContent.includes('Hello ContextOS'));
 
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('log store creates private directories and files', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-log-mode-test-'));
+  const logDir = ensureLogDir(tempDir);
+  const logFile = path.join(logDir, 'private.log');
+  writeSecureLog(logFile, 'secret');
+
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(logDir).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(logFile).mode & 0o777, 0o600);
+  }
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('log store prunes by age, count, and byte budget', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-log-prune-test-'));
+  const logDir = ensureLogDir(tempDir);
+  const now = Date.now();
+  const makeLog = (name, size, ageMs = 0) => {
+    const filePath = path.join(logDir, name);
+    fs.writeFileSync(filePath, 'x'.repeat(size));
+    const mtime = new Date(now - ageMs);
+    fs.utimesSync(filePath, mtime, mtime);
+    return filePath;
+  };
+
+  const expired = makeLog('expired.log', 4, 40 * 24 * 60 * 60 * 1000);
+  const oldest = makeLog('oldest.log', 6, 3000);
+  const middle = makeLog('middle.log', 6, 2000);
+  const newest = makeLog('newest.log', 6, 1000);
+
+  const result = pruneLogDir(logDir, { maxFiles: 2, maxBytes: 100, maxAgeMs: 30 * 24 * 60 * 60 * 1000, now });
+  assert.equal(result.removed, 2);
+  assert.equal(result.kept, 2);
+  assert.equal(fs.existsSync(expired), false);
+  assert.equal(fs.existsSync(oldest), false);
+  assert.equal(fs.existsSync(middle), true);
+  assert.equal(fs.existsSync(newest), true);
+
+  makeLog('large.log', 80, 500);
+  const byteResult = pruneLogDir(logDir, { maxFiles: 10, maxBytes: 20, maxAgeMs: 30 * 24 * 60 * 60 * 1000, now });
+  assert.equal(byteResult.kept, 1);
+  assert.equal(fs.existsSync(path.join(logDir, 'large.log')), true);
+  assert.equal(fs.existsSync(middle), false);
+  assert.equal(fs.existsSync(newest), false);
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
 test('Sanitizer treats the exit code as authoritative for successful command output', () => {
   const sanitized = sanitizeTerminalOutput('Recovered from a failed attempt successfully.\n', { exitCode: 0 });
   assert.match(sanitized.summary, /succeeded/i);

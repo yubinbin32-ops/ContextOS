@@ -36,30 +36,24 @@ try {
     title: 'Packaging',
     artifactRefs: [{ path: 'app/Info.plist', anchorKind: 'file', hash: 'placeholder' }],
   });
-  service.artifactService.recordArtifact({ path: 'app/Info.plist', category: 'config' });
-  service.artifactService.recordArtifact({ path: 'app/Build.xcconfig', category: 'config' });
   service.syncEngine.exportGraphToJson(projectId, projectRoot);
+  service.db.saveBlock({
+    id: 'block-admin-sync',
+    projectId,
+    title: 'Admin sync marker',
+    artifactRefs: [{ path: 'app/Build.xcconfig', anchorKind: 'file', hash: 'placeholder' }],
+  });
   service.close({ stopProcesses: false });
 
-  const linked = runAdmin(['artifact', 'link', '--path', 'app/Info.plist', '--block-id', 'block-packaging']);
-  assert.equal(linked.ok, true);
-  const ignored = runAdmin([
-    'artifact',
-    'ignore',
-    '--path',
-    'app/Build.xcconfig',
-    '--reason',
-    'manual admin verification',
-  ]);
-  assert.equal(ignored.ok, true);
-  const list = runAdmin(['artifact', 'list']);
-  assert.equal(list.ok, true);
-  assert.equal(list.result.length, 2);
-  assert.equal(list.result.find((item) => item.path === 'app/Info.plist').status, 'linked');
-  assert.equal(list.result.find((item) => item.path === 'app/Build.xcconfig').status, 'ignored');
+  const synced = runAdmin(['sync']);
+  assert.equal(synced.ok, true);
+  const context = runAdmin(['context']);
+  assert.equal(context.ok, true);
+  const graph = JSON.parse(fs.readFileSync(path.join(projectRoot, '.contextos', 'graph.json'), 'utf8'));
+  assert.equal(graph.data.blocks.some((block) => block.id === 'block-admin-sync'), true);
 
   console.log('Manual admin CLI flow passed.');
-  console.log('- link and ignore actions used the packaged writer channel.');
+  console.log('- sync and context used the packaged writer channel.');
   console.log('- graph and SQLite remained synchronized.');
 } finally {
   fs.rmSync(projectRoot, { recursive: true, force: true });

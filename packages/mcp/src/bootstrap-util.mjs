@@ -1,9 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 const HOME = os.homedir();
+
+export function deriveProjectId(projectRoot) {
+  const baseName = path.basename(path.resolve(projectRoot || process.cwd())).trim();
+  const slug = baseName.toLowerCase().replace(/ +/g, '-');
+  return slug || 'contextos';
+}
 
 export function resolveNodeExecutable() {
   const isWin = process.platform === 'win32';
@@ -51,7 +58,7 @@ export function resolveNodeExecutable() {
       } catch (_) {}
     }
   }
-  return 'node';
+  throw new Error('Unable to locate an executable Node.js runtime. Install Node.js 22+ or use the full ContextOS edition.');
 }
 
 export function resolveCodexExecutable() {
@@ -107,8 +114,13 @@ export function deployCanonicalServer(sourceScriptPath = null) {
   ].filter(Boolean);
 
   const found = candidates.find((p) => fs.existsSync(p));
-  if (found && found !== canonicalScript) {
-    fs.copyFileSync(found, canonicalScript);
+  if (!found) {
+    throw new Error('Cannot locate the ContextOS MCP server bundle. Install the app or pass a valid source script path.');
+  }
+  if (path.resolve(found) !== path.resolve(canonicalScript)) {
+    const tempPath = `${canonicalScript}.contextos-${process.pid}-${randomUUID()}.tmp`;
+    fs.copyFileSync(found, tempPath);
+    fs.renameSync(tempPath, canonicalScript);
   }
   return canonicalScript;
 }
@@ -128,35 +140,114 @@ export function copyDirectoryRecursive(src, dest) {
   }
 }
 
-export function configureJsonMcp({ configPath, serverScript, nodePath, env = null, version = '2.1.0' }) {
-  const dir = path.dirname(configPath);
-  fs.mkdirSync(dir, { recursive: true });
+function backupFile(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  const backupPath = `${filePath}.contextos.bak`;
+  fs.copyFileSync(filePath, backupPath);
+  return backupPath;
+}
 
-  let json = {};
-  if (fs.existsSync(configPath)) {
-    try {
-      json = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (_) {
-      json = {};
+function writeFileAtomic(filePath, content, mode = null) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  backupFile(filePath);
+  const tempPath = `${filePath}.contextos-${process.pid}-${randomUUID()}.tmp`;
+  fs.writeFileSync(tempPath, content, { encoding: 'utf8', mode: mode ?? 0o644 });
+  if (mode !== null) fs.chmodSync(tempPath, mode);
+  fs.renameSync(tempPath, filePath);
+}
+
+function readJsonObject(filePath, label) {
+  if (!fs.existsSync(filePath)) return {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('root value must be an object');
     }
+    return parsed;
+  } catch (error) {
+    throw new Error(`Refusing to overwrite invalid JSON at '${filePath}' (${label}): ${error.message}`);
   }
+}
 
-  json.mcpServers = json.mcpServers || {};
+export function mergePersonalMarketplaceDocument(parsed) {
+  let marketplaces = [];
+  let marketplaceWasArray = false;
+  if (Array.isArray(parsed)) {
+    marketplaces = parsed;
+    marketplaceWasArray = true;
+  } else if (parsed && typeof parsed === 'object') {
+    marketplaces = [parsed];
+  } else {
+    throw new Error('Marketplace root must be an object or array');
+  }
+  const existingPersonal = marketplaces.find((entry) => entry?.name === 'personal');
+  const existingPlugins = Array.isArray(existingPersonal?.plugins) ? existingPersonal.plugins : [];
+  const contextosEntry = {
+    name: 'contextos',
+    source: { source: 'local', path: './plugins/contextos' },
+    policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' },
+    category: 'Productivity',
+  };
+  const mergedPlugins = existingPlugins.filter((plugin) => plugin?.name !== 'contextos');
+  mergedPlugins.push(contextosEntry);
+  const personalEntry = {
+    ...(existingPersonal || {}),
+    name: 'personal',
+    interface: existingPersonal?.interface || { displayName: 'Personal' },
+    plugins: mergedPlugins,
+  };
+  const filtered = marketplaces.filter((m) => m?.name !== 'personal');
+  filtered.push(personalEntry);
+  return marketplaceWasArray || filtered.length > 1 ? filtered : filtered[0];
+}
+
+function replaceDirectoryAtomically(source, destination) {
+  if (!fs.existsSync(source)) throw new Error(`Plugin source does not exist: '${source}'`);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  const token = `${process.pid}-${randomUUID()}`;
+  const tempDestination = `${destination}.contextos-${token}.tmp`;
+  const backupDestination = `${destination}.contextos-${token}.bak`;
+  copyDirectoryRecursive(source, tempDestination);
+  let movedExisting = false;
+  try {
+    if (fs.existsSync(destination)) {
+      fs.renameSync(destination, backupDestination);
+      movedExisting = true;
+    }
+    fs.renameSync(tempDestination, destination);
+    if (movedExisting) fs.rmSync(backupDestination, { recursive: true, force: true });
+  } catch (error) {
+    try {
+      if (fs.existsSync(destination)) fs.rmSync(destination, { recursive: true, force: true });
+      if (movedExisting && fs.existsSync(backupDestination)) fs.renameSync(backupDestination, destination);
+    } catch (_) {}
+    try { fs.rmSync(tempDestination, { recursive: true, force: true }); } catch (_) {}
+    throw error;
+  }
+}
+
+export function configureJsonMcp({ configPath, serverScript, nodePath, env = null, version = null }) {
+  const json = readJsonObject(configPath, 'MCP config');
+  json.mcpServers = json.mcpServers && typeof json.mcpServers === 'object' && !Array.isArray(json.mcpServers)
+    ? json.mcpServers
+    : {};
   const serverEntry = {
     command: nodePath,
     args: ['--no-warnings=ExperimentalWarning', serverScript],
-    _version: version,
   };
+  if (version) serverEntry._version = version;
 
   if (env && Object.keys(env).length > 0) {
     serverEntry.env = env;
-  } else {
-    delete serverEntry.env;
   }
 
   json.mcpServers.contextos = serverEntry;
-  fs.writeFileSync(configPath, JSON.stringify(json, null, 2) + '\n', 'utf8');
+  writeFileAtomic(configPath, JSON.stringify(json, null, 2) + '\n');
   return true;
+}
+
+function tomlString(value) {
+  return JSON.stringify(String(value));
 }
 
 export function configureTomlCodex({ configPath, serverScript, nodePath, env = null }) {
@@ -177,17 +268,17 @@ export function configureTomlCodex({ configPath, serverScript, nodePath, env = n
   }
 
   content = content.trimEnd();
-  const safeNodePath = nodePath.replace(/\\/g, '\\\\');
-  const safeServerScript = serverScript.replace(/\\/g, '\\\\');
-  let tomlBlock = `\n\n[mcp_servers.contextos]\ncommand = "${safeNodePath}"\nargs = ["--no-warnings=ExperimentalWarning", "${safeServerScript}"]\n`;
+  let tomlBlock = `\n\n[mcp_servers.contextos]\ncommand = ${tomlString(nodePath)}\nargs = ["--no-warnings=ExperimentalWarning", ${tomlString(serverScript)}]\n`;
   if (env && Object.keys(env).length > 0) {
     tomlBlock += `[mcp_servers.contextos.env]\n`;
     for (const [k, v] of Object.entries(env)) {
-      tomlBlock += `${k} = "${String(v).replace(/\\/g, '\\\\')}"\n`;
+      tomlBlock += `${k} = ${tomlString(v)}\n`;
     }
   }
 
-  fs.writeFileSync(configPath, (content + tomlBlock).trim() + '\n', 'utf8');
+  fs.writeFileSync(`${configPath}.contextos.tmp`, (content + tomlBlock).trim() + '\n', 'utf8');
+  backupFile(configPath);
+  fs.renameSync(`${configPath}.contextos.tmp`, configPath);
 }
 
 export function cleanTomlCodex({ configPath }) {
@@ -195,7 +286,7 @@ export function cleanTomlCodex({ configPath }) {
   let content = fs.readFileSync(configPath, 'utf8');
   const regex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
   content = content.replace(regex, '');
-  fs.writeFileSync(configPath, content.trim() + '\n', 'utf8');
+  writeFileAtomic(configPath, content.trim() + '\n');
 }
 
 export function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
@@ -206,8 +297,7 @@ export function installCodexPlugin({ serverScript, nodePath, env = null, pluginS
 
   // 1. Sync official plugin bundle to ~/plugins/contextos
   if (pluginSource && fs.existsSync(pluginSource)) {
-    try { fs.rmSync(userPluginsContextOS, { recursive: true, force: true }); } catch (_) {}
-    copyDirectoryRecursive(pluginSource, userPluginsContextOS);
+    replaceDirectoryAtomically(pluginSource, userPluginsContextOS);
   } else if (!fs.existsSync(userPluginsContextOS)) {
     fs.mkdirSync(path.join(userPluginsContextOS, '.codex-plugin'), { recursive: true });
     fs.mkdirSync(path.join(userPluginsContextOS, 'server'), { recursive: true });
@@ -216,40 +306,24 @@ export function installCodexPlugin({ serverScript, nodePath, env = null, pluginS
 
   // 2. Ensure marketplace.json has personal marketplace with contextos
   fs.mkdirSync(personalMarketplaceDir, { recursive: true });
-  let marketplaces = [];
+  let parsedMarketplace = null;
   if (fs.existsSync(personalMarketplaceURL)) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(personalMarketplaceURL, 'utf8'));
-      marketplaces = Array.isArray(parsed) ? parsed : [parsed];
-    } catch (_) {}
+      parsedMarketplace = JSON.parse(fs.readFileSync(personalMarketplaceURL, 'utf8'));
+    } catch (error) {
+      throw new Error(`Refusing to overwrite invalid marketplace JSON at '${personalMarketplaceURL}': ${error.message}`);
+    }
   }
-  const personalEntry = {
-    name: 'personal',
-    interface: { displayName: 'Personal' },
-    plugins: [
-      {
-        name: 'contextos',
-        source: { source: 'local', path: './plugins/contextos' },
-        policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' },
-        category: 'Productivity',
-      },
-    ],
-  };
-  const filtered = marketplaces.filter((m) => m.name !== 'personal');
-  filtered.push(personalEntry);
-  fs.writeFileSync(
-    personalMarketplaceURL,
-    JSON.stringify(filtered.length === 1 ? filtered[0] : filtered, null, 2) + '\n',
-    'utf8'
-  );
+  const output = mergePersonalMarketplaceDocument(parsedMarketplace ?? {});
+  writeFileAtomic(personalMarketplaceURL, JSON.stringify(output, null, 2) + '\n');
 
   // 3. Attempt official codex CLI plugin add
   const codexBin = resolveCodexExecutable();
   let installedViaCli = false;
   if (codexBin) {
     try {
-      try { execSync(`"${codexBin}" plugin remove contextos@personal --json`, { stdio: 'ignore' }); } catch (_) {}
-      execSync(`"${codexBin}" plugin add contextos@personal --json`, { stdio: 'pipe' });
+      try { execFileSync(codexBin, ['plugin', 'remove', 'contextos@personal', '--json'], { stdio: 'ignore' }); } catch (_) {}
+      execFileSync(codexBin, ['plugin', 'add', 'contextos@personal', '--json'], { stdio: 'pipe' });
       installedViaCli = true;
     } catch (_) {}
   }
@@ -428,13 +502,24 @@ export function syncAllPlatforms({
   pluginSource = null,
   forceAll = false,
   selectedPlatforms = null,
+  version = null,
 }) {
   const allPlatforms = detectInstalledPlatforms();
+  const knownPlatformIds = new Set(allPlatforms.map((platform) => platform.id));
+  const requestedPlatforms = selectedPlatforms && selectedPlatforms.length > 0
+    ? [...new Set(selectedPlatforms)]
+    : null;
+  if (requestedPlatforms) {
+    const unknown = requestedPlatforms.filter((id) => !knownPlatformIds.has(id));
+    if (unknown.length > 0) {
+      throw new Error(`Unknown platform id(s): ${unknown.join(', ')}. Supported: ${[...knownPlatformIds].join(', ')}`);
+    }
+  }
   const modified = [];
 
   const platforms =
-    selectedPlatforms && selectedPlatforms.length > 0
-      ? allPlatforms.filter((p) => selectedPlatforms.includes(p.id))
+    requestedPlatforms
+      ? allPlatforms.filter((p) => requestedPlatforms.includes(p.id))
       : allPlatforms;
 
   for (const platform of platforms) {
@@ -461,6 +546,7 @@ export function syncAllPlatforms({
         serverScript,
         nodePath,
         env,
+        version,
       });
       modified.push(platform.name);
     }
@@ -479,6 +565,7 @@ export function syncAllPlatforms({
           serverScript,
           nodePath,
           env,
+          version,
         });
         modified.push('Workspace .cursor/mcp.json');
       }
@@ -491,6 +578,7 @@ export function syncAllPlatforms({
           serverScript,
           nodePath,
           env,
+          version,
         });
         modified.push('Workspace .agents/mcp_config.json');
       }
@@ -503,6 +591,7 @@ export function syncAllPlatforms({
           serverScript,
           nodePath,
           env,
+          version,
         });
         modified.push('Workspace .opencode/mcp.json');
       }
@@ -522,16 +611,18 @@ export function getGlobalCloudConfig() {
   return null;
 }
 
-export function saveGlobalCloudConfig({ cloudUrl, token }) {
-  const dotContextos = path.join(HOME, '.contextos');
-  fs.mkdirSync(dotContextos, { recursive: true });
+export function saveGlobalCloudConfig({ cloudUrl, token, homeDir = HOME }) {
+  const dotContextos = path.join(homeDir, '.contextos');
+  fs.mkdirSync(dotContextos, { recursive: true, mode: 0o700 });
   const globalCloudPath = path.join(dotContextos, 'cloud.json');
+  const existing = readJsonObject(globalCloudPath, 'global cloud config');
   const config = {
+    ...existing,
     cloudUrl: cloudUrl ? cloudUrl.replace(/\/+$/, '') : '',
     token: token || '',
     updatedAt: new Date().toISOString(),
   };
-  fs.writeFileSync(globalCloudPath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+  writeFileAtomic(globalCloudPath, JSON.stringify(config, null, 2) + '\n', 0o600);
   return config;
 }
 
@@ -540,18 +631,14 @@ export function initProjectWorkspace({
   mode = 'local',
   cloudUrl = '',
   token: _token = '',
-  projectId = 'contextos',
+  projectId = null,
 }) {
+  const resolvedProjectId = projectId || deriveProjectId(projectRoot);
   const dotContextos = path.join(projectRoot, '.contextos');
   fs.mkdirSync(dotContextos, { recursive: true });
 
   const projectJsonPath = path.join(dotContextos, 'project.json');
-  let existing = {};
-  if (fs.existsSync(projectJsonPath)) {
-    try {
-      existing = JSON.parse(fs.readFileSync(projectJsonPath, 'utf8'));
-    } catch (_) {}
-  }
+  const existing = readJsonObject(projectJsonPath, 'project metadata');
 
   const isCloud = mode === 'cloud';
   if (isCloud && !cloudUrl) {
@@ -559,8 +646,8 @@ export function initProjectWorkspace({
   }
   const projectConfig = {
     ...existing,
-    id: projectId || existing.id || 'contextos',
-    name: existing.name || (projectId === 'contextos' ? 'ContextOS' : projectId),
+    id: resolvedProjectId || existing.id || 'contextos',
+    name: existing.name || (resolvedProjectId === 'contextos' ? 'ContextOS' : resolvedProjectId),
     storage: isCloud ? 'cloud' : 'local',
     isCloud: isCloud,
     createdAt: existing.createdAt || new Date().toISOString(),
@@ -576,6 +663,6 @@ export function initProjectWorkspace({
     delete projectConfig.token;
   }
 
-  fs.writeFileSync(projectJsonPath, JSON.stringify(projectConfig, null, 2) + '\n', 'utf8');
+  writeFileAtomic(projectJsonPath, JSON.stringify(projectConfig, null, 2) + '\n');
   return projectConfig;
 }

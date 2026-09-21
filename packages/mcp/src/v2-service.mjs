@@ -8,16 +8,29 @@ import {
   withProjectWriteLock,
 } from '../../storage/src/index.mjs';
 import { PlanService, TaskService, KnowledgeService } from '../../application/src/index.mjs';
+import { Block, assertBlockHasRealCode } from '../../domain/src/index.mjs';
 import {
   CodeTools,
   LanguageRegistry,
   calculateHash,
   calculateTreeHash,
   findDirectoryManifest,
+  applyChangeset,
 } from '../../code-intel/src/index.mjs';
 import { runCommand, ProcessManager } from '../../process-host/src/index.mjs';
 import { NetworkLayoutEngine } from '../../layout/src/index.mjs';
 import { MarkdownRenderer } from '../../context/src/index.mjs';
+
+/**
+ * Actions that only read state. They never take the graph-conflict gate: a
+ * graph.json that lags behind SQLite must not stop the agent from reading code.
+ */
+const READ_ONLY_ACTIONS = {
+  code: new Set(['outline', 'read', 'search']),
+  block: new Set(['list', 'open', 'search']),
+  chain: new Set(['list', 'open', 'links', 'validate', 'validate_layout']),
+  knowledge: new Set(['rule_list', 'rule_open', 'decision_open']),
+};
 
 export class ContextOSV2Service {
   constructor({ projectRoot = process.cwd(), projectId = 'contextos' } = {}) {
@@ -29,6 +42,10 @@ export class ContextOSV2Service {
     const dbPath = path.join(this.projectRoot, '.contextos', 'state.sqlite');
     this.db = new V2Database(dbPath);
     this.db.ensureProject(this.projectId, this.projectRoot);
+    this.db.adoptLegacyProject(this.projectId, {
+      legacyProjectId: 'contextos',
+      repoRoot: this.projectRoot,
+    });
 
     this.syncEngine = new SyncEngine(this.db);
     this.planService = new PlanService(this.db);
@@ -57,6 +74,43 @@ export class ContextOSV2Service {
     return true;
   }
 
+  _isReadOnly(facade, action) {
+    return Boolean(READ_ONLY_ACTIONS[facade]?.has(action));
+  }
+
+  _validateRuleRefs(value) {
+    const refs = value === undefined || value === null
+      ? []
+      : (Array.isArray(value) ? value : [value]);
+    const clean = [...new Set(refs.filter((ruleId) => typeof ruleId === 'string' && ruleId.trim()).map((ruleId) => ruleId.trim()))];
+    const unknown = clean.filter((ruleId) => !KnowledgeService.getRule(this.projectRoot, ruleId));
+    if (unknown.length) throw new Error(`Unknown Rule reference(s): ${unknown.join(', ')}`);
+    return clean;
+  }
+
+  /**
+   * Resolve a graph/SQLite divergence instead of leaving the OS wedged.
+   * graph.json is the versioned artifact: whenever it was rewritten after our
+   * last export (git checkout, revert, pull), it is imported even if its
+   * revision is older, so reverting code also reverts the OS. Only a stale copy
+   * we never wrote is overwritten by a fresh export.
+   */
+  healStateConflict() {
+    if (!this.stateConflict) return null;
+    const before = this.stateConflict.reason;
+    const diskRevision = this.stateConflict.graphRevision ?? 0;
+    const dbRevision = this.stateConflict.databaseRevision ?? 0;
+    if (diskRevision > dbRevision || this.syncEngine.graphEditedExternally(this.projectId, this.projectRoot)) {
+      const graphPath = path.join(this.projectRoot, '.contextos', 'graph.json');
+      this.syncEngine.importGraphFromJson(fs.readFileSync(graphPath, 'utf8'), this.projectRoot);
+    } else {
+      this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+    }
+    const after = this.syncEngine.reconcileExternalChange(this.projectId, this.projectRoot);
+    this.stateConflict = after.conflict ? after : null;
+    return { reason: before, healed: !after.conflict };
+  }
+
   async _withWriteLock(label, callback, { allowConflict = false } = {}) {
     if (this.writeContext.getStore() === true) return callback();
 
@@ -80,6 +134,85 @@ export class ContextOSV2Service {
       throw new Error(`${label} '${inputPath}' is outside project root '${this.projectRoot}'`);
     }
     return { fullPath, relativePath };
+  }
+
+  // A curated Block must anchor to real code: fill the line range + hash for a
+  // `{ path, symbol }` ref, or the file hash for a whole-file ref, so the graph
+  // never stores an empty locator.
+  _anchorSymbolRef(ref) {
+    if (!ref?.path) throw new Error('ArtifactRef requires a path');
+    const resolved = this._resolveProjectPath(ref.path, 'artifactRef path');
+    const { fullPath, relativePath } = resolved;
+    if (!fs.existsSync(fullPath)) {
+      throw new Error(`ArtifactRef path does not exist: '${relativePath}'`);
+    }
+
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      const hashMode = ref.hashMode || (ref.manifest ? 'manifest' : 'content');
+      const manifest = ref.manifest
+        ? this._resolveProjectPath(ref.manifest, 'artifactRef manifest').relativePath
+        : null;
+      const resolvedTree = calculateTreeHash(this.projectRoot, relativePath, { hashMode, manifest });
+      if (ref.hash && ref.hash !== resolvedTree.hash) {
+        throw new Error(`ArtifactRef hash is stale for '${relativePath}'. Re-run bind_auto to refresh it.`);
+      }
+      return {
+        ...ref,
+        path: relativePath,
+        symbol: null,
+        anchorKind: 'tree',
+        startLine: null,
+        endLine: null,
+        hash: resolvedTree.hash,
+        hashMode: resolvedTree.hashMode,
+        manifest: resolvedTree.manifest,
+      };
+    }
+
+    const content = fs.readFileSync(fullPath, 'utf8');
+    const lines = content.split(/\r?\n/);
+    if (!ref.symbol) {
+      const hash = calculateHash(content);
+      if (ref.hash && ref.hash !== hash) {
+        throw new Error(`ArtifactRef hash is stale for '${relativePath}'. Re-run bind_auto to refresh it.`);
+      }
+      return {
+        ...ref,
+        path: relativePath,
+        symbol: null,
+        anchorKind: 'file',
+        startLine: 1,
+        endLine: lines.length || 1,
+        hash,
+        hashMode: null,
+        manifest: null,
+      };
+    }
+
+    const structure = LanguageRegistry.parseStructure(relativePath, content);
+    const bare = ref.symbol.includes('#') ? ref.symbol.split('#').pop().trim() : ref.symbol;
+    const match = structure.symbols.find((s) => s.name === bare)
+      || structure.symbols.find((s) => s.shortName === bare)
+      || structure.symbols.find((s) => s.name.endsWith(`.${bare}`))
+      || structure.symbols.find((s) => s.containerName && `${s.containerName}.${s.shortName || s.name}`.endsWith(`.${bare}`));
+    if (!match) {
+      throw new Error(`Symbol '${ref.symbol}' not found in '${relativePath}'. Drop 'symbol' to bind the whole file.`);
+    }
+    if (ref.hash && ref.hash !== match.hash) {
+      throw new Error(`ArtifactRef hash is stale for '${relativePath}'. Re-run bind_auto to refresh it.`);
+    }
+    return {
+      ...ref,
+      path: relativePath,
+      symbol: match.name,
+      anchorKind: 'symbol',
+      startLine: match.startLine,
+      endLine: match.endLine,
+      hash: match.hash,
+      hashMode: null,
+      manifest: null,
+    };
   }
 
   // ================= 1. os_context =================
@@ -233,7 +366,6 @@ export class ContextOSV2Service {
             ? { changed: 0, changedPlanIds: [] }
             : this.planService.repairStateHygiene(this.projectId);
           if (hygiene.changed > 0 || planHygiene.changed > 0) {
-            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
           }
           if (res.changed) {
             return `External Git/JSON change applied! Graph revision updated to ${res.revision}.`;
@@ -266,9 +398,26 @@ export class ContextOSV2Service {
         return '# Project Plans\n' + (plans.length ? plans.map((p) => `- [${p.status.toUpperCase()}] **${p.title}** (${p.id}) - ${p.summary}`).join('\n') : 'No plans yet.');
       }
       case 'create': {
-        const created = this.planService.createPlan({ ...planData, projectId: this.projectId });
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        const ruleRefs = this._validateRuleRefs(planData.ruleRefs ?? planData.rule_refs);
+        const created = this.planService.createPlan({
+          ...planData,
+          id: id || planData.id,
+          projectId: this.projectId,
+          ruleRefs,
+        });
         return format === 'json' ? created : MarkdownRenderer.renderPlan(created);
+      }
+      case 'update': {
+        const updates = { ...planData };
+        if (updates.ruleRefs !== undefined || updates.rule_refs !== undefined) {
+          updates.ruleRefs = this._validateRuleRefs(updates.ruleRefs ?? updates.rule_refs);
+        }
+        const updated = this.planService.updatePlan(id, updates);
+        return format === 'json' ? updated : MarkdownRenderer.renderPlan(updated);
+      }
+      case 'upsert': {
+        if (!this.db.getPlan(id)) return this._plan({ action: 'create', id, planData: { ...planData, id }, format });
+        return this._plan({ action: 'update', id, planData, format });
       }
       case 'open': {
         const plan = this.db.getPlan(id);
@@ -277,17 +426,14 @@ export class ContextOSV2Service {
       }
       case 'check': {
         const cp = this.planService.checkCheckpoint(id, checkpointId, { passed, evidenceRef });
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Checkpoint '${checkpointId}' in Plan '${id}' marked as ${cp.status}.`;
       }
       case 'complete': {
         const completed = this.planService.completePlan(id, planData);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === 'json' ? completed : `Plan '${id}' completed successfully!\nSummary: ${completed.completedSummary}`;
       }
       case 'delete': {
         const deleted = this.planService.deletePlan(id);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return format === 'json' ? { deleted, id } : `Plan '${id}' deleted successfully.`;
       }
       default:
@@ -352,11 +498,26 @@ export class ContextOSV2Service {
   }) {
     switch (action) {
       case 'start': {
+        const targetId = taskData.id || id;
+        const existing = targetId ? this.db.getTask(targetId) : null;
+        if (existing) {
+          const patch = {};
+          if (taskData.title !== undefined) patch.title = taskData.title;
+          if (taskData.contextSlice !== undefined) patch.contextSlice = taskData.contextSlice;
+          const incomingRules = rules ?? taskData.rules ?? taskData.ruleRefs ?? taskData.references?.rules ?? (ruleId ? [ruleId] : undefined);
+          if (incomingRules !== undefined) patch.rules = this._validateRuleRefs(incomingRules);
+          if (Object.keys(patch).length) this.taskService.updateTask(existing.id, patch);
+          const started = this.taskService.activateTask(existing.id, this.projectRoot);
+          return format === 'json'
+            ? { task: started, autoPlanId: null, lightweight: false, preserved: true }
+            : `Task '${started.id}' started in state '${started.status}'.`;
+        }
+
         const payload = { ...taskData };
-        payload.id = payload.id || `task-${Date.now()}`;
+        payload.id = payload.id || id || `task-${Date.now()}`;
         payload.title = payload.title || 'Untitled task';
-        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
-        if (rules && !payload.rules) payload.rules = rules;
+        const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : undefined);
+        if (incomingRules !== undefined) payload.rules = this._validateRuleRefs(incomingRules);
 
         let autoPlanId = null;
         if (!payload.planId) {
@@ -384,7 +545,6 @@ export class ContextOSV2Service {
         payload.phaseId = this._ensurePlanPhase(payload.planId, payload.phaseId);
         const created = this.taskService.createTask(payload, this.projectRoot);
         const started = this.taskService.activateTask(created.id, this.projectRoot);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
 
         if (format === 'json') {
           return {
@@ -397,8 +557,8 @@ export class ContextOSV2Service {
       }
       case 'create': {
         const payload = { ...taskData };
-        if (ruleId && !payload.ruleId) payload.ruleId = ruleId;
-        if (rules && !payload.rules) payload.rules = rules;
+        const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : undefined);
+        if (incomingRules !== undefined) payload.rules = this._validateRuleRefs(incomingRules);
         const created = this.taskService.createTask(payload, this.projectRoot);
         return format === 'json' ? created : MarkdownRenderer.renderTask(created, { projectRoot: this.projectRoot });
       }
@@ -415,19 +575,21 @@ export class ContextOSV2Service {
       case 'bind_rule': {
         const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
         if (!targetRule) throw new Error('ruleId is required to bind a rule');
+        this._validateRuleRefs(targetRule);
         const updated = this.taskService.bindRule(id, targetRule);
         return format === 'json' ? updated : `Rule '${targetRule}' bound to Task '${id}'.`;
       }
       case 'unbind_rule': {
         const targetRule = ruleId || taskData?.ruleId || taskData?.rule || (Array.isArray(rules) ? rules[0] : null) || text;
         if (!targetRule) throw new Error('ruleId is required to unbind a rule');
+        this._validateRuleRefs(targetRule);
         const updated = this.taskService.unbindRule(id, targetRule);
         return format === 'json' ? updated : `Rule '${targetRule}' unbound from Task '${id}'.`;
       }
       case 'update': {
         const payload = { ...taskData };
-        if (rules && payload.rules === undefined) payload.rules = rules;
-        if (ruleId && payload.ruleId === undefined) payload.ruleId = ruleId;
+        const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : undefined);
+        if (incomingRules !== undefined) payload.rules = this._validateRuleRefs(incomingRules);
         const updated = this.taskService.updateTask(id, payload);
         return format === 'json' ? updated : MarkdownRenderer.renderTask(updated, { projectRoot: this.projectRoot });
       }
@@ -485,7 +647,6 @@ export class ContextOSV2Service {
             completedPlan = this.planService.completePlan(plan.id, {
               completedSummary: `Lightweight task '${result.task.title}' completed.`,
             });
-            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
           }
         }
 
@@ -613,6 +774,7 @@ export class ContextOSV2Service {
   }
 
   async block(input) {
+    if (this._isReadOnly('block', input.action)) return this._block(input);
     return this._withWriteLock('block', () => this._block(input));
   }
 
@@ -695,20 +857,28 @@ export class ContextOSV2Service {
         const existingRefs = existing?.artifactRefs || [];
         const mergedRefs = [...existingRefs];
         for (const nr of normalizedRefs) {
-          if (!mergedRefs.some((r) => r.path === nr.path && (!nr.symbol || r.symbol === nr.symbol))) {
-            mergedRefs.push(nr);
+          const anchored = this._anchorSymbolRef(nr);
+          if (anchored.symbolUnresolved) {
+            throw new Error(`Symbol '${anchored.symbol}' not found in '${anchored.path}'. Drop 'symbol' to bind the whole file.`);
+          }
+          const at = mergedRefs.findIndex((r) => r.path === anchored.path && (!anchored.symbol || r.symbol === anchored.symbol));
+          if (at < 0) {
+            mergedRefs.push(anchored);
+          } else if (!mergedRefs[at].hash || mergedRefs[at].startLine == null) {
+            // Refresh locators that were stored without an anchor.
+            mergedRefs[at] = { ...mergedRefs[at], ...anchored };
           }
         }
 
-        const block = {
+        const block = new Block({
           ...(existing || {}),
           ...blockData,
           id: targetId,
           projectId: this.projectId,
           artifactRefs: mergedRefs,
-        };
-        this.db.saveBlock(block);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        });
+        assertBlockHasRealCode(block);
+        this.db.saveBlock(block.toJSON());
         return `Block '${block.id}' bound with ${block.artifactRefs.length} code locators.`;
       }
       case 'bind_auto': {
@@ -736,11 +906,23 @@ export class ContextOSV2Service {
           throw new Error("Missing 'path' or 'paths' parameter for bind_auto (e.g. path: 'SceneRenderer.swift')");
         }
 
+        // `GraphStore.refreshIfChanged`, `GraphStore#refreshIfChanged` and the
+        // bare `refreshIfChanged` must all resolve to the same method.
         const symbolFilters = new Set(
-          (symbols || blockData?.symbols || []).map((s) => {
-            return s.includes('#') ? s.split('#')[1].trim() : s.trim();
-          }).filter(Boolean)
+          (symbols || blockData?.symbols || []).map((s) => String(s).trim()).filter(Boolean)
         );
+        const matchesFilter = (sym, fileBase = '') => {
+          // `math.add` is accepted for a symbol declared in `math.mjs`.
+          for (const filter of symbolFilters) {
+            const bare = filter.includes('#') ? filter.split('#').pop().trim() : filter;
+            if (sym.name === bare || sym.shortName === bare) return true;
+            if (sym.name.endsWith(`.${bare}`)) return true;
+            if (`${fileBase}.${sym.shortName || sym.name}` === filter) return true;
+            const qualified = sym.containerName ? `${sym.containerName}.${sym.shortName || sym.name}` : null;
+            if (qualified && (qualified === bare || qualified.endsWith(`.${bare}`))) return true;
+          }
+          return false;
+        };
 
         const autoArtifactRefs = [];
 
@@ -789,7 +971,8 @@ export class ContextOSV2Service {
           let matchedSymbols = declaredSymbols;
 
           if (symbolFilters.size > 0) {
-            matchedSymbols = declaredSymbols.filter((s) => symbolFilters.has(s.name));
+            const fileBase = path.basename(cleanRelPath).replace(/\.[^.]+$/, '');
+            matchedSymbols = declaredSymbols.filter((sym) => matchesFilter(sym, fileBase));
           }
 
           if (matchedSymbols.length > 0) {
@@ -809,6 +992,13 @@ export class ContextOSV2Service {
               });
             }
           } else {
+            // Never degrade silently: binding a whole file when a symbol was
+            // asked for produces an anchor nobody can trust.
+            if (symbolFilters.size > 0) {
+              throw new Error(
+                `Symbol(s) ${[...symbolFilters].map((s) => `'${s}'`).join(', ')} not found in '${cleanRelPath}'. Use a fully qualified name like 'ClassName.method', or drop 'symbols' to bind the file.`
+              );
+            }
             const baseSymbol = path.basename(cleanRelPath);
             autoArtifactRefs.push({
               path: cleanRelPath,
@@ -836,16 +1026,15 @@ export class ContextOSV2Service {
           }
         }
 
-        const updatedBlock = {
+        const updatedBlock = new Block({
           ...existing,
           ...blockData,
           id: targetId,
           projectId: this.projectId,
           artifactRefs: mergedRefs,
-        };
-
-        this.db.saveBlock(updatedBlock);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
+        });
+        assertBlockHasRealCode(updatedBlock);
+        this.db.saveBlock(updatedBlock.toJSON());
 
         if (format === 'json') {
           return { block: updatedBlock, addedRefs: autoArtifactRefs };
@@ -861,7 +1050,6 @@ export class ContextOSV2Service {
       }
       case 'delete': {
         this.db.deleteBlock(id);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Block '${id}' deleted successfully.`;
       }
       default:
@@ -871,6 +1059,7 @@ export class ContextOSV2Service {
 
   // ================= 5. chain =================
   async chain(input) {
+    if (this._isReadOnly('chain', input.action)) return this._chain(input);
     return this._withWriteLock('chain', () => this._chain(input));
   }
 
@@ -888,17 +1077,14 @@ export class ContextOSV2Service {
       }
       case 'compose': {
         this.db.saveChain({ ...chainData, projectId: this.projectId });
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Chain '${chainData.id}' composed successfully.`;
       }
       case 'delete': {
         this.db.deleteChain(id);
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Chain '${id}' deleted successfully.`;
       }
       case 'link': {
         this.db.saveLink({ ...linkData, projectId: this.projectId });
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Link created: ${linkData.from} -[${linkData.kind}]-> ${linkData.to}`;
       }
       case 'unlink': {
@@ -911,7 +1097,6 @@ export class ContextOSV2Service {
         } else {
           throw new Error("Action 'unlink' requires link id or { from, to } in linkData");
         }
-        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return `Link between '${from}' and '${to}' removed.`;
       }
       case 'links': {
@@ -936,8 +1121,13 @@ export class ContextOSV2Service {
             .filter((blockId) => !blockIds.has(blockId))
             .map((blockId) => ({ chainId: chain.id, blockId }))
         );
+        // Derived modules (`mod-*`) come from ship's auto-attribution and are
+        // not curated architecture, so they never count as orphans.
+        const derivedBlocks = blocks
+          .filter((block) => String(block.id).startsWith('mod-'))
+          .map((block) => block.id);
         const orphanBlocks = blocks
-          .filter((block) => !chainedIds.has(block.id))
+          .filter((block) => !chainedIds.has(block.id) && !String(block.id).startsWith('mod-'))
           .map((block) => block.id);
         const danglingLinks = links
           .filter((link) => !blockIds.has(link.from) || !blockIds.has(link.to))
@@ -948,6 +1138,7 @@ export class ContextOSV2Service {
           nodeCount: layout.nodes.length,
           edgeCount: layout.edges.length,
           bounds: layout.bounds,
+          derivedBlocks: derivedBlocks.length,
           orphanBlocks,
           missingMembers,
           danglingLinks,
@@ -960,29 +1151,112 @@ export class ContextOSV2Service {
 
   // ================= 6. code =================
   async code(input) {
+    if (this._isReadOnly('code', input.action)) return this._code(input);
     return this._withWriteLock('code', () => this._code(input));
   }
 
-  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, format = 'markdown' }) {
+  _recordChangedFiles(files = []) {
+    const activeTask = this.taskService.findActiveTask(this.projectId);
+    if (!activeTask) return;
+    for (const file of files) {
+      this.taskService.addFileToWorkingSet(activeTask.id, file.path);
+      try {
+        const fullPath = this._resolveProjectPath(file.path, 'changed file').fullPath;
+        const stat = fs.statSync(fullPath);
+        activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
+        activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
+        activeTask.baseline.fileSnapshots[file.path] = {
+          mtimeMs: stat.mtimeMs,
+          size: stat.size,
+          hash: file.newHash,
+          snapshottedAt: new Date().toISOString(),
+        };
+      } catch (_) {}
+    }
+    this.db.saveTask(activeTask);
+  }
+
+  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = 'markdown', changes = [] }) {
+    if (action === 'changeset') {
+      const result = applyChangeset(this.projectRoot, changes);
+      this._recordChangedFiles(result.files);
+      if (format === 'json') return result;
+      return [
+        '# ContextOS changeset',
+        '',
+        ...result.files.map((file) => `- ${file.created ? 'created' : 'edited'} \`${file.path}\` (hash ${file.newHash || 'n/a'})`),
+      ].join('\n');
+    }
     if (action === 'search' && !relPath) {
-      // Global workspace symbol search
+      if (!String(query || '').trim()) {
+        return '# Search\n\n`query` is required. Example: `ops({ capability: "code", action: "search", args: { query: "observer", root: "packages/orchestrator" } })`';
+      }
+      // Global workspace symbol search. Build artifacts (the bundled MCP server,
+      // dist output) are excluded: they duplicate source symbols and are huge.
+      const rootPath = root ? path.resolve(this.projectRoot, String(root)) : null;
+      const rootRelative = rootPath
+        ? path.relative(this.projectRoot, rootPath).split(path.sep).join('/').replace(/^\.\//, '').replace(/\/+$/, '')
+        : '';
+      const rootIsFile = Boolean(rootPath && fs.existsSync(rootPath) && fs.statSync(rootPath).isFile());
+      const isArtifact = (p) => p.startsWith('dist/') || p.startsWith('plugins/contextos/server/') || p.includes('node_modules/');
       const blocks = this.db.listBlocks(this.projectId);
       const allFiles = new Set();
       for (const b of blocks) {
         for (const ref of b.artifactRefs) {
+          if (isArtifact(ref.path)) continue;
+          if (rootPath) {
+            const inRoot = rootIsFile
+              ? ref.path === rootRelative
+              : (!rootRelative || ref.path === rootRelative || ref.path.startsWith(`${rootRelative}/`));
+            if (!inRoot) continue;
+          }
           allFiles.add(ref.path);
         }
       }
       const results = CodeTools.searchWorkspace(this.projectRoot, query || '', Array.from(allFiles));
-      if (format === 'json') return results;
-      const lines = [`# Workspace Symbols matching: \`${query}\``];
-      if (results.length === 0) {
-        lines.push('No matching symbols found.');
-      } else {
-        for (const r of results) {
+      // Symbols only cover declarations; agents usually mean "where is this
+      // mentioned", so always top the answer up with a bounded textual grep.
+      const wanted = Number(limit || maxResults || 8);
+      const runText = (needle) => CodeTools.searchText(this.projectRoot, needle, {
+        limit: Math.max(1, wanted - results.length),
+        root,
+      });
+      let text = runText(query || '');
+      // "git status" / "ship 收尾" never match literally: retry with the single
+      // most specific token instead of sending the agent back to `rg`.
+      let retriedWith = null;
+      if (!results.length && !text.hits.length && /\s/.test(String(query || '').trim())) {
+        const token = String(query).split(/[\s,，、]+/).filter(Boolean).sort((a, b) => b.length - a.length)[0];
+        if (token) {
+          const retry = runText(token);
+          if (retry.hits.length) {
+            text = retry;
+            retriedWith = token;
+          }
+        }
+      }
+      if (format === 'json') {
+        return { symbols: results, text: text.hits, scannedFiles: text.scanned, truncated: text.truncated, retriedWith };
+      }
+      const lines = [`# Search: \`${query}\`${root ? ` (root: \`${root}\`)` : ''}`];
+      if (results.length > 0) {
+        lines.push('\n## Symbols');
+        for (const r of results.slice(0, wanted)) {
           const sig = r.signature ? ` - \`${r.signature}\`` : '';
           lines.push(`- **${r.kind}** \`${r.symbol}\`${sig} [\`${r.path}\`:L${r.startLine}-L${r.endLine}]`);
         }
+      }
+      if (text.hits.length > 0) {
+        lines.push(`\n## Textual matches${retriedWith ? ` (retried with \`${retriedWith}\`)` : ''}`);
+        for (const hit of text.hits) {
+          lines.push(`- \`${hit.path}\`:L${hit.line}: \`${hit.content}\``);
+        }
+      }
+      if (results.length === 0 && text.hits.length === 0) {
+        lines.push(`\nNo symbol or text match. Scanned ${text.scanned} files${text.truncated ? ' (walk budget reached)' : ''}.`);
+        lines.push('Next: shorten the query to a single token, drop `root` to search the whole repo, or run `explore` with the intent.');
+      } else {
+        lines.push(`\n> scanned ${text.scanned} files${text.truncated ? ' (walk budget reached, narrow with \`root\`)' : ''}; want more? raise \`maxResults\`.`);
       }
       return lines.join('\n');
     }
@@ -1036,9 +1310,13 @@ export class ContextOSV2Service {
       }
       case 'read': {
         const effectiveSelector = selector || (startLine !== undefined || endLine !== undefined ? { startLine, endLine } : null);
-        const res = CodeTools.read(relPath, content, effectiveSelector);
+        // No selector means "give me the file": return it whole instead of
+        // failing, so the agent never has to fall back to a native `cat`/`sed`.
+        const res = CodeTools.read(relPath, content, effectiveSelector || { fullFile: true });
         if (format === 'json') return res;
-        return `\`\`\`${path.extname(relPath).slice(1) || 'text'}\n// ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})\n${res.code}\n\`\`\``;
+        const fence = (code) => `\`\`\`${path.extname(relPath).slice(1) || 'text'}\n// ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})\n${code}\n\`\`\``;
+        if (res.code.length <= 20000) return fence(res.code);
+        return `${fence(res.code.slice(0, 20000))}\n\n<!-- 全文 ${res.totalLines} 行 / ${res.code.length} 字符，已截断到前 20000 字符 -->`;
       }
       case 'edit': {
         let selectorObj = {};
@@ -1166,6 +1444,7 @@ export class ContextOSV2Service {
 
   // ================= 9. knowledge =================
   async knowledge(input) {
+    if (this._isReadOnly('knowledge', input.action)) return this._knowledge(input);
     return this._withWriteLock('knowledge', () => this._knowledge(input));
   }
 

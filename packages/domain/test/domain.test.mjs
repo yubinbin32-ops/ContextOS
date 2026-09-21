@@ -15,6 +15,10 @@ import {
   assertCheckpointBelongsToPlan,
   checkTaskCoverage,
   assertPlanCanBeCompleted,
+  assertPlanCanBeCompletedWithTasks,
+  assertPlanStatusTransition,
+  assertPlanStructure,
+  assertTaskStatusTransition,
   InvariantViolationError,
 } from '../src/index.mjs';
 
@@ -101,6 +105,58 @@ test('Task C-D-C-S state machine and context slice', () => {
   });
   assert.equal(task.status, 'completed');
   assert.ok(task.syncResult.completedAt);
+});
+
+test('Plan structure and lifecycle invariants reject ambiguous or incomplete state', () => {
+  const basePlan = new Plan({
+    id: 'plan-lifecycle',
+    projectId: 'proj-1',
+    title: 'Lifecycle Plan',
+    phases: [
+      { id: 'P0', order: 0, objective: 'First', acceptance: ['first accepted'] },
+      { id: 'P1', order: 1, objective: 'Second', acceptance: ['second accepted'] },
+    ],
+    checkpoints: [{ id: 'cp-lifecycle', title: 'Lifecycle accepted', status: 'passed' }],
+  });
+
+  assertPlanStructure(basePlan);
+  assert.throws(
+    () => assertPlanStructure(new Plan({
+      ...basePlan.toJSON(),
+      phases: [
+        { id: 'P0', order: 0, objective: 'First', acceptance: ['ok'] },
+        { id: 'P1', order: 0, objective: 'Second', acceptance: ['ok'] },
+      ],
+    })),
+    /duplicate phase order/
+  );
+  assert.throws(
+    () => assertPlanStatusTransition('completed', 'active', 'plan-lifecycle'),
+    /cannot transition from 'completed' to 'active'/
+  );
+  assert.throws(
+    () => assertTaskStatusTransition('draft', 'completed', 'task-lifecycle'),
+    /cannot transition from 'draft' to 'completed'/
+  );
+
+  const task = new Task({
+    id: 'task-lifecycle',
+    planId: 'plan-lifecycle',
+    phaseId: 'P0',
+    title: 'Unfinished task',
+    status: 'draft',
+  });
+  const linkedPlan = new Plan({
+    ...basePlan.toJSON(),
+    phases: [
+      { id: 'P0', order: 0, objective: 'First', acceptance: ['first accepted'], taskIds: ['task-lifecycle'] },
+      { id: 'P1', order: 1, objective: 'Second', acceptance: ['second accepted'] },
+    ],
+  });
+  assert.throws(
+    () => assertPlanCanBeCompletedWithTasks(linkedPlan, [task]),
+    /non-terminal tasks remain/
+  );
 });
 
 test('Ghost Block rejection invariant', () => {

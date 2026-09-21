@@ -80,7 +80,11 @@ export class ContextOSCloudClient {
         throw new Error(`Cloud server returned HTTP ${response.status}: ${response.statusText}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      if (!data || data.schemaVersion !== 4) {
+        throw new Error(`Unsupported cloud snapshot schemaVersion: ${data?.schemaVersion ?? 'missing'}`);
+      }
+      return data;
     } catch (err) {
       clearTimeout(timeout);
       throw new Error(`[ContextOS Cloud Error] Failed to fetch snapshot from ${url}: ${err.message}`);
@@ -97,56 +101,26 @@ export class ContextOSCloudClient {
       const response = await fetch(url, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify(snapshot),
+        body: JSON.stringify({ ...snapshot, schemaVersion: snapshot.schemaVersion || 4 }),
         signal: controller.signal,
       });
-
       clearTimeout(timeout);
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.status === 'ok') {
-          return data;
-        }
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Cloud server returned HTTP ${response.status}: ${errorText || response.statusText}`);
       }
-    } catch {
+      const data = await response.json();
+      if (!data || data.status !== 'ok' || data.schemaVersion !== 4) {
+        throw new Error('Cloud snapshot replacement did not confirm schemaVersion 4.');
+      }
+      return data;
+    } catch (err) {
       clearTimeout(timeout);
-      // Fall through to resilient individual tool calls
+      if (err.name === 'AbortError') {
+        throw new Error(`[ContextOS Cloud] Snapshot push to ${url} timed out after ${this.timeoutMs}ms.`);
+      }
+      throw new Error(`[ContextOS Cloud Error] Failed to replace snapshot at ${url}: ${err.message}`);
     }
-
-    // Resilient fallback for cloud hubs running earlier worker builds: push via /api/v2/call
-    // Push plans first so project anchor is established without triggering child cascades
-    let pushedPlans = 0;
-    for (const p of snapshot.plans || []) {
-      await this.call('plan', {
-        action: 'create',
-        planData: {
-          id: p.id,
-          title: p.title || p.id,
-          summary: p.summary || '',
-          priority: p.priority || 'normal',
-        },
-      });
-      pushedPlans++;
-    }
-
-    let pushedBlocks = 0;
-    for (const b of snapshot.blocks || []) {
-      await this.call('block', {
-        action: 'bind',
-        id: b.id,
-        blockData: {
-          title: b.title || b.id,
-          kind: b.kind || 'service',
-          summary: b.summary || '',
-          details: b.details || b.body || '',
-          artifactRefs: b.artifactRefs || [],
-        },
-      });
-      pushedBlocks++;
-    }
-
-    return { status: 'ok', pushedBlocks, pushedPlans, mode: 'call_fallback' };
   }
 
   async checkHealth() {

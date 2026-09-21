@@ -62,6 +62,7 @@ export class KnowledgeService {
 
   static getRule(projectRoot, ruleId) {
     const rulesDir = this.getRulesDir(projectRoot);
+    if (!fs.existsSync(rulesDir)) return null;
     const targetFile = path.join(rulesDir, `${ruleId}.md`);
     if (!fs.existsSync(targetFile)) {
       // Search by id in directory

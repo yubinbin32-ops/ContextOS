@@ -5,8 +5,10 @@ on:
     branches:
       - main
     paths:
+      - "worker.js"
       - "apps/cloud/**"
       - "migrations/**"
+      - "wrangler.toml"
       - "wrangler.jsonc"
       - ".github/workflows/deploy-cloudflare.yml"
   workflow_dispatch:

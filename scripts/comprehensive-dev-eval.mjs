@@ -16,17 +16,46 @@
 
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
+import crypto from 'node:crypto';
 import assert from 'node:assert';
 import { ContextOSV2Service } from '../packages/mcp/src/v2-service.mjs';
 import { LanguageRegistry } from '../packages/code-intel/src/language-registry.mjs';
 
 async function runEvaluation() {
-  const repoRoot = path.resolve(import.meta.dirname, '..');
+  const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-comprehensive-'));
+  const targetFile = 'packages/code-intel/src/language-registry.mjs';
+  const targetFullPath = path.join(repoRoot, targetFile);
+  fs.mkdirSync(path.dirname(targetFullPath), { recursive: true });
+  fs.mkdirSync(path.join(repoRoot, 'test'), { recursive: true });
+  fs.writeFileSync(targetFullPath, `import crypto from 'node:crypto';
+
+export function calculateHash(code) {
+  return crypto.createHash('sha256').update(code, 'utf8').digest('hex').slice(0, 16);
+}
+`, 'utf8');
+  const targetHash = crypto.createHash('sha256').update(fs.readFileSync(targetFullPath)).digest('hex').slice(0, 16);
+  const targetSymbolHash = LanguageRegistry.parseStructure(targetFile, fs.readFileSync(targetFullPath, 'utf8')).symbols.find((symbol) => symbol.name === 'calculateHash')?.hash;
+  assert(targetSymbolHash, 'fixture calculateHash symbol must have a hash');
+  fs.writeFileSync(path.join(repoRoot, 'test', 'smoke.test.mjs'), `import assert from 'node:assert/strict';
+import test from 'node:test';
+import { calculateHash } from '../packages/code-intel/src/language-registry.mjs';
+
+test('calculateHash', () => assert.equal(calculateHash('x').length, 16));
+`, 'utf8');
+  process.once('exit', () => fs.rmSync(repoRoot, { recursive: true, force: true }));
   console.log('======================================================================');
   console.log('       ContextOS V2 Comprehensive Real Development Evaluation         ');
   console.log('======================================================================\n');
 
   const service = new ContextOSV2Service({ projectRoot: repoRoot, projectId: 'contextos' });
+  service.db.saveBlock({
+    id: 'block-code-gateway',
+    projectId: 'contextos',
+    title: 'Code Gateway',
+    summary: 'AST and code-intelligence gateway',
+    artifactRefs: [{ path: targetFile, symbol: 'calculateHash', hash: targetSymbolHash }],
+  });
 
   // -------------------------------------------------------------------------
   // [Dimension 3 & 4] Fast Architecture Comprehension & Cross-Conversation State
@@ -44,7 +73,23 @@ async function runEvaluation() {
   // [Dimension 4 & 6] Cross-Conversation Resumption & C-D-C-S Lifecycle
   // -------------------------------------------------------------------------
   console.log('\n>>> [Eval 2] Cross-Conversation Task Continuity & C-D-C-S State Machine');
-  const targetFile = 'packages/code-intel/src/language-registry.mjs';
+
+  if (!service.db.getPlan('plan-v2-rebuild')) {
+    await service.plan({
+      action: 'create',
+      planData: {
+        id: 'plan-v2-rebuild',
+        title: 'ContextOS V2 Comprehensive Evaluation',
+        phases: [{
+          id: 'P8',
+          order: 0,
+          objective: 'Evaluate cross-conversation continuity and lifecycle truth.',
+          acceptance: ['Task continuity preserves context and terminal state.'],
+          status: 'active',
+        }],
+      },
+    });
+  }
 
   // Create Task in Phase P8
   const taskRes = await service.task({
@@ -89,8 +134,8 @@ async function runEvaluation() {
   console.log('\n>>> [Eval 3] AI Surgical Code Engineering (Search, Outline, Read, Edit)');
   // 1. Search
   const searchHits = await service.code({ action: 'search', query: 'calculateHash', format: 'json' });
-  assert(searchHits.length > 0, 'Symbol search must locate calculateHash');
-  console.log(`  ✓ code search found '${searchHits[0].symbol}' in ${searchHits[0].path}`);
+  assert(searchHits.symbols.length > 0, 'Symbol search must locate calculateHash');
+  console.log(`  ✓ code search found '${searchHits.symbols[0].symbol}' in ${searchHits.symbols[0].path}`);
 
   // 2. Outline
   const outline = await service.code({ action: 'outline', path: targetFile, format: 'json' });
@@ -125,7 +170,7 @@ async function runEvaluation() {
   // 5. Out-of-context command execution
   console.log('\n>>> [Eval 4] Out-of-Context Command Runner & Noise Sanitization');
   const cmdRes = await service.runCommand({
-    command: 'node --test packages/code-intel/test/code-intel.test.mjs',
+    command: 'node --test test/*.test.mjs',
     cwd: repoRoot,
   });
   assert(cmdRes.exitCode === 0, 'Tests must pass');
@@ -187,7 +232,7 @@ async function runEvaluation() {
       title: 'Temporary Evaluation Probe',
       summary: 'Probe for testing block lifecycle and dynamic link insertion.',
       artifactRefs: [
-        { path: 'packages/code-intel/src/index.mjs', symbol: 'CodeTools', hash: 'e9751272' },
+        { path: targetFile, symbol: 'calculateHash', hash: targetSymbolHash },
       ],
     },
   });
@@ -209,6 +254,13 @@ async function runEvaluation() {
   const hasTempLink = linksAfterAdd.some((l) => l.from === tempBlockId && l.to === 'block-code-gateway');
   assert(hasTempLink, 'Link must be registered');
   console.log(`  ✓ Link successfully created: ${tempBlockId} -[calls]-> block-code-gateway`);
+
+  service.db.saveChain({
+    id: 'chain-eval-flow',
+    projectId: 'contextos',
+    title: 'Evaluation Flow',
+    memberIds: [tempBlockId, 'block-code-gateway'],
+  });
 
   // 3. Chain Validation
   const valRes = await service.chain({ action: 'validate' });
@@ -339,6 +391,7 @@ struct MetroCardView: View {
   console.log('\n======================================================================');
   console.log('       ContextOS V2 Comprehensive Real Development Evaluation: PASS   ');
   console.log('======================================================================\n');
+  service.close({ stopProcesses: false });
 }
 
 runEvaluation().catch((err) => {

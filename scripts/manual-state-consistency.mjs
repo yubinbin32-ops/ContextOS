@@ -18,6 +18,8 @@ try {
         {
           id: 'P0',
           order: 0,
+          objective: 'Verify concurrent journal writes remain consistent.',
+          acceptance: ['All concurrent writes are persisted without losing task context.'],
           status: 'active',
           tasks: [
             {
@@ -56,6 +58,13 @@ try {
   serviceA.syncEngine.exportGraphToJson(projectId, projectRoot);
   const graphPath = path.join(projectRoot, '.contextos', 'graph.json');
   const revisionOne = fs.readFileSync(graphPath, 'utf8');
+  const revisionOneRevision = JSON.parse(revisionOne).graphRevision;
+  serviceA.db.saveBlock({
+    id: 'block-integrity-version',
+    projectId,
+    title: 'Integrity version marker',
+    artifactRefs: [{ path: 'src/integrity.js', hash: 'integrity-hash' }],
+  });
   serviceA.syncEngine.exportGraphToJson(projectId, projectRoot);
   const revisionTwo = JSON.parse(fs.readFileSync(graphPath, 'utf8')).graphRevision;
   fs.writeFileSync(graphPath, revisionOne, 'utf8');
@@ -63,15 +72,16 @@ try {
   const staleReader = new ContextOSV2Service({ projectRoot, projectId });
   try {
     const conflictBrief = await staleReader.osContext({ action: 'brief' });
-    assert.match(conflictBrief, /Graph state conflict/i);
-    const conflictMessage = await staleReader.osContext({ action: 'reconcile' });
-    assert.match(conflictMessage, /conflict/i);
-    assert.equal(staleReader.stateConflict?.conflict, true, 'stale graph was not reported as a conflict');
+    assert.doesNotMatch(conflictBrief, /Graph state conflict/i);
+    const reconcileMessage = await staleReader.osContext({ action: 'reconcile' });
+    assert.match(reconcileMessage, /already in sync|applied/i);
+    assert.equal(staleReader.stateConflict, null, 'reverted graph should be imported without wedging the OS');
     assert.equal(
       staleReader.db.getProject(projectId).graph_revision,
-      revisionTwo,
-      'stale graph rolled back the database revision'
+      revisionOneRevision,
+      'graph.json rollback must restore the database revision'
     );
+    assert.equal(staleReader.db.getBlock('block-integrity-version'), null, 'reverted graph must remove the newer block');
   } finally {
     staleReader.close({ stopProcesses: false });
   }
@@ -92,7 +102,7 @@ try {
 
   console.log('Manual state consistency flow passed.');
   console.log('- 12 concurrent task notes preserved.');
-  console.log(`- stale graph conflict detected at revision ${revisionTwo}.`);
+  console.log(`- graph.json rollback restored revision ${revisionOneRevision} from ${revisionTwo}.`);
   console.log('- graph outbox flushed and cleared.');
 } finally {
   serviceA.close({ stopProcesses: false });

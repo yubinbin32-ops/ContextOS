@@ -1,6 +1,6 @@
-# Contributing to contextos
+# Contributing to ContextOS
 
-Thanks for helping improve contextos. Focused bug reports, reproducible benchmark results, documentation fixes, and small pull requests are especially useful while the project is young.
+Thanks for helping improve ContextOS. Focused bug reports, reproducible benchmark results, documentation fixes, and small pull requests are especially useful while the project is young.
 
 ## Before opening an issue
 
@@ -14,7 +14,8 @@ Thanks for helping improve contextos. Focused bug reports, reproducible benchmar
 ```bash
 npm ci
 npm test
-npm run plugin:build
+npm run plugin:verify
+npm run verify          # full release gate, including real MCP acceptance and desktop build
 ```
 
 For changes to context retrieval, AST slicing, mutation, storage, or log sanitization, also run:
@@ -31,15 +32,15 @@ npm run desktop:build
 
 ### macOS Packaging & Distribution Policy (No DMG)
 
-- **Mandatory Packaging**: Always package `contextos.app` directly into a `.zip` archive (`contextos-macos.zip`) using `zip -r -y -q release-assets/contextos-macos.zip contextos.app`. The `-y` flag is required to preserve symlinks within the app bundle.
-- **Strictly Prohibit `.dmg`**: Do **not** use DMG disk images for distributing `contextos`. On modern macOS, launching ad-hoc signed apps from mounted read-only DMG volumes triggers macOS Gatekeeper App Translocation (`/private/var/folders/.../AppTranslocation`), causing read-only volume errors, theme and appearance rendering abnormalities, and runtime cache initialization failures. Direct `.zip` distribution extracts a clean, standard, writable `contextos.app` that runs without translocation anomalies.
+- **Mandatory Packaging**: Always package `ContextOS.app` directly into a `.zip` archive (`ContextOS-macos.zip` or `ContextOS-macos-full.zip`) using `zip -r -y -q release-assets/ContextOS-macos.zip ContextOS.app`. The `-y` flag is required to preserve symlinks within the app bundle.
+- **Strictly Prohibit `.dmg`**: Do **not** use DMG disk images for distributing ContextOS. On modern macOS, launching ad-hoc signed apps from mounted read-only DMG volumes triggers macOS Gatekeeper App Translocation (`/private/var/folders/.../AppTranslocation`), causing read-only volume errors, theme and appearance rendering abnormalities, and runtime cache initialization failures. Direct `.zip` distribution extracts a clean, standard, writable `ContextOS.app` that runs without translocation anomalies.
 
 ## Pull requests
 
 - Keep the change focused and explain the concrete trigger and resulting behavior.
 - Add or update tests when behavior, storage, parsing, or rollback semantics change.
 - Keep `.contextos/graph.json` synchronized when the change alters architecture, plans, or verification evidence.
-- Do not commit `.contextos/contextos.sqlite`, local credentials, generated build directories, or private project data.
+- Do not commit `.contextos/state.sqlite`, local credentials, generated build directories, or private project data.
 - Include screenshots for visible macOS app changes.
 
 By contributing, you agree that your work is licensed under the repository's [MIT License](LICENSE).

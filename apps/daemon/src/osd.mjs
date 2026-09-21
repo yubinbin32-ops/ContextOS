@@ -39,6 +39,13 @@ export class Daemon {
   }
 
   async handleMessage(method, params = {}) {
+    const result = await this._handleMessage(method, params);
+    // graph.json is a derived projection: publish once per request.
+    try { this.syncEngine.publishIfDirty(this.projectId, this.projectRoot); } catch (_) {}
+    return result;
+  }
+
+  async _handleMessage(method, params = {}) {
     switch (method) {
       case 'ping':
         return { pong: true, timestamp: Date.now() };
@@ -62,6 +69,7 @@ export class Daemon {
       // --- Plan & Task ---
       case 'plan_save':
         this.db.savePlan(params.plan);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return this.db.getPlan(params.plan.id);
 
       case 'plan_get':
@@ -72,6 +80,7 @@ export class Daemon {
 
       case 'task_save':
         this.db.saveTask(params.task);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return this.db.getTask(params.task.id);
 
       case 'task_get':
@@ -83,6 +92,7 @@ export class Daemon {
       // --- Block & Chain ---
       case 'block_save':
         this.db.saveBlock(params.block);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return this.db.getBlock(params.block.id);
 
       case 'block_get':
@@ -93,6 +103,7 @@ export class Daemon {
 
       case 'chain_save':
         this.db.saveChain(params.chain);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return this.db.getChain(params.chain.id);
 
       case 'chain_get':
@@ -103,6 +114,7 @@ export class Daemon {
 
       case 'link_save':
         this.db.saveLink(params.link);
+        this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
         return { saved: true };
 
       case 'link_list':

@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "AI 编码的高精度外骨骼动力装甲：通过 MCP 自动管理上下文，实测减少 90%+ 上下文开销。(High-Precision Powered Exoskeleton for AI Coding: Auto-governs context via MCP, reducing context window waste by 90%+)",
   "license": "MIT",
   "type": "module",
@@ -36,16 +36,30 @@
     "type": "git",
     "url": "https://github.com/yubinbin32-ops/ContextOS.git"
   },
+  "files": [
+    "plugins/contextos/server/contextos-mcp.mjs",
+    "plugins/contextos/skills/contextos/SKILL.md",
+    "packages/code-intel/grammars/",
+    "AI_SETUP.md",
+    "README.md",
+    "README_zh.md",
+    "LICENSE"
+  ],
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
-    "mcp": "node packages/mcp/src/server.mjs",
+    "mcp": "node packages/mcp/src/v3-server.mjs",
     "test": "node --test packages/*/test/*.test.mjs apps/*/test/*.test.mjs",
-    "verify": "npm test && npm run plugin:verify && node scripts/manual-tree-bindings.mjs && node scripts/manual-zero-project-verification.mjs && npm run desktop:build",
+    "verify": "npm test && npm run plugin:verify && npm run dist:smoke && npm run acceptance:real && node scripts/verify-doc-contract.mjs && npm run sim && node scripts/manual-tree-bindings.mjs && node scripts/comprehensive-dev-eval.mjs && node scripts/manual-state-consistency.mjs && node scripts/manual-admin-cli.mjs && node scripts/verify-all-features.mjs && npm run desktop:build",
     "benchmark": "node scripts/benchmark.mjs",
-    "plugin:build": "esbuild packages/mcp/src/server.mjs --bundle --platform=node --format=esm --target=node22 --outfile=plugins/contextos/server/contextos-mcp.mjs",
+    "sim": "node scripts/dev-flow-sim.mjs",
+    "rearchitect": "node scripts/manual-rearchitect.mjs",
+    "plugin:build": "esbuild packages/mcp/src/v3-server.mjs --bundle --platform=node --format=esm --target=node22 --outfile=plugins/contextos/server/contextos-mcp.mjs",
     "plugin:verify": "npm run plugin:build && node scripts/plugin-smoke.mjs",
+    "dist:smoke": "node scripts/distribution-smoke.mjs",
+    "acceptance:real": "node scripts/p7-real-acceptance.mjs",
+    "plugin:install": "npm run plugin:build && node scripts/install-plugin.mjs",
     "desktop:build": "swift build --package-path apps/desktop",
     "desktop:run": "swift run --package-path apps/desktop contextos-desktop",
     "desktop:package": "node scripts/package-macos.mjs"

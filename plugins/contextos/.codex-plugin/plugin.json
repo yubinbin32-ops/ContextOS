@@ -1,15 +1,15 @@
 {
   "name": "contextos",
-  "version": "2.4.0",
-  "description": "Spatial architecture canvas and context optimization OS for AI coding agents with C-D-C-S workflow.",
+  "version": "2.5.0",
+  "description": "Context operating system for AI coding agents: the agent states intent and the OS orchestrates AST slicing, out-of-context commands, derived architecture indexing and evidence capture.",
   "author": {
     "name": "ContextOS"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "ContextOS",
-    "shortDescription": "Task-scoped project context and live architecture sync.",
-    "longDescription": "Read only the project context needed for the current task, then keep blocks, chains, links, code references, progress, and checkpoints synchronized as the implementation changes.",
+    "shortDescription": "Intent-level context OS: explore, change, verify, ship.",
+    "longDescription": "State what you want and the OS does the rest: it slices code with a real AST engine, keeps terminal output out of context, derives architecture modules from source, attaches verification receipts automatically and returns everything inside a context budget.",
     "developerName": "ContextOS",
     "brandColor": "#111111",
     "composerIcon": "./assets/topic-logo.png",
@@ -19,19 +19,19 @@
     "capabilities": [
       "Project context retrieval",
       "Contract-first AST code streams",
-      "Live source binding synchronization",
-      "Task-scoped shared context budgets",
+      "Derived architecture module indexing",
+      "Intent-level orchestration (explore, change, verify, ship)",
+      "Budgeted context responses",
       "Redacted project-local command gateway",
       "AST locators and source-drift protection",
-      "Checkpoint freshness and retest gating",
+      "Automatic receipt and evidence capture",
       "Architecture and progress synchronization",
-      "Checkpoint evidence",
       "OS Markdown documents and chapter retrieval",
-      "Persistent task reconciliation and resumable handoffs",
+      "Resumable sessions and manual passthrough to every legacy capability",
       "Read-only README in the knowledge reader"
     ],
     "defaultPrompt": [
-      "Use ContextOS to understand this task and keep its project graph synchronized."
+      "Use ContextOS explore/change/verify/ship to do this task and keep the project graph synchronized."
     ]
   },
   "mcpServers": "./.mcp.json"

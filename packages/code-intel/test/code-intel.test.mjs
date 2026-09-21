@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LanguageRegistry, CodeTools, CoverageChecker, TreeSitterParser, normalizeCallee } from '../src/index.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { LanguageRegistry, CodeTools, CoverageChecker, TreeSitterParser, normalizeCallee, applyChangeset } from '../src/index.mjs';
 
 const JS_CODE = `import fs from 'node:fs';
 import path from 'node:path';
@@ -408,6 +411,68 @@ test('CodeTools.edit surgical modification and re-anchoring', () => {
     replacementContent: placeholderReplacement,
   });
   assert.ok(placeholderResult.newContent.includes('$1 and $& and $$;'));
+
+  const rangeOnly = CodeTools.edit('src/engine.js', JS_CODE, {
+    startLine: 1,
+    endLine: 1,
+    replacementContent: "import path from 'node:path';",
+  });
+  assert.equal(rangeOnly.newContent.split('\n')[0], "import path from 'node:path';");
+
+  assert.throws(
+    () => CodeTools.edit('src/engine.js', JS_CODE, {
+      startLine: 1,
+      endLine: 9999,
+      replacementContent: 'invalid',
+    }),
+    /outside src\/engine\.js/
+  );
+});
+
+test('changeset preflight and commit are atomic', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-changeset-'));
+  const aPath = path.join(root, 'a.txt');
+  const bPath = path.join(root, 'b.txt');
+  fs.writeFileSync(aPath, 'alpha\n');
+
+  assert.throws(
+    () => applyChangeset(root, [
+      { kind: 'edit', path: 'a.txt', startLine: 1, endLine: 1, replacement: 'beta' },
+      { kind: 'edit', path: 'missing.txt', target: 'x', replacement: 'y' },
+    ]),
+    /cannot edit missing file/
+  );
+  assert.equal(fs.readFileSync(aPath, 'utf8'), 'alpha\n');
+
+  const applied = applyChangeset(root, [
+    { kind: 'edit', path: 'a.txt', startLine: 1, endLine: 1, replacement: 'beta' },
+    { kind: 'create', path: 'b.txt', content: 'created\n' },
+  ]);
+  assert.equal(fs.readFileSync(aPath, 'utf8'), 'beta\n');
+  assert.equal(fs.readFileSync(bPath, 'utf8'), 'created\n');
+  assert.equal(applied.files.length, 2);
+
+  const originalRename = fs.renameSync;
+  let renameCalls = 0;
+  fs.renameSync = (...args) => {
+    renameCalls += 1;
+    if (renameCalls === 3) throw new Error('injected rename failure');
+    return originalRename(...args);
+  };
+  try {
+    assert.throws(
+      () => applyChangeset(root, [
+        { kind: 'edit', path: 'a.txt', startLine: 1, endLine: 1, replacement: 'gamma' },
+        { kind: 'edit', path: 'b.txt', startLine: 1, endLine: 1, replacement: 'changed' },
+      ]),
+      /rolled back/
+    );
+  } finally {
+    fs.renameSync = originalRename;
+  }
+  assert.equal(fs.readFileSync(aPath, 'utf8'), 'beta\n');
+  assert.equal(fs.readFileSync(bPath, 'utf8'), 'created\n');
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('CoverageChecker identifies gaps and covered files', () => {

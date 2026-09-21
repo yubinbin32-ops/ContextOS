@@ -4,8 +4,10 @@ compatibility_date = "2025-03-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-# Optional bearer token for authentication. Leave empty for open access or set your secret.
-AUTH_TOKEN = ""
+# AUTH_TOKEN must be provided as a Worker secret: wrangler secret put AUTH_TOKEN
+# Cloud access fails closed when it is absent unless ALLOW_OPEN_ACCESS is explicitly true.
+ALLOWED_ORIGINS = ""
+ALLOW_OPEN_ACCESS = "false"
 
 [[d1_databases]]
 binding = "DB"

@@ -280,7 +280,13 @@ export function helper() {
       id: 'plan-verify',
       projectId: 'proj-verify-all',
       title: 'Verification Plan',
-      phases: [{ id: 'P0', order: 0, status: 'active' }],
+      phases: [{
+        id: 'P0',
+        order: 0,
+        objective: 'Verify native host modifications through the service facade.',
+        acceptance: ['Working-set hashes and AST locators reconcile after host edits.'],
+        status: 'active',
+      }],
     },
     format: 'json',
   });
@@ -294,6 +300,7 @@ export function helper() {
       title: 'Host Native Modification Verification Task',
       workingSet: {
         files: [testFilePath],
+        scopeDirs: ['src'],
       },
     },
     format: 'json',

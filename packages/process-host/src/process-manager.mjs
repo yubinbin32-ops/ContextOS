@@ -2,6 +2,7 @@ import { spawn, execSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { ensureLogDir, pruneLogDir, secureLogFile } from './log-store.mjs';
 
 export class ProcessManager {
   constructor({ projectRoot = process.cwd() } = {}) {
@@ -70,10 +71,11 @@ export class ProcessManager {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Process session '${sessionId}' already exists`);
     }
-    const logDir = path.join(this.projectRoot, '.contextos', 'logs');
-    fs.mkdirSync(logDir, { recursive: true });
+    const logDir = ensureLogDir(this.projectRoot);
+    pruneLogDir(logDir);
     const logFile = path.join(logDir, `${sessionId}.log`);
-    const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+    const logStream = fs.createWriteStream(logFile, { flags: 'a', mode: 0o600 });
+    logStream.on('open', () => secureLogFile(logFile));
 
     const isWin = process.platform === 'win32';
     const shell = isWin ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';

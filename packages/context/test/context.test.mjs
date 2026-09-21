@@ -107,6 +107,10 @@ test('MarkdownRenderer.renderBlock displays Architecture Neighborhood (上下游
 
 test('ContextOSV2Service integrates block taxonomy and micro-topology neighborhood', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-topology-test-'));
+  fs.mkdirSync(path.join(tempDir, 'packages/mcp/src'), { recursive: true });
+  fs.mkdirSync(path.join(tempDir, 'packages/storage/src'), { recursive: true });
+  fs.writeFileSync(path.join(tempDir, 'packages/mcp/src/v3-server.mjs'), 'export const gateway = true;\n');
+  fs.writeFileSync(path.join(tempDir, 'packages/storage/src/database.mjs'), 'export const storage = true;\n');
   const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'test-proj' });
 
   // 1. Create blocks
@@ -116,7 +120,7 @@ test('ContextOSV2Service integrates block taxonomy and micro-topology neighborho
     blockData: {
       title: 'Gateway Test Facade',
       summary: 'Entrypoint for client requests',
-      artifactRefs: ['packages/mcp/src/v2-server.mjs'],
+      artifactRefs: ['packages/mcp/src/v3-server.mjs'],
     },
   });
 
@@ -181,7 +185,7 @@ test('ContextOSV2Service integrates block taxonomy and micro-topology neighborho
     id: 'block-no-summary',
     blockData: {
       title: 'Searchable No Summary Block',
-      artifactRefs: [],
+      artifactRefs: ['packages/mcp/src/v3-server.mjs'],
     },
   });
   const searchJson = await service.block({ action: 'search', query: 'Searchable', format: 'json' });

@@ -1,118 +1,88 @@
+/**
+ * Plugin smoke test: runs the shipped bundle (plugins/contextos/server/contextos-mcp.mjs)
+ * over stdio against a throwaway project and verifies the V3 intent surface,
+ * command sanitization, the `ops` passthrough and version alignment.
+ */
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { MCP_TOOL_NAMES, TOOL_ACTIONS } from "../packages/mcp/src/tool-contract.mjs";
+import { createFixtureProject } from "./fixture-project.mjs";
 
 const projectRoot = process.cwd();
+const EXPECTED_TOOLS = ["explore", "change", "verify", "ship", "ops"];
 const transport = new StdioClientTransport({
   command: "node",
   args: ["plugins/contextos/server/contextos-mcp.mjs"],
   cwd: projectRoot,
 });
-const client = new Client({ name: "contextos-plugin-smoke", version: "2.4.0" });
+const client = new Client({ name: "contextos-plugin-smoke", version: "2.5.0" });
+const fixture = createFixtureProject({ prefix: "ctxos-plugin" });
+
 const packageVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 const pluginVersion = JSON.parse(fs.readFileSync("plugins/contextos/.codex-plugin/plugin.json", "utf8")).version;
 const appVersion = fs.readFileSync("apps/desktop/Resources/Info.plist", "utf8").match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)/)?.[1];
 assert.equal(packageVersion, pluginVersion, "package and plugin versions must match");
 assert.equal(packageVersion, appVersion, "package and desktop app versions must match");
-assert.equal(packageVersion, "2.4.0", "Version must be 2.4.0");
-const skillPath = path.join(
-  "plugins",
-  "contextos",
-  "skills",
-  "contextos",
-  "SKILL.md"
-);
+assert.equal(packageVersion, "2.5.0", "Version must be 2.5.0");
+
+const skillPath = path.join("plugins", "contextos", "skills", "contextos", "SKILL.md");
 assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");
 const skillText = fs.readFileSync(skillPath, "utf8");
-assert.ok(skillText.includes("12 大核心 Facade 工具全景与参数规范"), "Skill must retain the comprehensive tool guide");
-assert.ok(skillText.includes("### 5. `run_command`"), "Skill must document run_command usage");
-assert.ok(skillText.includes("### 7. `block`"), "Skill must document Block bindings");
-assert.ok(skillText.includes('anchorKind: "tree"'), "Skill must document directory tree bindings");
-assert.ok(skillText.includes('task(action: "start"'), "Skill must document the lightweight task start path");
-assert.ok(skillText.includes('task(action: "finish"'), "Skill must document the lightweight task finish path");
-assert.ok(skillText.includes("实验性 Cloud Hub"), "Skill must mark Cloud Hub as experimental");
-const skillToolSections = skillText.match(/^### \d+\. `/gm)?.length ?? 0;
-assert.equal(skillToolSections, 12, "Skill must retain one section for every MCP tool");
-for (const [toolName, actions] of Object.entries(TOOL_ACTIONS)) {
-  if (actions.length === 0) continue;
-  const actionList = actions.map((action) => `\`${action}\``).join(", ");
-  assert.ok(
-    skillText.includes(`| \`${toolName}\` | ${actionList} |`),
-    `Skill action contract is missing or stale for ${toolName}`
-  );
+assert.ok(skillText.includes("意图级开发入口"), "Skill must document the intent-level entry");
+for (const tool of EXPECTED_TOOLS) {
+  assert.ok(skillText.includes(`\`${tool}\``), `Skill must document the ${tool} tool`);
 }
+assert.ok(skillText.includes("ops({ capability"), "Skill must document the ops passthrough");
+assert.ok(skillText.length < 12000, `Skill must stay lean for context budgets (got ${skillText.length} chars)`);
 
 try {
   await client.connect(transport);
   const listing = await client.listTools();
-  const names = new Set(listing.tools.map((tool) => tool.name));
-  const expectedTools = [...MCP_TOOL_NAMES];
-  for (const tool of expectedTools) {
-    assert.ok(names.has(tool), `missing MCP tool: ${tool}`);
-  }
-  assert.equal(names.size, expectedTools.length, "unexpected MCP tool count");
-  assert.equal(expectedTools.length, 12, "plugin smoke must cover all core and administrative tools");
-  for (const tool of listing.tools) {
-    const expectedActions = TOOL_ACTIONS[tool.name] || [];
-    const actionSchema = tool.inputSchema?.properties?.action;
-    if (expectedActions.length > 0) {
-      assert.deepEqual(actionSchema?.enum, expectedActions, `MCP action schema drift for ${tool.name}`);
-    } else {
-      assert.equal(actionSchema, undefined, `Unexpected action schema for ${tool.name}`);
-    }
-  }
+  const names = listing.tools.map((tool) => tool.name).sort();
+  assert.deepEqual(names, [...EXPECTED_TOOLS].sort(), "bundled server must expose exactly the V3 tools");
 
-  // 1. Test os_context
-  const briefRes = await client.callTool({
-    name: "os_context",
-    arguments: { action: "brief" },
-  });
-  assert.ok(!briefRes.isError, "os_context brief failed");
-  const briefText = briefRes.content?.map((c) => c.text ?? "").join("\n") ?? "";
-  assert.ok(briefText.includes("ContextOS") || briefText.includes("Plan"), "brief missing expected header");
+  const call = async (name, args) => {
+    const res = await client.callTool({ name, arguments: { projectRoot: fixture.root, ...args } });
+    assert.ok(!res.isError, `${name} failed`);
+    return (res.content || []).map((chunk) => chunk.text ?? "").join("\n");
+  };
 
-  // 2. Test block
-  const blockRes = await client.callTool({
-    name: "block",
-    arguments: { action: "list", format: "json" },
-  });
-  assert.ok(!blockRes.isError, "block list failed");
+  // 1. explore
+  const explored = await call("explore", { intent: "了解 src/math.mjs" });
+  assert.match(explored, /# ContextOS explore/);
 
-  // 3. Test chain
-  const chainRes = await client.callTool({
-    name: "chain",
-    arguments: { action: "list" },
+  // 2. change
+  await call("change", {
+    edits: [{ path: "src/strings.mjs", target: "return `hello ${name}`;", replacement: "return `hi ${name}`;" }],
   });
-  assert.ok(!chainRes.isError, "chain list failed");
+  assert.match(fixture.read("src/strings.mjs"), /hi \$\{name\}/, "surgical edit must land on disk");
 
-  // 4. Test run_command sanitization
-  const runRes = await client.callTool({
-    name: "run_command",
-    arguments: {
-      command: `echo "error: failed with token ghp_123456789012345678901234567890123456" && exit 1`,
-    },
+  // 3. verify + sanitization of a leaked secret
+  const runText = await call("verify", {
+    commands: ['echo "error: failed with token ghp_123456789012345678901234567890123456" && exit 1'],
   });
-  const runText = runRes.content?.map((c) => c.text ?? "").join("\n") ?? "";
-  assert.ok(!runText.includes("ghp_123456789012345678901234567890123456"), "run_command leaked secret");
+  assert.ok(!runText.includes("ghp_123456789012345678901234567890123456"), "command gateway leaked secret");
   assert.ok(runText.includes("[REDACTED_GITHUB_TOKEN]"), "secret not redacted");
 
+  // 4. ship closes the session
+  const shipped = await call("ship", { summary: "greet() wording" });
+  assert.match(shipped, /Closure/);
 
-  // 6. Test knowledge
-  const rulesRes = await client.callTool({
-    name: "knowledge",
-    arguments: { action: "rule_list" },
-  });
-  assert.ok(!rulesRes.isError, "knowledge rule_list failed");
+  // 5. ops passthrough keeps every legacy capability reachable
+  const rules = await call("ops", { capability: "knowledge", action: "rule_list" });
+  assert.ok(!rules.includes("isError"), "ops knowledge rule_list failed");
+  const blocks = await call("ops", { capability: "block", action: "list", args: { format: "json" } });
+  assert.ok(blocks.length > 0, "ops block list returned nothing");
 
-  console.log(`# ContextOS V2 Plugin Smoke Verification Passed!`);
-  console.log(`- MCP tools: ${names.size} (${expectedTools.join(", ")})`);
+  console.log("# ContextOS Plugin Smoke Verification Passed!");
+  console.log(`- MCP tools: ${names.length} (${names.join(", ")})`);
   console.log(`- Version alignment: ${packageVersion}`);
-  console.log(`- Command gateway sanitization: verified`);
-  console.log(`- Knowledge & architecture graph: verified`);
+  console.log("- Command gateway sanitization: verified");
+  console.log("- Knowledge & architecture graph: verified via ops passthrough");
 } finally {
   await client.close();
   await transport.close();
+  fixture.cleanup();
 }

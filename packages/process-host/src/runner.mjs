@@ -1,8 +1,8 @@
 import { spawn, execSync } from 'node:child_process';
 import path from 'node:path';
-import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { sanitizeTerminalOutput, redactSecrets } from './sanitizer.mjs';
+import { ensureLogDir, pruneLogDir, writeSecureLog } from './log-store.mjs';
 
 export async function runCommand({
   command,
@@ -15,9 +15,9 @@ export async function runCommand({
   const receiptId = `receipt-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
   const startTime = Date.now();
 
-  const logDir = path.join(projectRoot, '.contextos', 'logs');
-  fs.mkdirSync(logDir, { recursive: true });
+  const logDir = ensureLogDir(projectRoot);
   const logFile = path.join(logDir, `${receiptId}.log`);
+  pruneLogDir(logDir);
   const maxCaptureChars = 10_000_000;
 
   return new Promise((resolve) => {
@@ -82,7 +82,7 @@ export async function runCommand({
 
       // Persist raw full log out-of-context
       try {
-        fs.writeFileSync(logFile, redactSecrets(rawOutput), 'utf8');
+        writeSecureLog(logFile, redactSecrets(rawOutput));
       } catch (_) {}
 
       const exitCode = killedByTimeout ? 124 : (code !== null ? code : 1);

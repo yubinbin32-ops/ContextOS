@@ -2,7 +2,7 @@
   <img src="assets/logo.png" width="76" alt="ContextOS" />
   <h1>AI 编码的高精度外骨骼动力装甲</h1>
   <p><strong>通过 MCP 自动管理上下文，实测减少 90%+ 上下文开销。</strong></p>
-  <p>解决大项目上下文挤爆与记忆遗忘：以手术刀级 AST 读写代替盲读长文件，以脱敏沙箱隔绝终端日志，以地铁图谱让 AI 秒懂架构。</p>
+  <p>解决大项目上下文挤爆与记忆遗忘：以手术刀级 AST 读写代替盲读长文件，以脱敏日志出舱隔绝终端噪声，以地铁图谱让 AI 秒懂架构。</p>
   <p><a href="https://github.com/yubinbin32-ops/ContextOS/releases/latest"><strong>下载 macOS App</strong></a> · <a href="#30-秒极速配置ai-自动安装引导">30 秒极速开启</a> · <a href="README.md">English</a></p>
 </div>
 
@@ -15,12 +15,12 @@
 
 有了 ContextOS，AI 不再需要背负笨重的全量上下文行走，而是**通过 MCP 自动管理上下文**：
 1. **外骨骼精准借力**：通过编译器级 AST 手术刀工具，按需读写关键符号与代码块，杜绝盲读长文件；
-2. **终端噪声舱外隔绝**：运行日志安全存盘落入沙箱，仅向上下文回传精简诊断回执，剥离 98% 无关噪声；
-3. **全局神经图谱联通**：以地铁图谱（Metro Map）统合沉淀架构记忆与 C-D-C-S 任务流，开箱即懂系统全貌。
+2. **终端噪声舱外隔绝**：运行日志安全存盘并脱敏，仅向上下文回传精简诊断回执，剥离 98% 无关噪声；
+3. **全局神经图谱联通**：以地铁图谱（Metro Map）统合沉淀架构记忆与派生模块图谱，开箱即懂系统全貌。
 
 **实测在复杂项目开发中，能够直接减少 90%+ 的无谓上下文开销**，彻底告别上下文挤爆与遗忘，让每一次对话都能平滑承接工程进展。
 
-![ContextOS V2 Metro Map 地铁路线图架构与桌面端实景](docs/images/contextos-desktop-v2.png)
+![ContextOS Metro Map 地铁路线图架构与桌面端实景](docs/images/contextos-desktop-v2.png)
 
 ## 它带来的核心开发变化
 
@@ -29,11 +29,11 @@ Block 绑定真实文件、AST 符号或目录树（杜绝虚空 Ghost Block）�
 
 ![功能链与精确 AST 代码定位](assets/path-impact.png)
 
-### 2. 进度遵循 C-D-C-S 严格生命周期
-开发严格按照 **Create（创建任务）→ Develop（手术刀开发）→ Check（验证沉淀）→ Sync（原子写回）** 节拍流转。任务携带上下文切片与中间思考，并在 Sync 时触发 **100% 工作区覆盖率门禁**。
+### 2. AI 只表达意图，OS 自行跑完闭环
+AI 只需调用 `explore` → `change` → `verify` → `ship`：OS 从 git 派生工作集、用 AST 派生模块自动归属文件、自动挂接验证回执，并把每次返回压进上下文预算。覆盖率与证据门禁默认为 advisory，`.contextos/profile.json` 设 `strict: true` 可恢复硬门禁。
 
 ### 3. 命令运行出舱脱敏 (Out-of-Context Execution)
-`run_command` 剥离 ANSI 终端控制符与敏感密钥，全量**脱敏后**日志存盘于 `.contextos/logs/`，仅向上下文返回精简回执（Receipt），削减 98% 以上的终端输出噪声。
+`verify` 与 `ops` 背后的命令网关会剥离 ANSI 终端控制符与敏感密钥，全量**脱敏后**日志存盘于 `.contextos/logs/`，仅向上下文返回精简回执（Receipt），削减 98% 以上的终端输出噪声。
 
 ### 4. 代码工具手术刀级读写 (Surgical Code Engineering)
 集成编译器级真 AST 引擎（原生支持 JS/TS/JSX/TSX、Python、Swift、Java、Kotlin、C/C++、C#、Go、Rust、PHP、Ruby 等 10+ 种主流语言），支持 VS Code 风格全局符号搜索、大纲审视、方法级抽取和补丁式精准写盘并自动重锚。
@@ -135,22 +135,33 @@ npx -y github:yubinbin32-ops/ContextOS
 
 ---
 
-## 存储模式说明：本地与云端协同
+## 存储模式说明：本地与实验性云端协同
 
 ContextOS 始终以**本地工作区项目目录**为核心基石（代码阅读、AST 手术刀修改、脱敏命令执行均在本地完成）：
 
 - **本地存储模式**：适合单人本地开发。数据保存在项目根目录的 `.contextos/state.sqlite`，0 毫秒响应延迟，100% 离线，完全保护代码与架构隐私。
-- **云端协同模式**：适合团队协作开发。通过项目配置将架构图谱托管在 Serverless 云端中枢（Cloudflare D1），多名团队成员协同开发时实时同步模块契约。
+- **实验性云端协同模式**：用于评估团队协作。通过项目配置将架构图谱托管在 Serverless 云端中枢（Cloudflare D1），多名团队成员协同开发时同步模块契约。API 与运维模型稳定前，请将云端模式视为实验能力。
   - **天然支持多项目严格隔离**：云端中枢基于严格的 `projectId` 分区存储，同一套云端 Worker 和 D1 数据库可同时支持您开发无数个不同项目，彼此独立互不串扰。
 - **随时双向无损切换**：开发过程中，您只需对 AI 说：
   - *“把当前项目切换为云端协同模式”* ➔ 本地数据自动完整推送到云端 D1；
   - *“把当前项目切回本地离线模式”* ➔ 云端最新架构快照自动下载至本地 SQLite，后续开发完全离线。
 
-## 实测 V2 上下文节省基准
+## 架构演进历史
 
-在自我托管的 ContextOS V2 自身代码库（18 Blocks, 3 Chains, 18 Links, 49 源码文件，100% 覆盖率）测定：
+ContextOS 会随着真实使用反馈主动修正架构方向：
 
-| 研发环节 | 传统开发交互（非推荐，消耗大） | ContextOS V2 渐进式最佳实践 | 节省比率 |
+- **0.4.x**：正则解析、Ghost Block 与 49 个工具的 MCP 面让架构记忆不可靠。
+- **V2**：引入真实代码 Block、AST 可见性、SQLite + `graph.json` 双物化和正式开发治理。
+- **意图级架构**：公开入口收敛为 `explore` / `change` / `verify` / `ship` / `ops`，编排下沉到 OS，模块信息从代码库自动派生。
+- **2.5.0**：加固项目身份、发布升级链路、图谱同步、原子编辑和生命周期门禁。
+
+完整取舍与历史弯路见 [DECISION.md](DECISION.md)。
+
+## 实测 ContextOS 上下文节省基准
+
+基准数据由当前代码库动态生成，不再硬编码历史版本的文件、Block、Chain、Link 数量。请在本地运行以下脚本获取当前 checkout 的真实数据：
+
+| 研发环节 | 传统开发交互（非推荐，消耗大） | ContextOS 意图工作流 | 节省比率 |
 |---|---|---|---:|
 | **会话启动 (Bootstrap)** | 全量加载架构与图谱 (61,902 字符 / ~15,476 tokens) | 渐进式 L0-L1 Markdown (1,987 字符 / ~497 tokens) | **96.79%** |
 | **代码大纲审视** | 盲读 4 个核心全量源码 (34,045 字符 / ~8,512 tokens) | AST 符号大纲提取 (4,374 字符 / ~1,093 tokens) | **87.15%** |
@@ -175,7 +186,8 @@ cd ContextOS
 npm ci
 npm test
 npm run plugin:verify
-npm run desktop:build       # macOS + Swift/Xcode
+npm run verify             # 完整发布门禁
+npm run desktop:build      # macOS + Swift/Xcode
 ```
 
 版本化的 `.contextos/graph.json` 是项目可移植的图谱投影。

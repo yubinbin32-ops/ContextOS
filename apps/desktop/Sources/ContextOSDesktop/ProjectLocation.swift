@@ -50,6 +50,12 @@ struct ProjectLocation {
                fm.fileExists(atPath: legacyDb.path)
     }
 
+    static func defaultProjectId(for root: URL) -> String {
+        let baseName = root.standardizedFileURL.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let slug = baseName.lowercased().replacingOccurrences(of: " ", with: "-")
+        return slug.isEmpty ? "contextos" : slug
+    }
+
     static func resolve(startingAt root: URL) throws -> ProjectLocation {
         var candidate = root.standardizedFileURL
 
@@ -67,9 +73,18 @@ struct ProjectLocation {
                 let descriptor: ProjectDescriptor
                 if hasDescriptor, let data = try? Data(contentsOf: descriptorURL),
                    let decoded = try? JSONDecoder().decode(ProjectDescriptor.self, from: data) {
-                    descriptor = decoded
+                    let expectedId = defaultProjectId(for: candidate)
+                    if decoded.id == "contextos", expectedId != "contextos" {
+                        let migrated = ProjectDescriptor(id: expectedId, name: decoded.name, schemaVersion: decoded.schemaVersion)
+                        descriptor = migrated
+                        if let encoded = try? JSONEncoder().encode(migrated) {
+                            try? encoded.write(to: descriptorURL)
+                        }
+                    } else {
+                        descriptor = decoded
+                    }
                 } else {
-                    let projId = candidate.lastPathComponent.lowercased().replacingOccurrences(of: " ", with: "-")
+                    let projId = defaultProjectId(for: candidate)
                     let newDescriptor = ProjectDescriptor(id: projId, name: candidate.lastPathComponent, schemaVersion: 2)
                     descriptor = newDescriptor
                     let dotDir = candidate.appending(path: ".contextos")
@@ -105,7 +120,7 @@ struct ProjectLocation {
         let targetRoot = root.standardizedFileURL
         let dotDir = targetRoot.appending(path: ".contextos")
         try? FileManager.default.createDirectory(at: dotDir, withIntermediateDirectories: true)
-        let projId = targetRoot.lastPathComponent.lowercased().replacingOccurrences(of: " ", with: "-")
+        let projId = defaultProjectId(for: targetRoot)
         let descriptor = ProjectDescriptor(id: projId, name: targetRoot.lastPathComponent, schemaVersion: 2)
         let descriptorURL = dotDir.appending(path: "project.json")
         if let encoded = try? JSONEncoder().encode(descriptor) {

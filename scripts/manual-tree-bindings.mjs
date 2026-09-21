@@ -17,12 +17,39 @@ try {
   fs.writeFileSync(path.join(tempDir, 'package-lock.json'), '{"lockfileVersion":3}\n', 'utf8');
 
   const service = new ContextOSV2Service({ projectRoot: tempDir, projectId });
+  await service.knowledge({
+    action: 'rule_write',
+    ruleData: {
+      id: 'rule-product-contract',
+      title: 'Product contract',
+      category: 'product',
+      summary: 'Preserve the documented product contract.',
+      content: 'Verify behavior against the documented contract.',
+    },
+  });
+  await service.knowledge({
+    action: 'rule_write',
+    ruleData: {
+      id: 'rule-surgical-code-editing',
+      title: 'Surgical editing',
+      category: 'code-quality',
+      summary: 'Prefer bounded edits.',
+      content: 'Use bounded edits and re-anchor after changes.',
+    },
+  });
   await service.plan({
     action: 'create',
     planData: {
       id: 'plan-manual-tree',
       title: 'Manual tree binding workflow',
-      phases: [{ id: 'P0', name: 'Implement', order: 0, status: 'active' }],
+      phases: [{
+        id: 'P0',
+        name: 'Implement',
+        order: 0,
+        objective: 'Verify source and directory bindings.',
+        acceptance: ['All working-set paths resolve to verified anchors.'],
+        status: 'active',
+      }],
     },
   });
   await service.task({

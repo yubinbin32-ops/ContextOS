@@ -9,6 +9,7 @@ import {
   initProjectWorkspace,
   saveGlobalCloudConfig,
   getGlobalCloudConfig,
+  detectInstalledPlatforms,
 } from '../packages/mcp/src/bootstrap-util.mjs';
 
 export * from '../packages/mcp/src/bootstrap-util.mjs';
@@ -19,30 +20,72 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(`ContextOS bootstrap\n\nUsage:\n  node scripts/bootstrap.mjs --target-root <workspace> (--platforms cursor,codex | --all) [options]\n\nOptions:\n  --mode <local|cloud>       Project storage mode (default: local)\n  --cloud-url <url>          Cloud endpoint for cloud mode\n  --token <token>            Cloud token for cloud mode\n  --project-id <id>          Project id (default: contextos)\n  --platforms <list>         Comma-separated platform ids; no implicit all\n  --all                      Explicitly select every detected platform\n  --save-global-cloud        Persist cloud credentials to ~/.contextos/cloud.json\n  --dry-run                  Print the plan without writing any files\n  --help, -h                 Show this help`);
+    process.exit(0);
+  }
+
   let mode = 'local';
   let cloudUrl = '';
   let token = '';
   let projectId = 'contextos';
   let targetRoot = process.cwd();
   let platformsArg = '';
+  let allPlatforms = false;
   let saveGlobal = false;
+  let dryRun = false;
+  let argIndex = 0;
 
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--mode' && args[i + 1]) {
-      mode = args[++i];
-    } else if (args[i] === '--cloud-url' && args[i + 1]) {
-      cloudUrl = args[++i];
-    } else if (args[i] === '--token' && args[i + 1]) {
-      token = args[++i];
-    } else if (args[i] === '--project-id' && args[i + 1]) {
-      projectId = args[++i];
-    } else if (args[i] === '--target-root' && args[i + 1]) {
-      targetRoot = path.resolve(args[++i]);
-    } else if (args[i] === '--platforms' && args[i + 1]) {
-      platformsArg = args[++i];
-    } else if (args[i] === '--save-global-cloud') {
-      saveGlobal = true;
+  const takeValue = (flag) => {
+    const value = args[++argIndex];
+    if (!value || value.startsWith('--')) {
+      console.error(`Missing value for ${flag}`);
+      process.exit(2);
     }
+    return value;
+  };
+
+  for (argIndex = 0; argIndex < args.length; argIndex++) {
+    if (args[argIndex] === '--mode') {
+      mode = takeValue('--mode');
+    } else if (args[argIndex] === '--cloud-url') {
+      cloudUrl = takeValue('--cloud-url');
+    } else if (args[argIndex] === '--token') {
+      token = takeValue('--token');
+    } else if (args[argIndex] === '--project-id') {
+      projectId = takeValue('--project-id');
+    } else if (args[argIndex] === '--target-root') {
+      targetRoot = path.resolve(takeValue('--target-root'));
+    } else if (args[argIndex] === '--platforms') {
+      platformsArg = takeValue('--platforms');
+    } else if (args[argIndex] === '--all') {
+      allPlatforms = true;
+    } else if (args[argIndex] === '--save-global-cloud') {
+      saveGlobal = true;
+    } else if (args[argIndex] === '--dry-run') {
+      dryRun = true;
+    } else if (args[argIndex].startsWith('--')) {
+      console.error(`Unknown option: ${args[argIndex]}`);
+      process.exit(2);
+    }
+  }
+
+  if (!['local', 'cloud'].includes(mode)) {
+    console.error(`Unsupported mode: ${mode}. Use 'local' or 'cloud'.`);
+    process.exit(2);
+  }
+
+  if (!fs.existsSync(targetRoot) || !fs.statSync(targetRoot).isDirectory()) {
+    console.error(`Target workspace does not exist or is not a directory: ${targetRoot}`);
+    process.exit(2);
+  }
+  if (!allPlatforms && !platformsArg) {
+    console.error('Refusing to install implicitly. Pass --platforms <list> or --all explicitly.');
+    process.exit(2);
+  }
+  if (allPlatforms && platformsArg) {
+    console.error('Pass either --all or --platforms, not both.');
+    process.exit(2);
   }
 
   // If cloudUrl is not provided via CLI but mode is cloud, check global cloud config
@@ -56,20 +99,52 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   }
 
+  const selectedPlatforms = allPlatforms
+    ? null
+    : platformsArg.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (!allPlatforms && selectedPlatforms.length === 0) {
+    console.error('No platforms selected. Pass at least one platform id.');
+    process.exit(2);
+  }
+  const availablePlatforms = detectInstalledPlatforms();
+  const supportedPlatformIds = new Set(availablePlatforms.map((platform) => platform.id));
+  const unknownPlatforms = (selectedPlatforms || []).filter((id) => !supportedPlatformIds.has(id));
+  if (unknownPlatforms.length > 0) {
+    console.error(`Unknown platform id(s): ${unknownPlatforms.join(', ')}. Supported: ${[...supportedPlatformIds].join(', ')}`);
+    process.exit(2);
+  }
+  if (saveGlobal && (mode !== 'cloud' || !cloudUrl)) {
+    console.error('--save-global-cloud requires --mode cloud and a cloud URL.');
+    process.exit(2);
+  }
+
+  console.log(`[ContextOS Bootstrap] Project Storage Mode: ${mode} | Project ID: ${projectId}`);
+  if (allPlatforms) {
+    console.log('[ContextOS Bootstrap] Platforms: All detected (explicit --all)');
+  } else {
+    console.log(`[ContextOS Bootstrap] Selected Platforms: ${selectedPlatforms.join(', ')}`);
+  }
+
+  if (dryRun) {
+    const platformsForPlan = allPlatforms
+      ? availablePlatforms.filter((platform) => platform.isInstalled)
+      : availablePlatforms.filter((platform) => selectedPlatforms.includes(platform.id));
+    console.log(`[ContextOS Bootstrap] Dry run for target: ${targetRoot}`);
+    console.log(`[ContextOS Bootstrap] Would write project metadata: ${path.join(targetRoot, '.contextos', 'project.json')} (with backup)`);
+    console.log('[ContextOS Bootstrap] Would atomically deploy: ~/.contextos/server/contextos-mcp.mjs');
+    for (const platform of platformsForPlan) {
+      const suffix = platform.configPath ? ` -> ${platform.configPath}` : '';
+      console.log(`[ContextOS Bootstrap] Would configure ${platform.name}${suffix}`);
+    }
+    if (saveGlobal) {
+      console.log('[ContextOS Bootstrap] Would save global cloud credentials to ~/.contextos/cloud.json (mode 0600)');
+    }
+    process.exit(0);
+  }
+
   if (saveGlobal && cloudUrl) {
     saveGlobalCloudConfig({ cloudUrl, token });
     console.log(`[ContextOS Bootstrap] Saved global cloud credentials to ~/.contextos/cloud.json`);
-  }
-
-  const selectedPlatforms = platformsArg
-    ? platformsArg.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
-    : null;
-
-  console.log(`[ContextOS Bootstrap] Project Storage Mode: ${mode} | Project ID: ${projectId}`);
-  if (selectedPlatforms) {
-    console.log(`[ContextOS Bootstrap] Selected Platforms: ${selectedPlatforms.join(', ')}`);
-  } else {
-    console.log(`[ContextOS Bootstrap] Platforms: All detected`);
   }
 
   const nodePath = resolveNodeExecutable();
@@ -102,6 +177,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const skillSource = path.join(REPO_ROOT, 'plugins', 'contextos', 'skills', 'contextos');
   const pluginSource = path.join(REPO_ROOT, 'plugins', 'contextos');
+  const packageVersion = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).version;
   const modified = syncAllPlatforms({
     serverScript,
     nodePath,
@@ -110,6 +186,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     skillSource,
     pluginSource,
     selectedPlatforms,
+    version: packageVersion,
   });
 
   console.log(`[ContextOS Bootstrap] Successfully configured target platforms:`);

@@ -181,6 +181,9 @@ export class Task {
   }
 
   failSync(reason) {
+    if (this.status !== 'checking' && this.status !== 'syncing') {
+      throw new Error(`Cannot fail sync from state: ${this.status}. Must be checking or syncing.`);
+    }
     this.status = 'sync_failed';
     this.syncResult = {
       error: reason,
@@ -190,6 +193,9 @@ export class Task {
   }
 
   block(reason) {
+    if (this.status === 'completed') {
+      throw new Error('Cannot block a completed task');
+    }
     this.status = 'blocked';
     this.addNote({ text: `Task blocked: ${reason}`, kind: 'blocked' });
   }

@@ -209,6 +209,13 @@ struct DetailView: View {
             Text("\(coverage.verifiedBlocks)/\(coverage.totalBlocks) \(store.text("verified")) · \(coverage.plannedBlocks)/\(coverage.totalBlocks) \(store.activeLocale == "zh-Hans" ? "由此 Plan 覆盖" : "covered by this Plan")")
                 .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(ContextOSTheme.ink.opacity(0.82))
+            if !plan.ruleRefs.isEmpty {
+                sectionLabel(store.activeLocale == "zh-Hans" ? "关联规则" : "BOUND RULES")
+                Text(plan.ruleRefs.joined(separator: " · "))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(ContextOSTheme.ink.opacity(0.82))
+                    .textSelection(.enabled)
+            }
             if !coverage.requiredCheckpointMissingIDs.isEmpty {
                 Text("\(store.activeLocale == "zh-Hans" ? "验证待补" : "Verification needed"): \(coverage.requiredCheckpointMissingIDs.prefix(6).joined(separator: ", "))")
                     .font(.system(size: 9.5, design: .monospaced)).foregroundStyle(ContextOSTheme.pending)
@@ -268,6 +275,9 @@ struct DetailView: View {
                             let targets = store.planStepTargets(step)
                             if !targets.isEmpty {
                                 detailParagraph(label: store.activeLocale == "zh-Hans" ? "目标" : "TARGETS", value: targets)
+                            }
+                            if !step.ruleRefs.isEmpty {
+                                detailParagraph(label: store.activeLocale == "zh-Hans" ? "任务规则" : "TASK RULES", value: step.ruleRefs.joined(separator: ", "))
                             }
                             structuredList(store.activeLocale == "zh-Hans" ? "期望变化" : "PROPOSED DELTA", value: step.proposedDelta)
                         }

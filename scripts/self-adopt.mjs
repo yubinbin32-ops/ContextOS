@@ -317,14 +317,14 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
     // --- Context Control Gateways & Execution Tier ---
     {
       id: 'block-mcp-facades',
-      title: 'Consolidated 9 MCP Facades',
+      title: 'Intent-Level MCP Surface & Internal Service Facade',
       kind: 'gateway',
-      summary: 'High-level action-based MCP facades replacing legacy micro-tools with clean context control.',
+      summary: 'Five intent-level MCP tools over the internal service facade, which orchestrates every legacy capability server-side.',
       files: [
-        'packages/mcp/src/v2-server.mjs',
+        'packages/mcp/src/v3-server.mjs',
         'packages/mcp/src/v2-service.mjs',
-        'packages/mcp/src/server.mjs',
-        'packages/mcp/src/service.mjs',
+        'packages/mcp/src/service-factory.mjs',
+        'packages/mcp/src/system-tools.mjs',
       ],
     },
     {

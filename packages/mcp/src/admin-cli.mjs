@@ -64,6 +64,7 @@ export async function runAdminCli(argv = process.argv.slice(2)) {
   const service = new ContextOSV2Service({ projectRoot, projectId: projectId || 'contextos' });
   try {
     if (command === 'sync' || command === 'reconcile' || command === 'context') {
+      service.syncEngine.publishIfDirty(service.projectId, projectRoot);
       const result = await service.osContext({ action: 'reconcile', format: 'json' });
       writeJson({ ok: true, command: 'sync', result });
       return 0;

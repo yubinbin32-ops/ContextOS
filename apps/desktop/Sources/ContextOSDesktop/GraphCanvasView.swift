@@ -85,7 +85,7 @@ struct GraphCanvasView: View {
     }
 
     private var sceneKey: String {
-        let lenses = store.enabledLenses.map(\.rawValue).sorted().joined(separator: ",")
+        let lenses = store.hiddenKinds.sorted().joined(separator: ",")
         return "\(store.snapshot.project.id):\(store.snapshot.project.graphRevision):\(store.snapshot.changeSequence):\(store.snapshotPresentationID.uuidString):\(lenses)"
     }
 
@@ -96,7 +96,7 @@ struct GraphCanvasView: View {
     }
 
     private func rebuildScene(viewport: CGSize, fit: Bool) {
-        let nextScene = CanvasScene.compile(snapshot: store.snapshot, lenses: store.enabledLenses)
+        let nextScene = CanvasScene.compile(snapshot: store.snapshot, hiddenKinds: store.hiddenKinds)
         if reduceMotion {
             scene = nextScene
         } else {

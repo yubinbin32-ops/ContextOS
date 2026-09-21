@@ -20,19 +20,22 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     canvasToolbar
                     Divider()
-                    GraphCanvasView(store: store).overlay(alignment: .topLeading) { errorBanner }
-                }
-                if let documentID = requestedDocument {
-                    KnowledgeView(store: store, library: knowledge, documentID: documentID, section: requestedSection, close: closeDocument, openDocument: openDocument)
-                        .frame(width: min(640, max(440, proxy.size.width * 0.38)))
-                        .overlay(alignment: .leading) { Rectangle().fill(ContextOSTheme.hairline).frame(width: 1) }
-                } else if let selection = store.selection {
-                    DetailView(store: store, selection: selection)
-                        .frame(width: drawerWidth)
-                        .background(ContextOSTheme.surface)
-                        .overlay(alignment: .leading) { Rectangle().fill(ContextOSTheme.hairline).frame(width: 1) }
-                        .shadow(color: .black.opacity(0.075), radius: 12, x: -4, y: 0)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                    HStack(spacing: 0) {
+                        GraphCanvasView(store: store)
+                            .overlay(alignment: .topLeading) { errorBanner }
+                        if let documentID = requestedDocument {
+                            KnowledgeView(store: store, library: knowledge, documentID: documentID, section: requestedSection, close: closeDocument, openDocument: openDocument)
+                                .frame(width: min(640, max(440, proxy.size.width * 0.38)))
+                                .overlay(alignment: .leading) { Rectangle().fill(ContextOSTheme.hairline).frame(width: 1) }
+                        } else if let selection = store.selection {
+                            DetailView(store: store, selection: selection)
+                                .frame(width: drawerWidth)
+                                .background(ContextOSTheme.surface)
+                                .overlay(alignment: .leading) { Rectangle().fill(ContextOSTheme.hairline).frame(width: 1) }
+                                .shadow(color: .black.opacity(0.075), radius: 12, x: -4, y: 0)
+                                .transition(.move(edge: .trailing).combined(with: .opacity))
+                        }
+                    }
                 }
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: store.selection)
@@ -102,8 +105,8 @@ struct ContentView: View {
                 closeDocument()
                 let typeStr = parts.queryItems?.first(where: { $0.name == "type" })?.value ?? "plan"
                 let id = parts.queryItems?.first(where: { $0.name == "id" })?.value ?? ""
-                if typeStr == "plan" {
-                    store.focusPlan(id.isEmpty ? (store.snapshot.plans.first?.id ?? "plan-v2-rebuild") : id)
+                if typeStr == "plan", let fallbackPlanID = store.snapshot.plans.first?.id {
+                    store.focusPlan(id.isEmpty ? fallbackPlanID : id)
                 } else if typeStr == "decision" {
                     store.select(GraphSelection(type: .decision, id: id))
                 } else if typeStr == "block" {
@@ -401,36 +404,44 @@ struct ContentView: View {
     }
 
     private var canvasToolbar: some View {
-        HStack(spacing: 13) {
-            ForEach(store.availableLenses) { lens in
-                Toggle(
-                    store.lensTitle(lens),
-                    isOn: Binding(get: { store.enabledLenses.contains(lens) }, set: { store.setLens(lens, enabled: $0) })
-                )
-                .toggleStyle(.checkbox)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(ContextOSTheme.ink)
-            }
-            Spacer()
-            Button { store.fitOverview() } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 11, weight: .medium))
+        HStack(alignment: .top, spacing: 12) {
+            WrappingHStackLayout(spacing: 10, rowSpacing: 6) {
+                ForEach(store.availableKinds, id: \.self) { kind in
+                    Toggle(
+                        store.kindTitle(kind),
+                        isOn: Binding(get: { !store.hiddenKinds.contains(kind) }, set: { store.setKindVisible(kind, visible: $0) })
+                    )
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(ContextOSTheme.ink)
+                    .fixedSize(horizontal: true, vertical: false)
+                }
             }
-            .buttonStyle(.plain)
-            .help(store.activeLocale == "zh-Hans" ? "居中自适应视图" : "Fit overview")
-            Text("\(Int((store.canvasScale * 100).rounded()))%")
-                .font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(ContextOSTheme.muted)
-                .help(store.activeLocale == "zh-Hans" ? "触控板捏合、⌘滚动或双击缩放" : "Pinch, ⌘-scroll, or double-click to zoom")
-            Button { store.settingsPresented = true } label: {
-                Label(store.text("settings"), systemImage: "gearshape")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded)).foregroundStyle(ContextOSTheme.ink)
-                    .padding(.horizontal, 9).frame(height: 30)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 10) {
+                Button { store.fitOverview() } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(ContextOSTheme.ink)
+                }
+                .buttonStyle(.plain)
+                .help(store.activeLocale == "zh-Hans" ? "居中自适应视图" : "Fit overview")
+                Text("\(Int((store.canvasScale * 100).rounded()))%")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced)).foregroundStyle(ContextOSTheme.muted)
+                    .help(store.activeLocale == "zh-Hans" ? "触控板捏合、⌘滚动或双击缩放" : "Pinch, ⌘-scroll, or double-click to zoom")
+                Button { store.settingsPresented = true } label: {
+                    Label(store.text("settings"), systemImage: "gearshape")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded)).foregroundStyle(ContextOSTheme.ink)
+                        .padding(.horizontal, 9).frame(height: 30)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(",", modifiers: .command)
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut(",", modifiers: .command)
+            .fixedSize(horizontal: true, vertical: false)
         }
-        .padding(.horizontal, 16).frame(height: 50)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(ContextOSTheme.surface.opacity(0.96))
     }
 

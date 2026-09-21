@@ -93,3 +93,154 @@ export function assertPlanCanBeCompleted(plan) {
     );
   }
 }
+
+export const PLAN_STATUS_TRANSITIONS = Object.freeze({
+  draft: ['active', 'archived'],
+  active: ['completed', 'archived'],
+  completed: ['archived'],
+  archived: [],
+});
+
+export const TASK_STATUS_TRANSITIONS = Object.freeze({
+  draft: ['active', 'blocked'],
+  active: ['checking', 'syncing', 'blocked'],
+  checking: ['syncing', 'sync_failed', 'active', 'blocked'],
+  syncing: ['completed', 'sync_failed', 'blocked'],
+  completed: [],
+  blocked: ['active'],
+  sync_failed: ['checking', 'active', 'blocked'],
+});
+
+function assertKnownStatus(value, allowed, entity, id) {
+  if (!allowed.includes(value)) {
+    throw new InvariantViolationError(
+      `${entity} '${id}' has unsupported status '${value}'. Must be one of ${allowed.join(', ')}`,
+      { id, status: value }
+    );
+  }
+}
+
+export function assertPlanStatusTransition(previousStatus, nextStatus, planId = '<unknown>') {
+  const allowed = PLAN_STATUS_TRANSITIONS[previousStatus];
+  assertKnownStatus(previousStatus, Object.keys(PLAN_STATUS_TRANSITIONS), 'Plan', planId);
+  assertKnownStatus(nextStatus, Object.keys(PLAN_STATUS_TRANSITIONS), 'Plan', planId);
+  if (previousStatus !== nextStatus && !allowed.includes(nextStatus)) {
+    throw new InvariantViolationError(
+      `Plan '${planId}' cannot transition from '${previousStatus}' to '${nextStatus}'.`,
+      { planId, previousStatus, nextStatus, allowed }
+    );
+  }
+}
+
+export function assertTaskStatusTransition(previousStatus, nextStatus, taskId = '<unknown>') {
+  const allowed = TASK_STATUS_TRANSITIONS[previousStatus];
+  assertKnownStatus(previousStatus, Object.keys(TASK_STATUS_TRANSITIONS), 'Task', taskId);
+  assertKnownStatus(nextStatus, Object.keys(TASK_STATUS_TRANSITIONS), 'Task', taskId);
+  if (previousStatus !== nextStatus && !allowed.includes(nextStatus)) {
+    throw new InvariantViolationError(
+      `Task '${taskId}' cannot transition from '${previousStatus}' to '${nextStatus}'. Use the Task lifecycle actions instead of a raw status update.`,
+      { taskId, previousStatus, nextStatus, allowed }
+    );
+  }
+}
+
+/**
+ * Validate the structural contract of a non-lightweight plan. Legacy plans can
+ * still be opened, but any create/update/completion path must pass this gate.
+ */
+export function assertPlanStructure(plan, { allowLightweight = false } = {}) {
+  const phases = plan.phases || [];
+  if (!allowLightweight && phases.length === 0) {
+    throw new InvariantViolationError(
+      `Plan '${plan.id}' requires at least one phase.`,
+      { planId: plan.id }
+    );
+  }
+
+  const phaseIds = new Set();
+  const phaseOrders = new Set();
+  for (const phase of phases) {
+    if (phaseIds.has(phase.id)) {
+      throw new InvariantViolationError(`Plan '${plan.id}' contains duplicate phase id '${phase.id}'.`, {
+        planId: plan.id,
+        phaseId: phase.id,
+      });
+    }
+    phaseIds.add(phase.id);
+
+    if (!Number.isInteger(phase.order) || phase.order < 0) {
+      throw new InvariantViolationError(
+        `Phase '${phase.id}' in Plan '${plan.id}' requires a non-negative integer order.`,
+        { planId: plan.id, phaseId: phase.id, order: phase.order }
+      );
+    }
+    if (phaseOrders.has(phase.order)) {
+      throw new InvariantViolationError(
+        `Plan '${plan.id}' contains duplicate phase order ${phase.order}; orders must be unique.`,
+        { planId: plan.id, order: phase.order }
+      );
+    }
+    phaseOrders.add(phase.order);
+
+    if (!allowLightweight) {
+      if (!String(phase.objective || '').trim()) {
+        throw new InvariantViolationError(
+          `Phase '${phase.id}' in Plan '${plan.id}' requires a non-empty objective.`,
+          { planId: plan.id, phaseId: phase.id }
+        );
+      }
+      if (!Array.isArray(phase.acceptance) || phase.acceptance.filter((item) => String(item || '').trim()).length === 0) {
+        throw new InvariantViolationError(
+          `Phase '${phase.id}' in Plan '${plan.id}' requires at least one acceptance criterion.`,
+          { planId: plan.id, phaseId: phase.id }
+        );
+      }
+    }
+  }
+}
+
+export function assertPlanTaskLinks(plan, tasks = []) {
+  const taskById = new Map(tasks.map((task) => [task.id, task]));
+  const referencedTaskIds = new Set();
+  for (const phase of plan.phases || []) {
+    const phaseTaskIds = Array.isArray(phase.taskIds) ? phase.taskIds : [];
+    for (const taskId of phaseTaskIds) {
+      const task = taskById.get(taskId);
+      if (!task) {
+        throw new InvariantViolationError(
+          `Plan '${plan.id}' phase '${phase.id}' references missing Task '${taskId}'.`,
+          { planId: plan.id, phaseId: phase.id, taskId }
+        );
+      }
+      if (task.planId !== plan.id || task.phaseId !== phase.id) {
+        throw new InvariantViolationError(
+          `Task '${taskId}' is linked to '${task.planId}/${task.phaseId}', not '${plan.id}/${phase.id}'.`,
+          { planId: plan.id, phaseId: phase.id, taskId, taskPlanId: task.planId, taskPhaseId: task.phaseId }
+        );
+      }
+      referencedTaskIds.add(taskId);
+    }
+  }
+
+  for (const task of tasks) {
+    if (!referencedTaskIds.has(task.id)) {
+      throw new InvariantViolationError(
+        `Task '${task.id}' belongs to Plan '${plan.id}' but is not linked from phase '${task.phaseId}'.`,
+        { planId: plan.id, phaseId: task.phaseId, taskId: task.id }
+      );
+    }
+  }
+}
+
+export function assertPlanCanBeCompletedWithTasks(plan, tasks = [], { allowLightweight = false } = {}) {
+  assertPlanStructure(plan, { allowLightweight });
+  assertPlanTaskLinks(plan, tasks);
+  assertPlanCanBeCompleted(plan);
+  const unfinished = tasks.filter((task) => task.status !== 'completed');
+  if (unfinished.length > 0) {
+    throw new InvariantViolationError(
+      `Cannot complete Plan '${plan.id}' while non-terminal tasks remain: ${unfinished.map((task) => `${task.id}(${task.status})`).join(', ')}`,
+      { planId: plan.id, unfinishedTaskIds: unfinished.map((task) => task.id) }
+    );
+  }
+}

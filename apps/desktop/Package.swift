@@ -13,5 +13,9 @@ let package = Package(
             name: "ContextOSDesktop",
             dependencies: ["CSQLite"]
         ),
+        .testTarget(
+            name: "ContextOSDesktopTests",
+            dependencies: ["ContextOSDesktop"]
+        ),
     ]
 )

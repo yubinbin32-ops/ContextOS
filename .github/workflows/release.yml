@@ -1,0 +1,175 @@
+name: Build and publish release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: contextos-release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: x64
+          - runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run automated checks
+        run: npm test
+
+      - name: Detect signing credentials
+        id: signing
+        env:
+          CERTIFICATE_P12: ${{ secrets.CONTEXTOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CONTEXTOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.CONTEXTOS_KEYCHAIN_PASSWORD }}
+          SIGN_IDENTITY: ${{ secrets.CONTEXTOS_SIGN_IDENTITY }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${CERTIFICATE_P12:-}" && -n "${CERTIFICATE_PASSWORD:-}" && -n "${KEYCHAIN_PASSWORD:-}" && -n "${SIGN_IDENTITY:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "require_developer_id=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "require_developer_id=0" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Unsigned release::Developer ID signing secrets are incomplete; packaging with an ad-hoc signature."
+          fi
+
+      - name: Import Developer ID certificate
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          CERTIFICATE_P12: ${{ secrets.CONTEXTOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CONTEXTOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.CONTEXTOS_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/contextos.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/contextos.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/contextos.keychain-db"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/contextos.keychain-db"
+          security import "$RUNNER_TEMP/contextos.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/contextos.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/contextos.keychain-db"
+          security default-keychain -s "$RUNNER_TEMP/contextos.keychain-db"
+
+      - name: Build release package
+        env:
+          CONTEXTOS_PACKAGE_ARCH: ${{ matrix.arch }}
+          CONTEXTOS_REQUIRE_DEVELOPER_ID: ${{ steps.signing.outputs.require_developer_id }}
+          CONTEXTOS_SIGN_IDENTITY: ${{ steps.signing.outputs.enabled == 'true' && secrets.CONTEXTOS_SIGN_IDENTITY || '' }}
+        run: npm run desktop:package
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          cp "dist/ContextOS-macos-${{ matrix.arch }}.zip" release-assets/
+          cp "dist/ContextOS-macos-full-${{ matrix.arch }}.zip" release-assets/
+          cp "dist/SHA256SUMS-${{ matrix.arch }}" "release-assets/SHA256SUMS-${{ matrix.arch }}.txt"
+
+      - name: Upload architecture assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: contextos-macos-${{ matrix.arch }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build standalone MCP bundle
+        run: npm run plugin:build
+
+      - name: Download packaged assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: contextos-macos-*
+          merge-multiple: true
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            release_version="${GITHUB_REF_NAME#v}"
+            if [[ "$release_version" != "$package_version" ]]; then
+              echo "Tag version $release_version does not match package.json version $package_version"
+              exit 1
+            fi
+          else
+            release_version="$package_version"
+          fi
+          tag="v${release_version}"
+          prerelease="false"
+          if [[ "$release_version" == *-* ]]; then
+            prerelease="true"
+          fi
+          echo "version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Build combined checksums
+        shell: bash
+        run: |
+          cp plugins/contextos/server/contextos-mcp.mjs release-assets/contextos-mcp.mjs
+          (
+            cd release-assets
+            find . -maxdepth 1 -type f ! -name 'SHA256SUMS*' -print0 \
+              | sort -z \
+              | xargs -0 shasum -a 256 > SHA256SUMS
+          )
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ContextOS ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          make_latest: true
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          files: release-assets/*
+          fail_on_unmatched_files: true

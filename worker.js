@@ -4,34 +4,67 @@
  * Supports MCP over HTTP (SSE & Streamable JSON-RPC) + REST API + Bearer Token Auth
  */
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+const BASE_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, x-contextos-token, x-contextos-project-id',
   'Content-Type': 'application/json',
 };
 
+function corsHeaders(request, env) {
+  const origin = request.headers.get('Origin');
+  if (!origin) return {};
+  const configured = String(env?.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (configured.includes('*')) {
+    return { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' };
+  }
+  if (!configured.includes(origin)) return {};
+  return { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' };
+}
+
+function jsonHeaders(request, env) {
+  return { ...BASE_HEADERS, ...corsHeaders(request, env) };
+}
+
 const DDL = `
-CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, repo_root TEXT NOT NULL, graph_revision INTEGER NOT NULL DEFAULT 0, exported_at TEXT, schema_version INTEGER NOT NULL DEFAULT 2);
+CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, repo_root TEXT NOT NULL, graph_revision INTEGER NOT NULL DEFAULT 0, exported_at TEXT, schema_version INTEGER NOT NULL DEFAULT 4);
 CREATE TABLE IF NOT EXISTS plans (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, title TEXT NOT NULL, priority TEXT NOT NULL DEFAULT 'normal', status TEXT NOT NULL DEFAULT 'active', summary TEXT NOT NULL DEFAULT '', completed_summary TEXT, history_ref TEXT, rule_refs_json TEXT NOT NULL DEFAULT '[]', decision_refs_json TEXT NOT NULL DEFAULT '[]', dependency_refs_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS phases (id TEXT NOT NULL, plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE, phase_order INTEGER NOT NULL DEFAULT 0, objective TEXT NOT NULL DEFAULT '', scope TEXT NOT NULL DEFAULT '', deliverables_json TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL DEFAULT 'pending', task_ids_json TEXT NOT NULL DEFAULT '[]', acceptance_json TEXT NOT NULL DEFAULT '[]', PRIMARY KEY (id, plan_id));
 CREATE TABLE IF NOT EXISTS checkpoints (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE, phase_id TEXT, title TEXT NOT NULL, criteria TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', evidence_refs_json TEXT NOT NULL DEFAULT '[]', completed_at TEXT);
 CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE, phase_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft', context_slice_json TEXT NOT NULL DEFAULT '{}', working_set_json TEXT NOT NULL DEFAULT '{}', references_json TEXT NOT NULL DEFAULT '{}', baseline_json TEXT NOT NULL DEFAULT '{}', notes_json TEXT NOT NULL DEFAULT '[]', checks_json TEXT NOT NULL DEFAULT '[]', sync_result_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS blocks (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, title TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'service', summary TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', history_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS artifact_refs (id TEXT PRIMARY KEY, block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE, path TEXT NOT NULL, symbol TEXT, start_line INTEGER, end_line INTEGER, hash TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'implementation');
+CREATE TABLE IF NOT EXISTS blocks (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, title TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'service', summary TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '', artifact_ref_count INTEGER NOT NULL DEFAULT 0, history_json TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS artifact_refs (id TEXT PRIMARY KEY, block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE, path TEXT NOT NULL, symbol TEXT, anchor_kind TEXT NOT NULL DEFAULT 'symbol', start_line INTEGER, end_line INTEGER, hash TEXT NOT NULL DEFAULT '', role TEXT NOT NULL DEFAULT 'implementation', hash_mode TEXT, manifest TEXT);
 CREATE TABLE IF NOT EXISTS chains (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, title TEXT NOT NULL, summary TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'leaf', member_ids_json TEXT NOT NULL DEFAULT '[]', metadata_json TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS links (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, from_id TEXT NOT NULL, to_id TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'depends_on', provenance TEXT NOT NULL DEFAULT 'authored', confidence REAL NOT NULL DEFAULT 1.0, reason TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 `;
 
-let dbInitialized = false;
+const CLOUD_SCHEMA_MIGRATIONS = [
+  "ALTER TABLE blocks ADD COLUMN artifact_ref_count INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE artifact_refs ADD COLUMN anchor_kind TEXT NOT NULL DEFAULT 'symbol'",
+  "ALTER TABLE artifact_refs ADD COLUMN hash_mode TEXT",
+  "ALTER TABLE artifact_refs ADD COLUMN manifest TEXT",
+];
+
+const initializedDbs = new WeakSet();
 
 async function ensureDb(db) {
-  if (dbInitialized || !db) return;
+  if (!db || initializedDbs.has(db)) return;
   try {
     await db.exec(DDL);
-    dbInitialized = true;
+    for (const statement of CLOUD_SCHEMA_MIGRATIONS) {
+      try {
+        await db.exec(statement);
+      } catch (err) {
+        if (!/duplicate column name/i.test(String(err?.message || err))) throw err;
+      }
+    }
+    await db.exec('UPDATE projects SET schema_version = 4 WHERE schema_version < 4;');
+    initializedDbs.add(db);
   } catch (err) {
     console.error('Failed to initialize D1 schema:', err);
+    throw err;
   }
 }
 
@@ -40,7 +73,12 @@ const sseSessions = new Map();
 
 function checkAuth(request, env) {
   const secret = (env?.AUTH_TOKEN || env?.CONTEXTOS_TOKEN || '').trim();
-  if (!secret) return { authorized: true };
+  const allowOpenAccess = String(env?.ALLOW_OPEN_ACCESS || '').toLowerCase() === 'true';
+  if (!secret) {
+    return allowOpenAccess
+      ? { authorized: true }
+      : { authorized: false, error: 'Unauthorized: AUTH_TOKEN is not configured.' };
+  }
 
   const authHeader = request.headers.get('Authorization') || request.headers.get('x-contextos-token') || '';
   let token = '';
@@ -48,11 +86,6 @@ function checkAuth(request, env) {
     token = authHeader.slice(7).trim();
   } else if (authHeader) {
     token = authHeader.trim();
-  }
-
-  if (!token) {
-    const url = new URL(request.url);
-    token = url.searchParams.get('token') || '';
   }
 
   if (token === secret) {
@@ -93,6 +126,284 @@ async function seedStarterProjectIfNeeded(db, projectId) {
   } catch (err) {
     console.error('Error seeding starter project:', err);
   }
+}
+
+function parseJson(value, fallback) {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+async function buildCloudSnapshot(db, projectId) {
+  const empty = {
+    schemaVersion: 4,
+    project: { id: projectId, name: `${projectId} (Cloud)`, root: '', graphRevision: 0 },
+    changeSequence: 0,
+    plans: [],
+    phases: [],
+    checkpoints: [],
+    tasks: [],
+    blocks: [],
+    chains: [],
+    chainMembers: [],
+    links: [],
+    chainNodes: [],
+    chainEdges: [],
+    planChainReferences: [],
+    planDependencies: [],
+    planSteps: [],
+    planCheckpointReferences: [],
+    planChainScopes: [],
+    planChanges: [],
+    planChainChangeReferences: [],
+    backgroundScopes: [],
+    decisions: [],
+    decisionScopes: [],
+    sourceReferences: [],
+    checkpointBindings: [],
+    checkpointDependencies: [],
+    localizations: [],
+    history: [],
+    latestChanges: [],
+  };
+  if (!db) return empty;
+
+  const project = await db.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first();
+  const plans = (await db.prepare('SELECT * FROM plans WHERE project_id = ?').bind(projectId).all()).results || [];
+  const phases = (await db.prepare('SELECT * FROM phases WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').bind(projectId).all()).results || [];
+  const checkpoints = (await db.prepare('SELECT * FROM checkpoints WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').bind(projectId).all()).results || [];
+  const tasks = (await db.prepare('SELECT * FROM tasks WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').bind(projectId).all()).results || [];
+  const blocks = (await db.prepare('SELECT * FROM blocks WHERE project_id = ?').bind(projectId).all()).results || [];
+  const refs = (await db.prepare('SELECT * FROM artifact_refs WHERE block_id IN (SELECT id FROM blocks WHERE project_id = ?)').bind(projectId).all()).results || [];
+  const chains = (await db.prepare('SELECT * FROM chains WHERE project_id = ?').bind(projectId).all()).results || [];
+  const links = (await db.prepare('SELECT * FROM links WHERE project_id = ?').bind(projectId).all()).results || [];
+  const refsByBlock = new Map();
+  for (const ref of refs) {
+    if (!refsByBlock.has(ref.block_id)) refsByBlock.set(ref.block_id, []);
+    refsByBlock.get(ref.block_id).push({
+      id: ref.id,
+      path: ref.path,
+      symbol: ref.symbol || undefined,
+      anchorKind: ref.anchor_kind || (ref.symbol ? 'symbol' : 'file'),
+      startLine: ref.start_line,
+      endLine: ref.end_line,
+      hash: ref.hash || '',
+      role: ref.role || 'implementation',
+      hashMode: ref.hash_mode || null,
+      manifest: ref.manifest || null,
+    });
+  }
+
+  return {
+    ...empty,
+    project: {
+      id: projectId,
+      name: `${projectId} (Cloud)`,
+      root: project?.repo_root || '',
+      graphRevision: project?.graph_revision || 0,
+    },
+    changeSequence: project?.graph_revision || 0,
+    plans: plans.map((p) => ({
+      id: p.id,
+      title: p.title,
+      summary: p.summary || '',
+      goal: p.title,
+      status: p.status || 'active',
+      derivedStatus: p.status || 'active',
+      statusReason: '',
+      priority: p.priority || 'normal',
+      phase: 'implementation',
+      order: 0,
+      proposedDelta: '',
+      completionPolicy: '{}',
+      nextAction: '',
+      blockers: '[]',
+      startedAt: p.created_at,
+      completedAt: null,
+      invalidatedAt: null,
+      progress: { total: 0, passed: 0, failed: 0, percentage: 0 },
+      revision: 1,
+      ruleRefs: parseJson(p.rule_refs_json, []),
+      decisionRefs: parseJson(p.decision_refs_json, []),
+      dependencyRefs: parseJson(p.dependency_refs_json, []),
+    })),
+    phases: phases.map((phase) => ({
+      id: phase.id,
+      planId: phase.plan_id,
+      order: phase.phase_order || 0,
+      objective: phase.objective || '',
+      scope: phase.scope || '',
+      deliverables: parseJson(phase.deliverables_json, []),
+      status: phase.status || 'pending',
+      taskIds: parseJson(phase.task_ids_json, []),
+      acceptance: parseJson(phase.acceptance_json, []),
+    })),
+    checkpoints: checkpoints.map((checkpoint) => ({
+      id: checkpoint.id,
+      targetType: 'plan',
+      targetId: checkpoint.plan_id,
+      phaseId: checkpoint.phase_id || null,
+      title: checkpoint.title,
+      criteria: checkpoint.criteria || '',
+      status: checkpoint.status || 'pending',
+      evidenceRefs: parseJson(checkpoint.evidence_refs_json, []),
+      completedAt: checkpoint.completed_at || null,
+      revision: 1,
+    })),
+    tasks: tasks.map((task) => ({
+      id: task.id,
+      planId: task.plan_id,
+      phaseId: task.phase_id,
+      title: task.title,
+      status: task.status || 'draft',
+      contextSlice: parseJson(task.context_slice_json, {}),
+      workingSet: parseJson(task.working_set_json, {}),
+      references: parseJson(task.references_json, {}),
+      baseline: parseJson(task.baseline_json, {}),
+      notes: parseJson(task.notes_json, []),
+      checks: parseJson(task.checks_json, []),
+      syncResult: parseJson(task.sync_result_json, null),
+      createdAt: task.created_at,
+      updatedAt: task.updated_at,
+    })),
+    blocks: blocks.map((block) => ({
+      id: block.id,
+      kind: block.kind || 'service',
+      title: block.title,
+      summary: block.summary || '',
+      body: block.details || '',
+      details: block.details || '',
+      history: parseJson(block.history_json, []),
+      contract: '',
+      scope: 'project',
+      architectureLayer: 'domain',
+      localOrder: 0,
+      deliveryState: 'active',
+      healthState: 'healthy',
+      priority: 'normal',
+      revision: 1,
+      createdAt: block.created_at,
+      updatedAt: block.updated_at,
+      artifactRefs: refsByBlock.get(block.id) || [],
+    })),
+    chains: chains.map((chain) => ({
+      id: chain.id,
+      title: chain.title,
+      chainType: chain.kind || 'leaf',
+      kind: chain.kind || 'leaf',
+      purpose: chain.summary || '',
+      summary: chain.summary || '',
+      metadata: parseJson(chain.metadata_json, {}),
+      intent: chain.title,
+      inputContract: '',
+      outputContract: '',
+      deliveryState: 'active',
+      healthState: 'healthy',
+      priority: 'normal',
+      topologyOrder: 0,
+      revision: 1,
+      createdAt: chain.created_at,
+      updatedAt: chain.updated_at,
+      memberIds: parseJson(chain.member_ids_json, []),
+    })),
+    chainMembers: chains.flatMap((chain) => parseJson(chain.member_ids_json, []).map((blockId, index) => ({
+      chainId: chain.id,
+      blockId,
+      order: index,
+    }))),
+    links: links.map((link) => ({
+      id: link.id,
+      sourceType: 'block',
+      sourceId: link.from_id,
+      targetType: 'block',
+      targetId: link.to_id,
+      kind: link.kind || 'depends_on',
+      label: link.reason || '',
+      reason: link.reason || '',
+      provenance: link.provenance || 'authored',
+      confidence: link.confidence ?? 1,
+      contract: '',
+      healthState: 'healthy',
+      revision: link.revision || 1,
+      createdAt: link.created_at,
+      updatedAt: link.updated_at,
+    })),
+  };
+}
+
+async function replaceCloudSnapshot(db, projectId, body) {
+  const now = new Date().toISOString();
+  const statements = [];
+  const add = (sql, ...values) => statements.push(db.prepare(sql).bind(...values));
+
+  add('INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET repo_root = excluded.repo_root, graph_revision = excluded.graph_revision, exported_at = excluded.exported_at, schema_version = excluded.schema_version',
+    projectId, body.project?.root || '', body.project?.graphRevision || body.changeSequence || 0, now, body.schemaVersion || 4);
+  add('DELETE FROM links WHERE project_id = ?', projectId);
+  add('DELETE FROM chains WHERE project_id = ?', projectId);
+  add('DELETE FROM artifact_refs WHERE block_id IN (SELECT id FROM blocks WHERE project_id = ?)', projectId);
+  add('DELETE FROM blocks WHERE project_id = ?', projectId);
+  add('DELETE FROM checkpoints WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)', projectId);
+  add('DELETE FROM tasks WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)', projectId);
+  add('DELETE FROM phases WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)', projectId);
+  add('DELETE FROM plans WHERE project_id = ?', projectId);
+
+  for (const plan of body.plans || []) {
+    add('INSERT INTO plans (id, project_id, title, priority, status, summary, completed_summary, history_ref, rule_refs_json, decision_refs_json, dependency_refs_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      plan.id, projectId, plan.title || plan.id, plan.priority || 'normal', plan.status || 'active', plan.summary || '', plan.completedSummary || null, plan.historyRef || null,
+      JSON.stringify(plan.ruleRefs || []), JSON.stringify(plan.decisionRefs || []), JSON.stringify(plan.dependencyRefs || []), plan.startedAt || plan.createdAt || now, plan.updatedAt || now);
+  }
+  for (const phase of body.phases || []) {
+    add('INSERT OR REPLACE INTO phases (id, plan_id, phase_order, objective, scope, deliverables_json, status, task_ids_json, acceptance_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      phase.id, phase.planId, phase.order || 0, phase.objective || '', phase.scope || '', JSON.stringify(phase.deliverables || []), phase.status || 'pending', JSON.stringify(phase.taskIds || []), JSON.stringify(phase.acceptance || []));
+  }
+  for (const checkpoint of body.checkpoints || []) {
+    add('INSERT OR REPLACE INTO checkpoints (id, plan_id, phase_id, title, criteria, status, evidence_refs_json, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      checkpoint.id, checkpoint.targetId || checkpoint.planId, checkpoint.phaseId || null, checkpoint.title || checkpoint.id, checkpoint.criteria || '', checkpoint.status || 'pending', JSON.stringify(checkpoint.evidenceRefs || []), checkpoint.completedAt || null);
+  }
+  for (const task of body.tasks || []) {
+    add('INSERT OR REPLACE INTO tasks (id, plan_id, phase_id, title, status, context_slice_json, working_set_json, references_json, baseline_json, notes_json, checks_json, sync_result_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      task.id, task.planId, task.phaseId || '', task.title || task.id, task.status || 'draft', JSON.stringify(task.contextSlice || {}), JSON.stringify(task.workingSet || {}), JSON.stringify(task.references || {}), JSON.stringify(task.baseline || {}), JSON.stringify(task.notes || []), JSON.stringify(task.checks || []), task.syncResult ? JSON.stringify(task.syncResult) : null, task.createdAt || now, task.updatedAt || now);
+  }
+  for (const block of body.blocks || []) {
+    add('INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, artifact_ref_count, history_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      block.id, projectId, block.title || block.id, block.kind || 'service', block.summary || '', block.body || block.details || '', (block.artifactRefs || []).length, JSON.stringify(block.history || []), block.createdAt || now, block.updatedAt || now);
+    for (const [index, ref] of (block.artifactRefs || []).entries()) {
+      const anchorKind = ref.anchorKind || ref.anchor_kind || (ref.symbol ? 'symbol' : 'file');
+      add('INSERT OR REPLACE INTO artifact_refs (id, block_id, path, symbol, anchor_kind, start_line, end_line, hash, role, hash_mode, manifest) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        ref.id || `${block.id}-ref-${index}`, block.id, ref.path || '', ref.symbol || null, anchorKind, ref.startLine ?? ref.start_line ?? null, ref.endLine ?? ref.end_line ?? null, ref.hash || '', ref.role || 'implementation', ref.hashMode || ref.hash_mode || null, ref.manifest || null);
+    }
+  }
+  for (const chain of body.chains || []) {
+    add('INSERT OR REPLACE INTO chains (id, project_id, title, summary, kind, member_ids_json, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      chain.id, projectId, chain.title || chain.id, chain.summary || chain.purpose || '', chain.kind || chain.chainType || 'linear', JSON.stringify(chain.memberIds || chain.member_ids || []), JSON.stringify(chain.metadata || {}), chain.createdAt || now, chain.updatedAt || now);
+  }
+  for (const link of body.links || []) {
+    const fromId = link.sourceId || link.fromId || link.from_id || link.from;
+    const toId = link.targetId || link.toId || link.to_id || link.to;
+    if (!fromId || !toId) continue;
+    add('INSERT OR REPLACE INTO links (id, project_id, from_id, to_id, kind, provenance, confidence, reason, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      link.id || `link-${fromId}-${toId}`, projectId, fromId, toId, link.kind || 'depends_on', link.provenance || 'authored', link.confidence ?? 1, link.reason || link.label || '', link.revision || 1, link.createdAt || now, link.updatedAt || now);
+  }
+
+  if (typeof db.batch === 'function') {
+    await db.batch(statements);
+  } else {
+    for (const statement of statements) await statement.run();
+  }
+  return {
+    plans: (body.plans || []).length,
+    phases: (body.phases || []).length,
+    checkpoints: (body.checkpoints || []).length,
+    tasks: (body.tasks || []).length,
+    blocks: (body.blocks || []).length,
+    artifactRefs: (body.blocks || []).reduce((sum, block) => sum + (block.artifactRefs || []).length, 0),
+    chains: (body.chains || []).length,
+    links: (body.links || []).length,
+  };
 }
 
 async function executeTool(tool, input = {}, projectId = 'contextos', db) {
@@ -421,8 +732,9 @@ async function handleJsonRpc(msg, env, db, projectId = 'contextos') {
 
 export default {
   async fetch(request, env, ctx) {
+    const responseHeaders = jsonHeaders(request, env);
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: responseHeaders });
     }
 
     const url = new URL(request.url);
@@ -491,7 +803,7 @@ export default {
     if (!auth.authorized) {
       return new Response(JSON.stringify({ error: auth.error }), {
         status: 401,
-        headers: CORS_HEADERS,
+        headers: responseHeaders,
       });
     }
 
@@ -507,7 +819,7 @@ export default {
           authRequired: hasAuthToken,
           url: url.origin,
         }),
-        { headers: CORS_HEADERS }
+        { headers: responseHeaders }
       );
     }
 
@@ -544,11 +856,10 @@ export default {
 
       return new Response(readable, {
         headers: {
+          ...responseHeaders,
           'Content-Type': 'text/event-stream; charset=utf-8',
           'Cache-Control': 'no-cache, no-transform',
           'Connection': 'keep-alive',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': '*',
         },
       });
     }
@@ -566,16 +877,16 @@ export default {
         if (writer && rpcResponse) {
           const encoder = new TextEncoder();
           writer.write(encoder.encode(`event: message\r\ndata: ${JSON.stringify(rpcResponse)}\r\n\r\n`));
-          return new Response('Accepted', { status: 202, headers: CORS_HEADERS });
+          return new Response('Accepted', { status: 202, headers: responseHeaders });
         }
 
         // If no active SSE session in this isolate, return RPC response directly
         if (rpcResponse) {
-          return new Response(JSON.stringify(rpcResponse), { status: 200, headers: CORS_HEADERS });
+          return new Response(JSON.stringify(rpcResponse), { status: 200, headers: responseHeaders });
         }
-        return new Response('Accepted', { status: 202, headers: CORS_HEADERS });
+        return new Response('Accepted', { status: 202, headers: responseHeaders });
       } catch (err) {
-        return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: CORS_HEADERS });
+        return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: responseHeaders });
       }
     }
 
@@ -586,250 +897,39 @@ export default {
           const body = await request.json();
           const projectId = request.headers.get('x-contextos-project-id') || url.searchParams.get('projectId') || 'contextos';
           const rpcResponse = await handleJsonRpc(body, env, db, projectId);
-          return new Response(JSON.stringify(rpcResponse || {}), { status: 200, headers: CORS_HEADERS });
+          return new Response(JSON.stringify(rpcResponse || {}), { status: 200, headers: responseHeaders });
         } catch (err) {
-          return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: CORS_HEADERS });
+          return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: responseHeaders });
         }
       }
-      return new Response(JSON.stringify({ status: 'ContextOS Streamable HTTP MCP Active' }), { headers: CORS_HEADERS });
+      return new Response(JSON.stringify({ status: 'ContextOS Streamable HTTP MCP Active' }), { headers: responseHeaders });
     }
 
-    // 6. Snapshot export & sync (/api/v2/snapshot)
+    // 6. Snapshot export & transactional replacement (/api/v2/snapshot)
     if (url.pathname === '/api/v2/snapshot') {
       const projectId = request.headers.get('x-contextos-project-id') || url.searchParams.get('projectId') || 'contextos';
       if (request.method === 'POST') {
         try {
           const body = await request.json();
-          const now = new Date().toISOString();
-          if (db) {
-            await db.prepare('INSERT INTO projects (id, repo_root, graph_revision, exported_at, schema_version) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET exported_at = excluded.exported_at')
-              .bind(projectId, '', 1, now, 2).run();
-
-            for (const b of body.blocks || []) {
-              await db.prepare('INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                .bind(b.id, projectId, b.title || b.id, b.kind || 'service', b.summary || '', b.details || b.body || '', now, now).run();
-
-              const refs = b.artifactRefs || b.artifact_refs || [];
-              if (refs.length > 0) {
-                await db.prepare('DELETE FROM artifact_refs WHERE block_id = ?').bind(b.id).run();
-                for (let i = 0; i < refs.length; i++) {
-                  const r = refs[i];
-                  const refId = r.id || `${b.id}-ref-${i}`;
-                  await db.prepare('INSERT OR REPLACE INTO artifact_refs (id, block_id, path, symbol, start_line, end_line, hash, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                    .bind(refId, b.id, r.path || '', r.symbol || null, r.startLine || r.start_line || null, r.endLine || r.end_line || null, r.hash || '', r.role || 'implementation').run();
-                }
-              }
-            }
-            for (const c of body.chains || []) {
-              const members = JSON.stringify(c.memberIds || c.member_ids || []);
-              await db.prepare('INSERT OR REPLACE INTO chains (id, project_id, title, summary, kind, member_ids_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                .bind(c.id, projectId, c.title || c.id, c.summary || c.purpose || '', c.kind || c.chainType || 'linear', members, now, now).run();
-            }
-            for (const l of body.links || []) {
-              const fromId = l.fromId || l.from_id || l.sourceId || l.from;
-              const toId = l.toId || l.to_id || l.targetId || l.to;
-              if (fromId && toId) {
-                const linkId = l.id || `link-${fromId}-${toId}`;
-                await db.prepare('INSERT OR REPLACE INTO links (id, project_id, from_id, to_id, kind, reason, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                  .bind(linkId, projectId, fromId, toId, l.kind || 'depends_on', l.reason || l.label || '', now, now).run();
-              }
-            }
-            for (const p of body.plans || []) {
-              await db.prepare('INSERT OR REPLACE INTO plans (id, project_id, title, priority, status, summary, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                .bind(p.id, projectId, p.title || p.id, p.priority || 'normal', p.status || 'active', p.summary || '', now, now).run();
-            }
-            for (const t of body.tasks || []) {
-              const ws = Array.isArray(t.workingSet || t.working_set)
-                ? { files: t.workingSet || t.working_set }
-                : (t.workingSet || t.working_set || {});
-              await db.prepare('INSERT OR REPLACE INTO tasks (id, plan_id, phase_id, title, status, context_slice_json, working_set_json, references_json, baseline_json, notes_json, checks_json, sync_result_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                .bind(
-                  t.id,
-                  t.planId || t.plan_id || 'plan-v2-rebuild',
-                  t.phaseId || t.phase_id || 'P0',
-                  t.title || 'Untitled Task',
-                  t.status || 'draft',
-                  JSON.stringify(t.contextSlice || t.context_slice || {}),
-                  JSON.stringify(ws),
-                  JSON.stringify(t.references || {}),
-                  JSON.stringify(t.baseline || {}),
-                  JSON.stringify(t.notes || []),
-                  JSON.stringify(t.checks || []),
-                  t.syncResult || t.sync_result ? JSON.stringify(t.syncResult || t.sync_result) : null,
-                  t.createdAt || t.created_at || now,
-                  t.updatedAt || t.updated_at || now
-                ).run();
-            }
+          if (!body || typeof body !== 'object' || Array.isArray(body)) {
+            return new Response(JSON.stringify({ error: 'Snapshot body must be a JSON object.' }), { status: 400, headers: responseHeaders });
           }
-          return new Response(JSON.stringify({ status: 'ok', projectId, syncedAt: now }), { headers: CORS_HEADERS });
+          if (body.schemaVersion && body.schemaVersion !== 4) {
+            return new Response(JSON.stringify({ error: `Unsupported snapshot schemaVersion: ${body.schemaVersion}` }), { status: 409, headers: responseHeaders });
+          }
+          if (!db) {
+            return new Response(JSON.stringify({ error: 'Cloud storage is unavailable.' }), { status: 503, headers: responseHeaders });
+          }
+          const counts = await replaceCloudSnapshot(db, projectId, body);
+          return new Response(JSON.stringify({ status: 'ok', projectId, schemaVersion: 4, counts }), { headers: responseHeaders });
         } catch (err) {
-          return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: CORS_HEADERS });
+          return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: responseHeaders });
         }
       }
 
-      if (db) {
-        await seedStarterProjectIfNeeded(db, projectId);
-      }
-      let snapshot = {
-        project: { id: projectId, name: `${projectId} (Cloud)`, root: '', graphRevision: 1 },
-        changeSequence: 1,
-        blocks: [],
-        chains: [],
-        plans: [],
-        links: [],
-        chainMembers: [],
-        chainNodes: [],
-        chainEdges: [],
-        planChainReferences: [],
-        planDependencies: [],
-        planSteps: [],
-        planCheckpointReferences: [],
-        planChainScopes: [],
-        planChanges: [],
-        planChainChangeReferences: [],
-        backgroundScopes: [],
-        decisions: [],
-        decisionScopes: [],
-        sourceReferences: [],
-        checkpoints: [],
-        checkpointBindings: [],
-        checkpointDependencies: [],
-        localizations: [],
-        history: [],
-        latestChanges: [],
-      };
-
-      if (db) {
-        try {
-          const plans = (await db.prepare('SELECT * FROM plans WHERE project_id = ?').bind(projectId).all()).results || [];
-          const blocks = (await db.prepare('SELECT * FROM blocks WHERE project_id = ?').bind(projectId).all()).results || [];
-          const allRefs = (await db.prepare('SELECT * FROM artifact_refs WHERE block_id IN (SELECT id FROM blocks WHERE project_id = ?)').bind(projectId).all()).results || [];
-          const refsByBlock = new Map();
-          for (const r of allRefs) {
-            if (!refsByBlock.has(r.block_id)) refsByBlock.set(r.block_id, []);
-            refsByBlock.get(r.block_id).push({
-              id: r.id,
-              path: r.path,
-              symbol: r.symbol,
-              startLine: r.start_line,
-              endLine: r.end_line,
-              hash: r.hash,
-              role: r.role,
-            });
-          }
-          const chains = (await db.prepare('SELECT * FROM chains WHERE project_id = ?').bind(projectId).all()).results || [];
-          const links = (await db.prepare('SELECT * FROM links WHERE project_id = ?').bind(projectId).all()).results || [];
-          const checkpoints = (await db.prepare('SELECT * FROM checkpoints WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').bind(projectId).all()).results || [];
-          const tasks = (await db.prepare('SELECT * FROM tasks WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').bind(projectId).all()).results || [];
-
-          snapshot.tasks = tasks.map((t) => ({
-            id: t.id,
-            planId: t.plan_id,
-            phaseId: t.phase_id,
-            title: t.title,
-            status: t.status,
-            contextSlice: JSON.parse(t.context_slice_json || '{}'),
-            workingSet: JSON.parse(t.working_set_json || '{}'),
-            references: JSON.parse(t.references_json || '{}'),
-            baseline: JSON.parse(t.baseline_json || '{}'),
-            notes: JSON.parse(t.notes_json || '[]'),
-            checks: JSON.parse(t.checks_json || '[]'),
-            syncResult: t.sync_result_json ? JSON.parse(t.sync_result_json) : null,
-            createdAt: t.created_at,
-            updatedAt: t.updated_at,
-          }));
-
-          snapshot.plans = plans.map((p) => ({
-            id: p.id,
-            title: p.title,
-            summary: p.summary || '',
-            goal: p.title,
-            status: p.status,
-            derivedStatus: p.status,
-            statusReason: '',
-            priority: p.priority,
-            phase: 'implementation',
-            order: 0,
-            proposedDelta: '',
-            completionPolicy: '{}',
-            nextAction: '',
-            blockers: '[]',
-            startedAt: p.created_at,
-            completedAt: null,
-            invalidatedAt: null,
-            progress: { total: 0, passed: 0, failed: 0, percentage: 0 },
-            revision: 1,
-          }));
-
-          snapshot.blocks = blocks.map((b) => ({
-            id: b.id,
-            kind: b.kind || 'service',
-            title: b.title,
-            summary: b.summary || '',
-            body: b.details || '',
-            contract: '',
-            scope: 'project',
-            architectureLayer: 'domain',
-            localOrder: 0,
-            deliveryState: 'active',
-            healthState: 'healthy',
-            priority: 'normal',
-            revision: 1,
-            artifactRefs: refsByBlock.get(b.id) || [],
-          }));
-
-          snapshot.chains = chains.map((c) => ({
-            id: c.id,
-            title: c.title,
-            chainType: c.kind || 'leaf',
-            purpose: c.summary || '',
-            intent: c.title,
-            inputContract: '',
-            outputContract: '',
-            deliveryState: 'active',
-            healthState: 'healthy',
-            priority: 'normal',
-            topologyOrder: 0,
-            revision: 1,
-          }));
-
-          snapshot.links = links.map((l) => ({
-            id: l.id,
-            sourceType: 'block',
-            sourceId: l.from_id,
-            targetType: 'block',
-            targetId: l.to_id,
-            kind: l.kind || 'depends_on',
-            label: l.reason || '',
-            contract: '',
-            healthState: 'healthy',
-            revision: l.revision || 1,
-          }));
-
-          snapshot.checkpoints = checkpoints.map((cp) => ({
-            id: cp.id,
-            targetType: 'plan',
-            targetId: cp.plan_id,
-            title: cp.title,
-            criteria: cp.criteria || '',
-            status: cp.status || 'pending',
-            kind: 'atomic',
-            aggregationPolicy: '{}',
-            eligibleAfterChildren: false,
-            evidenceLevel: 'none',
-            requiredEvidenceLevel: 'static',
-            coverage: 'complete',
-            evidence: '[]',
-            invalidatedAt: null,
-            revision: 1,
-            updatedAt: cp.completed_at || new Date().toISOString(),
-          }));
-        } catch (e) {
-          console.error('Error querying D1 snapshot:', e);
-        }
-      }
-
-      return new Response(JSON.stringify(snapshot), { headers: CORS_HEADERS });
+      if (db) await seedStarterProjectIfNeeded(db, projectId);
+      const snapshot = await buildCloudSnapshot(db, projectId);
+      return new Response(JSON.stringify(snapshot), { headers: responseHeaders });
     }
 
     // 7. Tool call RPC endpoint (/api/v2/call)
@@ -839,15 +939,15 @@ export default {
         const { tool, input = {} } = body;
         const projectId = body.projectId || input.projectId || request.headers.get('x-contextos-project-id') || url.searchParams.get('projectId') || 'contextos';
         const result = await executeTool(tool, input, projectId, db);
-        return new Response(JSON.stringify({ result }), { headers: CORS_HEADERS });
+        return new Response(JSON.stringify({ result }), { headers: responseHeaders });
       } catch (err) {
         return new Response(JSON.stringify({ error: err.message }), {
           status: 500,
-          headers: CORS_HEADERS,
+          headers: responseHeaders,
         });
       }
     }
 
-    return new Response(JSON.stringify({ error: 'Not Found' }), { status: 404, headers: CORS_HEADERS });
+    return new Response(JSON.stringify({ error: 'Not Found' }), { status: 404, headers: responseHeaders });
   },
 };

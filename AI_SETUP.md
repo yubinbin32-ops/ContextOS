@@ -20,7 +20,7 @@ graph TD
     Step2 --> AskPlatform{询问用户配置哪些编辑器?\n[1] Cursor [2] Codex [3] Claude\n[4] Antigravity [5] OpenCode [6] 全部}
     AskPlatform --> Step3[Step 3: 询问协作需求]
     Step3 --> AskTeam{是否需要团队协同?\n[1] 单人开发 (本地模式)\n[2] 团队协同 (云端模式)}
-    AskTeam -->|选择 1: 单人开发| InjectLocal[按需注入平台 & 初始化本地模式] --> Finish([完成！开启 C-D-C-S 架构治理])
+    AskTeam -->|选择 1: 单人开发| InjectLocal[按需注入平台 & 初始化本地模式] --> Finish([完成！开启意图级开发循环])
     AskTeam -->|选择 2: 团队协同| CloudSetup[索取/配置 Cloudflare 凭据 & 初始化云端] --> Finish
 ```
 
@@ -38,7 +38,7 @@ graph TD
        [2] 仅安装插件（轻量命令行与 MCP 模式）
        ```
      * 若用户选择 `1`：
-       * AI 自动下载最新的 `ContextOS.app.zip` 并解压部署至 `/Applications/ContextOS.app`（或用户应用目录）。
+       * AI 自动下载最新 release 中的 `ContextOS-macos-full.zip`（或轻量版 `ContextOS-macos.zip`），解压并部署为 `/Applications/ContextOS.app`。
        * （提示用户：若首次打开提示未受信任的开发者拦截，可前往“系统设置 ➔ 隐私与安全性”点击“仍要打开”，或按住 Control 点击应用选择“打开”即可）。
      * 若用户选择 `2`：直接进入 Step 1。
    * 若操作系统为 **Windows / Linux**：
@@ -92,31 +92,36 @@ AI 询问用户的实际开发需求：
    node scripts/bootstrap.mjs --platforms <选定平台>
    ```
 2. **初始化当前项目**：
-   * 调用 `contextos_init(mode: "local", projectId: "contextos")`。
+   * 调用 `ops({ capability: "system", action: "init", args: { projectRoot, mode: "local" } })`。
+   * 不要传入固定 `projectId`；项目身份默认从 workspace 目录派生。只有明确采用旧项目状态时才使用迁移入口。
 3. **完成反馈**：
    ```text
    🎉 ContextOS 已配置完成（本地单人开发模式）！
    - 已注入平台：<选定平台>
    - 存储路径：当前项目 .contextos/
-   - 12 个核心 Facade 工具已就绪，即可开始日常开发。
+   - 五个意图级工具（explore/change/verify/ship/ops）已就绪，即可开始日常开发。
    ```
 
-### 选项 2：团队协同（云端模式）
+### 选项 2：团队协同（实验性云端模式）
+
+> Cloud Hub 仍为实验能力；除排障外优先使用本地模式。
 1. **AI 引导配置云端凭据**：
    * 若当前环境已有全局凭据，直接复用；
    * 若尚无凭据，AI 提供 1-Click Cloudflare 部署链接：
      ```markdown
      👉 请点击下方链接，一键部署云端中枢至您的 Cloudflare 账户：
-     https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/feat/cloud-hub
+     https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main
      
      💡 部署完成后，请将生成的 Worker 网址与 AUTH_TOKEN 发送给我。
      ```
    * 用户提供后，AI 执行 `node scripts/bootstrap.mjs --save-global-cloud --cloud-url "<URL>" --token "<TOKEN>"`。
+   * Cloud Hub 默认关闭匿名访问：必须配置 `AUTH_TOKEN` Worker secret；只有在明确测试时才设置 `ALLOW_OPEN_ACCESS=true`。跨域访问需通过 `ALLOWED_ORIGINS` allowlist，不接受 URL query token。
 2. **AI 执行平台注入与项目初始化**：
    ```bash
    node scripts/bootstrap.mjs --platforms <选定平台>
    ```
-   * 调用 `contextos_init(mode: "cloud", projectId: "contextos")`。
+   * 调用 `ops({ capability: "system", action: "init", args: { projectRoot, mode: "cloud" } })`。
+   * 同样不要固定 `projectId`；云同步使用从 workspace 派生的稳定身份。
 3. **完成反馈**：
    ```text
    🎉 ContextOS 已配置完成（团队云端协同模式）！
@@ -134,8 +139,8 @@ AI 询问用户的实际开发需求：
 
 ---
 
-## 随时双向无损切换机制 (`contextos_switch`)
+## 随时双向无损切换机制 (`ops system switch`)
 
 无论初始选择哪种模式，后续开发过程中均可根据需要随时通过一句话无损切换：
-* **本地 ➔ 云端**：用户说 *“把当前项目切换为云端协同模式”* ➔ AI 调用 `contextos_switch(targetMode: "cloud")`，本地所有 Block、Chain、Link、Plan 自动完整推送到 Cloud Hub；
-* **云端 ➔ 本地**：用户说 *“把当前项目切回本地开发”* ➔ AI 调用 `contextos_switch(targetMode: "local")`，云端最新快照自动落盘为本地 SQLite，后续完全离线运行。
+* **本地 ➔ 云端**：用户说 *“把当前项目切换为云端协同模式”* ➔ AI 调用 `ops({ capability: "system", action: "switch", args: { projectRoot, targetMode: "cloud" } })`，本地所有 Block、Chain、Link、Plan、Task 自动完整推送到 Cloud Hub；
+* **云端 ➔ 本地**：用户说 *“把当前项目切回本地开发”* ➔ AI 调用 `ops({ capability: "system", action: "switch", args: { projectRoot, targetMode: "local" } })`，云端最新快照自动落盘为本地 SQLite，后续完全离线运行。

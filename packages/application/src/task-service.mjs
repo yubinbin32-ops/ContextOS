@@ -382,6 +382,11 @@ export class TaskService {
       baseline = {},
     } = taskData;
 
+    const plan = planId ? this.db.getPlan(planId) : null;
+    if (!plan) throw new Error(`Task requires an existing Plan; Plan '${planId || '<missing>'}' not found`);
+    const phase = (plan.phases || []).find((item) => item.id === phaseId);
+    if (!phase) throw new Error(`Task requires an existing Phase; Phase '${phaseId || '<missing>'}' not found in Plan '${planId}'.`);
+
     const taskRules = Array.isArray(rules)
       ? rules
       : (Array.isArray(ruleRefs)
@@ -445,6 +450,15 @@ export class TaskService {
   updateTask(taskId, taskData = {}) {
     const raw = this.db.getTask(taskId);
     if (!raw) throw new Error(`Task '${taskId}' not found`);
+    if (taskData.planId !== undefined && taskData.planId !== raw.planId) {
+      throw new Error(`Task '${taskId}' cannot be moved to another Plan through update; create a new Task in the target phase.`);
+    }
+    if (taskData.phaseId !== undefined && taskData.phaseId !== raw.phaseId) {
+      throw new Error(`Task '${taskId}' cannot be moved to another Phase through update; create a new Task in the target phase.`);
+    }
+    if (taskData.status !== undefined && taskData.status !== raw.status) {
+      throw new Error(`Task '${taskId}' status is managed by lifecycle actions; raw update ${raw.status} -> ${taskData.status} is not allowed.`);
+    }
 
     const updated = { ...raw };
     if (taskData.title !== undefined) updated.title = taskData.title;

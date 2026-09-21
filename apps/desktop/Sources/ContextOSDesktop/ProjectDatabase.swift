@@ -37,6 +37,12 @@ final class ProjectDatabase {
         return DatabaseFileIdentity(systemFileNumber: value.uint64Value)
     }
 
+    private static func stringArray(from raw: String?) -> [String] {
+        guard let raw, let data = raw.data(using: .utf8),
+              let values = try? JSONSerialization.jsonObject(with: data) as? [String] else { return [] }
+        return values
+    }
+
     init(location: ProjectLocation) throws {
         self.location = location
         guard FileManager.default.fileExists(atPath: location.database.path) else {
@@ -200,7 +206,8 @@ final class ProjectDatabase {
                 nextAction: row.text("next_action"), blockers: row.text("blockers_json"),
                 startedAt: row.optionalText("started_at"), completedAt: row.optionalText("completed_at"),
                 invalidatedAt: row.optionalText("invalidated_at"), progress: .empty,
-                revision: row.int("current_revision")
+                revision: row.int("current_revision"),
+                ruleRefs: Self.stringArray(from: row.optionalText("rule_refs_json"))
             )
         }
         let links = try rows(
@@ -279,7 +286,7 @@ final class ProjectDatabase {
                 id: row.text("id"), planId: row.text("plan_id"), position: row.int("position"),
                 title: row.text("title"), action: row.text("action"), status: row.text("status"),
                 targetReferences: row.text("target_refs_json"), proposedDelta: row.text("proposed_delta_json"),
-                updatedAt: row.text("updated_at")
+                updatedAt: row.text("updated_at"), ruleRefs: []
             )
         }
         let planCheckpointReferences = try optionalRows(
@@ -549,27 +556,36 @@ final class ProjectDatabase {
                 id: location.descriptor.id,
                 name: location.descriptor.name,
                 root: location.root.path,
-                graphRevision: 1
+                graphRevision: 0
             )
         }
 
-        let blocks = try rows("SELECT * FROM blocks WHERE project_id = ? ORDER BY title", bindings: [project.id]).map { row in
-            let rawKind = row.optionalText("kind") ?? ""
-            let kind = rawKind.isEmpty ? "service" : rawKind
+        let blocks = try rows(
+            """
+            SELECT b.*, COUNT(ar.id) AS artifact_ref_count
+            FROM blocks b
+            LEFT JOIN artifact_refs ar ON ar.block_id = b.id
+            WHERE b.project_id = ?
+            GROUP BY b.id
+            ORDER BY b.title COLLATE NOCASE
+            """,
+            bindings: [project.id]
+        ).map { row in
+            let artifactCount = row.int("artifact_ref_count")
             return BlockItem(
                 id: row.text("id"),
-                kind: kind,
+                kind: row.optionalText("kind") ?? "",
                 title: row.text("title"),
                 summary: row.text("summary"),
                 body: row.text("details"),
                 contract: "",
-                scope: "general",
-                architectureLayer: "core",
+                scope: "",
+                architectureLayer: "",
                 localOrder: 0,
-                deliveryState: "complete",
-                healthState: "healthy",
+                deliveryState: artifactCount > 0 ? "complete" : "ghost",
+                healthState: artifactCount > 0 ? "healthy" : "missing",
                 priority: "normal",
-                revision: 1
+                revision: 0
             )
         }
 
@@ -587,15 +603,15 @@ final class ProjectDatabase {
             return ChainItem(
                 id: chainId,
                 title: row.text("title"),
-                chainType: row.text("kind").isEmpty ? "leaf" : row.text("kind"),
+                chainType: row.text("kind"),
                 purpose: row.text("summary"),
                 intent: "",
                 inputContract: "",
                 outputContract: "",
-                deliveryState: "complete",
-                healthState: "healthy",
+                deliveryState: "unknown",
+                healthState: "unknown",
                 priority: "normal",
-                revision: 1
+                revision: 0
             )
         }
 
@@ -609,8 +625,8 @@ final class ProjectDatabase {
                 kind: row.text("kind"),
                 label: row.text("kind"),
                 contract: "",
-                healthState: "healthy",
-                revision: 1
+                healthState: "unknown",
+                revision: 0
             )
         }
 
@@ -623,7 +639,17 @@ final class ProjectDatabase {
             }
         }
 
-        let sourceReferences = try rows("SELECT id, block_id, path, symbol, anchor_kind, hash, hash_mode, manifest, start_line, end_line, role FROM artifact_refs ORDER BY path, start_line", bindings: []).map { row in
+        let sourceReferences = try rows(
+            """
+            SELECT ar.id, ar.block_id, ar.path, ar.symbol, ar.anchor_kind, ar.hash, ar.hash_mode,
+                   ar.manifest, ar.start_line, ar.end_line, ar.role
+            FROM artifact_refs ar
+            JOIN blocks b ON b.id = ar.block_id
+            WHERE b.project_id = ?
+            ORDER BY ar.path, ar.start_line
+            """,
+            bindings: [project.id]
+        ).map { row in
             SourceReference(
                 id: row.text("id"),
                 blockId: row.text("block_id"),
@@ -639,8 +665,10 @@ final class ProjectDatabase {
                 gitCommit: nil
             )
         }
-        let planSteps = (try? rows("SELECT id, plan_id, phase_order, objective, scope, deliverables_json, status, acceptance_json FROM phases WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?) ORDER BY phase_order ASC", bindings: [project.id]))?.map { row in
-            PlanStep(
+        let planSteps: [PlanStep] = ((try? rows("SELECT id, plan_id, phase_order, objective, scope, deliverables_json, status, acceptance_json FROM phases WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?) ORDER BY phase_order ASC", bindings: [project.id])) ?? []).map { row -> PlanStep in
+            let taskRows = (try? rows("SELECT references_json FROM tasks WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?) AND phase_id = ? ORDER BY created_at ASC", bindings: [project.id, row.text("id")])) ?? []
+            let taskRules = taskRows.flatMap { Self.stringArray(from: $0.optionalText("references_json")) }
+            return PlanStep(
                 id: row.text("id"),
                 planId: row.text("plan_id"),
                 position: row.int("phase_order"),
@@ -649,91 +677,22 @@ final class ProjectDatabase {
                 status: row.text("status"),
                 targetReferences: row.optionalText("deliverables_json") ?? "[]",
                 proposedDelta: row.optionalText("acceptance_json") ?? "[]",
-                updatedAt: ""
-            )
-        } ?? []
-
-        let planId = "plan-v2-rebuild"
-
-        let planChainScopes = chains.enumerated().map { index, chain in
-            let memberIds = chainNodes.filter { $0.chainId == chain.id }.sorted(by: { $0.position < $1.position }).map(\.blockId)
-            let memberJson = (try? String(data: JSONSerialization.data(withJSONObject: memberIds), encoding: .utf8)) ?? "[]"
-            return PlanChainScopeItem(
-                id: "scope-\(chain.id)",
-                planId: planId,
-                chainId: chain.id,
-                position: index,
-                title: "\(chain.title) 端到端重构",
-                summary: chain.purpose.isEmpty ? "\(chain.title) 链路重构与测试闭环" : chain.purpose,
-                rationale: "拆解为解耦的高内聚单职责组件，纳入地铁轨道主链路统一管理与自动化验证。",
-                startBlockId: memberIds.first,
-                endBlockId: memberIds.last,
-                nodeIds: memberJson,
-                linkIds: "[]",
-                expectedDelta: "[\"重构模块接入轨道\",\"100%覆盖验证\"]",
-                prohibitions: "[\"禁止产生无代码引用的幽灵节点\"]",
-                status: "completed",
-                revision: 1
+                updatedAt: "",
+                ruleRefs: Array(Set(taskRules)).sorted()
             )
         }
 
-        let planChanges = blocks.enumerated().map { index, block in
-            PlanChangeItem(
-                id: "change-\(block.id)",
-                planId: planId,
-                entityType: "block",
-                entityId: block.id,
-                position: index,
-                title: "重构与接入 \(block.title)",
-                summary: block.summary,
-                currentBehavior: "旧版多职责混乱聚集或缺失独立边界",
-                proposedBehavior: "确立独立单职责模块，严格绑定源码与 AST 符号，通过 4/4 检查点测试",
-                rationale: "消除大泥球架构，实现真正精准的代码上下文提取与受控写入",
-                prohibitions: "[\"禁止脱离实际源码存在\"]",
-                expectedEffects: "[\"代码阅读上下文降低 77%+\",\"零幽灵节点\"]",
-                sourceRefs: "[\"block:\(block.id)\"]",
-                status: "completed",
-                revision: 1
-            )
-        }
+        let planChainScopes: [PlanChainScopeItem] = []
 
-        var planChainChangeReferences: [PlanChainChangeReference] = []
-        for scope in planChainScopes {
-            let memberIds = Set(Self.jsonStringArray(scope.nodeIds))
-            for (idx, change) in planChanges.filter({ memberIds.contains($0.entityId) }).enumerated() {
-                planChainChangeReferences.append(PlanChainChangeReference(
-                    chainScopeId: scope.id,
-                    planChangeId: change.id,
-                    role: "stage",
-                    position: idx
-                ))
-            }
-        }
+        let planChanges: [PlanChangeItem] = []
 
-        let totalSteps = planSteps.count
-        let completedSteps = planSteps.filter { $0.status == "completed" }.count
-        let planProgress = PlanProgress(
-            completedSteps: completedSteps,
-            totalSteps: totalSteps,
-            passedRequiredCheckpoints: 4,
-            totalRequiredCheckpoints: 4,
-            directBlockChanges: WorkProgress(completed: blocks.count, total: blocks.count),
-            chainChanges: WorkProgress(completed: chains.count, total: chains.count),
-            linkChanges: WorkProgress(completed: links.count, total: links.count),
-            chainIntegrationGates: GateProgress(passed: chains.count, total: chains.count),
-            planAcceptanceGates: GateProgress(passed: 4, total: 4)
-        )
+        let planChainChangeReferences: [PlanChainChangeReference] = []
 
-        let proposedDeltaJSON = """
-        [
-          {"type": "architecture", "change": "重构 18 个单职责 Block，消除大泥球架构并确立清晰服务边界"},
-          {"type": "chain", "change": "建立 AST 核心分析、MCP 统一协议、SwiftUI 桌面交互 3 条端到端主链路"},
-          {"type": "schema", "change": "升级 SQLite 存储为 V2 规范并支持跨平台同步与状态快照"},
-          {"type": "canvas", "change": "实现白色高精工程语言与 iOS 克制美学的 Metro 轨道式架构画布"}
-        ]
-        """
+        let planProgress = PlanProgress.empty
 
-        let plans = try rows("SELECT id, project_id, title, priority, status, summary FROM plans WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
+        let proposedDeltaJSON = "[]"
+
+        var plans = try rows("SELECT id, project_id, title, priority, status, summary FROM plans WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
             PlanItem(
                 id: row.text("id"),
                 title: row.text("title"),
@@ -743,7 +702,7 @@ final class ProjectDatabase {
                 derivedStatus: row.text("status"),
                 statusReason: "",
                 priority: row.text("priority"),
-                phase: "V2",
+                phase: "",
                 order: 0,
                 proposedDelta: proposedDeltaJSON,
                 completionPolicy: "{}",
@@ -752,8 +711,9 @@ final class ProjectDatabase {
                 startedAt: nil,
                 completedAt: nil,
                 invalidatedAt: nil,
-                progress: planProgress,
-                revision: 1
+                progress: .empty,
+                revision: 0,
+                ruleRefs: Self.stringArray(from: row.optionalText("rule_refs_json"))
             )
         }
 
@@ -771,79 +731,64 @@ final class ProjectDatabase {
                 aggregationPolicy: "{}",
                 eligibleAfterChildren: false,
                 evidenceLevel: isPassed ? "static" : "none",
-                requiredEvidenceLevel: "static",
-                coverage: "complete",
+                requiredEvidenceLevel: "none",
+                coverage: isPassed ? "complete" : "unknown",
                 evidence: row.optionalText("evidence_refs_json") ?? "[]",
                 invalidatedAt: nil,
-                revision: 1,
+                revision: 0,
                 updatedAt: row.optionalText("completed_at") ?? ""
             )
         } ?? []
 
-        var chainCheckpoints: [CheckpointItem] = []
-        var checkpointBindings: [CheckpointBinding] = []
-        for (index, chain) in chains.enumerated() {
-            let chkId = "chk-chain-\(chain.id)"
-            chainCheckpoints.append(CheckpointItem(
-                id: chkId,
-                targetType: "chain",
-                targetId: chain.id,
-                title: "\(chain.title) 端到端集成门禁",
-                criteria: "主轨道上各 Block 契约及跨模块正交数据流验证通过",
-                status: "passed",
-                kind: "integration",
-                aggregationPolicy: "{}",
-                eligibleAfterChildren: false,
-                evidenceLevel: "static",
-                requiredEvidenceLevel: "static",
-                coverage: "complete",
-                evidence: "[\"test:pass\"]",
-                invalidatedAt: nil,
-                revision: 1,
-                updatedAt: ""
-            ))
-            checkpointBindings.append(CheckpointBinding(
-                checkpointId: chkId,
-                subjectType: "plan_chain_scope",
-                subjectId: "scope-\(chain.id)",
-                role: "integration_gate",
-                required: true,
-                position: index
-            ))
-        }
-
-        let blockCheckpoints = blocks.enumerated().map { index, block in
-            CheckpointItem(
-                id: "chk-block-\(block.id)",
-                targetType: "block",
-                targetId: block.id,
-                title: "\(block.title) 静态与 AST 契约验证",
-                criteria: "源码存在且 AST 符号准确锚定，无幽灵引用",
-                status: "passed",
-                kind: "atomic",
-                aggregationPolicy: "{}",
-                eligibleAfterChildren: false,
-                evidenceLevel: "static",
-                requiredEvidenceLevel: "static",
-                coverage: "complete",
-                evidence: "[\"block:\(block.id)\"]",
-                invalidatedAt: nil,
-                revision: 1,
-                updatedAt: ""
+        let checkpoints = rawCheckpoints
+        let checkpointBindings: [CheckpointBinding] = []
+        let planCheckpointReferences = rawCheckpoints.enumerated().map { index, checkpoint in
+            PlanCheckpointReference(
+                planId: checkpoint.targetId,
+                checkpointId: checkpoint.id,
+                stepId: nil,
+                position: index,
+                required: true
             )
         }
-        for (index, block) in blocks.enumerated() {
-            checkpointBindings.append(CheckpointBinding(
-                checkpointId: "chk-block-\(block.id)",
-                subjectType: "block",
-                subjectId: block.id,
-                role: "verified",
-                required: true,
-                position: index
-            ))
-        }
 
-        let checkpoints = rawCheckpoints + chainCheckpoints + blockCheckpoints
+        plans = plans.map { plan in
+            let steps = planSteps.filter { $0.planId == plan.id }
+            let planCheckpoints = checkpoints.filter { $0.targetId == plan.id }
+            let passed = planCheckpoints.filter { $0.status == "passed" }.count
+            return PlanItem(
+                id: plan.id,
+                title: plan.title,
+                summary: plan.summary,
+                goal: plan.goal,
+                status: plan.status,
+                derivedStatus: plan.derivedStatus,
+                statusReason: plan.statusReason,
+                priority: plan.priority,
+                phase: plan.phase,
+                order: plan.order,
+                proposedDelta: plan.proposedDelta,
+                completionPolicy: plan.completionPolicy,
+                nextAction: plan.nextAction,
+                blockers: plan.blockers,
+                startedAt: plan.startedAt,
+                completedAt: plan.completedAt,
+                invalidatedAt: plan.invalidatedAt,
+                progress: PlanProgress(
+                    completedSteps: steps.filter { $0.status == "completed" }.count,
+                    totalSteps: steps.count,
+                    passedRequiredCheckpoints: passed,
+                    totalRequiredCheckpoints: planCheckpoints.count,
+                    directBlockChanges: .empty,
+                    chainChanges: .empty,
+                    linkChanges: .empty,
+                    chainIntegrationGates: .empty,
+                    planAcceptanceGates: GateProgress(passed: passed, total: planCheckpoints.count)
+                ),
+                revision: plan.revision,
+                ruleRefs: plan.ruleRefs
+            )
+        }
 
         let decisionPath = location.root.appendingPathComponent("DECISION.md")
         let decisions: [DecisionItem]
@@ -852,11 +797,11 @@ final class ProjectDatabase {
         } else {
             decisions = []
         }
-        let decisionScopes = decisions.map { DecisionScope(decisionID: $0.id, scopeType: "global", scopeValue: "all") }
+        let decisionScopes: [DecisionScope] = []
 
         return GraphSnapshot(
             project: project,
-            changeSequence: 0,
+            changeSequence: project.graphRevision,
             blocks: blocks,
             chains: chains,
             plans: plans,
@@ -867,7 +812,7 @@ final class ProjectDatabase {
             planChainReferences: [],
             planDependencies: [],
             planSteps: planSteps,
-            planCheckpointReferences: [],
+            planCheckpointReferences: planCheckpointReferences,
             planChainScopes: planChainScopes,
             planChanges: planChanges,
             planChainChangeReferences: planChainChangeReferences,
@@ -1072,7 +1017,8 @@ final class ProjectDatabase {
             derivedStatus: status, statusReason: reason, priority: plan.priority, phase: plan.phase, order: plan.order,
             proposedDelta: plan.proposedDelta, completionPolicy: plan.completionPolicy, nextAction: plan.nextAction,
             blockers: plan.blockers, startedAt: plan.startedAt, completedAt: plan.completedAt,
-            invalidatedAt: plan.invalidatedAt, progress: progress, revision: plan.revision
+            invalidatedAt: plan.invalidatedAt, progress: progress, revision: plan.revision,
+            ruleRefs: plan.ruleRefs
         )
     }
 

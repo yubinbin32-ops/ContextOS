@@ -112,6 +112,7 @@ struct PlanItem: Identifiable, Equatable {
     let invalidatedAt: String?
     let progress: PlanProgress
     let revision: Int
+    let ruleRefs: [String]
 }
 
 struct PlanProgress: Equatable {
@@ -196,6 +197,7 @@ struct PlanStep: Identifiable, Equatable {
     let targetReferences: String
     let proposedDelta: String
     let updatedAt: String
+    let ruleRefs: [String]
 }
 
 struct PlanCheckpointReference: Equatable {
@@ -433,33 +435,6 @@ struct GraphSelection: Equatable, Hashable {
 
     let type: EntityType
     let id: String
-}
-
-enum ViewLens: String, CaseIterable, Identifiable {
-    // Canvas filters are a projection of the canonical architectural Block.kind values.
-    // Tests belong to Plans/Checkpoints and are not architectural blocks.
-    case principle = "Principle"
-    case product = "Product"
-    case requirement = "Requirement"
-    case flow = "Flow"
-    case ui = "UI"
-    case service = "Service"
-    case function = "Function"
-    case api = "API"
-    case integration = "Integration"
-    case data = "Data"
-    case database = "Database"
-    case risk = "Risk"
-
-    var id: String { rawValue }
-
-    func includes(block: BlockItem) -> Bool {
-        block.kind.caseInsensitiveCompare(rawValue) == .orderedSame
-    }
-
-    static func forKind(_ kind: String) -> ViewLens? {
-        allCases.first { $0.rawValue.caseInsensitiveCompare(kind) == .orderedSame }
-    }
 }
 
 enum SidebarSection: String, CaseIterable, Identifiable {

@@ -16,11 +16,11 @@ In traditional workflows with large repositories, an AI agent is forced to haul 
 With ContextOS, the AI sheds the deadweight and lets the **MCP protocol auto-govern context**:
 1. **Exoskeleton-Powered Precision**: Compiler-grade AST tools surgically inspect and edit only the relevant symbols and syntax blocks, eliminating whole-file dumps;
 2. **Out-of-Context Isolation**: Terminal logs are safely captured to a sandboxed disk store, returning compact diagnostic receipts to strip 98%+ of terminal noise;
-3. **Unified Neural Metro Map**: Architectural memory and the C-D-C-S task lifecycle are synchronized in a visual subway map, giving the AI immediate full-picture clarity.
+3. **Unified Neural Metro Map**: Architectural memory and the derived module graph are synchronized in a visual subway map, giving the AI immediate full-picture clarity.
 
 **In real-world multi-step tasks, ContextOS reduces redundant context consumption by over 90%**, eliminating context explosion and memory loss across long-running sessions.
 
-![ContextOS V2 Metro Map Architecture and Desktop App](docs/images/contextos-desktop-v2.png)
+![ContextOS Metro Map Architecture and Desktop App](docs/images/contextos-desktop-v2.png)
 
 ## What changes in daily development?
 
@@ -29,11 +29,11 @@ Blocks bind to real files, AST symbols, or directory trees (zero ghost blocks al
 
 ![Feature Path with Exact Code Locations](assets/path-impact.png)
 
-### 2. Progress follows the C-D-C-S lifecycle
-Work flows strictly through **Create → Develop → Check → Sync**. Tasks carry an explicit context slice, intermediate development notes, and sandboxed test checks, completing with an atomic sync that enforces a 100% workspace code coverage gate.
+### 2. The agent states intent, the OS runs the loop
+The agent only calls `explore` → `change` → `verify` → `ship`. The OS derives the working set from git, files code under AST-derived modules, attaches verification receipts automatically and keeps every response inside a context budget. Coverage and evidence gates are advisory by default; `strict: true` in `.contextos/profile.json` restores hard enforcement.
 
 ### 3. Commands run out-of-context
-`run_command` strips ANSI noise, redacts secrets, saves the full sanitized log into `.contextos/logs/`, and returns a compact receipt with critical error diagnostics, reducing terminal noise by over 98%.
+The command gateway behind `verify` and `ops` strips ANSI noise, redacts secrets, saves the full sanitized log into `.contextos/logs/`, and returns a compact receipt with critical error diagnostics, reducing terminal noise by over 98%.
 
 ### 4. Code tools operate surgically
 Multi-language AST engines (compiler-grade parsing for JS/TS/JSX/TSX, Python, Swift, Java, Kotlin, C/C++, C#, Go, Rust, PHP, Ruby) allow VS Code-style symbol search, outline inspection, and surgical reading/editing with automatic symbol re-anchoring.
@@ -135,22 +135,33 @@ Add standard stdio MCP configuration to your editor (`mcp.json` or `claude_deskt
 
 ---
 
-## Storage Modes: Local & Cloud Collaboration
+## Storage Modes: Local & Experimental Cloud Collaboration
 
 ContextOS treats the **local workspace project directory** as the absolute source of truth (code reads, AST edits, test runs, and logs always run locally):
 
 - **Local Storage Mode**: Designed for solo development. Architecture data is stored in the project's `.contextos/state.sqlite`. 100% offline, private, and zero network latency.
-- **Cloud Collaboration Mode**: Designed for team collaboration. Connects to a serverless Cloud Hub (Cloudflare D1 edge database) to synchronize architectural topology and progress across teammates and devices.
+- **Experimental Cloud Collaboration Mode**: Designed for evaluating team collaboration. Connects to a serverless Cloud Hub (Cloudflare D1 edge database) to synchronize architectural topology and progress across teammates and devices. Treat this mode as experimental until its API and operational model stabilize.
   - **Multi-Project Strict Isolation**: Cloud Hub partitions entities by `projectId`. A single Cloudflare Worker backs multiple independent repositories cleanly.
 - **Lossless Two-Way Switching**: Switch storage modes anytime by prompting your AI:
   - *"Switch current project to cloud collaboration mode"* ➔ Local SQLite graph is pushed to Cloud D1.
   - *"Switch current project back to offline local mode"* ➔ Cloud snapshot is synced back to local SQLite for offline development.
 
-## Reproducible V2 Benchmark
+## Architecture Evolution
 
-The measurements below were verified on the self-adopted ContextOS V2 repository (18 Blocks, 3 Chains, 18 Links, 49 files, 100% coverage).
+ContextOS has deliberately changed direction as real usage exposed new costs:
 
-| Development Phase | Traditional AI Workflow | ContextOS V2 Workflow | Reduction Rate |
+- **0.4.x:** regex parsing, Ghost Blocks, and a 49-tool MCP surface made architectural memory unreliable.
+- **V2:** introduced real-code Blocks, AST-backed visibility, SQLite plus `graph.json`, and formal development governance.
+- **Intent-level architecture:** collapsed the public surface to `explore` / `change` / `verify` / `ship` / `ops`, moved orchestration into the OS, and made module metadata derive from the codebase.
+- **2.5.0:** hardens project identity, release/update paths, graph synchronization, atomic edits, and lifecycle gates.
+
+[Read the full decision history](DECISION.md).
+
+## Reproducible ContextOS Benchmark
+
+The benchmark is generated from the current repository and is intentionally not hard-coded to a historical Block/Chain/Link count. Run it locally to produce the measurements for your checkout:
+
+| Development Phase | Traditional AI Workflow | ContextOS Intent Workflow | Reduction Rate |
 |---|---|---|---:|
 | **Session Bootstrap (Ingestion)** | Read full graph & repo files (61,902 chars / ~15,476 tokens) | Progressive L0-L1 Markdown (1,987 chars / ~497 tokens) | **96.79%** |
 | **Code Structure Exploration** | Full file inspections (34,045 chars / ~8,512 tokens) | AST Symbol Outlines (4,374 chars / ~1,093 tokens) | **87.15%** |
@@ -175,7 +186,8 @@ cd ContextOS
 npm ci
 npm test
 npm run plugin:verify
-npm run desktop:build       # macOS + Swift/Xcode
+npm run verify             # full release gate
+npm run desktop:build      # macOS + Swift/Xcode
 ```
 
 The versioned `.contextos/graph.json` is the project's portable graph projection.

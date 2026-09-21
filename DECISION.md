@@ -1,6 +1,19 @@
-# Project Decisions (Architectural Decision Records)
+# ContextOS Architecture Decision Records
 
-This document records the architectural history, lessons learned from past wrong paths, and permanent design decisions for ContextOS V2.
+This document records ContextOS's architectural history, lessons learned from past wrong paths, and permanent design decisions. Historical entries are retained for traceability; decisions marked as superseded no longer describe the current architecture.
+
+## 架构演进速览
+
+| 阶段 | 主要变化 | 结果 |
+| --- | --- | --- |
+| 0.4.x 及以前 (DEC-001) | 正则伪 AST、Ghost Block、49 个工具的单一 MCP 面、碎片化 Checkpoint、桌面端直接访问 SQLite | 架构事实不可靠，工具选择和元数据维护吞掉大量 AI 回合 |
+| V2 重建 (DEC-001/002/008/009) | 独立 Plugin 与 SwiftUI App 分层、Action Facade、C-D-C-S、真实代码 Block、SQLite + `graph.json` 双物化 | 建立可回滚、可验证的架构事实，但治理流程逐步膨胀 |
+| AST 与上下文引擎升级 (DEC-006/010/011) | Tree-sitter WASM 多语言解析、`mtime + SHA256` 外部修改检测、符号级读写、命令出舱 Receipt | 从“整文件倾倒”升级为编译器级切片与证据化执行 |
+| Artifact Ledger 试验与回退 (DEC-013/015) | 移除逐文件 Artifact/BuildRun 台账，改用目录树锚点与 manifest/content Hash | 减少重复状态和图谱噪声，保留有界依赖边界 |
+| 意图级架构 (DEC-016/017/018/019) | 对外收敛为 `explore/change/verify/ship/ops`，服务端编排器接管流程，模块派生，治理默认 advisory，V2 facade 退出主入口 | AI 只表达意图，不再手工驱动状态机；上下文与调用往返显著下降 |
+| 2.5.0 生产加固 (DEC-012/020/021/022) | 项目身份派生、显式 workspace root、原子 changeset、图谱同步自愈、分发/升级验证、Plan/Task 生命周期门禁、Cloud 鉴权 | 从功能可用推进到可发布、可升级、可审计的工程状态 |
+
+当前公开入口固定为 `explore`、`change`、`verify`、`ship`、`ops`。代码事实由真实文件与 AST 锚点维护；SQLite 负责事务状态，`graph.json` 负责 Git 可移植投影；Cloud Hub 仍为实验能力。
 
 ---
 
@@ -33,6 +46,8 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
 ---
 
 ## [DEC-004] True AST Parsing Engine (@babel/parser & Python Native ast) vs Regex Line-Matching
+
+> 状态：已被 DEC-010（Tree-sitter WebAssembly 引擎）取代，保留作历史。
 
 - **Status**: Accepted
 - **Context & Mistaken Paths (历史弯路)**:
@@ -108,6 +123,8 @@ Decision: Use deterministic graph.json exported from SQLite on task_sync. Watch 
 ---
 
 ## [DEC-008] C-D-C-S Development Protocol & 100% Code Coverage Gate
+
+> 状态：已被 DEC-016 / DEC-017 取代。AI 不再驱动 C-D-C-S 状态机，覆盖率门禁在 V3 路径下降为 advisory，保留作历史。
 
 - **Status**: Accepted
 - **Context & Mistaken Paths (历史弯路)**:
@@ -214,6 +231,8 @@ BuildRun 记录 `inputSources`、`provenance.confidence` 和解析诊断。`run_
 
 ## [DEC-014] Preserve the Comprehensive Skill Manual and Apply Only Minimal Delta Updates
 
+> 状态：已被 DEC-017 取代。Skill 已重写为 ≤10KB 的意图级手册，保留作历史。
+
 ### 1. 背景
 曾尝试把 Skill 从约 37KB 压缩为约 5KB 路由卡，并把完整工具说明拆到独立 `tool-routing.md`。该实验减少了单次加载体积，却削弱了 AI 对工具用途、使用时机和操作顺序的直接感知，容易产生工具误用、漏用或行动迟疑。Skill 不是普通文档，而是智能体的默认操作手册。
 
@@ -228,6 +247,8 @@ Skill 的维护原则改为“先保留完整认知，再做局部精确更新�
 
 ## [DEC-015] Remove Artifact Ledger and Promote Directory Tree Bindings
 
+> 状态：已完成的清理动作（Artifact 体系已移除），保留作历史。
+
 ### 1. 背景
 DEC-013 为了解决生成物与构建来源追踪引入了 Artifact Ledger、Artifact Inbox 和 BuildRun。实际自举后，53 条 Artifact 中有 44 条是 Block 已经管理的源码，UI 只展示前十项且无法表达目录型依赖边界。该方案把文件台账、构建来源和覆盖门禁混在一起，造成重复状态、持续清理成本和错误的产品价值预期。
 
@@ -239,3 +260,103 @@ DEC-013 为了解决生成物与构建来源追踪引入了 Artifact Ledger、Ar
 
 ### 4. 影响与后果
 MCP 工具从 13 个缩减为 12 个，Artifact 表、服务、桌面页面和 CLI 命令被删除。Task Sync 对所有 workingSet 文件执行精确 file/symbol 或 tree 覆盖校验；源码覆盖门禁不再依赖 Artifact 分类。历史 graph.json 中的 artifacts 与 buildRuns 在导入时忽略，旧 SQLite 表在 schema v3 迁移中删除。构建追溯仍需时，使用 `.contextos/logs` 与 Receipt，而不是架构图。
+
+---
+
+## [DEC-016] Inversion of Control: Intent-Level Ingress with Server-Side Orchestration
+
+### 1. 背景
+V2 收敛出 12 个 facade、57 个 action，并强制 AI 手工驱动 C-D-C-S 状态机与 100% Block 覆盖门禁。随着能力增长，工具面、参数包（`taskData`/`checkData`/`syncData`/`blockData`/`chainData`/`linkData` 全为自由结构）与 Skill 散文同步膨胀：SKILL.md 达 35KB，本仓库自身维护 69 blocks / 20 chains / 109 links。AI 的回合被消耗在"选择工具 + 元数据记账 + 门禁修复舞"上，而不是写代码。诊断结论是：省上下文的只有 AST 切片与日志脱敏，治理层是纯成本。
+
+### 2. 决策
+控制反转：AI 只表达意图，OS 在服务端编排内部能力。新增 `packages/orchestrator`（IntentRouter / Pipeline / ContextBudget / Observer / SessionStore / Tracer）与 `packages/mcp/src/v3-server.mjs`，对外只暴露 5 个意图级工具 `explore` / `change` / `verify` / `ship` / `ops`。V2 的 12 个 facade 全部降级为内部能力，通过 `ops({ capability, action, args })` 直通保留。会话状态由 git 与编辑行为派生（SessionStore 只有 open / closed 两态），覆盖率与证据门禁默认降级为 advisory，`.contextos/profile.json` 的 `strict: true` 可恢复硬门禁。
+
+### 3. 原因与替代方案取舍
+备选方案一是继续给 V2 打补丁（合并 action、精简 Skill），但工具面与状态机是同一套治理模型的两面，补丁只能缓解调用次数，无法消除"AI 必须知道该点哪个工具"的认知负担。备选方案二是让服务端调用模型做规划，会引入延迟、成本与不可复现性；最终采用确定性路由（关键词 + 结构特征打分）+ 固定流水线，零额外模型调用且可追踪。保留 `ops` 直通是为了不丢失任何既有能力，也让误判有逃生舱。
+
+### 4. 影响与后果
+V2 入口与插件产物在 P0 阶段保持不变（plugin smoke 仍校验 12 工具），V3 以 `npm run mcp:v3` 并行启用，由 `npm run v3:smoke` 守卫。服务工厂（`service-factory.mjs`）与三个系统能力（`system-tools.mjs`）从 `v2-server.mjs` 抽出，v2-server 由 671 行降至 295 行且行为不变；顺带修复了 `contextos_switch` 到 cloud 分支中 `dbPath` 未定义导致的崩溃。后续 P1 落地流水线与派生索引、P2 移除手工绑定义务、P3 下线旧 facade 并精简 Skill（届时 DEC-014 的 Skill 保留条款需一并修订）。
+
+---
+
+## [DEC-017] Derived Module Index, Advisory Governance and Retirement of the V2 Facade Surface
+
+### 1. 背景
+DEC-016 把入口收敛到 5 个意图级工具后，治理层仍有一处结构性成本：模块必须人工声明（本仓库 69 blocks / 20 chains / 109 links），`task.sync` 的 100% 覆盖率门禁把元数据缺失升级为硬失败，AI 因此要先做图书管理员再做程序员。同时 DEC-014 要求保留 35KB 的综合性 Skill 手册，与"减少 AI 认知负担"的目标直接冲突。
+
+### 2. 决策
+1. 新增 `ModuleIndex`：由 AST（`LanguageRegistry.parseStructure`）与目录聚类派生 `mod-*` 模块，按 mtime+size 增量缓存于 `.contextos/module-index.json`；`explore` 优先展示派生模块。`ship` 对被改动且无归属的文件执行 best-effort `block.bind_auto`，把派生模块写回图谱 —— 永不阻塞、永不打断闭环。
+2. 治理降级为 advisory：V3 路径不再触发任何覆盖率或证据硬门禁（无绿色回执仍可 `ship`，仅标记 unverified）；`.contextos/profile.json` 的 `strict: true` 为需要强制的团队保留硬门禁。
+3. 插件产物改为打包 `v3-server.mjs`，V2 facade 全部经 `ops` 直通保留；SKILL.md 重写为 ≤10KB 的意图级手册；`plugin-smoke` 改为校验 5 工具 + 完整循环 + 脱敏 + ops 可达性。`npm run mcp:v2` 保留 V2 入口作为回滚通道。
+
+### 3. 原因与替代方案取舍
+替代方案是继续保留双入口并行（V2 与 V3 同时暴露 17 个工具）：但工具定义本身占上下文，双入口让 AI 重新陷入"该点哪个"的选择负担，与 DEC-016 的目标相悖。完全删除 V2 facade 则会丢失 Plan/Checkpoint/Chain 等仍有用户价值的治理能力，因此改为 `ops` 内层保留、外层收敛。Skill 瘦身上，DEC-014 的"最小增量"条款在入口已反转后不再成立：手册的主要篇幅是在教 12 个 facade 的用法，而这正是被移除的认知负担本身。
+
+### 4. 影响与后果
+MCP 工具 12 → 5，SKILL.md 35KB → 约 5.5KB，单次 `explore` 实测约 3KB（≈750 token）即可命中目标模块与符号。派生模块会随首次 `ship` 写入 graph.json（kind: `module`），桌面端可见但不再要求 AI 创建；`no-ghost-blocks` 不变式仍然成立，因为每个派生 Block 都由真实文件与 AST 符号锚定。代价是架构图谱的语义质量从"人工策展"下降为"自动聚类"，需要策展语义时仍可用 `ops` 的 block/chain 覆盖。
+
+---
+
+## [DEC-018] Development-Flow Simulation as the Acceptance Gate
+
+### 1. 背景
+前 17 条决策全部以"理论上的上下文节省率"作为验收依据（DEC-011 的双基准、DEC-016 的单次返回体积）。但真正的判据是：AI 能不能用这套接口把一个真实开发任务从头做完。缺少端到端的行为验证，就无法判断精简后的接口是否还能覆盖开发需要。
+
+### 2. 决策
+新增 `scripts/dev-flow-sim.mjs` 作为验收门禁，并纳入 `npm run verify`。它用同一份 fixture 跑四个真实开发任务（新增功能并补测试、修 bug、第一版修复失败后迭代到通过、纯理解定位），分别在 V3 意图面与 V2 facade 上各跑一遍，统计调用次数、返回字符数、因门禁触发的修复回合与最终状态是否落库。V3 侧的智能体只提供 intent 与补丁，其余步骤全部取自 OS 返回的 `👉 tool({...})` 机器可读提示。
+
+### 3. 原因与替代方案取舍
+替代方案是继续维护 `comprehensive-dev-eval.mjs` 这类按维度打分的静态评测，但它只检查能力是否存在，不检查完成一个任务要付多少代价。模拟真实流程才能同时覆盖"功能不丢失"与"成本是否下降"两个判据。V2 对照实验中特意让智能体只记录通过的 check —— 若照文档如实记录一次失败 check，`task.sync` 会直接拒绝（`Cannot sync task with 1 failed checks`），任务再也无法推进，这本身就是门禁代价的证据。
+
+### 4. 影响与后果
+实测（2026-09-20，M1/Node 22）：V3 15 次调用 / 7108 字符 vs V2 48 次调用 / 22666 字符，往返与上下文各降约 69%；V2 因覆盖率门禁产生 6 个修复回合，V3 为 0。四个场景 V3 均完成且状态落库（会话 closed + 绿色回执）。门禁判据固定为：完成、`≤ maxCalls`、零修复回合、调用数与字符数均低于 V2 —— 任一项失败则 `npm run verify` 退出非零。
+
+---
+
+## [DEC-019] Delete the V2 Facade Surface and Its Tooling
+
+### 1. 背景
+DEC-017 之后 V2 的 12 个 facade 只剩回滚价值，但它们的存在本身是成本：`tool-contract.mjs` 与 `v2-server.mjs` 需要同步维护，`plugin-smoke` 之外还有一整套 V2 端到端脚本，AI 侧还要在文档里看到两套入口。保留双入口与 DEC-016 的"减少选择负担"目标相悖。
+
+### 2. 决策
+删除 `packages/mcp/src/v2-server.mjs`、`server.mjs`、`service.mjs`、`tool-contract.mjs`、`packages/mcp/test/v2-mcp.test.mjs`、`scripts/manual-zero-project-verification.mjs` 与 `scripts/v3-smoke.mjs`；移除 `mcp:v2`、`plugin:build:v2`、`v3:smoke` 三个 npm 脚本与 `dist/contextos-mcp-v2.mjs` 产物。V3 的 MCP 面测试迁入 `packages/mcp/test/v3-mcp.test.mjs`（随 `npm test` 运行），出货产物仍由 `plugin-smoke` 守，验收由 `dev-flow-sim` 守。`dev-flow-sim` 的 V2 对照改为直接驱动 `ContextOSV2Service`（服务层仍在，供 `ops` 与编排器复用），因此 A/B 测量继续有效。
+
+### 3. 原因与替代方案取舍
+替代方案是把 V2 冻结为"不再维护但保留"的死代码：省一次删除，却要长期承担文档分叉、契约漂移与新人误用的成本，且 `tool-contract` 的单源真理约束会持续制造维护负担。删除的唯一真实损失是回滚通道 —— 但 V2 协议的问题正是本次重构要消除的对象（覆盖率门禁、失败 check 卡死、状态机记账），回滚到它没有意义；真要回滚可用 git 历史。V2 端到端脚本覆盖的云端切换、chain/link、进程托管等能力仍可通过 `ops` 手工验证，`system-tools.mjs` 未删。
+
+### 4. 影响与后果
+`npm test` 由 79 降为 70 项（删 11 项 V2 MCP 测试、增 2 项 V3 MCP 测试），`npm run verify` 链路缩短且全绿。仓库内已无任何代码 import 被删模块；`self-adopt.mjs` 中的文件清单同步更新为 V3 入口。`worker.js` / `apps/cloud` 中的 C-D-C-S 文案属于云端 Hub 侧，本次不动。
+
+---
+
+## [DEC-020] Chinese Graph Re-foundation and Rule / Plan Purge
+
+### 1. 背景
+图谱里还留着英文时代的状态：19 个英文 Block（其中 `block-mcp-facades` 还写着 "Consolidated 12 MCP Facades"，与 V3 事实冲突）、3 条粗粒度 Chain、18 条 Link，以及 10 个已完成的 Plan 与 22 个 Task 的历史台账；规则库 8 条里 `rule-cdcs-workflow` 已被意图闭环取代，`rule-out-of-context-commands` 与 `rule-command-sessions` 内容重叠，`rule-product-contract` 与 `rule-no-ghost-blocks` 同属"架构真理"命题。这些陈旧事实会被 `explore` 直接注入上下文，等于让 AI 读到错误的架构。
+
+### 2. 决策
+新增 `scripts/manual-rearchitect.mjs`（`npm run rearchitect`，幂等）：先清空历史 Plan/Task 与全部 Block/Chain/Link，再按 V3 的真实代码结构重建 **22 个中文 Block / 7 条 Chain / 21 条跨链 Link**，全部经 `bind_auto` 绑定真实文件与 AST 锚点。规则库由 8 条合并为 6 条并全部改写为中文：`rule-intent-loop`、`rule-out-of-context-execution`（合并两条命令规则）、`rule-surgical-code-editing`、`rule-context-budget`（取代 context-reduction）、`rule-architecture-truth`（合并 product-contract 与 no-ghost-blocks）、`rule-ui-aesthetic-precision`。DECISION.md 对已失效条目（DEC-004/008/014/015）加"状态：已被 X 取代"标记，保留历史但不再具备规范效力。
+
+### 3. 原因与替代方案取舍
+替代方案是就地改标题与摘要：成本低，但 Chain 只有 3 条、跨链关系 18 条且新旧混杂，无法表达"意图入口 → 编排内核 → 内部能力 → AST/存储/执行"的真实调用方向，地铁图也会继续呈现一团乱麻。全量重建的风险是丢失人工策展语义，因此重建时按包边界与调用方向重新划分（意图编排 / AST 代码智能 / 状态存储 / 执行 / 渲染布局 / 桌面端 / 分发云端验证），并用带类型的 Link 显式记录 `calls` 与 `depends_on`。历史 Plan 全部 completed/archived，删除不影响任何进行中的工作；Task 随外键级联删除。
+
+### 4. 影响与后果
+`graph.json` 重新导出（rev 428+），`explore` 现在会注入中文模块名与中文规则标题，跨语言一致。规则从 8 条降至 6 条，注入候选更聚焦；`rule-architecture-truth` 把"中文命名 Block/Chain"写成硬约束，防止再次漂移回英文。代价：桌面端地铁图的旧收藏与布局坐标失效，需要重新摆放一次。
+
+## [DEC-021] 派生产物分歧自愈与只读动作免门禁
+
+### 1. 背景
+图谱重整导出 graph.json（rev 428）后，后续 npm test / plugin:verify / sim 改写了 SQLite（rev 432）却未回写派生产物。reconcileExternalChange 把“磁盘落后于数据库”判定为致命冲突，而 code / block / chain / knowledge / verify 全部走写锁 + 冲突门禁，于是连读一行代码都被拒绝。实测：AI 在 explore 成功后连续两次被挡（ops code outline、verify），被迫退回 cat/rg/sed 整段读取，单次会话上下文涨到 112k。
+
+### 2. 决策
+(1) 只读动作（code 的 outline/read/search、block 的 list/open/search、chain 的 list/open/links/validate、knowledge 的 rule_list/rule_open/decision_open）不再经过冲突门禁；(2) 新增 healStateConflict() 与编排器的 _selfHeal()：每次 dispatch 先 reconcile，再按版本方向消解分歧——数据库更新则重导出 graph.json，磁盘更新则导入；(3) verify 接受单个 command 参数，不再静默退化到 profile 默认值。
+
+### 3. 原因与替代方案取舍
+也可以在存储层直接把“旧图”改成自动重导出，但那会破坏 storage 层既有测试语义（旧图必须是 conflict，而不是隐式回滚）。放在编排层可以保留原语语义，同时把自愈限定在 AI 路径上。
+
+### 4. 影响与后果
+回归测试“stale graph.json 被自愈而不是卡死”加入后共 74 项单测通过；真实仓库实测自愈后 explore 4077 字符、ops outline 3767 字符、verify PASS。代价：graph.json 会被自动重导出覆盖，人工手改 graph.json 的场景应以 SQLite 为准。
+
+## [DEC-022] Cold-start identity and lifecycle truth
+
+Project identity is derived once from the workspace directory. Legacy state created under the bootstrap ID 'contextos' is adopted atomically only when the target project is empty and the repository root matches; conflicting projects are refused rather than merged. Plan completion requires all checkpoints to pass and all linked tasks to be completed. Raw Plan/Task updates may not bypass lifecycle actions. Failed receipts are superseded only by a later successful run of the same normalized command in the same or unknown cwd. The Skill, bundle, and installed plugin cache must be hash-aligned before cold-start acceptance is considered valid.

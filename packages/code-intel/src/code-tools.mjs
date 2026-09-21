@@ -159,49 +159,80 @@ export class CodeTools {
   /**
    * 3. Edit: Surgical code edit with automatic relocalization (re-anchoring)
    */
-  static edit(filePath, content, { targetContent, replacementContent, startLine = null, endLine = null, symbol = null }) {
-    if (!targetContent || typeof targetContent !== 'string') {
-      throw new Error('CodeTools.edit requires targetContent');
-    }
+  static edit(filePath, content, { targetContent = null, replacementContent, startLine = null, endLine = null, symbol = null } = {}) {
     if (replacementContent === undefined || typeof replacementContent !== 'string') {
       throw new Error('CodeTools.edit requires replacementContent');
     }
 
-    let newContent = '';
     const lines = content.split(/\r?\n/);
+    let effectiveStart = startLine !== null && startLine !== undefined ? Number(startLine) : null;
+    let effectiveEnd = endLine !== null && endLine !== undefined ? Number(endLine) : null;
 
-    if (startLine !== null || endLine !== null) {
-      // Range constrained replacement
-      const effectiveStart = startLine !== null && startLine !== undefined ? Number(startLine) : 1;
-      const effectiveEnd = endLine !== null && endLine !== undefined ? Number(endLine) : lines.length;
-      const chunkStart = Math.max(0, effectiveStart - 1);
-      const chunkEnd = Math.min(lines.length, effectiveEnd);
-      const chunk = lines.slice(chunkStart, chunkEnd).join('\n');
+    if (symbol) {
+      const structure = LanguageRegistry.parseStructure(filePath, content);
+      const matched = structure.symbols.find((s) => s.name === symbol)
+        || structure.symbols.find((s) => s.shortName === symbol)
+        || structure.symbols.find((s) => s.name.endsWith(`.${symbol}`));
+      if (!matched) throw new Error(`Symbol '${symbol}' not found in ${filePath}`);
+      if (effectiveStart === null) effectiveStart = matched.startLine;
+      if (effectiveEnd === null) effectiveEnd = matched.endLine;
+    }
 
-      if (!chunk.includes(targetContent)) {
-        throw new Error(
-          `TargetContent not found in specified range [L${effectiveStart}-L${effectiveEnd}] of ${filePath}`
-        );
+    const hasRange = effectiveStart !== null || effectiveEnd !== null;
+    let newContent = '';
+
+    if (!targetContent) {
+      if (!hasRange || effectiveStart === null || effectiveEnd === null) {
+        throw new Error('CodeTools.edit requires targetContent or a complete startLine/endLine (or symbol) range');
       }
-
-      const replacedChunk = chunk.replace(targetContent, () => replacementContent);
+      if (!Number.isInteger(effectiveStart) || !Number.isInteger(effectiveEnd)) {
+        throw new Error('CodeTools.edit startLine and endLine must be integers');
+      }
+      if (effectiveStart < 1 || effectiveEnd < effectiveStart || effectiveEnd > lines.length) {
+        throw new Error(`CodeTools.edit range [L${effectiveStart}-L${effectiveEnd}] is outside ${filePath} (1-${lines.length})`);
+      }
       newContent = [
-        ...lines.slice(0, chunkStart),
-        replacedChunk,
-        ...lines.slice(chunkEnd),
+        ...lines.slice(0, effectiveStart - 1),
+        ...replacementContent.split(/\r?\n/),
+        ...lines.slice(effectiveEnd),
       ].join('\n');
     } else {
-      // Global unique occurrence check
-      const occurrences = content.split(targetContent).length - 1;
-      if (occurrences === 0) {
-        throw new Error(`TargetContent not found in ${filePath}`);
+      if (typeof targetContent !== 'string') {
+        throw new Error('CodeTools.edit targetContent must be a string');
       }
-      if (occurrences > 1) {
-        throw new Error(
-          `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
-        );
+      if (hasRange) {
+        const chunkStart = Math.max(0, (effectiveStart ?? 1) - 1);
+        const chunkEnd = Math.min(lines.length, effectiveEnd ?? lines.length);
+        const chunk = lines.slice(chunkStart, chunkEnd).join('\n');
+        const occurrences = chunk.split(targetContent).length - 1;
+        if (occurrences === 0) {
+          throw new Error(
+            `TargetContent not found in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
+          );
+        }
+        if (occurrences > 1) {
+          throw new Error(
+            `TargetContent found ${occurrences} times in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
+          );
+        }
+        const replacedChunk = chunk.replace(targetContent, () => replacementContent);
+        newContent = [
+          ...lines.slice(0, chunkStart),
+          replacedChunk,
+          ...lines.slice(chunkEnd),
+        ].join('\n');
+      } else {
+        const occurrences = content.split(targetContent).length - 1;
+        if (occurrences === 0) {
+          throw new Error(`TargetContent not found in ${filePath}`);
+        }
+        if (occurrences > 1) {
+          throw new Error(
+            `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
+          );
+        }
+        newContent = content.replace(targetContent, () => replacementContent);
       }
-      newContent = content.replace(targetContent, () => replacementContent);
     }
 
     // Re-anchor: re-parse the new content to get updated locators
@@ -267,7 +298,87 @@ export class CodeTools {
   }
 
   /**
-   * 5. Workspace Search: Find symbols/methods across all project files (like VS Code Cmd+T)
+   * Bounded textual grep. Symbol search only matches declarations, which forces
+   * agents to reach for a native `rg`; this covers "where is X mentioned".
+   */
+  static searchText(repoRoot, query, { limit = 8, maxFiles = 1500, root = null, contextChars = 120, perFileLimit = 3 } = {}) {
+    const needle = String(query || '').trim().toLowerCase();
+    if (!needle) return { hits: [], scanned: 0, truncated: false };
+
+    const skipDirs = new Set([
+      'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', 'coverage', '.contextos',
+      '.cache', '.wrangler', 'DerivedData', '.build', 'vendor', 'Pods', 'target', '.venv',
+    ]);
+    const allowHiddenDirs = new Set(['.github']);
+    const files = [];
+    const walk = (dir) => {
+      if (files.length >= maxFiles) return;
+      let entries = [];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch (_) {
+        return;
+      }
+      for (const entry of entries) {
+        if (files.length >= maxFiles) return;
+        if (entry.isDirectory()) {
+          if (skipDirs.has(entry.name)) continue;
+          if (entry.name.startsWith('.') && !allowHiddenDirs.has(entry.name)) continue;
+          walk(path.join(dir, entry.name));
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const relative = path.relative(repoRoot, path.join(dir, entry.name)).split(path.sep).join('/');
+        files.push(relative);
+      }
+    };
+    walk(repoRoot);
+
+    const rootPath = root ? path.resolve(repoRoot, String(root)) : null;
+    const rootRelative = rootPath
+      ? path.relative(repoRoot, rootPath).split(path.sep).join('/').replace(/^\.\//, '').replace(/\/+$/, '')
+      : '';
+    const rootOutsideProject = rootPath
+      ? rootRelative.startsWith('..') || path.isAbsolute(rootRelative)
+      : false;
+    const rootIsFile = Boolean(rootPath && !rootOutsideProject && fs.existsSync(rootPath) && fs.statSync(rootPath).isFile());
+    const hits = [];
+    const perFile = new Map();
+    let scanned = 0;
+    for (const relative of files) {
+      if (hits.length >= limit) break;
+      if (rootOutsideProject) break;
+      if (rootPath) {
+        const inRoot = rootIsFile
+          ? relative === rootRelative
+          : (!rootRelative || relative === rootRelative || relative.startsWith(`${rootRelative}/`));
+        if (!inRoot) continue;
+      }
+      const fullPath = path.join(repoRoot, relative);
+      let content;
+      try {
+        if (fs.statSync(fullPath).size > 200_000) continue;
+        content = fs.readFileSync(fullPath, 'utf8');
+      } catch (_) {
+        continue;
+      }
+      if (content.includes('\0')) continue; // binary
+      scanned += 1;
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i += 1) {
+        if (hits.length >= limit) break;
+        if (!lines[i].toLowerCase().includes(needle)) continue;
+        const used = perFile.get(relative) || 0;
+        if (used >= perFileLimit) break;
+        perFile.set(relative, used + 1);
+        hits.push({ path: relative, line: i + 1, content: lines[i].trim().slice(0, contextChars) });
+      }
+    }
+    return { hits, scanned, truncated: files.length >= maxFiles };
+  }
+
+  /**
+   * 5. Workspace Search: find symbols/methods across project files (VS Code Cmd+T).
    */
   static searchWorkspace(repoRoot, query, candidateFiles = []) {
     const queryLower = query.toLowerCase();

@@ -40,6 +40,20 @@ export class V2Database {
         AND (symbol IS NULL OR TRIM(symbol) = '')
     `);
 
+    const blockColumns = this.db.prepare('PRAGMA table_info(blocks)').all();
+    if (!blockColumns.some((column) => column.name === 'artifact_ref_count')) {
+      this.db.exec('ALTER TABLE blocks ADD COLUMN artifact_ref_count INTEGER NOT NULL DEFAULT 0;');
+    }
+    this.db.exec(`
+      UPDATE blocks
+      SET artifact_ref_count = (
+        SELECT COUNT(*) FROM artifact_refs WHERE artifact_refs.block_id = blocks.id
+      )
+      WHERE artifact_ref_count != (
+        SELECT COUNT(*) FROM artifact_refs WHERE artifact_refs.block_id = blocks.id
+      )
+    `);
+
     const receiptColumns = this.db.prepare('PRAGMA table_info(command_receipts)').all();
     if (!receiptColumns.some((column) => column.name === 'changed_paths_json')) {
       this.db.exec("ALTER TABLE command_receipts ADD COLUMN changed_paths_json TEXT NOT NULL DEFAULT '[]';");
@@ -58,6 +72,152 @@ export class V2Database {
       DROP TABLE IF EXISTS build_runs;
       UPDATE projects SET schema_version = 3;
     `);
+    this._ensureGraphSyncTriggers();
+    this._ensureBlockIntegrityTriggers();
+  }
+
+  _ensureBlockIntegrityTriggers() {
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS blocks_require_artifact_count_insert
+      AFTER INSERT ON blocks
+      WHEN NEW.artifact_ref_count <= 0
+      BEGIN
+        SELECT RAISE(ABORT, 'Ghost Block rejected: blocks must reference real code');
+      END;
+
+      DROP TRIGGER IF EXISTS blocks_require_artifact_count_update;
+      CREATE TRIGGER blocks_require_artifact_count_update
+      AFTER UPDATE OF artifact_ref_count ON blocks
+      WHEN NEW.artifact_ref_count <= 0
+      BEGIN
+        SELECT RAISE(ABORT, 'Ghost Block rejected: blocks must reference real code');
+      END;
+
+      DROP TRIGGER IF EXISTS artifact_refs_validate_insert;
+      CREATE TRIGGER artifact_refs_validate_insert
+      BEFORE INSERT ON artifact_refs
+      WHEN NEW.path IS NULL OR TRIM(NEW.path) = ''
+        OR NEW.hash IS NULL OR TRIM(NEW.hash) = '' OR LOWER(NEW.hash) = 'untracked'
+        OR NEW.anchor_kind NOT IN ('symbol', 'file', 'tree')
+        OR (NEW.anchor_kind = 'symbol' AND (NEW.symbol IS NULL OR TRIM(NEW.symbol) = ''))
+        OR (NEW.anchor_kind = 'tree' AND NEW.hash_mode = 'manifest' AND (NEW.manifest IS NULL OR TRIM(NEW.manifest) = ''))
+      BEGIN
+        SELECT RAISE(ABORT, 'Invalid ArtifactRef: path, anchor and verified hash are required');
+      END;
+
+      DROP TRIGGER IF EXISTS artifact_refs_validate_update;
+      CREATE TRIGGER artifact_refs_validate_update
+      BEFORE UPDATE ON artifact_refs
+      WHEN NEW.path IS NULL OR TRIM(NEW.path) = ''
+        OR NEW.hash IS NULL OR TRIM(NEW.hash) = '' OR LOWER(NEW.hash) = 'untracked'
+        OR NEW.anchor_kind NOT IN ('symbol', 'file', 'tree')
+        OR (NEW.anchor_kind = 'symbol' AND (NEW.symbol IS NULL OR TRIM(NEW.symbol) = ''))
+        OR (NEW.anchor_kind = 'tree' AND NEW.hash_mode = 'manifest' AND (NEW.manifest IS NULL OR TRIM(NEW.manifest) = ''))
+      BEGIN
+        SELECT RAISE(ABORT, 'Invalid ArtifactRef: path, anchor and verified hash are required');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS artifact_refs_sync_count_after_insert
+      AFTER INSERT ON artifact_refs
+      BEGIN
+        UPDATE blocks
+        SET artifact_ref_count = (SELECT COUNT(*) FROM artifact_refs WHERE block_id = NEW.block_id)
+        WHERE id = NEW.block_id;
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS artifact_refs_sync_count_after_update
+      AFTER UPDATE OF block_id ON artifact_refs
+      BEGIN
+        UPDATE blocks
+        SET artifact_ref_count = (SELECT COUNT(*) FROM artifact_refs WHERE block_id = OLD.block_id)
+        WHERE id = OLD.block_id;
+        UPDATE blocks
+        SET artifact_ref_count = (SELECT COUNT(*) FROM artifact_refs WHERE block_id = NEW.block_id)
+        WHERE id = NEW.block_id;
+      END;
+
+      DROP TRIGGER IF EXISTS artifact_refs_prevent_last_delete;
+      CREATE TRIGGER artifact_refs_prevent_last_delete
+      BEFORE DELETE ON artifact_refs
+      WHEN EXISTS (SELECT 1 FROM blocks WHERE id = OLD.block_id)
+        AND NOT EXISTS (SELECT 1 FROM artifact_refs WHERE block_id = OLD.block_id AND id <> OLD.id)
+      BEGIN
+        SELECT RAISE(ABORT, 'Ghost Block rejected: cannot delete the final artifactRef');
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS artifact_refs_sync_count_after_delete
+      AFTER DELETE ON artifact_refs
+      BEGIN
+        UPDATE blocks
+        SET artifact_ref_count = (SELECT COUNT(*) FROM artifact_refs WHERE block_id = OLD.block_id)
+        WHERE id = OLD.block_id;
+      END;
+    `);
+  }
+
+  /**
+   * graph.json is a derived projection of SQLite. Instead of trusting every
+   * call site to remember an export, the graph tables mark the project dirty
+   * themselves; only the publisher decides when to write the file.
+   */
+  _ensureGraphSyncTriggers() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS graph_dirty (
+        project_id TEXT PRIMARY KEY,
+        reason TEXT NOT NULL DEFAULT '',
+        marked_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    const direct = ['blocks', 'chains', 'links', 'plans'];
+    for (const table of direct) {
+      for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
+        const ref = event === 'DELETE' ? 'OLD' : 'NEW';
+        const key = `${table}_${event.toLowerCase()}`;
+        this.db.exec(`
+          CREATE TRIGGER IF NOT EXISTS ${key}_dirty AFTER ${event} ON ${table}
+          WHEN ${ref}.project_id IS NOT NULL
+          BEGIN
+            INSERT INTO graph_dirty (project_id, reason, marked_at)
+            VALUES (${ref}.project_id, '${key}', datetime('now'))
+            ON CONFLICT(project_id) DO UPDATE SET
+              reason = '${key}', marked_at = datetime('now');
+          END;
+        `);
+      }
+    }
+    // Rows without their own project_id borrow it from their parent.
+    for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
+      const ref = event === 'DELETE' ? 'OLD' : 'NEW';
+      const key = `tasks_${event.toLowerCase()}`;
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS ${key}_dirty AFTER ${event} ON tasks
+        BEGIN
+          INSERT INTO graph_dirty (project_id, reason, marked_at)
+          SELECT project_id, '${key}', datetime('now') FROM plans WHERE id = ${ref}.plan_id
+          ON CONFLICT(project_id) DO UPDATE SET reason = '${key}', marked_at = datetime('now');
+        END;
+      `);
+    }
+    for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
+      const ref = event === 'DELETE' ? 'OLD' : 'NEW';
+      const key = `artifact_refs_${event.toLowerCase()}`;
+      this.db.exec(`
+        CREATE TRIGGER IF NOT EXISTS ${key}_dirty AFTER ${event} ON artifact_refs
+        BEGIN
+          INSERT INTO graph_dirty (project_id, reason, marked_at)
+          SELECT project_id, '${key}', datetime('now') FROM blocks WHERE id = ${ref}.block_id
+          ON CONFLICT(project_id) DO UPDATE SET reason = '${key}', marked_at = datetime('now');
+        END;
+      `);
+    }
+  }
+
+  isGraphDirty(projectId) {
+    return Boolean(this.db.prepare('SELECT 1 FROM graph_dirty WHERE project_id = ?').get(projectId));
+  }
+
+  clearGraphDirty(projectId) {
+    this.db.prepare('DELETE FROM graph_dirty WHERE project_id = ?').run(projectId);
   }
 
   transaction(fn) {
@@ -94,6 +254,7 @@ export class V2Database {
         .run(revision, exportedAt, projectId);
       db.setSyncState(`last_exported_hash:${projectId}`, sha256);
       db.db.prepare('DELETE FROM graph_outbox WHERE project_id = ?').run(projectId);
+      db.clearGraphDirty(projectId);
     });
   }
 
@@ -159,6 +320,83 @@ export class V2Database {
     );
     stmt.run(projectId, repoRoot, new Date().toISOString());
     return this.getProject(projectId);
+  }
+
+  /**
+   * Atomically adopt state created by the old bootstrap identity ('contextos')
+   * when a workspace later acquires its directory-derived identity. Never merge
+   * two non-empty projects: refusing is safer than silently mixing histories.
+   */
+  adoptLegacyProject(projectId, { legacyProjectId = 'contextos', repoRoot = null } = {}) {
+    if (!projectId || !legacyProjectId || projectId === legacyProjectId) {
+      return { adopted: false, removedEmptyLegacy: false, sourceCounts: {}, targetCounts: {} };
+    }
+
+    return this.transaction((db) => {
+      const legacy = db.getProject(legacyProjectId);
+      if (!legacy) return { adopted: false, removedEmptyLegacy: false, sourceCounts: {}, targetCounts: {} };
+
+      const scopedTables = ['plans', 'blocks', 'chains', 'links', 'graph_outbox'];
+      const countRows = (id) => Object.fromEntries(scopedTables.map((table) => [
+        table,
+        db.db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE project_id = ?`).get(id).count,
+      ]));
+      const sourceCounts = countRows(legacyProjectId);
+      const sourceTotal = Object.values(sourceCounts).reduce((sum, count) => sum + count, 0);
+
+      const resolvedRepoRoot = repoRoot ? path.resolve(repoRoot) : null;
+      const legacyRepoRoot = legacy.repo_root ? path.resolve(legacy.repo_root) : null;
+      if (sourceTotal > 0 && resolvedRepoRoot && legacyRepoRoot && resolvedRepoRoot !== legacyRepoRoot) {
+        throw new Error(
+          `Refusing to adopt project '${legacyProjectId}': it belongs to '${legacyRepoRoot}', not '${resolvedRepoRoot}'.`
+        );
+      }
+
+      const target = db.getProject(projectId) || db.ensureProject(projectId, resolvedRepoRoot || legacyRepoRoot || '');
+      const targetCounts = countRows(projectId);
+      const targetTotal = Object.values(targetCounts).reduce((sum, count) => sum + count, 0);
+
+      if (sourceTotal > 0 && targetTotal > 0) {
+        throw new Error(
+          `Refusing to merge project '${legacyProjectId}' into '${projectId}': both contain plans or graph state. Export or migrate one project explicitly.`
+        );
+      }
+
+      if (sourceTotal === 0) {
+        const sameRepo = !resolvedRepoRoot || !legacyRepoRoot || resolvedRepoRoot === legacyRepoRoot;
+        if (sameRepo) db.db.prepare('DELETE FROM projects WHERE id = ?').run(legacyProjectId);
+        return { adopted: false, removedEmptyLegacy: sameRepo, sourceCounts, targetCounts };
+      }
+
+      for (const table of scopedTables) {
+        db.db.prepare(`UPDATE ${table} SET project_id = ? WHERE project_id = ?`).run(projectId, legacyProjectId);
+      }
+
+      const graphRevision = Math.max(target.graph_revision || 0, legacy.graph_revision || 0);
+      const exportedAt = (legacy.graph_revision || 0) >= (target.graph_revision || 0)
+        ? legacy.exported_at
+        : target.exported_at;
+      db.db.prepare(`
+        UPDATE projects
+        SET repo_root = ?, graph_revision = ?, exported_at = ?, schema_version = MAX(schema_version, ?)
+        WHERE id = ?
+      `).run(
+        resolvedRepoRoot || legacyRepoRoot || target.repo_root,
+        graphRevision,
+        exportedAt,
+        legacy.schema_version || 3,
+        projectId
+      );
+      db.db.prepare('DELETE FROM projects WHERE id = ?').run(legacyProjectId);
+      db.db.prepare('DELETE FROM graph_dirty WHERE project_id = ?').run(legacyProjectId);
+      db.db.prepare(`
+        INSERT INTO graph_dirty (project_id, reason, marked_at)
+        VALUES (?, 'project-identity-adopted', datetime('now'))
+        ON CONFLICT(project_id) DO UPDATE SET reason = excluded.reason, marked_at = excluded.marked_at
+      `).run(projectId);
+
+      return { adopted: true, removedEmptyLegacy: false, sourceCounts, targetCounts, graphRevision };
+    });
   }
 
   setGraphRevision(projectId, revision) {
@@ -330,6 +568,72 @@ export class V2Database {
     });
   }
 
+  replaceProjectState(projectId, snapshot) {
+    return this.transaction((db) => {
+      // Graph integrity triggers intentionally reject zero-ref blocks. During a
+      // full replacement the old graph is removed before the new graph exists,
+      // so both delete-side guards must be paused and rebuilt once at the end.
+      db.db.exec(`
+        DROP TRIGGER IF EXISTS artifact_refs_prevent_last_delete;
+        DROP TRIGGER IF EXISTS blocks_require_artifact_count_update;
+      `);
+      db.db.prepare('DELETE FROM artifact_refs WHERE block_id IN (SELECT id FROM blocks WHERE project_id = ?)').run(projectId);
+      db.db.prepare('DELETE FROM blocks WHERE project_id = ?').run(projectId);
+      db.db.prepare('DELETE FROM links WHERE project_id = ?').run(projectId);
+      db.db.prepare('DELETE FROM chains WHERE project_id = ?').run(projectId);
+      db.db.prepare('DELETE FROM checkpoints WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').run(projectId);
+      db.db.prepare('DELETE FROM tasks WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').run(projectId);
+      db.db.prepare('DELETE FROM phases WHERE plan_id IN (SELECT id FROM plans WHERE project_id = ?)').run(projectId);
+      db.db.prepare('DELETE FROM plans WHERE project_id = ?').run(projectId);
+
+      db.ensureProject(projectId, snapshot.project?.root || '');
+      const phasesByPlan = new Map();
+      for (const phase of snapshot.phases || []) {
+        if (!phasesByPlan.has(phase.planId)) phasesByPlan.set(phase.planId, []);
+        phasesByPlan.get(phase.planId).push(phase);
+      }
+      const checkpointsByPlan = new Map();
+      for (const checkpoint of snapshot.checkpoints || []) {
+        const planId = checkpoint.targetId || checkpoint.planId;
+        if (!planId) continue;
+        if (!checkpointsByPlan.has(planId)) checkpointsByPlan.set(planId, []);
+        checkpointsByPlan.get(planId).push(checkpoint);
+      }
+      for (const plan of snapshot.plans || []) {
+        db.savePlan({
+          ...plan,
+          projectId,
+          phases: phasesByPlan.get(plan.id) || [],
+          checkpoints: checkpointsByPlan.get(plan.id) || [],
+        });
+      }
+      for (const task of snapshot.tasks || []) db.saveTask({ ...task, projectId });
+      for (const block of snapshot.blocks || []) {
+        db.saveBlock({ ...block, projectId, details: block.details ?? block.body ?? '' });
+      }
+      for (const chain of snapshot.chains || []) {
+        db.saveChain({
+          ...chain,
+          projectId,
+          summary: chain.summary ?? chain.purpose ?? '',
+          kind: chain.kind ?? chain.chainType ?? 'leaf',
+        });
+      }
+      for (const link of snapshot.links || []) {
+        db.saveLink({
+          ...link,
+          projectId,
+          from: link.from ?? link.fromId ?? link.from_id ?? link.sourceId,
+          to: link.to ?? link.toId ?? link.to_id ?? link.targetId,
+          reason: link.reason ?? link.label ?? '',
+        });
+      }
+      db.setGraphRevision(projectId, snapshot.project?.graphRevision || snapshot.changeSequence || 0);
+      db._ensureBlockIntegrityTriggers();
+      return true;
+    });
+  }
+
   // --- Task ---
   saveTask(task) {
     const stmt = this.db.prepare(`
@@ -427,55 +731,120 @@ export class V2Database {
   }
 
   _saveBlock(block) {
+    const refs = block.artifactRefs || block.artifact_refs || [];
+    if (!block.id || typeof block.id !== 'string') {
+      throw new Error('Block requires a valid string id');
+    }
+    if (!block.title || typeof block.title !== 'string') {
+      throw new Error(`Block '${block.id}' requires a title`);
+    }
+    if (!Array.isArray(refs) || refs.length === 0) {
+      throw new Error(`Ghost Block rejected: Block '${block.id}' must have at least one artifactRef`);
+    }
+
+    const normalizedRefs = refs.map((ref, index) => {
+      const anchorKind = ref?.anchorKind || ref?.anchor_kind || (ref?.symbol ? 'symbol' : 'file');
+      const hash = typeof ref?.hash === 'string' ? ref.hash.trim() : '';
+      const symbol = typeof ref?.symbol === 'string' ? ref.symbol.trim() : '';
+      const hashMode = ref?.hashMode || ref?.hash_mode || null;
+      const manifest = ref?.manifest || null;
+      if (!ref?.path || typeof ref.path !== 'string' || !ref.path.trim()) {
+        throw new Error(`Block '${block.id}' artifactRef ${index} requires a valid path`);
+      }
+      if (path.isAbsolute(ref.path)) {
+        throw new Error(`Block '${block.id}' artifactRef path must be relative: '${ref.path}'`);
+      }
+      if (!hash || hash === 'untracked') {
+        throw new Error(`Block '${block.id}' artifactRef '${ref.path}' requires a verified hash`);
+      }
+      if (anchorKind === 'symbol' && !symbol) {
+        throw new Error(`Block '${block.id}' symbol anchor '${ref.path}' requires a symbol`);
+      }
+      if (anchorKind === 'tree' && hashMode === 'manifest' && !manifest) {
+        throw new Error(`Block '${block.id}' manifest tree anchor '${ref.path}' requires a manifest path`);
+      }
+      return {
+        id: `${block.id}-ref-${index}`,
+        path: ref.path.trim(),
+        symbol: anchorKind === 'tree' ? null : (symbol || null),
+        anchorKind,
+        startLine: anchorKind === 'tree' ? null : (ref.startLine ?? ref.start_line ?? null),
+        endLine: anchorKind === 'tree' ? null : (ref.endLine ?? ref.end_line ?? null),
+        hash,
+        role: ref.role || 'implementation',
+        hashMode,
+        manifest: anchorKind === 'tree' ? manifest : null,
+      };
+    });
+
     const stmt = this.db.prepare(`
       INSERT INTO blocks (
-        id, project_id, title, kind, summary, details, history_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, title, kind, summary, details, artifact_ref_count, history_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         project_id = excluded.project_id,
         title = excluded.title,
         kind = excluded.kind,
         summary = excluded.summary,
         details = excluded.details,
+        artifact_ref_count = excluded.artifact_ref_count,
         history_json = excluded.history_json,
         updated_at = excluded.updated_at
     `);
     stmt.run(
       block.id,
       block.projectId || block.project_id || 'contextos',
-      block.title || block.id,
-      block.kind || 'service',
+      block.title,
+      block.kind ?? '',
       block.summary || '',
       block.details || '',
+      normalizedRefs.length,
       JSON.stringify(block.history || []),
       block.createdAt || block.created_at || new Date().toISOString(),
       block.updatedAt || block.updated_at || new Date().toISOString()
     );
 
-    const deleteRefs = this.db.prepare('DELETE FROM artifact_refs WHERE block_id = ?');
-    deleteRefs.run(block.id);
-
-    const insertRef = this.db.prepare(`
+    const upsertRef = this.db.prepare(`
       INSERT INTO artifact_refs (
         id, block_id, path, symbol, anchor_kind, start_line, end_line, hash, role, hash_mode, manifest
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        block_id = excluded.block_id,
+        path = excluded.path,
+        symbol = excluded.symbol,
+        anchor_kind = excluded.anchor_kind,
+        start_line = excluded.start_line,
+        end_line = excluded.end_line,
+        hash = excluded.hash,
+        role = excluded.role,
+        hash_mode = excluded.hash_mode,
+        manifest = excluded.manifest
     `);
-    const refs = block.artifactRefs || block.artifact_refs || [];
-    for (let i = 0; i < refs.length; i++) {
-      const ref = refs[i];
-      insertRef.run(
-        `${block.id}-ref-${i}`,
+    const desiredRefIds = new Set();
+    for (const ref of normalizedRefs) {
+      desiredRefIds.add(ref.id);
+      upsertRef.run(
+        ref.id,
         block.id,
         ref.path,
-        ref.symbol || null,
-        ref.anchorKind || (ref.symbol ? 'symbol' : 'file'),
-        ref.startLine || ref.start_line || null,
-        ref.endLine || ref.end_line || null,
-        ref.hash || '',
-        ref.role || 'implementation',
-        ref.hashMode || ref.hash_mode || null,
-        ref.manifest || null
+        ref.symbol,
+        ref.anchorKind,
+        ref.startLine,
+        ref.endLine,
+        ref.hash,
+        ref.role,
+        ref.hashMode,
+        ref.manifest
       );
+    }
+
+    const existingRefIds = this.db
+      .prepare('SELECT id FROM artifact_refs WHERE block_id = ?')
+      .all(block.id)
+      .map((row) => row.id);
+    const deleteRef = this.db.prepare('DELETE FROM artifact_refs WHERE id = ?');
+    for (const refId of existingRefIds) {
+      if (!desiredRefIds.has(refId)) deleteRef.run(refId);
     }
   }
 
@@ -501,7 +870,7 @@ export class V2Database {
       id: row.id,
       projectId: row.project_id,
       title: row.title,
-      kind: row.kind || 'service',
+      kind: row.kind ?? '',
       summary: row.summary,
       details: row.details,
       artifactRefs: refs,
@@ -521,6 +890,10 @@ export class V2Database {
 
   deleteBlock(blockId) {
     this.transaction((self) => {
+      self.db.exec(`
+        DROP TRIGGER IF EXISTS artifact_refs_prevent_last_delete;
+        DROP TRIGGER IF EXISTS blocks_require_artifact_count_update;
+      `);
       self.db.prepare('DELETE FROM links WHERE from_id = ? OR to_id = ?').run(blockId, blockId);
       self.db.prepare('DELETE FROM artifact_refs WHERE block_id = ?').run(blockId);
       self.db.prepare('DELETE FROM blocks WHERE id = ?').run(blockId);
@@ -531,6 +904,7 @@ export class V2Database {
           self.saveChain(c);
         }
       }
+      self._ensureBlockIntegrityTriggers();
     });
     return true;
   }

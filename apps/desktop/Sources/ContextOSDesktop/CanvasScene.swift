@@ -20,15 +20,13 @@ struct CanvasScene: Equatable {
         chainNodes: [:], chainLinks: [:], chainEnvelopes: [:], adjacency: [:]
     )
 
-    static func compile(snapshot: GraphSnapshot, lenses: Set<ViewLens>, topInset: CGFloat = 70) -> CanvasScene {
+    static func compile(snapshot: GraphSnapshot, hiddenKinds: Set<String> = [], topInset: CGFloat = 70) -> CanvasScene {
         let backgroundRuleIDs = Set(snapshot.backgroundScopes.map(\.blockId))
-        let excludedKinds: Set<String> = ["decision", "test", "checkpoint"]
         let allCanvasBlocks = snapshot.blocks.filter {
-            !backgroundRuleIDs.contains($0.id) && !excludedKinds.contains($0.kind.lowercased())
+            !backgroundRuleIDs.contains($0.id)
+                && !hiddenKinds.contains($0.kind)
         }
-        let visibleIDs = Set(allCanvasBlocks.filter { block in
-            lenses.contains { $0.includes(block: block) }
-        }.map(\.id))
+        let visibleIDs = Set(allCanvasBlocks.map(\.id))
         let blocks = allCanvasBlocks.filter { visibleIDs.contains($0.id) }
         let links = snapshot.links.filter {
             $0.sourceType == "block" && $0.targetType == "block" &&

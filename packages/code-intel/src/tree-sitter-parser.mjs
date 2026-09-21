@@ -53,11 +53,19 @@ export async function initTreeSitter() {
   if (!initPromise) {
     initPromise = (async () => {
       try {
-        let wasmPath = null;
-        try {
-          const require = createRequire(import.meta.url);
-          wasmPath = require.resolve('web-tree-sitter/web-tree-sitter.wasm');
-        } catch (_) {}
+        const currentDir = path.dirname(fileURLToPath(import.meta.url));
+        const bundledCandidates = [
+          process.env.CONTEXTOS_TREE_SITTER_WASM,
+          path.join(currentDir, 'web-tree-sitter.wasm'),
+          path.join(currentDir, '..', 'web-tree-sitter.wasm'),
+        ].filter(Boolean);
+        let wasmPath = bundledCandidates.find((candidate) => fs.existsSync(candidate)) || null;
+        if (!wasmPath) {
+          try {
+            const require = createRequire(import.meta.url);
+            wasmPath = require.resolve('web-tree-sitter/web-tree-sitter.wasm');
+          } catch (_) {}
+        }
         await Parser.init({
           locateFile(scriptName) {
             if (scriptName.endsWith('.wasm') && wasmPath) return wasmPath;

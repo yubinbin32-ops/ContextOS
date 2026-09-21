@@ -17,7 +17,13 @@ test('PlanService manages plan lifecycle and checkpoints', () => {
     id: 'plan-app-1',
     projectId: 'proj-app-test',
     title: 'App Test Plan',
-    phases: [{ id: 'P0', order: 0, status: 'active' }],
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Exercise the application plan lifecycle.',
+      acceptance: ['Checkpoint completion is enforced.'],
+      status: 'active',
+    }],
     checkpoints: [{ id: 'cp-app-1', title: 'Verify P0 Checkpoint', status: 'pending' }],
   });
 
@@ -45,6 +51,49 @@ test('PlanService manages plan lifecycle and checkpoints', () => {
   db.close();
 });
 
+test('PlanService blocks completion and raw status updates while tasks are non-terminal', () => {
+  const db = new V2Database(':memory:');
+  db.ensureProject('proj-lifecycle-test', '/tmp/repo');
+  const planService = new PlanService(db);
+  const taskService = new TaskService(db, null);
+
+  planService.createPlan({
+    id: 'plan-lifecycle-test',
+    projectId: 'proj-lifecycle-test',
+    title: 'Lifecycle test',
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Prove completion cannot bypass task lifecycle.',
+      acceptance: ['Draft tasks keep the plan open.'],
+      status: 'active',
+    }],
+    checkpoints: [{ id: 'cp-lifecycle-test', title: 'Done', status: 'passed' }],
+  });
+  const task = taskService.createTask({
+    id: 'task-lifecycle-test',
+    planId: 'plan-lifecycle-test',
+    phaseId: 'P0',
+    title: 'Still draft',
+  });
+
+  assert.throws(
+    () => planService.updatePlan('plan-lifecycle-test', { status: 'completed' }),
+    /non-terminal tasks remain/
+  );
+  assert.throws(
+    () => planService.completePlan('plan-lifecycle-test'),
+    /non-terminal tasks remain/
+  );
+  assert.throws(
+    () => taskService.updateTask(task.id, { status: 'completed' }),
+    /managed by lifecycle actions/
+  );
+  assert.equal(db.getPlan('plan-lifecycle-test').status, 'active');
+  assert.equal(db.getTask(task.id).status, 'draft');
+  db.close();
+});
+
 test('Task sync covers source and dependency tree bindings without an artifact ledger', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-tree-binding-'));
   const db = new V2Database(path.join(tempDir, '.contextos', 'state.sqlite'));
@@ -68,7 +117,13 @@ test('Task sync covers source and dependency tree bindings without an artifact l
     id: 'plan-tree-binding',
     projectId: 'proj-tree-binding',
     title: 'Tree Binding Flow',
-    phases: [{ id: 'P0', order: 0, status: 'active' }],
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Bind source and dependency trees.',
+      acceptance: ['Coverage reaches the expected dependency boundary.'],
+      status: 'active',
+    }],
   });
 
   taskService.createTask(
@@ -153,7 +208,13 @@ test('TaskService enforces C-D-C-S flow and coverage gate', () => {
     id: 'plan-app-1',
     projectId: 'proj-app-task',
     title: 'Parent Plan',
-    phases: [{ id: 'P0', order: 0, status: 'active' }],
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Exercise task coverage and synchronization.',
+      acceptance: ['Every working-set file is covered before sync.'],
+      status: 'active',
+    }],
   });
 
   const task = taskService.createTask({
@@ -295,7 +356,13 @@ test('TaskService detects host native modifications via mtime + SHA256 compariso
     id: 'plan-host-1',
     projectId: 'proj-host-mod',
     title: 'Host Modification Plan',
-    phases: [{ id: 'P0', order: 0, status: 'active' }],
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Reconcile direct host edits.',
+      acceptance: ['The working set tracks the new file hash.'],
+      status: 'active',
+    }],
   });
 
   // 3. Create and activate Task
@@ -407,14 +474,26 @@ test('PlanService repairs passed and stale active plans', () => {
     id: 'plan-passed',
     projectId: 'proj-plan-hygiene',
     title: 'Passed Plan',
-    phases: [{ id: 'P0', status: 'completed' }],
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Exercise checkpoint-based hygiene.',
+      acceptance: ['Passed checkpoints and completed tasks auto-close.'],
+      status: 'completed',
+    }],
     checkpoints: [{ id: 'cp-passed', title: 'Passed', status: 'passed' }],
   });
   const stale = plans.createPlan({
     id: 'plan-stale',
     projectId: 'proj-plan-hygiene',
     title: 'Stale Plan',
-    phases: [{ id: 'P0', status: 'pending' }],
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Exercise stale plan archival.',
+      acceptance: ['A stale incomplete plan is archived.'],
+      status: 'pending',
+    }],
   });
   stale.updatedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   db.savePlan(stale);
@@ -445,7 +524,13 @@ test('TaskService handles external file deletion and non-git project modificatio
     id: 'plan-ext-1',
     projectId: 'proj-ext-mod',
     title: 'Ext Plan',
-    phases: [{ id: 'P0', order: 0, status: 'active' }],
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Reconcile external file deletion.',
+      acceptance: ['Deleted files are removed from the working set.'],
+      status: 'active',
+    }],
   });
 
   const task = taskService.createTask(
@@ -493,7 +578,13 @@ test('TaskService manages explicit rule bindings and task updates', () => {
     id: 'plan-rule-test',
     projectId: 'proj-rule-test',
     title: 'Rule Test Plan',
-    phases: [{ id: 'P0', order: 0, status: 'active' }],
+    phases: [{
+      id: 'P0',
+      order: 0,
+      objective: 'Exercise explicit task rule bindings.',
+      acceptance: ['Rules round-trip without becoming mandatory.'],
+      status: 'active',
+    }],
   });
 
   const task = taskService.createTask({
@@ -558,6 +649,8 @@ test('PlanService instantiates and persists embedded tasks with rules in createP
         id: 'phase-p0',
         name: 'Phase 0 - Foundation',
         order: 0,
+        objective: 'Create the foundation tasks atomically.',
+        acceptance: ['Embedded tasks are persisted and linked.'],
         tasks: [
           {
             id: 'task-auto-1',

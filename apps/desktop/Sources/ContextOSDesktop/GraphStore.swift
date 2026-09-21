@@ -14,7 +14,9 @@ final class GraphStore: ObservableObject {
     @Published private(set) var focusRequestID = UUID()
     @Published private(set) var overviewFitRequestID = UUID()
     @Published var isolateFocused = false
-    @Published var enabledLenses: Set<ViewLens> = Set(ViewLens.allCases)
+    /// Kinds the user switched off. Empty means "show every kind", so a type the
+    /// OS just invented is visible without a UI change.
+    @Published var hiddenKinds: Set<String> = []
     @Published var collapsedSidebarSections: Set<SidebarSection> = [] {
         didSet { persistSidebarState() }
     }
@@ -62,7 +64,7 @@ final class GraphStore: ObservableObject {
     private struct ProjectViewState {
         let selection: GraphSelection?
         let highlightedChainIDs: Set<String>
-        let enabledLenses: Set<ViewLens>
+        let hiddenKinds: Set<String>
         let canvasScale: CGFloat
         let canvasOffset: CGSize
         let focusTarget: GraphSelection?
@@ -448,7 +450,7 @@ final class GraphStore: ObservableObject {
         projectViewStates[snapshot.project.id] = ProjectViewState(
             selection: selection,
             highlightedChainIDs: highlightedChainIDs,
-            enabledLenses: enabledLenses,
+            hiddenKinds: hiddenKinds,
             canvasScale: canvasScale,
             canvasOffset: canvasOffset,
             focusTarget: focusTarget,
@@ -462,7 +464,7 @@ final class GraphStore: ObservableObject {
         if let state = projectViewStates[projectID] {
             selection = state.selection.flatMap { Self.selection($0, existsIn: snapshot) ? $0 : nil }
             highlightedChainIDs = state.highlightedChainIDs.intersection(snapshot.chains.map(\.id))
-            enabledLenses = state.enabledLenses
+            hiddenKinds = state.hiddenKinds
             canvasScale = state.canvasScale
             canvasOffset = state.canvasOffset
             focusTarget = state.focusTarget.flatMap { Self.selection($0, existsIn: snapshot) ? $0 : nil }
@@ -478,7 +480,7 @@ final class GraphStore: ObservableObject {
             highlightedChainIDs.removeAll()
             focusTarget = nil
             isolateFocused = false
-            enabledLenses = Set(ViewLens.allCases)
+            hiddenKinds = []
             canvasScale = persisted.scale
             canvasOffset = persisted.offset
             hasRestoredCamera = true
@@ -490,7 +492,7 @@ final class GraphStore: ObservableObject {
         highlightedChainIDs.removeAll()
         focusTarget = nil
         isolateFocused = false
-        enabledLenses = Set(ViewLens.allCases)
+        hiddenKinds = []
         canvasScale = 1
         canvasOffset = .zero
         hasRestoredCamera = false
@@ -699,25 +701,47 @@ final class GraphStore: ObservableObject {
         return values
     }
 
-    /// Only kinds present in this project are offered by the Canvas filter.
-    /// This keeps the toolbar semantic and avoids empty or overlapping lenses.
-    var availableLenses: [ViewLens] {
-        let backgroundRuleIDs = Set(snapshot.backgroundScopes.map(\.blockId))
-        let excludedKinds: Set<String> = ["decision", "test", "checkpoint"]
-        let kinds = Set(snapshot.blocks.filter { !backgroundRuleIDs.contains($0.id) && !excludedKinds.contains($0.kind.lowercased()) }.map { $0.kind.lowercased() })
-        return ViewLens.allCases.filter { kinds.contains($0.rawValue.lowercased()) }
+    /// Every kind that exists in this project: the filter is data-driven, so
+    /// custom kinds appear automatically instead of needing a UI release.
+    var availableKinds: [String] {
+        Self.availableKinds(from: snapshot.blocks)
+    }
+
+    static func availableKinds(from blocks: [BlockItem]) -> [String] {
+        let kinds = blocks
+            .map { $0.kind.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        var seen = Set<String>()
+        return kinds.filter { seen.insert($0).inserted }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     var unassignedCheckpoints: [CheckpointItem] {
-        let planIDs = Set(snapshot.planCheckpointReferences.map(\.checkpointId))
-        let boundToPlan = Set(snapshot.checkpointBindings.filter {
+        Self.filterUnassignedCheckpoints(
+            snapshot.checkpoints,
+            planCheckpointReferences: snapshot.planCheckpointReferences,
+            checkpointBindings: snapshot.checkpointBindings,
+            activeBlockIDs: Set(snapshot.blocks.map(\.id)),
+            activeChainIDs: Set(snapshot.chains.map(\.id)),
+            activePlanIDs: Set(snapshot.plans.map(\.id)),
+            activeLinkIDs: Set(snapshot.links.map(\.id))
+        )
+    }
+
+    static func filterUnassignedCheckpoints(
+        _ checkpoints: [CheckpointItem],
+        planCheckpointReferences: [PlanCheckpointReference],
+        checkpointBindings: [CheckpointBinding],
+        activeBlockIDs: Set<String>,
+        activeChainIDs: Set<String>,
+        activePlanIDs: Set<String>,
+        activeLinkIDs: Set<String>
+    ) -> [CheckpointItem] {
+        let planIDs = Set(planCheckpointReferences.map(\.checkpointId))
+        let boundToPlan = Set(checkpointBindings.filter {
             ["plan", "plan_change", "plan_chain_scope"].contains($0.subjectType)
         }.map(\.checkpointId))
-        let activeBlockIDs = Set(snapshot.blocks.map(\.id))
-        let activeChainIDs = Set(snapshot.chains.map(\.id))
-        let activePlanIDs = Set(snapshot.plans.map(\.id))
-        let activeLinkIDs = Set(snapshot.links.map(\.id))
-        let unassigned = snapshot.checkpoints.filter { checkpoint in
+        let unassigned = checkpoints.filter { checkpoint in
             guard !planIDs.contains(checkpoint.id) && !boundToPlan.contains(checkpoint.id) else { return false }
             switch checkpoint.targetType {
             case "block": return activeBlockIDs.contains(checkpoint.targetId)
@@ -727,7 +751,7 @@ final class GraphStore: ObservableObject {
             default: return false
             }
         }
-        return Self.visibleVerificationCheckpoints(unassigned)
+        return visibleVerificationCheckpoints(unassigned)
     }
 
     /// The sidebar is an inbox for work that still needs attention. Passed
@@ -747,13 +771,10 @@ final class GraphStore: ObservableObject {
     }
 
     var visibleBlocks: [BlockItem] {
-        guard !enabledLenses.isEmpty else { return [] }
         let backgroundRuleIDs = Set(snapshot.backgroundScopes.map(\.blockId))
-        let excludedKinds: Set<String> = ["decision", "test", "checkpoint"]
         return snapshot.blocks.filter { block in
-            !excludedKinds.contains(block.kind.lowercased()) && enabledLenses.contains { $0.includes(block: block) }
+            !hiddenKinds.contains(block.kind) && !backgroundRuleIDs.contains(block.id)
         }
-            .filter { !backgroundRuleIDs.contains($0.id) }
     }
 
     func ruleScopeLabel(_ blockID: String) -> String {
@@ -768,11 +789,11 @@ final class GraphStore: ObservableObject {
         return scopes.isEmpty ? (activeLocale == "zh-Hans" ? "项目范围" : "PROJECT") : scopes.joined(separator: " · ")
     }
 
-    func setLens(_ lens: ViewLens, enabled: Bool) {
-        if enabled {
-            enabledLenses.insert(lens)
+    func setKindVisible(_ kind: String, visible: Bool) {
+        if visible {
+            hiddenKinds.remove(kind)
         } else {
-            enabledLenses.remove(lens)
+            hiddenKinds.insert(kind)
         }
     }
 
@@ -975,7 +996,9 @@ final class GraphStore: ObservableObject {
                 }.value
                 guard !Task.isCancelled else { return }
                 self?.sourcePollingError = failure
-                try? await Task.sleep(for: .seconds(15))
+                // Reconciliation is a fallback for editors that do not emit
+                // filesystem events; keep it low-frequency and event-driven.
+                try? await Task.sleep(for: .seconds(60))
             }
         }
     }
@@ -1005,7 +1028,9 @@ final class GraphStore: ObservableObject {
         source.resume()
         livePollingTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(250))
+                // The directory watcher handles normal SQLite/WAL updates. This
+                // low-frequency fallback only covers missed filesystem events.
+                try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { return }
                 self?.refreshIfChanged()
             }
@@ -1282,13 +1307,9 @@ final class GraphStore: ObservableObject {
         return (activeLocale == "zh-Hans" ? zh : en)[key] ?? key
     }
 
-    func lensTitle(_ lens: ViewLens) -> String {
-        switch lens {
-        case .principle: text("principle"); case .product: text("product"); case .requirement: text("requirement")
-        case .flow: text("flow"); case .ui: text("ui"); case .service: text("service")
-        case .function: text("function"); case .api: text("api"); case .integration: text("integration"); case .data: text("data")
-        case .database: text("database"); case .risk: text("risk")
-        }
+    /// Preserve the exact kind string written by the agent; custom labels are not translated.
+    func kindTitle(_ kind: String) -> String {
+        kind
     }
 
     func setCanvasOffset(_ value: CGSize) {
