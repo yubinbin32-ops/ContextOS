@@ -31,7 +31,14 @@ assert.ok(
 const skillPath = path.join("plugins", "contextos", "skills", "contextos", "SKILL.md");
 assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");
 const skillText = fs.readFileSync(skillPath, "utf8");
+const capabilityReference = path.join("plugins", "contextos", "skills", "contextos", "references", "capabilities.md");
 assert.ok(skillText.includes("意图级开发入口"), "Skill must document the intent-level entry");
+assert.ok(skillText.includes("references/capabilities.md"), "Skill must route advanced capabilities to its reference");
+assert.ok(fs.existsSync(capabilityReference), "ContextOS capability reference is missing");
+const capabilityText = fs.readFileSync(capabilityReference, "utf8");
+for (const term of ["decision_write", "rule_write", "bind_rule", "bind_auto", "chain", "compose", "link", "task.finish"]) {
+  assert.ok(capabilityText.includes(term), `Capability reference must document ${term}`);
+}
 for (const tool of EXPECTED_TOOLS) {
   assert.ok(skillText.includes(`\`${tool}\``), `Skill must document the ${tool} tool`);
 }

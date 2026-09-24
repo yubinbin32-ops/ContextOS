@@ -532,6 +532,34 @@ test('pipeline executes parallel and sequential chains with any tool', async () 
   assert.match(chainRes, /Sequential Chain: 2 actions/);
 });
 
+test('pipeline preserves nested action output budgets', async () => {
+  const dir = makeTempProject();
+  const largeFile = path.join(dir, 'src', 'large.txt');
+  fs.writeFileSync(largeFile, `BEGIN\n${'x'.repeat(4000)}\nEND_MARKER\n`);
+
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    steps: [
+      {
+        parallel: [
+          {
+            inspect: {
+              path: 'src/large.txt',
+              budget: 'full',
+              maxChars: 6000,
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.match(result, /END_MARKER/);
+  service.close();
+});
+
 test('ModuleIndex indexes manifests and config files, extracting structural properties', () => {
   const dir = makeTempProject();
   fs.writeFileSync(path.join(dir, 'Cargo.toml'), '[package]\nname = "desktop"\nversion = "2.5.5"\n');
@@ -546,5 +574,4 @@ test('ModuleIndex indexes manifests and config files, extracting structural prop
   const matches = index.lookup('version');
   assert.ok(matches.length > 0, 'lookup version should return modules containing version configs');
 });
-
 

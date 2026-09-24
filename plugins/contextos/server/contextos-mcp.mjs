@@ -45541,6 +45541,18 @@ var CodeTools = class {
 // packages/orchestrator/src/pipelines.mjs
 var OUTLINE_CLIP = 1200;
 var SEARCH_CLIP = 360;
+var PIPELINE_DEFAULT_OUTPUT_CLIP = 1200;
+var PIPELINE_MAX_OUTPUT_CLIP = 6e4;
+function resolveActionOutputLimit(action) {
+  if (!action || typeof action !== "object") return PIPELINE_DEFAULT_OUTPUT_CLIP;
+  const nested = [action.inspect, action.verify, action.change, action.ship].find((value) => value && typeof value === "object");
+  const requested = typeof action.maxChars === "number" ? action.maxChars : typeof nested?.maxChars === "number" ? nested.maxChars : null;
+  if (Number.isFinite(requested) && requested > 0) {
+    return Math.min(Math.floor(requested), PIPELINE_MAX_OUTPUT_CLIP);
+  }
+  if (nested?.budget === "full") return PIPELINE_MAX_OUTPUT_CLIP;
+  return PIPELINE_DEFAULT_OUTPUT_CLIP;
+}
 function compactOutlineData(text) {
   if (typeof text !== "string") return "";
   const lines = text.split(/\r?\n/);
@@ -46480,15 +46492,23 @@ function normalizeAction(action, projectRoot) {
     if ("inspect" in action) {
       tool = "inspect";
       args2 = typeof action.inspect === "string" ? { path: action.inspect } : { ...action.inspect };
+      if (action.maxChars !== void 0 && args2.maxChars === void 0) args2.maxChars = action.maxChars;
+      if (action.raw !== void 0 && args2.raw === void 0) args2.raw = action.raw;
     } else if ("change" in action) {
       tool = "change";
       args2 = typeof action.change === "string" ? { path: action.change } : { ...action.change };
+      if (action.maxChars !== void 0 && args2.maxChars === void 0) args2.maxChars = action.maxChars;
+      if (action.raw !== void 0 && args2.raw === void 0) args2.raw = action.raw;
     } else if ("verify" in action) {
       tool = "verify";
       args2 = typeof action.verify === "string" ? { command: action.verify } : action.verify === true ? {} : { ...action.verify };
+      if (action.maxChars !== void 0 && args2.maxChars === void 0) args2.maxChars = action.maxChars;
+      if (action.raw !== void 0 && args2.raw === void 0) args2.raw = action.raw;
     } else if ("ship" in action) {
       tool = "ship";
       args2 = typeof action.ship === "string" ? { summary: action.ship } : { ...action.ship };
+      if (action.maxChars !== void 0 && args2.maxChars === void 0) args2.maxChars = action.maxChars;
+      if (action.raw !== void 0 && args2.raw === void 0) args2.raw = action.raw;
     } else if ("run" in action || "run_command" in action) {
       tool = "ops";
       const cmd = action.run || action.run_command;
@@ -46566,7 +46586,13 @@ async function pipelinePipeline(ctx, input = {}) {
           try {
             const normalized = normalizeAction(action, ctx.projectRoot);
             const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
-            return { index: idx + 1, tool: normalized.tool, ok: true, output: res };
+            return {
+              index: idx + 1,
+              tool: normalized.tool,
+              ok: true,
+              output: res,
+              maxChars: resolveActionOutputLimit(action)
+            };
           } catch (err2) {
             return { index: idx + 1, tool: action.tool || "unknown", ok: false, error: err2.message };
           }
@@ -46590,7 +46616,13 @@ async function pipelinePipeline(ctx, input = {}) {
           const normalized = normalizeAction(action, ctx.projectRoot);
           const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
           const isFail = typeof res === "string" && (res.includes("Verdict: FAIL") || res.includes("BLOCKED"));
-          subResults.push({ index: j + 1, tool: normalized.tool, ok: !isFail, output: res });
+          subResults.push({
+            index: j + 1,
+            tool: normalized.tool,
+            ok: !isFail,
+            output: res,
+            maxChars: resolveActionOutputLimit(action)
+          });
           if (isFail) {
             chainFailed = true;
             haltReason = `Chain step ${j + 1} (${normalized.tool}) failed verification/gate`;
@@ -46624,7 +46656,8 @@ async function pipelinePipeline(ctx, input = {}) {
         kind: "single",
         tool: normalized.tool,
         ok: !isFail,
-        output: res
+        output: res,
+        maxChars: resolveActionOutputLimit(step)
       });
       if (isFail) {
         halted = true;
@@ -46667,7 +46700,7 @@ async function pipelinePipeline(ctx, input = {}) {
       for (const item of r.items) {
         lines.push(`- **Action ${item.index} (${item.tool})**: ${item.ok ? "OK" : `FAIL: ${item.error}`}`);
         if (item.output) {
-          lines.push("```text", formatPipelineOutput(item.output, 1200), "```");
+          lines.push("```text", formatPipelineOutput(item.output, item.maxChars), "```");
         }
       }
     } else if (r.kind === "chain") {
@@ -46675,14 +46708,14 @@ async function pipelinePipeline(ctx, input = {}) {
       for (const item of r.items) {
         lines.push(`- **Chain Action ${item.index} (${item.tool})**: ${item.ok ? "OK" : `FAILED: ${item.error || "Verification/gate failed"}`}`);
         if (item.output) {
-          lines.push("```text", formatPipelineOutput(item.output, 1200), "```");
+          lines.push("```text", formatPipelineOutput(item.output, item.maxChars), "```");
         }
       }
     } else {
       lines.push(`### Step ${r.step} [Single Action: ${r.tool}] (${r.ok ? "PASS" : "FAIL"})`);
       if (r.error) lines.push(`- Error: ${r.error}`);
       if (r.output) {
-        lines.push("```text", formatPipelineOutput(r.output, 1200), "```");
+        lines.push("```text", formatPipelineOutput(r.output, r.maxChars), "```");
       }
     }
   }
@@ -54085,6 +54118,7 @@ var package_default = {
   files: [
     "plugins/contextos/server/contextos-mcp.mjs",
     "plugins/contextos/skills/contextos/SKILL.md",
+    "plugins/contextos/skills/contextos/references/",
     "packages/code-intel/grammars/",
     "AI_SETUP.md",
     "README.md",

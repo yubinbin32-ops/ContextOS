@@ -50,7 +50,12 @@ function findPluginInstalls() {
   return installs;
 }
 
-const targets = findPluginInstalls();
+function findLocalSourceInstalls() {
+  const sourceTarget = path.join(os.homedir(), "plugins", "contextos");
+  return fs.existsSync(sourceTarget) ? [sourceTarget] : [];
+}
+
+const targets = [...new Set([...findPluginInstalls(), ...findLocalSourceInstalls()])];
 if (!targets.length) console.log("! 未找到已安装的 ContextOS 插件缓存，跳过缓存同步。");
 
 for (const target of targets) {

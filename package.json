@@ -39,6 +39,7 @@
   "files": [
     "plugins/contextos/server/contextos-mcp.mjs",
     "plugins/contextos/skills/contextos/SKILL.md",
+    "plugins/contextos/skills/contextos/references/",
     "packages/code-intel/grammars/",
     "AI_SETUP.md",
     "README.md",
