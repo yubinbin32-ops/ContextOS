@@ -12,8 +12,9 @@ This document records ContextOS's architectural history, lessons learned from pa
 | Artifact Ledger 试验与回退 (DEC-013/015) | 移除逐文件 Artifact/BuildRun 台账，改用目录树锚点与 manifest/content Hash | 减少重复状态和图谱噪声，保留有界依赖边界 |
 | 意图级架构 (DEC-016/017/018/019) | 对外收敛为 `explore/change/verify/ship/ops`，服务端编排器接管流程，模块派生，治理默认 advisory，V2 facade 退出主入口 | AI 只表达意图，不再手工驱动状态机；上下文与调用往返显著下降 |
 | 2.5.0 生产加固 (DEC-012/020/021/022) | 项目身份派生、显式 workspace root、原子 changeset、图谱同步自愈、分发/升级验证、Plan/Task 生命周期门禁、Cloud 鉴权 | 从功能可用推进到可发布、可升级、可审计的工程状态 |
+| 2.5.3 动作槽位与改测合一闭环 (DEC-023) | Action Slots [S1]、change 原地原子 verify 与 autoRevert、独立 inspect 深度切片、纯提问自适应节流、精简双安装模式 | 彻底消灭参数行号对齐失误，多轮开发压缩为 2 轮极速闭环，纯提问上下文再降 50% |
 
-当前公开入口固定为 `explore`、`change`、`verify`、`ship`、`ops`。代码事实由真实文件与 AST 锚点维护；SQLite 负责事务状态，`graph.json` 负责 Git 可移植投影；Cloud Hub 仍为实验能力。
+当前公开入口固定为 `explore`、`inspect`、`change`、`verify`、`ship`、`ops`。代码事实由真实文件与 AST 锚点维护；SQLite 负责事务状态，`graph.json` 负责 Git 可移植投影；安装方式统一收敛为 macOS 桌面端和一句话发给 AI 自动配置两种方式。
 
 ---
 
@@ -360,3 +361,27 @@ DEC-017 之后 V2 的 12 个 facade 只剩回滚价值，但它们的存在本�
 ## [DEC-022] Cold-start identity and lifecycle truth
 
 Project identity is derived once from the workspace directory. Legacy state created under the bootstrap ID 'contextos' is adopted atomically only when the target project is empty and the repository root matches; conflicting projects are refused rather than merged. Plan completion requires all checkpoints to pass and all linked tasks to be completed. Raw Plan/Task updates may not bypass lifecycle actions. Failed receipts are superseded only by a later successful run of the same normalized command in the same or unknown cwd. The Skill, bundle, and installed plugin cache must be hash-aligned before cold-start acceptance is considered valid.
+
+---
+
+## [DEC-023] Action Slots, In-Situ Verify, First-Class inspect, and Adaptive Query Budgeting
+
+### 1. 背景
+尽管 V3 将接口收敛为意图级，但在复杂的跨模块重构与真实开发中暴露了两个新痛点：
+1. **参数对齐成本高与行号猜测幻觉**：AI 在调用 `change` 时经常需要反复比对目标文件行号或猜测 verbatim 匹配字串，容易引发参数对齐失败；
+2. **多轮改测往返消耗累积上下文**：改代码（change）、开子进程测代码（verify）分别占用独立轮次，加上测试输出和调试往返，一次小任务往往需要 6~9 轮交互，导致宿主编辑器（如 Codex / Cursor）累积 Token 激增；
+3. **定位查询场景上下文冗余**：当 AI 仅仅提问“某个符号在哪里、谁在调用它”时，若仍旧返回代码修改槽位与多余代码切片，会白白浪费上下文窗口；
+4. **安装方式分散**：此前文档提供三种安装方式（桌面端、一键 AI 指南、手动下载 mjs 纯插件），第三种极客方式需要用户手动配置复杂路径且容易缺乏治理，造成认知分散。
+
+### 2. 决策
+1. **动作槽位 (Action Slots [S1], [S2])**：`explore` 在探索阶段自动预切片候选文件并注册动作槽位，AI 可直接通过选择题模式引用 `change({ slot: "S1", append: "..." })` 或按符号改写，零歧义、零参数对齐失误；
+2. **改测合一 (In-Situ Verify) 与原子回滚**：`change` 步骤原地接受 `verify` 参数（如 `verify: "npm test"`），在一个动作内原子完成“代码写盘 + 单测运行 + 凭证回执签发”。若单测未通过且开启 `autoRevert: true`，OS 会在毫秒级自动还原磁盘代码，防止中间态脏代码污染仓库；
+3. **深度切片专用工具 `inspect`**：对外正式开放为 6 大工具体系（`explore`、`inspect`、`change`、`verify`、`ship`、`ops`），支持按槽位或路径按需提取 AST 语义切片，坚决杜绝整文件倾倒；
+4. **纯提问自适应节流 (Adaptive Query Budgeting)**：自动识别纯理解/提问/定位意图（如“在何处实现”、“谁在调用”），智能跳过生成修改槽位与多余代码切片，单次探索上下文字符数直接压减 50%（从 ~2,000 压至 ~1,100 字符）；
+5. **轻量实时黑板 (`.contextos/blackboard.md`)**：会话进行中的任务目标、修改文件与测试回执实时落盘黑板，支持跨会话/清屏后通过 `explore` 在 ~150 tokens 内秒级复原上下文；
+6. **收敛为双安装模式**：去除手动配置 mjs 的第三种方式，全面推行【方案 A：macOS 桌面端开箱即用】与【方案 B：一句话发给 AI 自动自举配置】两种极简途径。
+
+### 3. 影响与收益
+- 极速开发闭环由 6~9 轮往返大幅压缩至 **2 轮实质动作**（explore ➔ change + verify ➔ ship）；
+- 彻底消灭了因行号或字符串错位导致的 `Target not unique` 报错；
+- 提问场景上下文预算再降 50%，安装引导门槛大幅降低。

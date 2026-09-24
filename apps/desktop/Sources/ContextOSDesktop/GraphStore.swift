@@ -60,6 +60,8 @@ final class GraphStore: ObservableObject {
     private var fileWatcher: DispatchSourceFileSystemObject?
     private var watchedDescriptor: Int32 = -1
     private var projectViewStates: [String: ProjectViewState] = [:]
+    private var sourceReferenceIndexByBlockID: [String: [SourceReference]] = [:]
+    private var sourceReferenceCacheKey = ""
 
     private struct ProjectViewState {
         let selection: GraphSelection?
@@ -457,6 +459,7 @@ final class GraphStore: ObservableObject {
             isolateFocused: isolateFocused
         )
         persistCameraState(for: snapshot.project.id)
+        persistHiddenKinds(for: snapshot.project.id)
     }
 
     private func restoreProjectViewState(for projectID: String) {
@@ -473,6 +476,7 @@ final class GraphStore: ObservableObject {
             cameraRestoreRequestID = UUID()
             collapsedSidebarSections = loadSidebarState(for: projectID)
             persistCameraState(for: projectID)
+            persistHiddenKinds(for: projectID)
             return
         }
         if let persisted = persistedCameraState(for: projectID) {
@@ -480,7 +484,7 @@ final class GraphStore: ObservableObject {
             highlightedChainIDs.removeAll()
             focusTarget = nil
             isolateFocused = false
-            hiddenKinds = []
+            hiddenKinds = persistedHiddenKinds(for: projectID)
             canvasScale = persisted.scale
             canvasOffset = persisted.offset
             hasRestoredCamera = true
@@ -492,7 +496,7 @@ final class GraphStore: ObservableObject {
         highlightedChainIDs.removeAll()
         focusTarget = nil
         isolateFocused = false
-        hiddenKinds = []
+        hiddenKinds = persistedHiddenKinds(for: projectID)
         canvasScale = 1
         canvasOffset = .zero
         hasRestoredCamera = false
@@ -502,6 +506,20 @@ final class GraphStore: ObservableObject {
 
     private func cameraStateKey(for projectID: String, component: String) -> String {
         "contextos.camera.\(projectID).\(component)"
+    }
+
+    private func hiddenKindsKey(for projectID: String) -> String {
+        "contextos.hiddenKinds.\(projectID)"
+    }
+
+    private func persistHiddenKinds(for projectID: String) {
+        guard !projectID.isEmpty else { return }
+        UserDefaults.standard.set(hiddenKinds.sorted(), forKey: hiddenKindsKey(for: projectID))
+    }
+
+    private func persistedHiddenKinds(for projectID: String) -> Set<String> {
+        guard !projectID.isEmpty else { return [] }
+        return Set(UserDefaults.standard.stringArray(forKey: hiddenKindsKey(for: projectID)) ?? [])
     }
 
     private func persistCameraState(for projectID: String) {
@@ -795,6 +813,7 @@ final class GraphStore: ObservableObject {
         } else {
             hiddenKinds.insert(kind)
         }
+        persistHiddenKinds(for: snapshot.project.id)
     }
 
     func setSidebarSection(_ section: SidebarSection, collapsed: Bool) {
@@ -1317,6 +1336,12 @@ final class GraphStore: ObservableObject {
         persistCameraState(for: snapshot.project.id)
     }
 
+    func setCamera(scale: CGFloat, offset: CGSize) {
+        canvasScale = min(1.8, max(0.25, scale))
+        canvasOffset = offset
+        persistCameraState(for: snapshot.project.id)
+    }
+
     func zoom(by amount: CGFloat) {
         canvasScale = min(1.8, max(0.25, canvasScale + amount))
         persistCameraState(for: snapshot.project.id)
@@ -1444,7 +1469,12 @@ final class GraphStore: ObservableObject {
     }
 
     func sourceReferences(for blockID: String) -> [SourceReference] {
-        snapshot.sourceReferences.filter { $0.blockId == blockID }
+        let cacheKey = "\(snapshot.project.id):\(snapshot.project.graphRevision):\(snapshot.changeSequence):\(snapshotPresentationID.uuidString)"
+        if cacheKey != sourceReferenceCacheKey {
+            sourceReferenceIndexByBlockID = Dictionary(grouping: snapshot.sourceReferences, by: \.blockId)
+            sourceReferenceCacheKey = cacheKey
+        }
+        return sourceReferenceIndexByBlockID[blockID, default: []]
     }
 
     func revealSource(_ source: SourceReference) {

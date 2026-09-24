@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,18 +31,22 @@ try {
   fs.mkdirSync(path.join(projectRoot, 'app'), { recursive: true });
   fs.writeFileSync(path.join(projectRoot, 'app/Info.plist'), '<plist/>\n', 'utf8');
   fs.writeFileSync(path.join(projectRoot, 'app/Build.xcconfig'), 'PRODUCT_NAME=Demo\n', 'utf8');
+  const infoContent = fs.readFileSync(path.join(projectRoot, 'app/Info.plist'));
+  const buildConfigContent = fs.readFileSync(path.join(projectRoot, 'app/Build.xcconfig'));
+  const infoHash = crypto.createHash('sha256').update(infoContent).digest('hex').slice(0, 16);
+  const buildConfigHash = crypto.createHash('sha256').update(buildConfigContent).digest('hex').slice(0, 16);
   service.db.saveBlock({
     id: 'block-packaging',
     projectId,
     title: 'Packaging',
-    artifactRefs: [{ path: 'app/Info.plist', anchorKind: 'file', hash: 'placeholder' }],
+    artifactRefs: [{ path: 'app/Info.plist', anchorKind: 'file', hash: infoHash }],
   });
   service.syncEngine.exportGraphToJson(projectId, projectRoot);
   service.db.saveBlock({
     id: 'block-admin-sync',
     projectId,
     title: 'Admin sync marker',
-    artifactRefs: [{ path: 'app/Build.xcconfig', anchorKind: 'file', hash: 'placeholder' }],
+    artifactRefs: [{ path: 'app/Build.xcconfig', anchorKind: 'file', hash: buildConfigHash }],
   });
   service.close({ stopProcesses: false });
 

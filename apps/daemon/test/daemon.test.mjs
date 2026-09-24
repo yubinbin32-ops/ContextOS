@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { Daemon } from '../src/osd.mjs';
-import { IPCClient, getSocketPath } from '../../../packages/protocol/src/index.mjs';
+import { IPCClient } from '../../../packages/protocol/src/index.mjs';
 
 test('Daemon graph writes go through the OS sync path and publish graph.json', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-daemon-sync-'));

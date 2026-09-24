@@ -40,49 +40,48 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync version data
+        run: npm run version:sync
+
       - name: Run automated checks
         run: npm test
 
-      - name: Detect signing credentials
-        id: signing
-        env:
-          CERTIFICATE_P12: ${{ secrets.CONTEXTOS_CERTIFICATE_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.CONTEXTOS_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.CONTEXTOS_KEYCHAIN_PASSWORD }}
-          SIGN_IDENTITY: ${{ secrets.CONTEXTOS_SIGN_IDENTITY }}
-        run: |
-          set -euo pipefail
-          if [[ -n "${CERTIFICATE_P12:-}" && -n "${CERTIFICATE_PASSWORD:-}" && -n "${KEYCHAIN_PASSWORD:-}" && -n "${SIGN_IDENTITY:-}" ]]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "require_developer_id=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "require_developer_id=0" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Unsigned release::Developer ID signing secrets are incomplete; packaging with an ad-hoc signature."
-          fi
-
-      - name: Import Developer ID certificate
-        if: steps.signing.outputs.enabled == 'true'
-        env:
-          CERTIFICATE_P12: ${{ secrets.CONTEXTOS_CERTIFICATE_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.CONTEXTOS_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.CONTEXTOS_KEYCHAIN_PASSWORD }}
-        run: |
-          set -euo pipefail
-          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/contextos.p12"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/contextos.keychain-db"
-          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/contextos.keychain-db"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_TEMP/contextos.keychain-db"
-          security import "$RUNNER_TEMP/contextos.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$RUNNER_TEMP/contextos.keychain-db"
-          security list-keychains -d user -s "$RUNNER_TEMP/contextos.keychain-db"
-          security default-keychain -s "$RUNNER_TEMP/contextos.keychain-db"
-
-      - name: Build release package
+      - name: Build unsigned release package
         env:
           CONTEXTOS_PACKAGE_ARCH: ${{ matrix.arch }}
-          CONTEXTOS_REQUIRE_DEVELOPER_ID: ${{ steps.signing.outputs.require_developer_id }}
-          CONTEXTOS_SIGN_IDENTITY: ${{ steps.signing.outputs.enabled == 'true' && secrets.CONTEXTOS_SIGN_IDENTITY || '' }}
+          CONTEXTOS_REQUIRE_DEVELOPER_ID: "0"
+          CONTEXTOS_SIGN_IDENTITY: ""
         run: npm run desktop:package
+
+      - name: Verify ad-hoc package signatures
+        env:
+          CONTEXTOS_PACKAGE_ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for archive in \
+            "dist/ContextOS-macos-${CONTEXTOS_PACKAGE_ARCH}.zip" \
+            "dist/ContextOS-macos-full-${CONTEXTOS_PACKAGE_ARCH}.zip"; do
+            verify_dir="$(mktemp -d)"
+            /usr/bin/ditto -xk "$archive" "$verify_dir"
+            app="$verify_dir/ContextOS.app"
+            binary="$app/Contents/MacOS/ContextOS"
+            /usr/bin/codesign --verify --deep --strict --verbose=2 "$app"
+            identity="$(/usr/bin/codesign -dv --verbose=4 "$app" 2>&1)"
+            grep -q '^Signature=adhoc' <<< "$identity"
+            grep -q '^TeamIdentifier=not set' <<< "$identity"
+            actual_arch="$(/usr/bin/lipo -archs "$binary")"
+            case "$actual_arch" in
+              x86_64) normalized_arch="x64" ;;
+              arm64) normalized_arch="arm64" ;;
+              *) normalized_arch="$actual_arch" ;;
+            esac
+            if [[ "$normalized_arch" != "$CONTEXTOS_PACKAGE_ARCH" ]]; then
+              echo "::error title=Architecture mismatch::$archive contains $actual_arch, expected $CONTEXTOS_PACKAGE_ARCH."
+              exit 1
+            fi
+            rm -rf "$verify_dir"
+          done
 
       - name: Collect release assets
         shell: bash
@@ -100,9 +99,52 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  package-windows:
+    name: Package Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix apps/desktop-win ci
+
+      - name: Sync version data
+        run: npm run version:sync
+
+      - name: Build Windows release package
+        run: node scripts/package-windows.mjs
+
+      - name: Collect Windows release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets-win
+          cp dist/*.exe release-assets-win/ 2>/dev/null || true
+          cp dist/*.msi release-assets-win/ 2>/dev/null || true
+          cp dist/SHA256SUMS-windows.txt release-assets-win/ 2>/dev/null || true
+
+      - name: Upload Windows assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: contextos-windows-x64
+          path: release-assets-win/*
+          if-no-files-found: warn
+          retention-days: 7
+
   publish:
     name: Publish GitHub Release
-    needs: package
+    needs: [package, package-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -119,6 +161,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync version data
+        run: npm run version:sync
+
       - name: Build standalone MCP bundle
         run: npm run plugin:build
 
@@ -126,7 +171,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-assets
-          pattern: contextos-macos-*
+          pattern: contextos-*
           merge-multiple: true
 
       - name: Resolve release version
@@ -168,6 +213,7 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ContextOS ${{ steps.version.outputs.tag }}
+          body_path: .github/RELEASE_NOTES.md
           generate_release_notes: true
           make_latest: true
           prerelease: ${{ steps.version.outputs.prerelease }}

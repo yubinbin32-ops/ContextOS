@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var syncIssues: [String] = []
     @State private var requestedDocument: String?
     @State private var requestedSection: String?
+    @State private var completedPlansCollapsed = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @AppStorage("contextos.appearance") private var appearance = AppearancePreference.system.rawValue
@@ -187,13 +188,76 @@ struct ContentView: View {
                     }
 
                     sidebarSection(.plans, title: store.text("plans")) {
-                        ForEach(store.plans.filter { $0.derivedStatus != "cancelled" }) { plan in
-                            sidebarButton(
-                                title: "\(plan.phase.uppercased()) \(plan.order) · \(store.planText(plan, field: "title"))",
-                                subtitle: "\(plan.priority.uppercased()) · \(plan.derivedStatus.uppercased()) · \(plan.progress.completedSteps)/\(plan.progress.totalSteps)",
-                                color: ContextOSTheme.planColor(plan.derivedStatus),
-                                selected: store.selection == GraphSelection(type: .plan, id: plan.id)
-                            ) { store.focusPlan(plan.id) }
+                        let activePlans = store.plans.filter { plan in
+                            let s = plan.status.lowercased()
+                            let ds = plan.derivedStatus.lowercased()
+                            let isDone = s == "completed" || s == "archived" || ds == "completed" || ds == "archived"
+                            let isActive = s == "active" || s == "draft" || s == "pending" || ds == "active" || ds == "draft" || ds == "pending"
+                            return (isActive || !isDone) && !isDone && ds != "cancelled"
+                        }
+                        let completedPlans = store.plans.filter { plan in
+                            let s = plan.status.lowercased()
+                            let ds = plan.derivedStatus.lowercased()
+                            return (s == "completed" || s == "archived" || ds == "completed" || ds == "archived") && ds != "cancelled"
+                        }
+
+                        if activePlans.isEmpty {
+                            Text(store.activeLocale == "zh-Hans" ? "暂无进行中的规划" : "No active plans")
+                                .font(.system(size: 8.5, design: .rounded))
+                                .foregroundStyle(ContextOSTheme.muted)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 4)
+                        } else {
+                            ForEach(activePlans) { plan in
+                                sidebarButton(
+                                    title: "\(plan.phase.uppercased()) \(plan.order) · \(store.planText(plan, field: "title"))",
+                                    subtitle: "\(plan.priority.uppercased()) · \(plan.derivedStatus.uppercased()) · \(plan.progress.completedSteps)/\(plan.progress.totalSteps)",
+                                    color: ContextOSTheme.planColor(plan.derivedStatus),
+                                    selected: store.selection == GraphSelection(type: .plan, id: plan.id)
+                                ) { store.focusPlan(plan.id) }
+                            }
+                        }
+
+                        if !completedPlans.isEmpty {
+                            Button {
+                                withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) {
+                                    completedPlansCollapsed.toggle()
+                                }
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: completedPlansCollapsed ? "chevron.right" : "chevron.down")
+                                        .font(.system(size: 8, weight: .bold))
+                                    Text(store.activeLocale == "zh-Hans" ? "已完结归档" : "COMPLETED / ARCHIVED")
+                                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                                        .tracking(1.0)
+                                    Spacer()
+                                    Text("\(completedPlans.count)")
+                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 1)
+                                        .background(ContextOSTheme.success.opacity(0.15))
+                                        .foregroundStyle(ContextOSTheme.success)
+                                        .clipShape(Capsule())
+                                }
+                                .foregroundStyle(ContextOSTheme.muted)
+                                .padding(.horizontal, 18)
+                                .padding(.top, 8)
+                                .padding(.bottom, 4)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+
+                            if !completedPlansCollapsed {
+                                ForEach(completedPlans) { plan in
+                                    let timeText = plan.completedAt.map { " · \($0.prefix(10))" } ?? ""
+                                    sidebarButton(
+                                        title: "\(plan.phase.uppercased()) \(plan.order) · \(store.planText(plan, field: "title"))",
+                                        subtitle: "\(plan.derivedStatus.uppercased())\(timeText) · \(plan.progress.completedSteps)/\(plan.progress.totalSteps)",
+                                        color: ContextOSTheme.success,
+                                        selected: store.selection == GraphSelection(type: .plan, id: plan.id)
+                                    ) { store.focusPlan(plan.id) }
+                                }
+                            }
                         }
                     }
 
@@ -479,11 +543,23 @@ struct ContentView: View {
     private var runningProcessesSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text(store.activeLocale == "zh-Hans" ? "持续运行命令" : "RUNNING PROCESSES")
-                    .font(.system(size: 8.5, weight: .bold, design: .monospaced))
-                    .tracking(1.2)
-                    .foregroundStyle(ContextOSTheme.muted)
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(store.runningProcesses.isEmpty ? ContextOSTheme.muted : ContextOSTheme.success)
+                        .frame(width: 6, height: 6)
+                    Text(store.activeLocale == "zh-Hans" ? "后台守护进程" : "RUNNING PROCESSES")
+                        .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                        .tracking(1.2)
+                        .foregroundStyle(ContextOSTheme.ink)
+                }
                 Spacer()
+                Text("SYS-OPS")
+                    .font(.system(size: 7.5, weight: .black, design: .monospaced))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.12))
+                    .foregroundStyle(ContextOSTheme.muted)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
                 if !store.runningProcesses.isEmpty {
                     Text("\(store.runningProcesses.count)")
                         .font(.system(size: 8, weight: .bold, design: .monospaced))
@@ -504,7 +580,7 @@ struct ContentView: View {
                 }
                 .padding(.vertical, 2)
             } else {
-                VStack(spacing: 4) {
+                VStack(spacing: 5) {
                     ForEach(store.runningProcesses) { proc in
                         HStack(spacing: 8) {
                             Circle()
@@ -542,7 +618,7 @@ struct ContentView: View {
                             .help(store.activeLocale == "zh-Hans" ? "停止此长期任务" : "Stop process")
                         }
                         .padding(6)
-                        .background(ContextOSTheme.surface)
+                        .background(ContextOSTheme.canvas)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .overlay(
                             RoundedRectangle(cornerRadius: 6)
@@ -552,8 +628,15 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(8)
+        .background(ContextOSTheme.surface.opacity(0.85))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(ContextOSTheme.hairline, lineWidth: 1)
+        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     private var projectRuleBlocks: [BlockItem] {

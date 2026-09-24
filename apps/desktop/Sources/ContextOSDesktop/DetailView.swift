@@ -686,8 +686,10 @@ struct DetailView: View {
                                         .font(.system(size: 11.5, weight: .semibold, design: .rounded))
                                     HStack(spacing: 5) {
                                         Text(block.kind.uppercased())
-                                        Text("·")
-                                        Text(block.architectureLayer.uppercased())
+                                        if !block.architectureLayer.isEmpty {
+                                            Text("·")
+                                            Text(block.architectureLayer.uppercased())
+                                        }
                                         if let role = store.snapshot.chainNodes.first(where: { $0.chainId == chainID && $0.blockId == id })?.role,
                                            !role.isEmpty {
                                             Text("·")
@@ -720,17 +722,37 @@ struct DetailView: View {
                        let link = store.snapshot.links.first(where: {
                            linkIDs.contains($0.id) && $0.sourceId == id && $0.targetId == nodeIDs[index + 1]
                        }) {
+                        let sourceBlock = store.block(id)
+                        let targetBlock = store.block(nodeIDs[index + 1])
+                        let sourceTitle = sourceBlock.map { store.blockText($0, field: "title") } ?? id
+                        let targetTitle = targetBlock.map { store.blockText($0, field: "title") } ?? nodeIDs[index + 1]
+
+                        let subtitle: String = {
+                            if !link.contract.isEmpty {
+                                return link.contract
+                            }
+                            if let reason = link.reason, !reason.isEmpty {
+                                return reason
+                            }
+                            if !link.label.isEmpty && link.label.lowercased() != link.kind.lowercased() {
+                                return link.label
+                            }
+                            let lk = link.kind.lowercased()
+                            let action = lk.contains("call") ? "invokes" : (lk.contains("depend") ? "depends on" : link.kind)
+                            return "\(sourceTitle) \(action) \(targetTitle)"
+                        }().trimmingCharacters(in: .whitespacesAndNewlines)
+
                         HStack(alignment: .top, spacing: 7) {
                             Rectangle()
                                 .fill(ContextOSTheme.linkKindColor(link.kind))
-                                .frame(width: 1, height: 28)
+                                .frame(width: 1, height: subtitle.isEmpty ? 14 : 26)
                                 .padding(.leading, 9)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text((link.label.isEmpty ? link.kind : link.label).uppercased())
                                     .font(.system(size: 8, weight: .bold, design: .monospaced))
                                     .foregroundStyle(ContextOSTheme.linkKindColor(link.kind))
-                                if !link.contract.isEmpty {
-                                    Text(link.contract)
+                                if !subtitle.isEmpty {
+                                    Text(subtitle)
                                         .font(.system(size: 9.5, design: .rounded))
                                         .foregroundStyle(ContextOSTheme.muted)
                                         .lineLimit(2)

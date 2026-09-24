@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { sanitizeTerminalOutput, stripAnsi, redactSecrets, runCommand, ProcessManager, ensureLogDir, pruneLogDir, writeSecureLog } from '../src/index.mjs';
+import { sanitizeTerminalOutput, redactSecrets, runCommand, ProcessManager, ensureLogDir, pruneLogDir, writeSecureLog } from '../src/index.mjs';
 
 test('Sanitizer strips ANSI, redacts secrets, and collapses build noise', () => {
   const secretText = 'Connecting with token: ghp_123456789012345678901234567890123456';
@@ -99,6 +99,25 @@ test('Sanitizer treats the exit code as authoritative for successful command out
   assert.equal(sanitized.errors.length, 0);
 });
 
+test('Sanitizer preserves query output and distinct files instead of blind collapsing', () => {
+  const lines = [];
+  for (let i = 1; i <= 30; i++) {
+    lines.push(`packages/core/src/file${i}.ts:${i}: const version = "2.5.5";`);
+  }
+  const raw = lines.join('\n') + '\n';
+  const sanitized = sanitizeTerminalOutput(raw, { exitCode: 0, command: 'rg "version" packages/' });
+  assert.match(sanitized.summary, /succeeded.*30 lines/i);
+  assert.ok(sanitized.text.includes('file1.ts'));
+  assert.ok(sanitized.text.includes('Matched files'));
+  assert.ok(!sanitized.text.includes('lines collapsed).'));
+});
+
+test('Sanitizer returns verbatim output when raw: true is passed', () => {
+  const raw = 'line 1\nline 2\nline 3\nline 4\nline 5\n';
+  const sanitized = sanitizeTerminalOutput(raw, { exitCode: 0, raw: true });
+  assert.equal(sanitized.text, raw.trimEnd());
+});
+
 test('ProcessManager starts, streams logs, and terminates process group', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-proc-test-'));
   const manager = new ProcessManager({ projectRoot: tempDir });
@@ -134,4 +153,64 @@ test('ProcessManager starts, streams logs, and terminates process group', async 
   assert.equal(alive, false);
 
   fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('extractDiagnosticBlocks captures multi-line TAP failure frames with diffs and locations', () => {
+  const tapOutput = `
+# Subtest: 13. SagaCoordinator 在幂等窗口内返回缓存结果
+ok 13 - 13. SagaCoordinator 在幂等窗口内返回缓存结果
+  ---
+  duration_ms: 0.133916
+  type: 'test'
+  ...
+# Subtest: 15. SagaCoordinator 步骤超时后取消并补偿已完成步骤
+not ok 15 - 15. SagaCoordinator 步骤超时后取消并补偿已完成步骤
+  ---
+  duration_ms: 11.907292
+  type: 'test'
+  location: '/path/to/test/saga-settlement.test.mjs:248:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    1 !== 0
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///path/to/test/saga-settlement.test.mjs:270:10)
+  ...
+# Subtest: 16. 全链路多币种转账
+ok 16 - 16. 全链路多币种转账
+`;
+
+  const sanitized = sanitizeTerminalOutput(tapOutput, { exitCode: 1 });
+  assert.ok(sanitized.diagnostics.length > 0);
+  const firstBlock = sanitized.diagnostics[0];
+  assert.ok(firstBlock.includes('not ok 15'));
+  assert.ok(firstBlock.includes('1 !== 0'));
+  assert.ok(firstBlock.includes('saga-settlement.test.mjs:248:1'));
+  assert.ok(firstBlock.includes('expected: 0'));
+  assert.ok(firstBlock.includes('actual: 1'));
+  assert.ok(sanitized.text.includes(firstBlock));
+});
+
+test('extractDiagnosticBlocks captures syntax error with caret and line pointers', () => {
+  const syntaxErrOutput = `
+/tmp/project/src/ledger.mjs:42
+const x = \\\${amount};
+          ^
+SyntaxError: Invalid or unexpected token
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:168:18)
+`;
+
+  const sanitized = sanitizeTerminalOutput(syntaxErrOutput, { exitCode: 1 });
+  assert.ok(sanitized.diagnostics.length > 0);
+  const block = sanitized.diagnostics[0];
+  assert.ok(block.includes('SyntaxError'));
+  assert.ok(block.includes('/tmp/project/src/ledger.mjs:42'));
+  assert.ok(block.includes('^'));
 });

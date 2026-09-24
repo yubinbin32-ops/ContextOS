@@ -38,7 +38,7 @@ enum PluginInstaller {
         var errorDescription: String? { output }
     }
 
-    static let fallbackVersion = "2.5.0"
+    static let fallbackVersion = ContextOSVersion.current
 
     static var canonicalServerDirectoryURL: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -46,18 +46,7 @@ enum PluginInstaller {
     }
 
     static var canonicalServerScriptURL: URL {
-        let manager = FileManager.default
-        if let bundleResourceURL = Bundle.main.resourceURL {
-            let bundledScript = bundleResourceURL.appending(path: "server/contextos-mcp.mjs")
-            if manager.fileExists(atPath: bundledScript.path) {
-                return bundledScript
-            }
-        }
-        let appBundleScript = URL(fileURLWithPath: "/Applications/ContextOS.app/Contents/Resources/server/contextos-mcp.mjs")
-        if manager.fileExists(atPath: appBundleScript.path) {
-            return appBundleScript
-        }
-        return canonicalServerDirectoryURL.appending(path: "contextos-mcp.mjs")
+        canonicalServerDirectoryURL.appending(path: "contextos-mcp.mjs")
     }
 
     private static let buildFiles = [
@@ -512,37 +501,18 @@ enum PluginInstaller {
     }
 
     private static func replaceFileAtomically(from sourceURL: URL, to destURL: URL) throws {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: sourceURL.path) else {
-            throw CommandFailure(output: "Source file does not exist: \(sourceURL.path)")
-        }
         if sourceURL.standardizedFileURL == destURL.standardizedFileURL { return }
-        try fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let token = UUID().uuidString
-        let tempURL = destURL.deletingLastPathComponent().appending(path: ".\(destURL.lastPathComponent).tmp-\(token)")
-        let backupURL = destURL.appendingPathExtension("contextos-backup-\(token)")
-        var movedExisting = false
-        do {
-            try fm.copyItem(at: sourceURL, to: tempURL)
-            if fm.fileExists(atPath: destURL.path) {
-                try fm.moveItem(at: destURL, to: backupURL)
-                movedExisting = true
-            }
-            try fm.moveItem(at: tempURL, to: destURL)
-            if movedExisting { try? fm.removeItem(at: backupURL) }
-        } catch {
-            try? fm.removeItem(at: tempURL)
-            if movedExisting, !fm.fileExists(atPath: destURL.path) {
-                try? fm.moveItem(at: backupURL, to: destURL)
-            }
-            throw error
-        }
+        try replaceItemAtomically(from: sourceURL, to: destURL, kind: "file")
     }
 
     static func replaceDirectoryAtomically(from sourceURL: URL, to destURL: URL) throws {
+        try replaceItemAtomically(from: sourceURL, to: destURL, kind: "directory")
+    }
+
+    private static func replaceItemAtomically(from sourceURL: URL, to destURL: URL, kind: String) throws {
         let fm = FileManager.default
         guard fm.fileExists(atPath: sourceURL.path) else {
-            throw CommandFailure(output: "Source directory does not exist: \(sourceURL.path)")
+            throw CommandFailure(output: "Source \(kind) does not exist: \(sourceURL.path)")
         }
         try fm.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let token = UUID().uuidString

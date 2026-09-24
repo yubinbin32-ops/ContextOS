@@ -49,7 +49,7 @@ const loadedLanguages = new Map();
 let initPromise = null;
 let sharedParser = null;
 
-export async function initTreeSitter() {
+async function initTreeSitter() {
   if (!initPromise) {
     initPromise = (async () => {
       try {
@@ -323,17 +323,22 @@ export class TreeSitterParser {
           return null;
       }
 
-      // Link any container methods to container symbols regardless of declaration order
+      // Link any container methods to container symbols regardless of declaration order.
+      const containers = new Map();
+      for (const symbol of symbols) {
+        if (
+          !containers.has(symbol.name) &&
+          (symbol.kind === 'struct' || symbol.kind === 'class' || symbol.kind === 'trait' || symbol.kind === 'interface')
+        ) {
+          containers.set(symbol.name, symbol);
+        }
+      }
       for (const sym of symbols) {
-        if (sym.containerName && (sym.kind === 'method' || sym.kind === 'constructor' || sym.kind === 'function')) {
-          const container = symbols.find(
-            (s) => s.name === sym.containerName && (s.kind === 'struct' || s.kind === 'class' || s.kind === 'trait' || s.kind === 'interface')
-          );
-          if (container && Array.isArray(container.methods)) {
-            if (!container.methods.some((m) => m.name === sym.name && m.startLine === sym.startLine)) {
-              container.methods.push(sym);
-            }
-          }
+        if (!sym.containerName || (sym.kind !== 'method' && sym.kind !== 'constructor' && sym.kind !== 'function')) continue;
+        const container = containers.get(sym.containerName);
+        if (!container || !Array.isArray(container.methods)) continue;
+        if (!container.methods.some((m) => m.name === sym.name && m.startLine === sym.startLine)) {
+          container.methods.push(sym);
         }
       }
 

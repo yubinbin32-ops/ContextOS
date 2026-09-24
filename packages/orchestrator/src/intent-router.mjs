@@ -117,15 +117,3 @@ export function extractIdentifiers(text = '') {
   }
   return found.slice(0, 6);
 }
-
-export function extractCommands(text = '') {
-  const source = String(text);
-  const found = new Set();
-  for (const match of source.matchAll(/`([^`]{2,80})`/g)) {
-    const value = match[1].trim();
-    if (/^(npm|node|pnpm|yarn|bun|swift|go|cargo|python3?|pytest|make|git)\b/.test(value)) {
-      found.add(value);
-    }
-  }
-  return Array.from(found).slice(0, 5);
-}

@@ -502,35 +502,7 @@ export class V2Database {
     }
   }
 
-  getPlan(planId) {
-    const stmt = this.db.prepare('SELECT * FROM plans WHERE id = ?');
-    const row = stmt.get(planId);
-    if (!row) return null;
-
-    const phasesStmt = this.db.prepare('SELECT * FROM phases WHERE plan_id = ? ORDER BY phase_order ASC');
-    const phases = phasesStmt.all(planId).map((p) => ({
-      id: p.id,
-      order: p.phase_order,
-      objective: p.objective,
-      scope: p.scope,
-      deliverables: JSON.parse(p.deliverables_json || '[]'),
-      status: p.status,
-      taskIds: JSON.parse(p.task_ids_json || '[]'),
-      acceptance: JSON.parse(p.acceptance_json || '[]'),
-    }));
-
-    const cpStmt = this.db.prepare('SELECT * FROM checkpoints WHERE plan_id = ?');
-    const checkpoints = cpStmt.all(planId).map((c) => ({
-      id: c.id,
-      planId: c.plan_id,
-      phaseId: c.phase_id,
-      title: c.title,
-      criteria: c.criteria,
-      status: c.status,
-      evidenceRefs: JSON.parse(c.evidence_refs_json || '[]'),
-      completedAt: c.completed_at,
-    }));
-
+  _planFromRow(row, phases, checkpoints) {
     return {
       id: row.id,
       projectId: row.project_id,
@@ -550,12 +522,90 @@ export class V2Database {
     };
   }
 
+  _phaseFromRow(row) {
+    return {
+      id: row.id,
+      order: row.phase_order,
+      objective: row.objective,
+      scope: row.scope,
+      deliverables: JSON.parse(row.deliverables_json || '[]'),
+      status: row.status,
+      taskIds: JSON.parse(row.task_ids_json || '[]'),
+      acceptance: JSON.parse(row.acceptance_json || '[]'),
+    };
+  }
+
+  _checkpointFromRow(row) {
+    return {
+      id: row.id,
+      planId: row.plan_id,
+      phaseId: row.phase_id,
+      title: row.title,
+      criteria: row.criteria,
+      status: row.status,
+      evidenceRefs: JSON.parse(row.evidence_refs_json || '[]'),
+      completedAt: row.completed_at,
+    };
+  }
+
+  getPlan(planId) {
+    const row = this.db.prepare('SELECT * FROM plans WHERE id = ?').get(planId);
+    if (!row) return null;
+
+    const phases = this.db
+      .prepare('SELECT * FROM phases WHERE plan_id = ? ORDER BY phase_order ASC')
+      .all(planId)
+      .map((phase) => this._phaseFromRow(phase));
+    const checkpoints = this.db
+      .prepare('SELECT * FROM checkpoints WHERE plan_id = ?')
+      .all(planId)
+      .map((checkpoint) => this._checkpointFromRow(checkpoint));
+
+    return this._planFromRow(row, phases, checkpoints);
+  }
+
   listPlans(projectId) {
-    const stmt = projectId
-      ? this.db.prepare('SELECT id FROM plans WHERE project_id = ? ORDER BY created_at DESC')
-      : this.db.prepare('SELECT id FROM plans ORDER BY created_at DESC');
-    const rows = projectId ? stmt.all(projectId) : stmt.all();
-    return rows.map((r) => this.getPlan(r.id));
+    const rows = projectId
+      ? this.db.prepare('SELECT * FROM plans WHERE project_id = ? ORDER BY created_at DESC').all(projectId)
+      : this.db.prepare('SELECT * FROM plans ORDER BY created_at DESC').all();
+    if (rows.length === 0) return [];
+
+    const phaseRows = projectId
+      ? this.db.prepare(`
+          SELECT phases.*
+          FROM phases
+          JOIN plans ON plans.id = phases.plan_id
+          WHERE plans.project_id = ?
+          ORDER BY phases.plan_id ASC, phases.phase_order ASC
+        `).all(projectId)
+      : this.db.prepare('SELECT * FROM phases ORDER BY plan_id ASC, phase_order ASC').all();
+    const checkpointRows = projectId
+      ? this.db.prepare(`
+          SELECT checkpoints.*
+          FROM checkpoints
+          JOIN plans ON plans.id = checkpoints.plan_id
+          WHERE plans.project_id = ?
+        `).all(projectId)
+      : this.db.prepare('SELECT * FROM checkpoints').all();
+
+    const phasesByPlan = new Map();
+    for (const phase of phaseRows) {
+      const list = phasesByPlan.get(phase.plan_id) || [];
+      list.push(this._phaseFromRow(phase));
+      phasesByPlan.set(phase.plan_id, list);
+    }
+    const checkpointsByPlan = new Map();
+    for (const checkpoint of checkpointRows) {
+      const list = checkpointsByPlan.get(checkpoint.plan_id) || [];
+      list.push(this._checkpointFromRow(checkpoint));
+      checkpointsByPlan.set(checkpoint.plan_id, list);
+    }
+
+    return rows.map((row) => this._planFromRow(
+      row,
+      phasesByPlan.get(row.id) || [],
+      checkpointsByPlan.get(row.id) || []
+    ));
   }
 
   deletePlan(planId) {
@@ -848,24 +898,21 @@ export class V2Database {
     }
   }
 
-  getBlock(blockId) {
-    const stmt = this.db.prepare('SELECT * FROM blocks WHERE id = ?');
-    const row = stmt.get(blockId);
-    if (!row) return null;
+  _artifactRefFromRow(row) {
+    return {
+      path: row.path,
+      symbol: row.symbol,
+      anchorKind: row.anchor_kind || (row.symbol ? 'symbol' : 'file'),
+      startLine: row.start_line,
+      endLine: row.end_line,
+      hash: row.hash,
+      role: row.role,
+      hashMode: row.hash_mode || null,
+      manifest: row.manifest || null,
+    };
+  }
 
-    const refsStmt = this.db.prepare('SELECT * FROM artifact_refs WHERE block_id = ?');
-    const refs = refsStmt.all(blockId).map((r) => ({
-      path: r.path,
-      symbol: r.symbol,
-      anchorKind: r.anchor_kind || (r.symbol ? 'symbol' : 'file'),
-      startLine: r.start_line,
-      endLine: r.end_line,
-      hash: r.hash,
-      role: r.role,
-      hashMode: r.hash_mode || null,
-      manifest: r.manifest || null,
-    }));
-
+  _blockFromRow(row, artifactRefs) {
     return {
       id: row.id,
       projectId: row.project_id,
@@ -873,19 +920,47 @@ export class V2Database {
       kind: row.kind ?? '',
       summary: row.summary,
       details: row.details,
-      artifactRefs: refs,
+      artifactRefs,
       history: JSON.parse(row.history_json || '[]'),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   }
 
+  getBlock(blockId) {
+    const row = this.db.prepare('SELECT * FROM blocks WHERE id = ?').get(blockId);
+    if (!row) return null;
+
+    const artifactRefs = this.db
+      .prepare('SELECT * FROM artifact_refs WHERE block_id = ?')
+      .all(blockId)
+      .map((ref) => this._artifactRefFromRow(ref));
+
+    return this._blockFromRow(row, artifactRefs);
+  }
+
   listBlocks(projectId) {
-    const stmt = projectId
-      ? this.db.prepare('SELECT id FROM blocks WHERE project_id = ? ORDER BY created_at ASC')
-      : this.db.prepare('SELECT id FROM blocks ORDER BY created_at ASC');
-    const rows = projectId ? stmt.all(projectId) : stmt.all();
-    return rows.map((r) => this.getBlock(r.id));
+    const rows = projectId
+      ? this.db.prepare('SELECT * FROM blocks WHERE project_id = ? ORDER BY created_at ASC').all(projectId)
+      : this.db.prepare('SELECT * FROM blocks ORDER BY created_at ASC').all();
+    if (rows.length === 0) return [];
+
+    const refRows = projectId
+      ? this.db.prepare(`
+          SELECT artifact_refs.*
+          FROM artifact_refs
+          JOIN blocks ON blocks.id = artifact_refs.block_id
+          WHERE blocks.project_id = ?
+        `).all(projectId)
+      : this.db.prepare('SELECT * FROM artifact_refs').all();
+    const refsByBlock = new Map();
+    for (const ref of refRows) {
+      const list = refsByBlock.get(ref.block_id) || [];
+      list.push(this._artifactRefFromRow(ref));
+      refsByBlock.set(ref.block_id, list);
+    }
+
+    return rows.map((row) => this._blockFromRow(row, refsByBlock.get(row.id) || []));
   }
 
   deleteBlock(blockId) {

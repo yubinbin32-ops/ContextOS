@@ -24,7 +24,7 @@ function inferFromPackageJson(projectRoot) {
  * optional; without it the OS infers verification commands from package.json.
  */
 export function loadProfile(projectRoot) {
-  const defaults = { strict: false, verify: [], maxChars: 1500, timeoutMs: 120000, budget: null };
+  const defaults = { strict: false, strictArchitecture: false, verify: [], maxChars: 1500, timeoutMs: 120000, budget: null };
   const profilePath = path.join(projectRoot, '.contextos', 'profile.json');
   let stored = {};
   if (fs.existsSync(profilePath)) {

@@ -11,6 +11,10 @@ struct GraphCanvasView: View {
     @State private var dragStartOffset: CGSize?
     @State private var pinchStartScale: CGFloat?
     @State private var didFitProjectID = ""
+    @State private var sceneBuildTask: Task<Void, Never>?
+    @State private var cameraPersistTask: Task<Void, Never>?
+    @State private var sceneCache: [String: CanvasScene] = [:]
+    @State private var sceneCacheOrder: [String] = []
 
     var body: some View {
         GeometryReader { viewport in
@@ -47,9 +51,8 @@ struct GraphCanvasView: View {
                         if dragStartOffset == nil { dragStartOffset = start }
                         camera.owner = .userPan
                         camera.offset = CGSize(width: start.width + value.translation.width, height: start.height + value.translation.height)
-                        store.setCanvasOffset(camera.offset)
                     }
-                    .onEnded { _ in dragStartOffset = nil; camera.owner = .none }
+                    .onEnded { _ in dragStartOffset = nil; camera.owner = .none; store.setCanvasOffset(camera.offset) }
             )
             .simultaneousGesture(
                 MagnificationGesture()
@@ -57,12 +60,13 @@ struct GraphCanvasView: View {
                         let start = pinchStartScale ?? camera.scale
                         if pinchStartScale == nil { pinchStartScale = start }
                         camera.owner = .userPinch
-                        setScale(start * value, around: viewportCenter(viewport.size))
+                        setScale(start * value, around: viewportCenter(viewport.size), persist: false)
                     }
-                    .onEnded { _ in pinchStartScale = nil; camera.owner = .none }
+                    .onEnded { _ in pinchStartScale = nil; camera.owner = .none; scheduleCameraPersistence() }
             )
             .background {
                 CameraEventBridge(
+                    viewportSize: viewport.size,
                     onScroll: { delta, _, zooming in
                         if zooming {
                             zoom(by: min(0.12, max(-0.12, delta.height * 0.012)), around: viewportCenter(viewport.size))
@@ -70,7 +74,7 @@ struct GraphCanvasView: View {
                             camera.owner = .userPan
                             camera.offset.width += delta.width
                             camera.offset.height += delta.height
-                            store.setCanvasOffset(camera.offset)
+                            scheduleCameraPersistence()
                             camera.owner = .none
                         }
                     },
@@ -81,6 +85,11 @@ struct GraphCanvasView: View {
             .onChange(of: sceneKey) { rebuildScene(viewport: viewport.size, fit: false) }
             .onChange(of: store.focusRequestID) { fitSelection(viewport: viewport.size) }
             .onChange(of: store.overviewFitRequestID) { fitAll(viewport: viewport.size) }
+            .onDisappear {
+                sceneBuildTask?.cancel()
+                cameraPersistTask?.cancel()
+                store.setCamera(scale: camera.scale, offset: camera.offset)
+            }
         }
     }
 
@@ -96,16 +105,47 @@ struct GraphCanvasView: View {
     }
 
     private func rebuildScene(viewport: CGSize, fit: Bool) {
-        let nextScene = CanvasScene.compile(snapshot: store.snapshot, hiddenKinds: store.hiddenKinds)
-        if reduceMotion {
+        let key = sceneKey
+        let snapshot = store.snapshot
+        let hiddenKinds = store.hiddenKinds
+        let shouldFit = fit || didFitProjectID != snapshot.project.id
+
+        if let cached = sceneCache[key] {
+            sceneCacheOrder.removeAll { $0 == key }
+            sceneCacheOrder.append(key)
+            applyScene(cached, viewport: viewport, fit: shouldFit)
+            return
+        }
+
+        sceneBuildTask?.cancel()
+        sceneBuildTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 45_000_000)
+            guard !Task.isCancelled else { return }
+            let nextScene = await Task.detached(priority: .userInitiated) {
+                CanvasScene.compile(snapshot: snapshot, hiddenKinds: hiddenKinds)
+            }.value
+            guard !Task.isCancelled else { return }
+            sceneCache[key] = nextScene
+            sceneCacheOrder.removeAll { $0 == key }
+            sceneCacheOrder.append(key)
+            while sceneCacheOrder.count > 6, let oldest = sceneCacheOrder.first {
+                sceneCache.removeValue(forKey: oldest)
+                sceneCacheOrder.removeFirst()
+            }
+            applyScene(nextScene, viewport: viewport, fit: shouldFit)
+        }
+    }
+
+    private func applyScene(_ nextScene: CanvasScene, viewport: CGSize, fit: Bool) {
+        if reduceMotion || nextScene.blocks.count > 48 {
             scene = nextScene
         } else {
             withAnimation(.smooth(duration: 0.28)) {
                 scene = nextScene
             }
         }
-        if fit || didFitProjectID != store.snapshot.project.id {
-            didFitProjectID = store.snapshot.project.id
+        if fit || didFitProjectID != nextScene.projectID {
+            didFitProjectID = nextScene.projectID
             fitAll(viewport: viewport)
         }
     }
@@ -177,82 +217,82 @@ struct GraphCanvasView: View {
         .allowsHitTesting(false)
     }
 
-    @ViewBuilder
     private var chainMotionLayer: some View {
-        if hasAnimatedChain {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion || scene.blocks.count > 120)) { timeline in
-                Canvas { context, _ in
-                    let chains = store.snapshot.chains.sorted { $0.id < $1.id }
-                    let seconds = timeline.date.timeIntervalSinceReferenceDate
-                    for (index, chain) in chains.enumerated() {
-                        let selected = store.highlightedChainIDs.contains(chain.id)
-                        let active = ["implementing", "verifying"].contains(chain.deliveryState)
-                        let unhealthy = ["warning", "failing", "unstable", "disputed"].contains(chain.healthState)
-                        guard selected || active || unhealthy else { continue }
-                        guard let envelope = scene.chainEnvelopes[chain.id] else { continue }
-
-                        let color = store.chainColor(chain.id)
-                        let signature = index % 3
-                        let speed = chain.deliveryState == "verifying" ? 0.075 : 0.12 + Double(signature) * 0.018
-                        let phaseOffset = Double(index) * 0.173
-                        let progress = reduceMotion ? 0.82 : positiveRemainder(seconds * speed + phaseOffset, modulus: 1)
-                        let dashPhase = reduceMotion ? 0 : CGFloat(-seconds * (18 + Double(signature) * 5))
-                        let dash: [CGFloat] = switch signature {
-                        case 0: [9, 14]
-                        case 1: [4, 8, 13, 8]
-                        default: [2, 7, 2, 15]
-                        }
-                        let path = chainEnvelopePath(envelope)
-                        context.stroke(
-                            path,
-                            with: .color(color.opacity(selected ? 0.72 : 0.34)),
-                            style: StrokeStyle(
-                                lineWidth: selected ? 2.0 : 1.2,
-                                lineCap: .round,
-                                lineJoin: .round,
-                                dash: dash,
-                                dashPhase: dashPhase
-                            )
-                        )
-
-                        guard let sample = chainMotionSample(chain.id, progress: progress) else { continue }
-                        let pulse = unhealthy && !reduceMotion ? 0.68 + 0.32 * sin(seconds * 3.2) : 1
-                        drawChainMarker(
-                            context: &context,
-                            point: sample.point,
-                            horizontal: sample.horizontal,
-                            signature: signature,
-                            color: color.opacity((selected ? 0.96 : 0.72) * pulse),
-                            selected: selected
-                        )
+        TimelineView(.animation(
+            minimumInterval: 1.0 / 30.0,
+            paused: reduceMotion || scene.blocks.count > 120
+        )) { timeline in
+            Canvas { context, _ in
+                let chains = store.snapshot.chains.sorted { $0.id < $1.id }
+                let seconds = timeline.date.timeIntervalSinceReferenceDate
+                for (index, chain) in chains.enumerated() {
+                    guard let envelope = scene.chainEnvelopes[chain.id] else { continue }
+                    let selected = store.highlightedChainIDs.contains(chain.id)
+                    let unhealthy = ["warning", "failing", "unstable", "disputed"].contains(chain.healthState)
+                    let color = store.chainColor(chain.id)
+                    let signature = index % 3
+                    let phaseOffset = Double(index) * 0.173
+                    let segments = chainMotionSegments(chain.id)
+                    let totalLength = segments.reduce(CGFloat.zero) { $0 + length($1.0, $1.1) }
+                    guard totalLength > 0 else { continue }
+                    let pixelsPerSecond: CGFloat = 72
+                    let progress = reduceMotion
+                        ? 0.82
+                        : positiveRemainder(seconds * Double(pixelsPerSecond / totalLength) + phaseOffset, modulus: 1)
+                    let traveled = CGFloat(progress) * totalLength
+                    let endpointFade = reduceMotion
+                        ? 1.0
+                        : Double(min(1, min(traveled, totalLength - traveled) / 24))
+                    let dashPhase = reduceMotion ? 0 : CGFloat(-seconds * (18 + Double(signature) * 5))
+                    let dash: [CGFloat] = switch signature {
+                    case 0: [9, 14]
+                    case 1: [4, 8, 13, 8]
+                    default: [2, 7, 2, 15]
                     }
+
+                    context.stroke(
+                        chainEnvelopePath(envelope),
+                        with: .color(color.opacity(selected ? 0.72 : 0.34)),
+                        style: StrokeStyle(
+                            lineWidth: selected ? 2.0 : 1.2,
+                            lineCap: .round,
+                            lineJoin: .round,
+                            dash: dash,
+                            dashPhase: dashPhase
+                        )
+                    )
+
+                    guard let sample = chainMotionSample(segments, progress: progress, totalLength: totalLength) else { continue }
+                    let pulse = unhealthy && !reduceMotion ? 0.68 + 0.32 * sin(seconds * 3.2) : 1
+                    drawChainMarker(
+                        context: &context,
+                        point: sample.point,
+                        horizontal: sample.horizontal,
+                        signature: signature,
+                        color: color.opacity((selected ? 0.96 : 0.72) * pulse * endpointFade),
+                        selected: selected
+                    )
                 }
             }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        } else {
-            Color.clear
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
         }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
-    private var hasAnimatedChain: Bool {
-        store.snapshot.chains.contains { chain in
-            store.highlightedChainIDs.contains(chain.id)
-                || ["implementing", "verifying"].contains(chain.deliveryState)
-                || ["warning", "failing", "unstable", "disputed"].contains(chain.healthState)
-        }
-    }
-
-    private func chainMotionSample(_ chainID: String, progress: Double) -> (point: CGPoint, horizontal: Bool)? {
-        let segments = (scene.chainLinks[chainID] ?? []).flatMap { linkID -> [(CGPoint, CGPoint)] in
+    private func chainMotionSegments(_ chainID: String) -> [(CGPoint, CGPoint)] {
+        (scene.chainLinks[chainID] ?? []).flatMap { linkID -> [(CGPoint, CGPoint)] in
             guard let points = scene.layout.routes[linkID] else { return [] }
             return zip(points, points.dropFirst()).filter { length($0.0, $0.1) > 0 }
         }
-        let total = segments.reduce(CGFloat.zero) { $0 + length($1.0, $1.1) }
-        guard total > 0 else { return nil }
-        var remaining = CGFloat(min(1, max(0, progress))) * total
+    }
+
+    private func chainMotionSample(
+        _ segments: [(CGPoint, CGPoint)],
+        progress: Double,
+        totalLength: CGFloat
+    ) -> (point: CGPoint, horizontal: Bool)? {
+        guard totalLength > 0 else { return nil }
+        var remaining = CGFloat(min(1, max(0, progress))) * totalLength
         for (start, end) in segments {
             let segmentLength = length(start, end)
             if remaining <= segmentLength {
@@ -504,8 +544,7 @@ struct GraphCanvasView: View {
             width: (viewport.width - scene.layout.size.width * scale) / 2,
             height: (viewport.height - scene.layout.size.height * scale) / 2
         )
-        store.setZoom(scale)
-        store.setCanvasOffset(camera.offset)
+        store.setCamera(scale: scale, offset: camera.offset)
         camera.owner = .none
     }
 
@@ -522,8 +561,7 @@ struct GraphCanvasView: View {
         camera.owner = .explicitLocate
         camera.scale = scale
         camera.offset = CGSize(width: viewport.width / 2 - bounds.midX * scale, height: viewport.height / 2 - bounds.midY * scale)
-        store.setZoom(scale)
-        store.setCanvasOffset(camera.offset)
+        store.setCamera(scale: scale, offset: camera.offset)
         camera.owner = .none
     }
 
@@ -538,13 +576,27 @@ struct GraphCanvasView: View {
         CGPoint(x: size.width / 2, y: size.height / 2)
     }
 
-    private func setScale(_ proposed: CGFloat, around viewportPoint: CGPoint) {
+    private func setScale(_ proposed: CGFloat, around viewportPoint: CGPoint, persist: Bool = true) {
         let next = min(1.8, max(0.25, proposed))
         let world = worldPoint(from: viewportPoint)
         camera.scale = next
         camera.offset = CGSize(width: viewportPoint.x - world.x * next, height: viewportPoint.y - world.y * next)
-        store.setZoom(next)
-        store.setCanvasOffset(camera.offset)
+        if persist {
+            store.setCamera(scale: next, offset: camera.offset)
+        } else {
+            scheduleCameraPersistence()
+        }
+    }
+
+    private func scheduleCameraPersistence() {
+        cameraPersistTask?.cancel()
+        let scale = camera.scale
+        let offset = camera.offset
+        cameraPersistTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 140_000_000)
+            guard !Task.isCancelled else { return }
+            store.setCamera(scale: scale, offset: offset)
+        }
     }
 
     private func worldPoint(from viewportPoint: CGPoint) -> CGPoint {
@@ -663,33 +715,47 @@ private struct CanvasCamera {
 }
 
 private struct CameraEventBridge: NSViewRepresentable {
+    let viewportSize: CGSize
     let onScroll: (CGSize, CGPoint, Bool) -> Void
     let onDoubleClick: (CGPoint, Bool) -> Void
 
     final class Coordinator {
         var monitor: Any?
+        var viewportSize: CGSize = .zero
         var onScroll: ((CGSize, CGPoint, Bool) -> Void)?
         var onDoubleClick: ((CGPoint, Bool) -> Void)?
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
-    func makeNSView(context: Context) -> NSView { NSView(frame: .zero) }
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        view.autoresizingMask = [.width, .height]
+        return view
+    }
 
     func updateNSView(_ view: NSView, context: Context) {
         let coordinator = context.coordinator
+        coordinator.viewportSize = viewportSize
         coordinator.onScroll = onScroll
         coordinator.onDoubleClick = onDoubleClick
         if coordinator.monitor == nil {
             coordinator.monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseUp]) { [weak view, weak coordinator] event in
                 guard let view, let coordinator, event.window === view.window else { return event }
-                if event.type == .scrollWheel,
-                   let hitView = event.window?.contentView.flatMap({ content in content.hitTest(content.convert(event.locationInWindow, from: nil)) }),
-                   hitView.ancestorOrSelf(where: { $0 is NSScrollView || $0 is WKWebView }) != nil {
+
+                let point = view.convert(event.locationInWindow, from: nil)
+                let size = coordinator.viewportSize
+                guard point.x >= 0, point.x <= size.width,
+                      point.y >= 0, point.y <= size.height else {
                     return event
                 }
-                let point = view.convert(event.locationInWindow, from: nil)
-                guard view.visibleRect.contains(point) else { return event }
+                guard view.bounds.contains(point) && view.visibleRect.contains(point) else { return event }
+
                 if event.type == .scrollWheel {
+                    if let window = event.window,
+                       let hitView = window.contentView?.hitTest(event.locationInWindow),
+                       hitView.ancestorOrSelf(where: { $0 is NSScrollView || $0 is WKWebView || $0 is NSTextView }) != nil {
+                        return event
+                    }
                     coordinator.onScroll?(
                         CGSize(width: event.scrollingDeltaX, height: event.scrollingDeltaY),
                         point,

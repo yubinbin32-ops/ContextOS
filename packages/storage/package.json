@@ -1,6 +1,5 @@
 {
   "name": "@contextos/storage",
   "private": true,
-  "version": "2.0.0",
   "type": "module"
 }

@@ -13,6 +13,7 @@ import {
   saveGlobalCloudConfig,
 } from './bootstrap-util.mjs';
 import { evictServices, findBundledPluginRoot, projectDbPath, requireProjectRoot } from './service-factory.mjs';
+import packageMetadata from '../../../package.json' with { type: 'json' };
 
 /**
  * System-level capabilities (init / doctor / switch) shared by the V2 facades and
@@ -71,7 +72,7 @@ export function runInit(input) {
       skillSource,
       pluginSource,
       selectedPlatforms: input.platforms,
-      version: process.env.CONTEXTOS_VERSION || null,
+      version: process.env.CONTEXTOS_VERSION || packageMetadata.version,
     });
     editorSummary = `\n\nInjected MCP & Skills into:\n${modified.map((m) => `  ✓ ${m}`).join('\n')}`;
   }

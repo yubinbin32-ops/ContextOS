@@ -7,6 +7,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { createFixtureProject } from './fixture-project.mjs';
 import { ContextOSV2Service } from '../packages/mcp/src/v2-service.mjs';
+import { packageVersion } from './version.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const bundlePath = path.join(repoRoot, 'plugins', 'contextos', 'server', 'contextos-mcp.mjs');
@@ -22,7 +23,7 @@ const transport = new StdioClientTransport({
   cwd: repoRoot,
   stderr: 'inherit',
 });
-const client = new Client({ name: 'contextos-p7-acceptance', version: '2.5.0' });
+const client = new Client({ name: 'contextos-p7-acceptance', version: packageVersion });
 
 const textOf = (result) => (result.content || []).map((chunk) => chunk.text || '').join('\n');
 const call = async (name, args = {}) => {
@@ -40,7 +41,7 @@ const callExpectError = async (name, args = {}) => {
 try {
   await client.connect(transport);
   const listing = await client.listTools();
-  assert.deepEqual(listing.tools.map((tool) => tool.name).sort(), ['change', 'explore', 'ops', 'ship', 'verify']);
+  assert.deepEqual(listing.tools.map((tool) => tool.name).sort(), ['change', 'explore', 'inspect', 'ops', 'pipeline', 'ship', 'verify']);
 
   const explored = await call('explore', { intent: 'inspect greet and the fixture test suite' });
   assert.match(explored, /# ContextOS explore/);
@@ -204,7 +205,7 @@ try {
     cwd: repoRoot,
     stderr: 'inherit',
   });
-  legacyClient = new Client({ name: 'contextos-p9-legacy-adoption', version: '2.5.0' });
+  legacyClient = new Client({ name: 'contextos-p9-legacy-adoption', version: packageVersion });
   await legacyClient.connect(legacyTransport);
   const legacyPlanList = await legacyClient.callTool({
     name: 'ops',

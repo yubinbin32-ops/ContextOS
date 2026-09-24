@@ -5,9 +5,10 @@
  */
 
 export const BUDGET_PRESETS = Object.freeze({
-  shallow: 1800,
-  normal: 4000,
-  deep: 9000,
+  shallow: 1200,
+  normal: 2800,
+  deep: 7500,
+  full: Infinity,
 });
 
 export function resolveBudget(depth, override) {
@@ -42,8 +43,10 @@ export function fitSections(sections = [], { maxChars = BUDGET_PRESETS.normal } 
     }
     const remaining = maxChars - used - header.length - 2;
     if (remaining > 160) {
-      const cut = body.slice(0, remaining - 24);
-      chunks.push(`${header}\n${cut}\n... (+${body.length - cut.length} chars omitted)`);
+      const hint = '\n[TRUNCATED: budget exceeded. Action required: specify \'ranges: [{startLine, endLine}]\' or pass \'budget: "full"\' to receive the entire content]';
+      const cutLen = Math.max(0, remaining - 24 - hint.length);
+      const cut = body.slice(0, cutLen);
+      chunks.push(`${header}\n${cut}\n... (+${body.length - cut.length} chars omitted)${hint}`);
       used = maxChars;
       included.push(section.key);
       truncated.push(section.key);

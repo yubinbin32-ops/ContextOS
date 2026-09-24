@@ -22,3 +22,4 @@ assets/截屏*.png
 .cache/
 .wrangler/
 .agents/mcp_config.json
+*.bak

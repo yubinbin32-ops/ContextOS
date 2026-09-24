@@ -12,13 +12,15 @@
 ```mermaid
 graph TD
     Start([用户唤起 AI 安装指令]) --> Step0[Step 0: 系统与桌面端检测]
-    Step0 -->|macOS| AskDesktop{询问是否安装 ContextOS.app?}
-    Step0 -->|Windows / Linux| Step1[Step 1: 运行环境检测 Node >= 22]
-    AskDesktop -->|选择 1: 是| InstallApp[自动下载部署 ContextOS.app] --> Step1
-    AskDesktop -->|选择 2: 否| Step1
+    Step0 -->|macOS| AskMacDesktop{询问是否安装 macOS 桌面端?}
+    Step0 -->|Windows| AskWinDesktop{询问是否安装 Windows 桌面端?}
+    Step0 -->|Linux| Step1[Step 1: 运行环境检测 Node >= 22]
+    AskMacDesktop -->|选择 1: 是| InstallMacApp[自动下载部署 ContextOS.app] --> Step1
+    AskMacDesktop -->|选择 2: 否| Step1
+    AskWinDesktop -->|选择 1: 是| InstallWinApp[自动下载部署 Windows 桌面端] --> Step1
+    AskWinDesktop -->|选择 2: 否| Step1
     Step1 --> Step2[Step 2: 平台探测与多选]
     Step2 --> AskPlatform{询问用户配置哪些编辑器?\n[1] Cursor [2] Codex [3] Claude\n[4] Antigravity [5] OpenCode [6] 全部}
-    AskPlatform --> Step3[Step 3: 询问协作需求]
     Step3 --> AskTeam{是否需要团队协同?\n[1] 单人开发 (本地模式)\n[2] 团队协同 (云端模式)}
     AskTeam -->|选择 1: 单人开发| InjectLocal[按需注入平台 & 初始化本地模式] --> Finish([完成！开启意图级开发循环])
     AskTeam -->|选择 2: 团队协同| CloudSetup[索取/配置 Cloudflare 凭据 & 初始化云端] --> Finish
@@ -41,7 +43,17 @@ graph TD
        * AI 自动下载最新 release 中的 `ContextOS-macos-full.zip`（或轻量版 `ContextOS-macos.zip`），解压并部署为 `/Applications/ContextOS.app`。
        * （提示用户：若首次打开提示未受信任的开发者拦截，可前往“系统设置 ➔ 隐私与安全性”点击“仍要打开”，或按住 Control 点击应用选择“打开”即可）。
      * 若用户选择 `2`：直接进入 Step 1。
-   * 若操作系统为 **Windows / Linux**：
+   * 若当前操作系统为 **Windows**：
+     * **向用户发起选择**：
+       ```text
+       检测到您当前系统为 Windows。ContextOS 现已推出官方 Windows 原生桌面端（支持 1:1 地铁图谱与编辑器集成）。
+       请选择：
+       [1] 下载安装 Windows 桌面端（推荐，带可视化拓扑与快捷设置）
+       [2] 仅配置插件（轻量命令行与 MCP 模式）
+       ```
+     * 若用户选择 `1`：AI 下载并运行 `ContextOS_<version>_x64-setup.exe` 或解压 `ContextOS-windows-x64.zip`。
+     * 若用户选择 `2`：直接进入 Step 1。
+   * 若操作系统为 **Linux**：
      * 跳过桌面端提示，直接进入 Step 1。
 
 ---

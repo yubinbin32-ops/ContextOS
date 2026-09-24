@@ -5,11 +5,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Existing release version to publish (for example 0.3.1)"
-        required: true
-        default: "0.3.1"
 
 permissions:
   contents: read
@@ -23,6 +18,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Sync version data
+        run: npm run version:sync
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -38,10 +41,10 @@ jobs:
         id: release
         shell: bash
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            version="${{ inputs.version }}"
-          else
-            version="${GITHUB_REF_NAME#v}"
+          version="$(jq -r '.version' package.json)"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "Tag version ${GITHUB_REF_NAME#v} does not match package.json version $version"
+            exit 1
           fi
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release version: $version"

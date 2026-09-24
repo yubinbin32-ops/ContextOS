@@ -562,7 +562,8 @@ final class ProjectDatabase {
 
         let blocks = try rows(
             """
-            SELECT b.*, COUNT(ar.id) AS artifact_ref_count
+            SELECT b.*, COUNT(ar.id) AS artifact_ref_count,
+                   GROUP_CONCAT(ar.path, ' ') AS sample_paths
             FROM blocks b
             LEFT JOIN artifact_refs ar ON ar.block_id = b.id
             WHERE b.project_id = ?
@@ -572,15 +573,40 @@ final class ProjectDatabase {
             bindings: [project.id]
         ).map { row in
             let artifactCount = row.int("artifact_ref_count")
+            let rawKind = row.optionalText("kind") ?? ""
+            let rawTitle = row.text("title")
+            let rawDetails = row.text("details")
+            let rawSummary = row.text("summary")
+            let samplePaths = row.optionalText("sample_paths") ?? ""
+            let blockID = row.text("id")
+
+            var layer = row.optionalText("architecture_layer") ?? ""
+            if layer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let combined = "\(samplePaths) \(rawKind) \(rawTitle) \(blockID)".lowercased()
+                if combined.contains("gateway") || combined.contains("api") || combined.contains("mcp") || combined.contains("server") {
+                    layer = "gateway"
+                } else if combined.contains("engine") || combined.contains("ast") || combined.contains("parser") || combined.contains("intel") {
+                    layer = "engine"
+                } else if combined.contains("storage") || combined.contains("db") || combined.contains("sqlite") || combined.contains("schema") {
+                    layer = "storage"
+                } else if combined.contains("desktop") || combined.contains("presentation") || combined.contains("ui") || combined.contains("view") {
+                    layer = "presentation"
+                } else if combined.contains("service") || combined.contains("app") {
+                    layer = "service"
+                } else {
+                    layer = "module"
+                }
+            }
+
             return BlockItem(
-                id: row.text("id"),
-                kind: row.optionalText("kind") ?? "",
-                title: row.text("title"),
-                summary: row.text("summary"),
-                body: row.text("details"),
+                id: blockID,
+                kind: rawKind.isEmpty ? "service" : rawKind,
+                title: rawTitle,
+                summary: rawSummary,
+                body: rawDetails,
                 contract: "",
                 scope: "",
-                architectureLayer: "",
+                architectureLayer: layer,
                 localOrder: 0,
                 deliveryState: artifactCount > 0 ? "complete" : "ghost",
                 healthState: artifactCount > 0 ? "healthy" : "missing",
@@ -593,40 +619,57 @@ final class ProjectDatabase {
         var chainMembers: [ChainMemberItem] = []
         var chainEdges: [ChainEdge] = []
 
-        let chains = try rows("SELECT id, project_id, title, summary, kind, member_ids_json FROM chains WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
+        let chains = try rows("SELECT id, project_id, title, summary, kind, member_ids_json, metadata_json FROM chains WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
             let chainId = row.text("id")
             let memberIDs = Self.jsonStringArray(row.text("member_ids_json"))
             for (index, mId) in memberIDs.enumerated() {
                 chainNodes.append(ChainNode(chainId: chainId, blockId: mId, position: index, role: "stage"))
                 chainMembers.append(ChainMemberItem(chainId: chainId, memberType: "block", memberId: mId, position: index, role: "stage", required: true))
             }
+
+            var deliveryState = "complete"
+            var healthState = "healthy"
+            if let metaText = row.optionalText("metadata_json"),
+               let metaData = metaText.data(using: .utf8),
+               let metaJson = try? JSONSerialization.jsonObject(with: metaData) as? [String: Any] {
+                if let d = metaJson["deliveryState"] as? String ?? metaJson["delivery_state"] as? String, !d.isEmpty, d != "unknown" {
+                    deliveryState = d
+                }
+                if let h = metaJson["healthState"] as? String ?? metaJson["health_state"] as? String, !h.isEmpty, h != "unknown" {
+                    healthState = h
+                }
+            }
+
             return ChainItem(
                 id: chainId,
                 title: row.text("title"),
-                chainType: row.text("kind"),
+                chainType: row.text("kind").isEmpty ? "leaf" : row.text("kind"),
                 purpose: row.text("summary"),
                 intent: "",
                 inputContract: "",
                 outputContract: "",
-                deliveryState: "unknown",
-                healthState: "unknown",
+                deliveryState: deliveryState,
+                healthState: healthState,
                 priority: "normal",
                 revision: 0
             )
         }
 
-        let links = try rows("SELECT id, project_id, from_id, to_id, kind FROM links WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
-            LinkItem(
+        let links = try rows("SELECT id, project_id, from_id, to_id, kind, reason FROM links WHERE project_id = ? ORDER BY id", bindings: [project.id]).map { row in
+            let linkKind = row.text("kind")
+            let linkReason = row.optionalText("reason") ?? ""
+            return LinkItem(
                 id: row.text("id"),
                 sourceType: "block",
                 sourceId: row.text("from_id"),
                 targetType: "block",
                 targetId: row.text("to_id"),
-                kind: row.text("kind"),
-                label: row.text("kind"),
-                contract: "",
-                healthState: "unknown",
-                revision: 0
+                kind: linkKind,
+                label: linkKind,
+                contract: linkReason,
+                healthState: "healthy",
+                revision: 0,
+                reason: linkReason
             )
         }
 

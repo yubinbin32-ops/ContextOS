@@ -77,6 +77,7 @@ struct LinkItem: Identifiable, Equatable {
     let contract: String
     let healthState: String
     let revision: Int
+    var reason: String? = nil
 }
 
 struct ChainNode: Equatable {

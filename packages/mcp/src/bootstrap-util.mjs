@@ -61,7 +61,7 @@ export function resolveNodeExecutable() {
   throw new Error('Unable to locate an executable Node.js runtime. Install Node.js 22+ or use the full ContextOS edition.');
 }
 
-export function resolveCodexExecutable() {
+function resolveCodexExecutable() {
   const isWin = process.platform === 'win32';
   const isMac = process.platform === 'darwin';
   const candidates = [];
@@ -125,7 +125,7 @@ export function deployCanonicalServer(sourceScriptPath = null) {
   return canonicalScript;
 }
 
-export function copyDirectoryRecursive(src, dest) {
+function copyDirectoryRecursive(src, dest) {
   if (!fs.existsSync(src)) return;
   fs.mkdirSync(dest, { recursive: true });
   const entries = fs.readdirSync(src, { withFileTypes: true });
@@ -281,7 +281,7 @@ export function configureTomlCodex({ configPath, serverScript, nodePath, env = n
   fs.renameSync(`${configPath}.contextos.tmp`, configPath);
 }
 
-export function cleanTomlCodex({ configPath }) {
+function cleanTomlCodex({ configPath }) {
   if (!fs.existsSync(configPath)) return;
   let content = fs.readFileSync(configPath, 'utf8');
   const regex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
@@ -289,7 +289,7 @@ export function cleanTomlCodex({ configPath }) {
   writeFileAtomic(configPath, content.trim() + '\n');
 }
 
-export function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
+function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
   const userPluginsContextOS = path.join(HOME, 'plugins', 'contextos');
   const personalMarketplaceDir = path.join(HOME, '.agents', 'plugins');
   const personalMarketplaceURL = path.join(personalMarketplaceDir, 'marketplace.json');

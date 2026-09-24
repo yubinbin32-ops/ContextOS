@@ -75,7 +75,6 @@ export class DecisionDocument {
 
     if (existingIndex >= 0) {
       // Replace section in rawMarkdown
-      const section = this.sections[existingIndex];
       const regex = new RegExp(`##\\s+\\[${id}\\][\\s\\S]*?(?=(##\\s+\\[|$))`);
       this.rawMarkdown = this.rawMarkdown.replace(regex, formattedContent);
     } else {

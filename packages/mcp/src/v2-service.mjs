@@ -111,14 +111,14 @@ export class ContextOSV2Service {
     return { reason: before, healed: !after.conflict };
   }
 
-  async _withWriteLock(label, callback, { allowConflict = false } = {}) {
+  async _withWriteLock(label, callback, { allowConflict = false, reconcile = true } = {}) {
     if (this.writeContext.getStore() === true) return callback();
 
     return withProjectWriteLock(
       this.projectRoot,
       async () =>
         this.writeContext.run(true, async () => {
-          if (!this._ensureStateReconciled() && !allowConflict) {
+          if (reconcile && !this._ensureStateReconciled() && !allowConflict) {
             throw new Error(`State conflict blocks ${label}: ${this.stateConflict.reason}`);
           }
           return callback();
@@ -217,7 +217,9 @@ export class ContextOSV2Service {
 
   // ================= 1. os_context =================
   async osContext({ action = 'brief', query = '', entityId = '', format = 'markdown' }) {
-    await this._withWriteLock('os_context.preflight', async () => {}, { allowConflict: true });
+    if (action !== 'reconcile') {
+      await this._withWriteLock('os_context.preflight', async () => {}, { allowConflict: true });
+    }
     switch (action) {
       case 'brief': {
         const project = this.db.getProject(this.projectId) || { id: this.projectId, repo_root: this.projectRoot };
@@ -242,7 +244,9 @@ export class ContextOSV2Service {
             .at(-1) || null;
         }
 
-        const displayTask = activeTask || (activePlan ? this.db.listTasks(activePlan.id).find((task) => task.status !== 'completed') || null : null);
+        const displayTask = activeTask || (activePlan
+          ? projectTasks.find((task) => task.planId === activePlan.id && task.status !== 'completed') || null
+          : null);
         const processes = this.processManager.listProcesses().filter((p) => p.status === 'running' || p.status === 'ready');
         const recentBlocks = this.db.listBlocks(this.projectId);
         const writeLock = inspectProjectWriteLock(this.projectRoot);
@@ -366,6 +370,7 @@ export class ContextOSV2Service {
             ? { changed: 0, changedPlanIds: [] }
             : this.planService.repairStateHygiene(this.projectId);
           if (hygiene.changed > 0 || planHygiene.changed > 0) {
+            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
           }
           if (res.changed) {
             return `External Git/JSON change applied! Graph revision updated to ${res.revision}.`;
@@ -377,7 +382,7 @@ export class ContextOSV2Service {
             ? ` Archived ${hygiene.changed} stale task(s) and ${planHygiene.changed} stale plan(s).`
             : '';
           return `ContextOS database and graph.json are already in sync.${hygieneMessage}`;
-        }, { allowConflict: true });
+        }, { allowConflict: true, reconcile: false });
       }
 
       default:
@@ -390,7 +395,9 @@ export class ContextOSV2Service {
     return this._withWriteLock('plan', () => this._plan(input));
   }
 
-  async _plan({ action, id, planData = {}, checkpointId, passed, evidenceRef, format = 'markdown' }) {
+  async _plan({ action, id, planId, planData = {}, checkpointId, passed, evidenceRef, reason, format = 'markdown' }) {
+    const targetId = id || planId || planData.id;
+    const targetCpId = checkpointId || planData.checkpointId;
     switch (action) {
       case 'list': {
         const plans = this.db.listPlans(this.projectId);
@@ -401,7 +408,7 @@ export class ContextOSV2Service {
         const ruleRefs = this._validateRuleRefs(planData.ruleRefs ?? planData.rule_refs);
         const created = this.planService.createPlan({
           ...planData,
-          id: id || planData.id,
+          id: targetId || planData.id,
           projectId: this.projectId,
           ruleRefs,
         });
@@ -412,29 +419,29 @@ export class ContextOSV2Service {
         if (updates.ruleRefs !== undefined || updates.rule_refs !== undefined) {
           updates.ruleRefs = this._validateRuleRefs(updates.ruleRefs ?? updates.rule_refs);
         }
-        const updated = this.planService.updatePlan(id, updates);
+        const updated = this.planService.updatePlan(targetId, updates);
         return format === 'json' ? updated : MarkdownRenderer.renderPlan(updated);
       }
       case 'upsert': {
-        if (!this.db.getPlan(id)) return this._plan({ action: 'create', id, planData: { ...planData, id }, format });
-        return this._plan({ action: 'update', id, planData, format });
+        if (!this.db.getPlan(targetId)) return this._plan({ action: 'create', id: targetId, planData: { ...planData, id: targetId }, format });
+        return this._plan({ action: 'update', id: targetId, planData, format });
       }
       case 'open': {
-        const plan = this.db.getPlan(id);
-        if (!plan) throw new Error(`Plan '${id}' not found`);
+        const plan = this.db.getPlan(targetId);
+        if (!plan) throw new Error(`Plan '${targetId}' not found`);
         return format === 'json' ? plan : MarkdownRenderer.renderPlan(plan);
       }
       case 'check': {
-        const cp = this.planService.checkCheckpoint(id, checkpointId, { passed, evidenceRef });
-        return `Checkpoint '${checkpointId}' in Plan '${id}' marked as ${cp.status}.`;
+        const cp = this.planService.checkCheckpoint(targetId, targetCpId, { passed, evidenceRef, reason });
+        return `Checkpoint '${targetCpId}' in Plan '${targetId}' marked as ${cp.status}.`;
       }
       case 'complete': {
-        const completed = this.planService.completePlan(id, planData);
-        return format === 'json' ? completed : `Plan '${id}' completed successfully!\nSummary: ${completed.completedSummary}`;
+        const completed = this.planService.completePlan(targetId, planData);
+        return format === 'json' ? completed : `Plan '${targetId}' completed successfully!\nSummary: ${completed.completedSummary}`;
       }
       case 'delete': {
-        const deleted = this.planService.deletePlan(id);
-        return format === 'json' ? { deleted, id } : `Plan '${id}' deleted successfully.`;
+        const deleted = this.planService.deletePlan(targetId);
+        return format === 'json' ? { deleted, id: targetId } : `Plan '${targetId}' deleted successfully.`;
       }
       default:
         throw new Error(`Unknown plan action: ${action}`);
@@ -482,6 +489,8 @@ export class ContextOSV2Service {
   async _task({
     action,
     id,
+    taskId,
+    planId,
     taskData = {},
     ruleId,
     rules,
@@ -496,9 +505,9 @@ export class ContextOSV2Service {
     files,
     format = 'markdown',
   }) {
+    const targetId = id || taskId || taskData.id;
     switch (action) {
       case 'start': {
-        const targetId = taskData.id || id;
         const existing = targetId ? this.db.getTask(targetId) : null;
         if (existing) {
           const patch = {};
@@ -514,8 +523,9 @@ export class ContextOSV2Service {
         }
 
         const payload = { ...taskData };
-        payload.id = payload.id || id || `task-${Date.now()}`;
+        payload.id = targetId || `task-${Date.now()}`;
         payload.title = payload.title || 'Untitled task';
+        if (planId && !payload.planId) payload.planId = planId;
         const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : undefined);
         if (incomingRules !== undefined) payload.rules = this._validateRuleRefs(incomingRules);
 
@@ -1176,7 +1186,7 @@ export class ContextOSV2Service {
     this.db.saveTask(activeTask);
   }
 
-  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = 'markdown', changes = [] }) {
+  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = 'markdown', changes = [], ranges, budget, maxChars }) {
     if (action === 'changeset') {
       const result = applyChangeset(this.projectRoot, changes);
       this._recordChangedFiles(result.files);
@@ -1309,12 +1319,15 @@ export class ContextOSV2Service {
         return format === 'json' ? res.structure : res.markdown;
       }
       case 'read': {
-        const effectiveSelector = selector || (startLine !== undefined || endLine !== undefined ? { startLine, endLine } : null);
+        const effectiveSelector = selector || (Array.isArray(ranges) && ranges.length ? { ranges } : (startLine !== undefined || endLine !== undefined ? { startLine, endLine } : null));
         // No selector means "give me the file": return it whole instead of
         // failing, so the agent never has to fall back to a native `cat`/`sed`.
         const res = CodeTools.read(relPath, content, effectiveSelector || { fullFile: true });
         if (format === 'json') return res;
         const fence = (code) => `\`\`\`${path.extname(relPath).slice(1) || 'text'}\n// ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})\n${code}\n\`\`\``;
+        if (budget === 'full' || maxChars === Infinity || (typeof maxChars === 'number' && maxChars > 20000)) {
+          return fence(res.code);
+        }
         if (res.code.length <= 20000) return fence(res.code);
         return `${fence(res.code.slice(0, 20000))}\n\n<!-- 全文 ${res.totalLines} 行 / ${res.code.length} 字符，已截断到前 20000 字符 -->`;
       }
@@ -1398,6 +1411,8 @@ export class ContextOSV2Service {
     cwd,
     maxChars = 1500,
     timeoutMs = 60000,
+    raw = false,
+    mode = 'auto',
   }) {
     const targetCwd = cwd
       ? this._resolveProjectPath(cwd, 'cwd').fullPath
@@ -1408,6 +1423,8 @@ export class ContextOSV2Service {
       maxChars,
       timeoutMs,
       projectRoot: this.projectRoot,
+      raw,
+      mode,
     });
 
     await this._withWriteLock('run_command.record', async () => {

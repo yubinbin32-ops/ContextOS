@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Context operating system for AI coding agents: the agent states intent and the OS orchestrates AST slicing, out-of-context commands, derived architecture indexing and evidence capture.",
   "author": {
     "name": "ContextOS"

@@ -20,6 +20,12 @@ final class PluginInstallerTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: destination.appendingPathComponent("value.txt")), "new")
     }
 
+    func testCanonicalServerScriptStaysInUserContextDirectory() {
+        let script = PluginInstaller.canonicalServerScriptURL
+        XCTAssertEqual(script.deletingLastPathComponent(), PluginInstaller.canonicalServerDirectoryURL)
+        XCTAssertFalse(script.path.hasPrefix(Bundle.main.bundleURL.path + "/"))
+    }
+
     func testMarketplaceMergePreservesOtherPluginsAndUnknownFields() {
         let merged = PluginInstaller.mergePersonalMarketplace(existing: [
             "custom": ["keep": true],

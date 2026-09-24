@@ -88,9 +88,19 @@ export class PlanService {
   repairStateHygiene(projectId, { staleMs = 6 * 60 * 60 * 1000 } = {}) {
     const changedPlanIds = [];
     const now = Date.now();
-    for (const rawPlan of this.db.listPlans(projectId)) {
+    const plans = this.db.listPlans(projectId);
+    const planIds = new Set(plans.map((plan) => plan.id));
+    const tasksByPlan = new Map();
+    for (const task of this.db.listTasks()) {
+      if (!planIds.has(task.planId)) continue;
+      const tasks = tasksByPlan.get(task.planId) || [];
+      tasks.push(task);
+      tasksByPlan.set(task.planId, tasks);
+    }
+
+    for (const rawPlan of plans) {
       if (rawPlan.status !== 'active') continue;
-      const tasks = this.db.listTasks(rawPlan.id);
+      const tasks = tasksByPlan.get(rawPlan.id) || [];
       const hasActiveTask = tasks.some((task) =>
         ['active', 'checking', 'syncing'].includes(task.status)
       );

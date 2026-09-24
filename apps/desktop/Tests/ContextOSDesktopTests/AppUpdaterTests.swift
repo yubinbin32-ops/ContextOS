@@ -115,6 +115,46 @@ final class AppUpdaterTests: XCTestCase {
         XCTAssertNil(release.asset(for: .full, architecture: "x64"))
     }
 
+    func testSignatureIdentityParsing() {
+        XCTAssertEqual(
+            AppUpdater.signatureIdentity(from: "Signature=adhoc\nTeamIdentifier=not set"),
+            .adHoc
+        )
+        XCTAssertEqual(
+            AppUpdater.signatureIdentity(from: "Authority=Developer ID Application: Example (TEAM123)\nTeamIdentifier=TEAM123"),
+            .developerID(teamIdentifier: "TEAM123")
+        )
+        XCTAssertEqual(
+            AppUpdater.signatureIdentity(from: "Signature=adhoc\nAuthority=Apple Development: Example"),
+            .adHoc
+        )
+        XCTAssertEqual(AppUpdater.signatureIdentity(from: "TeamIdentifier=TEAM123"), .unknown)
+    }
+
+    func testSignatureCompatibilityAllowsMatchingTrustClass() {
+        XCTAssertNoThrow(try AppUpdater.validateSignatureCompatibility(current: .adHoc, staged: .adHoc))
+        XCTAssertNoThrow(try AppUpdater.validateSignatureCompatibility(
+            current: .adHoc,
+            staged: .developerID(teamIdentifier: "TEAM123")
+        ))
+        XCTAssertNoThrow(try AppUpdater.validateSignatureCompatibility(
+            current: .developerID(teamIdentifier: "TEAM123"),
+            staged: .developerID(teamIdentifier: "TEAM123")
+        ))
+    }
+
+    func testSignatureCompatibilityRejectsDowngradeAndTeamChange() {
+        XCTAssertThrowsError(try AppUpdater.validateSignatureCompatibility(
+            current: .developerID(teamIdentifier: "TEAM123"),
+            staged: .adHoc
+        ))
+        XCTAssertThrowsError(try AppUpdater.validateSignatureCompatibility(
+            current: .developerID(teamIdentifier: "TEAM123"),
+            staged: .developerID(teamIdentifier: "TEAM456")
+        ))
+        XCTAssertThrowsError(try AppUpdater.validateSignatureCompatibility(current: .unknown, staged: .adHoc))
+    }
+
     private func asset(id: Int, name: String) -> AppReleaseAsset {
         AppReleaseAsset(
             id: id,

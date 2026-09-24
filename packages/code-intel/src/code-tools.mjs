@@ -2,6 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { LanguageRegistry, calculateHash } from './language-registry.mjs';
 
+function buildLocators(filePath, symbols = []) {
+  return symbols.map((symbol) => ({
+    path: filePath,
+    symbol: symbol.name,
+    startLine: symbol.startLine,
+    endLine: symbol.endLine,
+    hash: symbol.hash,
+    role: 'implementation',
+  }));
+}
+
 export class CodeTools {
   /**
    * 1. Outline: Progressive L1 structure view
@@ -76,14 +87,7 @@ export class CodeTools {
       filePath,
       content,
       newHash,
-      locators: structure.symbols.map((s) => ({
-        path: filePath,
-        symbol: s.name,
-        startLine: s.startLine,
-        endLine: s.endLine,
-        hash: s.hash,
-        role: 'implementation',
-      })),
+      locators: buildLocators(filePath, structure.symbols),
     };
   }
 
@@ -108,6 +112,30 @@ export class CodeTools {
           targetSymbol = symMatch[1];
         }
       }
+    } else if (typeof selector === 'object' && selector !== null && Array.isArray(selector.ranges) && selector.ranges.length > 0) {
+      const snippets = [];
+      const extractedRanges = [];
+      for (const r of selector.ranges) {
+        let s = r.startLine !== undefined && r.startLine !== null ? Number(r.startLine) : 1;
+        let e = r.endLine !== undefined && r.endLine !== null ? Number(r.endLine) : lines.length;
+        s = Math.max(1, Math.min(s, lines.length));
+        e = Math.max(s, Math.min(e, lines.length));
+        extractedRanges.push({ startLine: s, endLine: e });
+        const slice = lines.slice(s - 1, e);
+        snippets.push(`// [L${s}-L${e}]\n` + slice.join('\n'));
+      }
+      const codeSnippet = snippets.join('\n\n');
+      const hash = calculateHash(codeSnippet);
+      return {
+        filePath,
+        ranges: extractedRanges,
+        startLine: extractedRanges[0]?.startLine ?? 1,
+        endLine: extractedRanges[extractedRanges.length - 1]?.endLine ?? lines.length,
+        totalLines: lines.length,
+        symbol: null,
+        code: codeSnippet,
+        hash,
+      };
     } else if (selector.symbol) {
       targetSymbol = selector.symbol;
     } else if (selector.method) {
@@ -159,7 +187,34 @@ export class CodeTools {
   /**
    * 3. Edit: Surgical code edit with automatic relocalization (re-anchoring)
    */
-  static edit(filePath, content, { targetContent = null, replacementContent, startLine = null, endLine = null, symbol = null } = {}) {
+  static edit(filePath, content, { targetContent = null, replacementContent = '', startLine = null, endLine = null, symbol = null, append = null, fullFile = false } = {}) {
+    if (fullFile) {
+      if (typeof replacementContent !== 'string') {
+        throw new Error('CodeTools.edit requires replacementContent');
+      }
+      const updatedStructure = LanguageRegistry.parseStructure(filePath, replacementContent);
+      const newHash = calculateHash(replacementContent);
+      return {
+        filePath,
+        newContent: replacementContent,
+        newHash,
+        updatedLocators: buildLocators(filePath, updatedStructure.symbols),
+      };
+    }
+
+    if (append !== null && append !== undefined) {
+      const appendStr = String(append);
+      const newContent = content + (content.endsWith('\n') ? '' : '\n') + appendStr + (appendStr.endsWith('\n') ? '' : '\n');
+      const updatedStructure = LanguageRegistry.parseStructure(filePath, newContent);
+      const newHash = calculateHash(newContent);
+      return {
+        filePath,
+        newContent,
+        newHash,
+        updatedLocators: buildLocators(filePath, updatedStructure.symbols),
+      };
+    }
+
     if (replacementContent === undefined || typeof replacementContent !== 'string') {
       throw new Error('CodeTools.edit requires replacementContent');
     }
@@ -204,34 +259,61 @@ export class CodeTools {
         const chunkStart = Math.max(0, (effectiveStart ?? 1) - 1);
         const chunkEnd = Math.min(lines.length, effectiveEnd ?? lines.length);
         const chunk = lines.slice(chunkStart, chunkEnd).join('\n');
-        const occurrences = chunk.split(targetContent).length - 1;
+        let occurrences = chunk.split(targetContent).length - 1;
+        if (occurrences === 0) {
+          const trimmedTarget = targetContent.trim();
+          if (trimmedTarget && chunk.includes(trimmedTarget)) {
+            const trimmedOcc = chunk.split(trimmedTarget).length - 1;
+            if (trimmedOcc === 1) {
+              const replacedChunk = chunk.replace(trimmedTarget, () => replacementContent);
+              newContent = [
+                ...lines.slice(0, chunkStart),
+                replacedChunk,
+                ...lines.slice(chunkEnd),
+              ].join('\n');
+              occurrences = 1;
+            }
+          }
+        } else {
+          if (occurrences > 1) {
+            throw new Error(
+              `TargetContent found ${occurrences} times in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
+            );
+          }
+          const replacedChunk = chunk.replace(targetContent, () => replacementContent);
+          newContent = [
+            ...lines.slice(0, chunkStart),
+            replacedChunk,
+            ...lines.slice(chunkEnd),
+          ].join('\n');
+        }
         if (occurrences === 0) {
           throw new Error(
             `TargetContent not found in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
           );
         }
-        if (occurrences > 1) {
-          throw new Error(
-            `TargetContent found ${occurrences} times in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
-          );
-        }
-        const replacedChunk = chunk.replace(targetContent, () => replacementContent);
-        newContent = [
-          ...lines.slice(0, chunkStart),
-          replacedChunk,
-          ...lines.slice(chunkEnd),
-        ].join('\n');
       } else {
-        const occurrences = content.split(targetContent).length - 1;
+        let occurrences = content.split(targetContent).length - 1;
+        if (occurrences === 0) {
+          const trimmedTarget = targetContent.trim();
+          if (trimmedTarget && content.includes(trimmedTarget)) {
+            const trimmedOcc = content.split(trimmedTarget).length - 1;
+            if (trimmedOcc === 1) {
+              newContent = content.replace(trimmedTarget, () => replacementContent);
+              occurrences = 1;
+            }
+          }
+        } else {
+          if (occurrences > 1) {
+            throw new Error(
+              `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
+            );
+          }
+          newContent = content.replace(targetContent, () => replacementContent);
+        }
         if (occurrences === 0) {
           throw new Error(`TargetContent not found in ${filePath}`);
         }
-        if (occurrences > 1) {
-          throw new Error(
-            `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
-          );
-        }
-        newContent = content.replace(targetContent, () => replacementContent);
       }
     }
 
@@ -243,14 +325,7 @@ export class CodeTools {
       filePath,
       newContent,
       newHash,
-      updatedLocators: updatedStructure.symbols.map((s) => ({
-        path: filePath,
-        symbol: s.name,
-        startLine: s.startLine,
-        endLine: s.endLine,
-        hash: s.hash,
-        role: 'implementation',
-      })),
+      updatedLocators: buildLocators(filePath, updatedStructure.symbols),
     };
   }
 

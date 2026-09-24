@@ -9,6 +9,7 @@ import { Orchestrator } from '../src/index.mjs';
 import { observe } from '../src/observer.mjs';
 import { classifyIntent, extractPaths } from '../src/intent-router.mjs';
 import { fitSections } from '../src/context-budget.mjs';
+import { ModuleIndex } from '../src/module-index.mjs';
 import { ContextOSV2Service } from '../../mcp/src/v2-service.mjs';
 
 function makeTempProject() {
@@ -390,3 +391,160 @@ test('directories bind as tree refs and symbols resolve in every spelling', asyn
 
   service.close();
 });
+
+test('inspect supports ranges, budget: full, and truncation hints', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  // 1. inspect with ranges
+  const inspectRanges = await orchestrator.dispatch('inspect', {
+    path: 'src/math.mjs',
+    ranges: [{ startLine: 1, endLine: 1 }, { startLine: 3, endLine: 3 }],
+  });
+  assert.match(inspectRanges, /\[L1-L1\]/);
+  assert.match(inspectRanges, /export function add/);
+  assert.match(inspectRanges, /\[L3-L3\]/);
+
+  // 2. inspect with budget: full bypasses clip on long content
+  const longContent = 'line\n'.repeat(600);
+  fs.writeFileSync(path.join(projectRoot, 'src', 'long.mjs'), longContent);
+  const inspectFull = await orchestrator.dispatch('inspect', {
+    path: 'src/long.mjs',
+    budget: 'full',
+  });
+  assert.ok(inspectFull.length > 2500);
+  assert.ok(!inspectFull.includes('chars omitted'));
+
+  // 3. inspect with small maxChars shows truncation hint
+  const inspectTruncated = await orchestrator.dispatch('inspect', {
+    path: 'src/long.mjs',
+    maxChars: 500,
+  });
+  assert.match(inspectTruncated, /\[TRUNCATED: budget exceeded\. Action required: specify 'ranges: \[{startLine, endLine}\]' or pass 'budget: "full"'/);
+
+  service.close();
+});
+
+test('change supports top-level path, content, and overwrite: true', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('change', {
+    path: 'src/math.mjs',
+    content: 'export const PI = 3.14;\n',
+    overwrite: true,
+  });
+  assert.match(result, /ContextOS change/);
+  assert.equal(fs.readFileSync(path.join(projectRoot, 'src', 'math.mjs'), 'utf8'), 'export const PI = 3.14;\n');
+
+  service.close();
+});
+
+test('ship enforces architecture completeness gate when strictArchitecture is enabled', async () => {
+  const projectRoot = makeTempProject();
+  fs.mkdirSync(path.join(projectRoot, '.contextos'), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, '.contextos', 'profile.json'),
+    JSON.stringify({ strictArchitecture: true, verify: ['node -e "0"'] }, null, 2)
+  );
+
+  // Add an application file in apps/demo/app.mjs
+  fs.mkdirSync(path.join(projectRoot, 'apps', 'demo'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, 'apps', 'demo', 'app.mjs'), 'export const app = 1;\n');
+
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  // Touch the file in change
+  await orchestrator.dispatch('change', {
+    path: 'apps/demo/app.mjs',
+    content: 'export const app = 2;\n',
+    overwrite: true,
+    verify: true,
+  });
+
+  // ship should be BLOCKED because apps/demo/app.mjs is not covered by a curated block
+  const shipBlocked = await orchestrator.dispatch('ship', { summary: 'test ship blocked' });
+  assert.match(shipBlocked, /# ContextOS ship — BLOCKED \(architecture governance gate\)/);
+  assert.match(shipBlocked, /apps\/demo\/app\.mjs/);
+
+  // Now bind a curated block covering apps/demo
+  await orchestrator.dispatch('ops', {
+    capability: 'block',
+    action: 'bind_auto',
+    args: {
+      id: 'block-demo',
+      path: 'apps/demo',
+      blockData: { title: 'Demo App', kind: 'app' },
+    },
+  });
+
+  // Link to a chain
+  await orchestrator.dispatch('ops', {
+    capability: 'chain',
+    action: 'compose',
+    args: {
+      chainData: { id: 'chain-demo', title: 'Demo Chain', memberIds: ['block-demo'] },
+    },
+  });
+
+  // ship should now succeed!
+  const shipPassed = await orchestrator.dispatch('ship', { summary: 'test ship passed' });
+  assert.match(shipPassed, /# ContextOS ship/);
+  assert.ok(!shipPassed.includes('BLOCKED'));
+
+  service.close();
+});
+
+test('pipeline executes parallel and sequential chains with any tool', async () => {
+  const dir = makeTempProject();
+  const service = fakeService({ exitCode: 0 });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  // 1. Parallel inspect + ops run_command
+  const parallelRes = await orchestrator.dispatch('pipeline', {
+    steps: [
+      {
+        parallel: [
+          { tool: 'inspect', path: 'src/math.mjs' },
+          { run: 'git status' },
+        ],
+      },
+    ],
+  });
+  assert.match(parallelRes, /COMPLETED/);
+  assert.match(parallelRes, /Parallel Concurrency: 2 actions/);
+
+  // 2. Sequential chain: change -> verify
+  const chainRes = await orchestrator.dispatch('pipeline', {
+    steps: [
+      {
+        chain: [
+          { change: { path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 1;' } },
+          { verify: 'npm test' },
+        ],
+      },
+    ],
+  });
+  assert.match(chainRes, /COMPLETED/);
+  assert.match(chainRes, /Sequential Chain: 2 actions/);
+});
+
+test('ModuleIndex indexes manifests and config files, extracting structural properties', () => {
+  const dir = makeTempProject();
+  fs.writeFileSync(path.join(dir, 'Cargo.toml'), '[package]\nname = "desktop"\nversion = "2.5.5"\n');
+  fs.writeFileSync(path.join(dir, 'tauri.conf.json'), JSON.stringify({ version: '2.5.5', build: 'custom' }, null, 2));
+
+  const index = new ModuleIndex({ projectRoot: dir });
+  const discovered = index.discover();
+  assert.ok(discovered.includes('Cargo.toml'), 'Cargo.toml should be discovered');
+  assert.ok(discovered.includes('tauri.conf.json'), 'tauri.conf.json should be discovered');
+
+  index.ensure(['Cargo.toml', 'tauri.conf.json', 'package.json']);
+  const matches = index.lookup('version');
+  assert.ok(matches.length > 0, 'lookup version should return modules containing version configs');
+});
+
+

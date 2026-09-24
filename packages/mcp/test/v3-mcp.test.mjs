@@ -7,12 +7,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createV3Server } from "../src/v3-server.mjs";
 import { createFixtureProject } from "../../../scripts/fixture-project.mjs";
+import { packageVersion } from "../../../scripts/version.mjs";
 
-const EXPECTED_TOOLS = ["explore", "change", "verify", "ship", "ops"];
+const EXPECTED_TOOLS = ["explore", "inspect", "change", "verify", "ship", "ops", "pipeline"];
 
 async function boot() {
   const server = createV3Server();
-  const client = new Client({ name: "contextos-v3-test", version: "2.5.0" });
+  const client = new Client({ name: "contextos-v3-test", version: packageVersion });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return client;
@@ -276,6 +277,36 @@ test("V3 loop completes a real change with evidence and attribution", async () =
 
   const passthrough = await call("ops", { capability: "block", action: "list", args: { format: "json" } });
   assert.ok(passthrough.length > 0);
+
+  await client.close();
+  fixture.cleanup();
+});
+
+test("V3 MCP surface handles inspect ranges and change overwrite", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-inspect-change" });
+  const client = await boot();
+
+  const call = async (name, args) => {
+    const res = await client.callTool({ name, arguments: { projectRoot: fixture.root, ...args } });
+    assert.ok(!res.isError, `${name} failed: ${(res.content || []).map((c) => c.text).join('\n')}`);
+    return (res.content || []).map((chunk) => chunk.text ?? "").join("\n");
+  };
+
+  const inspected = await call("inspect", {
+    path: "src/math.mjs",
+    ranges: [{ startLine: 1, endLine: 2 }],
+    budget: "full",
+  });
+  assert.match(inspected, /# ContextOS inspect/);
+  assert.match(inspected, /\[L1-L2\]/);
+
+  const changed = await call("change", {
+    path: "src/math.mjs",
+    content: "export const version = '3.0.0';\n",
+    overwrite: true,
+  });
+  assert.match(changed, /ContextOS change/);
+  assert.equal(fixture.read("src/math.mjs"), "export const version = '3.0.0';\n");
 
   await client.close();
   fixture.cleanup();

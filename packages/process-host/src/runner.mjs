@@ -11,6 +11,8 @@ export async function runCommand({
   maxChars = 1500,
   timeoutMs = 60000,
   projectRoot = cwd,
+  raw = false,
+  mode = 'auto',
 }) {
   const receiptId = `receipt-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
   const startTime = Date.now();
@@ -26,9 +28,10 @@ export async function runCommand({
     let captureTruncated = false;
     let killedByTimeout = false;
 
+    const safeCommand = typeof command === 'string' ? command : '';
     const isWin = process.platform === 'win32';
     const shell = isWin ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
-    const shellArgs = isWin ? ['/d', '/s', '/c', command] : ['-c', command];
+    const shellArgs = isWin ? ['/d', '/s', '/c', safeCommand] : ['-c', safeCommand];
 
     const child = spawn(shell, shellArgs, {
       cwd,
@@ -72,7 +75,7 @@ export async function runCommand({
       stderrData += chunk.toString('utf8').slice(0, maxCaptureChars - stderrData.length);
     });
 
-    child.on('close', (code, signal) => {
+    child.on('close', (code) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
       const rawOutput =
@@ -86,7 +89,7 @@ export async function runCommand({
       } catch (_) {}
 
       const exitCode = killedByTimeout ? 124 : (code !== null ? code : 1);
-      const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars });
+      const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars, raw, mode, command: safeCommand });
 
       const relativeLogHandle = path.relative(projectRoot, logFile);
 
@@ -99,6 +102,7 @@ export async function runCommand({
         summary: killedByTimeout ? `Command timed out after ${timeoutMs}ms.` : sanitized.summary,
         text: sanitized.text,
         errors: sanitized.errors,
+        diagnostics: sanitized.diagnostics || [],
         warnings: sanitized.warnings,
         logHandle: relativeLogHandle,
         createdAt: new Date().toISOString(),

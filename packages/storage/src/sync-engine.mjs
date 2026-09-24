@@ -2,13 +2,21 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export function calculateSha256(text) {
+function calculateSha256(text) {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 export class SyncEngine {
   constructor(db) {
     this.db = db;
+  }
+
+  _parseGraph(jsonText) {
+    try {
+      return JSON.parse(jsonText);
+    } catch (error) {
+      throw new Error(`Invalid JSON syntax in graph: ${error.message}`);
+    }
   }
 
   _lastExportedHash(projectId) {
@@ -210,12 +218,7 @@ export class SyncEngine {
   }
 
   importGraphFromJson(jsonText, projectRoot) {
-    let graph;
-    try {
-      graph = JSON.parse(jsonText);
-    } catch (err) {
-      throw new Error(`Invalid JSON syntax in graph: ${err.message}`);
-    }
+    const graph = this._parseGraph(jsonText);
 
     const projectId = graph.projectId || graph.project?.id || graph.id || 'contextos';
     const graphRevision = graph.graphRevision || graph.project?.graphRevision || 0;
@@ -309,12 +312,7 @@ export class SyncEngine {
       return { changed: false, reason: 'Hash identical to last export' };
     }
 
-    let graph;
-    try {
-      graph = JSON.parse(jsonText);
-    } catch (err) {
-      throw new Error(`Invalid JSON syntax in graph: ${err.message}`);
-    }
+    const graph = this._parseGraph(jsonText);
 
     const project = this.db.getProject(projectId);
     const currentRevision = project?.graph_revision || 0;

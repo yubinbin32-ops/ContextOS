@@ -19,6 +19,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createV3Server } from "../packages/mcp/src/v3-server.mjs";
 import { ContextOSV2Service } from "../packages/mcp/src/v2-service.mjs";
 import { createFixtureProject } from "./fixture-project.mjs";
+import { packageVersion } from "./version.mjs";
 
 const MULTIPLY_TEST = `import assert from "node:assert/strict";
 import test from "node:test";
@@ -151,7 +152,7 @@ function parseHint(text) {
 
 async function boot(serverFactory) {
   const server = serverFactory();
-  const client = new Client({ name: "contextos-dev-flow-sim", version: "2.5.0" });
+  const client = new Client({ name: "contextos-dev-flow-sim", version: packageVersion });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return client;

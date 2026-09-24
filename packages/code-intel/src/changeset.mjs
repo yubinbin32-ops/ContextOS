@@ -30,7 +30,7 @@ function ensureParentDirectory(fullPath, createdDirectories) {
   for (const directory of missing.reverse()) createdDirectories.push(directory);
 }
 
-export function planChangeset(projectRoot, changes = []) {
+function planChangeset(projectRoot, changes = []) {
   if (!Array.isArray(changes) || changes.length === 0) {
     throw new Error('Changeset requires at least one create or edit operation');
   }
@@ -45,7 +45,8 @@ export function planChangeset(projectRoot, changes = []) {
 
     if (change.kind === 'create') {
       if (state) throw new Error(`Changeset operation ${index + 1} cannot create '${resolved.relativePath}' twice`);
-      if (fs.existsSync(resolved.fullPath)) {
+      const exists = fs.existsSync(resolved.fullPath);
+      if (exists && !change.overwrite) {
         throw new Error(`Changeset operation ${index + 1} cannot create existing file '${resolved.relativePath}'`);
       }
       if (typeof change.content !== 'string') {
@@ -55,12 +56,12 @@ export function planChangeset(projectRoot, changes = []) {
       state = {
         path: resolved.relativePath,
         fullPath: resolved.fullPath,
-        existed: false,
-        originalContent: null,
+        existed: exists,
+        originalContent: exists ? fs.readFileSync(resolved.fullPath, 'utf8') : null,
         newContent: change.content,
         newHash: created.newHash,
         locators: created.locators,
-        mode: 0o644,
+        mode: exists ? fs.statSync(resolved.fullPath).mode : 0o644,
       };
       states.set(resolved.fullPath, state);
       results.push({ index, kind: 'create', path: resolved.relativePath, newHash: created.newHash, locators: created.locators });
@@ -92,12 +93,28 @@ export function planChangeset(projectRoot, changes = []) {
       states.set(resolved.fullPath, state);
     }
 
+    if (change.fullFile) {
+      if (typeof change.replacement !== 'string') {
+        throw new Error(`Changeset operation ${index + 1} requires string replacement for fullFile edit '${resolved.relativePath}'`);
+      }
+      const edited = CodeTools.edit(resolved.relativePath, state.newContent, {
+        replacementContent: change.replacement,
+        fullFile: true,
+      });
+      state.newContent = edited.newContent;
+      state.newHash = edited.newHash;
+      state.locators = edited.updatedLocators;
+      results.push({ index, kind: 'edit', path: resolved.relativePath, newHash: edited.newHash, locators: edited.updatedLocators });
+      continue;
+    }
+
     const edited = CodeTools.edit(resolved.relativePath, state.newContent, {
       targetContent: change.target ?? null,
       replacementContent: change.replacement ?? '',
       startLine: change.startLine ?? null,
       endLine: change.endLine ?? null,
       symbol: change.symbol ?? null,
+      append: change.append ?? null,
     });
     state.newContent = edited.newContent;
     state.newHash = edited.newHash;
@@ -108,7 +125,7 @@ export function planChangeset(projectRoot, changes = []) {
   return { files: Array.from(states.values()), results };
 }
 
-export function commitChangeset(plan) {
+function commitChangeset(plan) {
   const prepared = [];
   const createdDirectories = [];
 

@@ -22,12 +22,11 @@ struct CanvasScene: Equatable {
 
     static func compile(snapshot: GraphSnapshot, hiddenKinds: Set<String> = [], topInset: CGFloat = 70) -> CanvasScene {
         let backgroundRuleIDs = Set(snapshot.backgroundScopes.map(\.blockId))
-        let allCanvasBlocks = snapshot.blocks.filter {
+        let blocks = snapshot.blocks.filter {
             !backgroundRuleIDs.contains($0.id)
                 && !hiddenKinds.contains($0.kind)
         }
-        let visibleIDs = Set(allCanvasBlocks.map(\.id))
-        let blocks = allCanvasBlocks.filter { visibleIDs.contains($0.id) }
+        let visibleIDs = Set(blocks.map(\.id))
         let links = snapshot.links.filter {
             $0.sourceType == "block" && $0.targetType == "block" &&
                 visibleIDs.contains($0.sourceId) && visibleIDs.contains($0.targetId)

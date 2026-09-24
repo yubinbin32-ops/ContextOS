@@ -3,12 +3,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { syncDesktopVersion } from './version.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const releaseArch = process.env.CONTEXTOS_PACKAGE_ARCH || process.arch;
 const nodeVersion = '22.14.0';
+const pkgVersion = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
+const [major = 0, minor = 0, patch = 0] = pkgVersion.split('-', 1)[0].split('.').map((part) => Number.parseInt(part, 10) || 0);
+const pkgBuildNumber = major * 10000 + minor * 100 + patch;
 
 if (!['arm64', 'x64'].includes(releaseArch)) {
   throw new Error(`Unsupported macOS packaging architecture: ${releaseArch}`);
@@ -22,6 +26,9 @@ if (releaseArch !== process.arch) {
 }
 
 console.log('🚀 Starting ContextOS macOS Packaging Pipeline...');
+
+// Auto-sync desktop version definitions from root package.json
+syncDesktopVersion();
 
 // 1. Rebuild plugin server bundle
 console.log('📦 Step 1/5: Building plugin MCP server bundle...');
@@ -92,8 +99,11 @@ fs.writeFileSync(path.join(contentsDir, 'PkgInfo'), 'APPL????');
 
 // Create Info.plist with executable name filled in
 const sourcePlistPath = path.join(repoRoot, 'apps/desktop/Resources/Info.plist');
-let plistContent = fs.readFileSync(sourcePlistPath, 'utf8');
-plistContent = plistContent.replace(/\$\(EXECUTABLE_NAME\)/g, 'ContextOS');
+const renderInfoPlist = () => fs.readFileSync(sourcePlistPath, 'utf8')
+  .replace(/\$\(EXECUTABLE_NAME\)/g, 'ContextOS')
+  .replace(/\$\(MARKETING_VERSION\)/g, pkgVersion)
+  .replace(/\$\(CURRENT_PROJECT_VERSION\)/g, String(pkgBuildNumber));
+const plistContent = renderInfoPlist();
 fs.writeFileSync(path.join(contentsDir, 'Info.plist'), plistContent, 'utf8');
 
 // Copy AppIcon
@@ -124,7 +134,7 @@ fs.copyFileSync(path.join(repoRoot, 'package.json'), path.join(marketplaceDir, '
 
 const targetAppPlistDir = path.join(marketplaceDir, 'apps/desktop/Resources');
 fs.mkdirSync(targetAppPlistDir, { recursive: true });
-fs.copyFileSync(sourcePlistPath, path.join(targetAppPlistDir, 'Info.plist'));
+fs.writeFileSync(path.join(targetAppPlistDir, 'Info.plist'), renderInfoPlist(), 'utf8');
 
 // 4. Code Signing & Packaging Standard Edition (without bundled Node)
 console.log('✍️  Step 4/5: Code signing and packaging Standard Edition (ContextOS-macos.zip)...');
@@ -145,7 +155,6 @@ const signApp = () => {
 };
 signApp();
 
-const pkgVersion = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
 const zipStandardV = path.join(distDir, `contextos-macos-v${pkgVersion}.zip`);
 const zipStandardLatest = path.join(distDir, 'contextos-macos.zip');
 const zipStandardArch = path.join(distDir, `ContextOS-macos-${releaseArch}.zip`);

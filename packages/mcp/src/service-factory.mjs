@@ -51,7 +51,7 @@ export function findBundledPluginRoot() {
   throw new Error('Cannot locate the bundled ContextOS plugin assets; set CONTEXTOS_REPOSITORY_ROOT explicitly.');
 }
 
-export function resolveProjectTransport(root) {
+function resolveProjectTransport(root) {
   let mode = 'local';
   let cloudUrl = null;
   let token = null;

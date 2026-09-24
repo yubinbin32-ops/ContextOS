@@ -1,4 +1,4 @@
-import { bindingMatchesPath } from './bindings.mjs';
+import { bindingMatchesPath, normalizeBindingPath } from './bindings.mjs';
 
 /**
  * Coverage checker: Calculates project or task working set Block coverage.
@@ -10,10 +10,10 @@ export class CoverageChecker {
     const fileCoverageMap = new Map();
 
     for (const filePath of filePaths) {
-      fileCoverageMap.set(filePath, {
+      fileCoverageMap.set(normalizeBindingPath(filePath), {
         path: filePath,
-        coveredByBlocks: [],
-        symbolsCovered: [],
+        coveredByBlocks: new Set(),
+        symbolsCovered: new Set(),
       });
     }
 
@@ -23,14 +23,19 @@ export class CoverageChecker {
         const hasHash = typeof ref.hash === 'string' && ref.hash.trim() && ref.hash !== 'untracked';
         const hasSymbol = typeof ref.symbol === 'string' && ref.symbol.trim() && ref.symbol !== '*';
         if (!ref.path || !hasHash || (anchorKind === 'symbol' && !hasSymbol)) continue;
-        for (const [filePath, entry] of fileCoverageMap.entries()) {
-          if (!bindingMatchesPath(ref.path, anchorKind, filePath)) continue;
-          if (!entry.coveredByBlocks.includes(block.id)) {
-            entry.coveredByBlocks.push(block.id);
+
+        const applyCoverage = (entry) => {
+          entry.coveredByBlocks.add(block.id);
+          if (hasSymbol) entry.symbolsCovered.add(ref.symbol);
+        };
+
+        if (anchorKind === 'tree') {
+          for (const entry of fileCoverageMap.values()) {
+            if (bindingMatchesPath(ref.path, anchorKind, entry.path)) applyCoverage(entry);
           }
-          if (ref.symbol && !entry.symbolsCovered.includes(ref.symbol)) {
-            entry.symbolsCovered.push(ref.symbol);
-          }
+        } else {
+          const entry = fileCoverageMap.get(normalizeBindingPath(ref.path));
+          if (entry) applyCoverage(entry);
         }
       }
     }
@@ -39,13 +44,18 @@ export class CoverageChecker {
     const uncoveredFiles = [];
     const gaps = [];
 
-    for (const [filePath, entry] of fileCoverageMap.entries()) {
-      if (entry.coveredByBlocks.length > 0) {
-        coveredFiles.push(entry);
+    for (const entry of fileCoverageMap.values()) {
+      const result = {
+        path: entry.path,
+        coveredByBlocks: Array.from(entry.coveredByBlocks),
+        symbolsCovered: Array.from(entry.symbolsCovered),
+      };
+      if (result.coveredByBlocks.length > 0) {
+        coveredFiles.push(result);
       } else {
-        uncoveredFiles.push(filePath);
+        uncoveredFiles.push(result.path);
         gaps.push({
-          path: filePath,
+          path: result.path,
           reason: 'No Block currently owns this code file.',
         });
       }

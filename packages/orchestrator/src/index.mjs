@@ -2,7 +2,7 @@ import { SessionStore } from './session-store.mjs';
 import { Tracer } from './tracer.mjs';
 import { createCapabilities } from './capabilities.mjs';
 import { loadProfile, saveProfile } from './profile.mjs';
-import { changePipeline, explorePipeline, shipPipeline, verifyPipeline } from './pipelines.mjs';
+import { changePipeline, explorePipeline, inspectPipeline, pipelinePipeline, shipPipeline, verifyPipeline } from './pipelines.mjs';
 
 export * from './context-budget.mjs';
 export * from './intent-router.mjs';
@@ -76,6 +76,7 @@ export class Orchestrator {
       profile: loadProfile(this.projectRoot),
       projectRoot: this.projectRoot,
       projectId: this.projectId,
+      orchestrator: this,
     };
   }
 
@@ -89,6 +90,8 @@ export class Orchestrator {
       switch (tool) {
         case 'explore':
           return await explorePipeline(ctx, input);
+        case 'inspect':
+          return await inspectPipeline(ctx, input);
         case 'change':
           return await changePipeline(ctx, input);
         case 'verify':
@@ -97,6 +100,8 @@ export class Orchestrator {
           return await shipPipeline(ctx, input);
         case 'ops':
           return await this._ops(ctx, input);
+        case 'pipeline':
+          return await pipelinePipeline(ctx, input);
         default:
           throw new Error(`Unknown orchestrator tool '${tool}'`);
       }

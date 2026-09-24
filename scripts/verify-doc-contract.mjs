@@ -11,7 +11,7 @@ const readmeZh = read('README_zh.md');
 const contributing = read('CONTRIBUTING.md');
 const decisions = read('DECISION.md');
 
-for (const tool of ['explore', 'change', 'verify', 'ship', 'ops']) {
+for (const tool of ['explore', 'change', 'inspect', 'verify', 'ship', 'ops']) {
   assert.match(skill, new RegExp(`\`${tool}\``), `Skill must document ${tool}`);
 }
 assert.match(skill, /tool_search/, 'Skill must document cold-start tool loading');

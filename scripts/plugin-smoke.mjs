@@ -9,23 +9,24 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { createFixtureProject } from "./fixture-project.mjs";
+import { packageVersion } from "./version.mjs";
 
 const projectRoot = process.cwd();
-const EXPECTED_TOOLS = ["explore", "change", "verify", "ship", "ops"];
+const EXPECTED_TOOLS = ["explore", "inspect", "change", "verify", "ship", "ops", "pipeline"];
 const transport = new StdioClientTransport({
   command: "node",
   args: ["plugins/contextos/server/contextos-mcp.mjs"],
   cwd: projectRoot,
 });
-const client = new Client({ name: "contextos-plugin-smoke", version: "2.5.0" });
+const client = new Client({ name: "contextos-plugin-smoke", version: packageVersion });
 const fixture = createFixtureProject({ prefix: "ctxos-plugin" });
 
-const packageVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
 const pluginVersion = JSON.parse(fs.readFileSync("plugins/contextos/.codex-plugin/plugin.json", "utf8")).version;
-const appVersion = fs.readFileSync("apps/desktop/Resources/Info.plist", "utf8").match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)/)?.[1];
 assert.equal(packageVersion, pluginVersion, "package and plugin versions must match");
-assert.equal(packageVersion, appVersion, "package and desktop app versions must match");
-assert.equal(packageVersion, "2.5.0", "Version must be 2.5.0");
+assert.ok(
+  fs.readFileSync("apps/desktop/Resources/Info.plist", "utf8").includes("<string>$(MARKETING_VERSION)</string>"),
+  "desktop app version must be injected from package.json"
+);
 
 const skillPath = path.join("plugins", "contextos", "skills", "contextos", "SKILL.md");
 assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");

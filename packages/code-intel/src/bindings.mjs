@@ -2,13 +2,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const SOURCE_EXTENSIONS = new Set([
-  '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx',
-  '.py', '.go', '.rs', '.swift', '.java', '.kt', '.kts',
-  '.c', '.h', '.cpp', '.hpp', '.cc', '.cxx', '.cs',
-  '.php', '.rb',
-]);
-
 const MANIFEST_CANDIDATES = [
   'package-lock.json',
   'pnpm-lock.yaml',
@@ -29,10 +22,6 @@ export function normalizeBindingPath(filePath) {
     .replace(/\\/g, '/')
     .replace(/^\.\//, '')
     .replace(/\/+$/, '');
-}
-
-export function isSourceCodePath(filePath) {
-  return SOURCE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 
 export function bindingMatchesPath(refPath, anchorKind, targetPath) {

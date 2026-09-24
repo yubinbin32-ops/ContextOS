@@ -23245,6 +23245,7 @@ function emptySession(projectId, intent) {
     touchedFiles: [],
     receipts: [],
     notes: [],
+    slots: {},
     startedAt: now,
     updatedAt: now,
     closedAt: null,
@@ -23257,7 +23258,40 @@ var SessionStore = class {
     this.projectId = projectId;
     this.dotDir = path.join(projectRoot, ".contextos");
     this.sessionPath = path.join(this.dotDir, "session.json");
+    this.blackboardPath = path.join(this.dotDir, "blackboard.md");
     this.historyPath = path.join(this.dotDir, "logs", "sessions", "history.jsonl");
+  }
+  renderBlackboard(session = this.current) {
+    if (!session) {
+      return "# ContextOS Blackboard\n- Status: idle (no open session)\n";
+    }
+    const lines = [
+      "# ContextOS Blackboard",
+      `- Session: \`${session.id}\` (${session.status})`,
+      `- Intent: ${session.intent || "(none)"}`
+    ];
+    if (session.touchedFiles.length) {
+      const paths = session.touchedFiles.slice(-5).map((f) => `\`${f.path}\``).join(", ");
+      lines.push(`- Working Files: ${paths}${session.touchedFiles.length > 5 ? ` (+${session.touchedFiles.length - 5})` : ""}`);
+    }
+    if (session.receipts.length) {
+      const last = session.receipts[session.receipts.length - 1];
+      lines.push(`- Last Verify: \`${last.command}\` -> exit ${last.exitCode} (${last.status || "done"})`);
+    }
+    if (session.notes.length) {
+      const lastNote = session.notes[session.notes.length - 1];
+      lines.push(`- Note: ${lastNote.text.slice(0, 100)}`);
+    }
+    return lines.join("\n") + "\n";
+  }
+  saveBlackboard(session = this.current) {
+    const md = this.renderBlackboard(session);
+    try {
+      fs2.mkdirSync(this.dotDir, { recursive: true });
+      fs2.writeFileSync(this.blackboardPath, md, "utf8");
+    } catch (_) {
+    }
+    return md;
   }
   load() {
     if (!fs2.existsSync(this.sessionPath)) return null;
@@ -23271,6 +23305,7 @@ var SessionStore = class {
     session.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     fs2.mkdirSync(this.dotDir, { recursive: true });
     fs2.writeFileSync(this.sessionPath, JSON.stringify(session, null, 2) + "\n", "utf8");
+    this.saveBlackboard(session);
     return session;
   }
   get current() {
@@ -23370,6 +23405,16 @@ var SessionStore = class {
       session.notes = session.notes.slice(-MAX_NOTES);
     }
     return this.save(session);
+  }
+  setSlots(slots = {}) {
+    const session = this.ensureSession();
+    session.slots = { ...session.slots || {}, ...slots };
+    return this.save(session);
+  }
+  getSlot(slotKey) {
+    const session = this.current;
+    if (!session || !session.slots) return null;
+    return session.slots[slotKey] || null;
   }
   close(summary = "") {
     const session = this.ensureSession();
@@ -23483,7 +23528,7 @@ function inferFromPackageJson(projectRoot) {
   }
 }
 function loadProfile(projectRoot) {
-  const defaults = { strict: false, verify: [], maxChars: 1500, timeoutMs: 12e4, budget: null };
+  const defaults = { strict: false, strictArchitecture: false, verify: [], maxChars: 1500, timeoutMs: 12e4, budget: null };
   const profilePath = path3.join(projectRoot, ".contextos", "profile.json");
   let stored = {};
   if (fs4.existsSync(profilePath)) {
@@ -23511,9 +23556,10 @@ import path9 from "node:path";
 
 // packages/orchestrator/src/context-budget.mjs
 var BUDGET_PRESETS = Object.freeze({
-  shallow: 1800,
-  normal: 4e3,
-  deep: 9e3
+  shallow: 1200,
+  normal: 2800,
+  deep: 7500,
+  full: Infinity
 });
 function resolveBudget(depth, override) {
   if (typeof override === "number" && override > 0) return override;
@@ -23542,10 +23588,13 @@ ${body2}`;
     }
     const remaining = maxChars - used - header.length - 2;
     if (remaining > 160) {
-      const cut = body2.slice(0, remaining - 24);
+      const hint = `
+[TRUNCATED: budget exceeded. Action required: specify 'ranges: [{startLine, endLine}]' or pass 'budget: "full"' to receive the entire content]`;
+      const cutLen = Math.max(0, remaining - 24 - hint.length);
+      const cut = body2.slice(0, cutLen);
       chunks.push(`${header}
 ${cut}
-... (+${body2.length - cut.length} chars omitted)`);
+... (+${body2.length - cut.length} chars omitted)${hint}`);
       used = maxChars;
       included.push(section.key);
       truncated.push(section.key);
@@ -42191,16 +42240,18 @@ var TreeSitterParser = class _TreeSitterParser {
         default:
           return null;
       }
+      const containers = /* @__PURE__ */ new Map();
+      for (const symbol of symbols) {
+        if (!containers.has(symbol.name) && (symbol.kind === "struct" || symbol.kind === "class" || symbol.kind === "trait" || symbol.kind === "interface")) {
+          containers.set(symbol.name, symbol);
+        }
+      }
       for (const sym of symbols) {
-        if (sym.containerName && (sym.kind === "method" || sym.kind === "constructor" || sym.kind === "function")) {
-          const container = symbols.find(
-            (s) => s.name === sym.containerName && (s.kind === "struct" || s.kind === "class" || s.kind === "trait" || s.kind === "interface")
-          );
-          if (container && Array.isArray(container.methods)) {
-            if (!container.methods.some((m) => m.name === sym.name && m.startLine === sym.startLine)) {
-              container.methods.push(sym);
-            }
-          }
+        if (!sym.containerName || sym.kind !== "method" && sym.kind !== "constructor" && sym.kind !== "function") continue;
+        const container = containers.get(sym.containerName);
+        if (!container || !Array.isArray(container.methods)) continue;
+        if (!container.methods.some((m) => m.name === sym.name && m.startLine === sym.startLine)) {
+          container.methods.push(sym);
         }
       }
       return { symbols, imports };
@@ -43368,23 +43419,23 @@ var LanguageRegistry = class {
       } else if (lang === "python") {
         this._parsePython(lines, symbols, imports, content);
       } else if (lang === "go") {
-        this._parseGo(lines, symbols, imports, content);
+        this._parseGo(lines, symbols);
       } else if (lang === "rust") {
-        this._parseRust(lines, symbols, imports, content);
+        this._parseRust(lines, symbols);
       } else if (lang === "swift") {
-        this._parseSwift(lines, symbols, imports, content);
+        this._parseSwift(lines, symbols, imports);
       } else if (lang === "java") {
-        this._parseJava(lines, symbols, imports, content);
+        this._parseJava(lines, symbols, imports);
       } else if (lang === "kotlin") {
-        this._parseKotlin(lines, symbols, imports, content);
+        this._parseKotlin(lines, symbols, imports);
       } else if (lang === "cpp") {
-        this._parseCpp(lines, symbols, imports, content);
+        this._parseCpp(lines, symbols, imports);
       } else if (lang === "csharp") {
-        this._parseCSharp(lines, symbols, imports, content);
+        this._parseCSharp(lines, symbols, imports);
       } else if (lang === "php") {
-        this._parsePhp(lines, symbols, imports, content);
+        this._parsePhp(lines, symbols, imports);
       } else if (lang === "ruby") {
-        this._parseRuby(lines, symbols, imports, content);
+        this._parseRuby(lines, symbols, imports);
       } else {
         symbols.push({
           name: path6.basename(filePath),
@@ -43410,8 +43461,8 @@ var LanguageRegistry = class {
   static _parseJsTs(lines, symbols, imports, fullText) {
     try {
       this._parseJsTsWithBabel(lines, symbols, imports, fullText);
-    } catch (err2) {
-      this._parseJsTsFallback(lines, symbols, imports, fullText);
+    } catch {
+      this._parseJsTsFallback(lines, symbols, imports);
     }
   }
   static _parseJsTsWithBabel(lines, symbols, imports, fullText) {
@@ -43582,11 +43633,10 @@ var LanguageRegistry = class {
       }
     }
   }
-  static _parseJsTsFallback(lines, symbols, imports, fullText) {
+  static _parseJsTsFallback(lines, symbols, imports) {
     let currentClass = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
-      const trimmed = line.trim();
       const lineNum = i2 + 1;
       const importMatch = line.match(/^\s*import\s+(?:(?:{[^}]+}|\*\s+as\s+\w+|\w+)\s+from\s+)?['"]([^'"]+)['"]/);
       if (importMatch) {
@@ -43773,7 +43823,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parseGo(lines, symbols, imports, fullText) {
+  static _parseGo(lines, symbols) {
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
       const lineNum = i2 + 1;
@@ -43816,7 +43866,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parseRust(lines, symbols, imports, fullText) {
+  static _parseRust(lines, symbols) {
     let currentImpl = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
@@ -43878,7 +43928,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parseSwift(lines, symbols, imports, fullText) {
+  static _parseSwift(lines, symbols, imports) {
     let currentType = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
@@ -43942,7 +43992,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parseJava(lines, symbols, imports, fullText) {
+  static _parseJava(lines, symbols, imports) {
     let currentClass = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
@@ -43996,7 +44046,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parseKotlin(lines, symbols, imports, fullText) {
+  static _parseKotlin(lines, symbols, imports) {
     let currentType = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
@@ -44042,7 +44092,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parseCpp(lines, symbols, imports, fullText) {
+  static _parseCpp(lines, symbols, imports) {
     let currentClass = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
@@ -44106,7 +44156,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parseCSharp(lines, symbols, imports, fullText) {
+  static _parseCSharp(lines, symbols, imports) {
     let currentClass = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
@@ -44160,7 +44210,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parsePhp(lines, symbols, imports, fullText) {
+  static _parsePhp(lines, symbols, imports) {
     let currentClass = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
@@ -44209,7 +44259,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
       }
     }
   }
-  static _parseRuby(lines, symbols, imports, fullText) {
+  static _parseRuby(lines, symbols, imports) {
     let currentClass = null;
     for (let i2 = 0; i2 < lines.length; i2++) {
       const line = lines[i2];
@@ -44591,8 +44641,53 @@ var SOURCE_EXT = /* @__PURE__ */ new Set([
   ".cpp",
   ".cs"
 ]);
-var MAX_SOURCE_FILES = 400;
-var MAX_INDEXED_PER_CALL = 40;
+var BINARY_OR_IGNORE_EXT = /* @__PURE__ */ new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".ico",
+  ".svg",
+  ".webp",
+  ".bmp",
+  ".tiff",
+  ".sqlite",
+  ".sqlite-wal",
+  ".sqlite-shm",
+  ".db",
+  ".bin",
+  ".exe",
+  ".dll",
+  ".dylib",
+  ".so",
+  ".node",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".tgz",
+  ".bz2",
+  ".xz",
+  ".7z",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".eot",
+  ".otf",
+  ".lockb",
+  ".pyc",
+  ".class",
+  ".o",
+  ".a",
+  ".pdf",
+  ".mp4",
+  ".mp3",
+  ".mov",
+  ".avi",
+  ".wav",
+  ".ds_store"
+]);
+var MAX_SOURCE_FILES = 800;
+var MAX_INDEXED_PER_CALL = 60;
 var MAX_FILE_BYTES = 2e5;
 function slugify2(value) {
   const slug = String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -44604,6 +44699,17 @@ function moduleIdFor(relativePath) {
 }
 function isSource(relativePath) {
   return SOURCE_EXT.has(path7.extname(relativePath).toLowerCase());
+}
+function isIndexable(relativePath) {
+  const base = path7.basename(relativePath).toLowerCase();
+  if (base.startsWith(".") && base !== ".gitignore" && base !== ".env" && base !== ".npmrc") {
+    if (!base.endsWith(".json") && !base.endsWith(".yaml") && !base.endsWith(".yml") && !base.endsWith(".toml")) {
+      return false;
+    }
+  }
+  const ext = path7.extname(relativePath).toLowerCase();
+  if (BINARY_OR_IGNORE_EXT.has(ext)) return false;
+  return true;
 }
 function walk(dir, root, collected, limit) {
   if (collected.length >= limit) return;
@@ -44622,7 +44728,7 @@ function walk(dir, root, collected, limit) {
     }
     if (!entry.isFile()) continue;
     const relative = path7.relative(root, path7.join(dir, entry.name)).split(path7.sep).join("/");
-    if (isSource(relative)) collected.push(relative);
+    if (isIndexable(relative)) collected.push(relative);
   }
 }
 var ModuleIndex = class {
@@ -44655,30 +44761,71 @@ var ModuleIndex = class {
   }
   _parse(relativePath) {
     const fullPath = path7.join(this.projectRoot, relativePath);
-    const stat = fs7.statSync(fullPath);
+    let stat;
+    try {
+      stat = fs7.statSync(fullPath);
+    } catch (_) {
+      return null;
+    }
     if (stat.size > MAX_FILE_BYTES) {
       return { path: relativePath, mtimeMs: stat.mtimeMs, size: stat.size, symbols: [], imports: [], language: "unknown" };
     }
     const content = fs7.readFileSync(fullPath, "utf8");
-    let structure = { symbols: [], imports: [], language: "unknown", capability: "none" };
-    try {
-      structure = LanguageRegistry.parseStructure(relativePath, content) || structure;
-    } catch (_) {
-    }
-    const symbols = [];
-    for (const sym of structure.symbols || []) {
-      symbols.push({ name: sym.name, kind: sym.kind, startLine: sym.startLine });
-      for (const method of sym.methods || []) {
-        symbols.push({ name: method.name, kind: "method", startLine: method.startLine });
+    const ext = path7.extname(relativePath).toLowerCase();
+    const basename = path7.basename(relativePath);
+    let symbols = [];
+    let imports = [];
+    let language = "unknown";
+    if (isSource(relativePath)) {
+      let structure = { symbols: [], imports: [], language: "unknown", capability: "none" };
+      try {
+        structure = LanguageRegistry.parseStructure(relativePath, content) || structure;
+      } catch (_) {
       }
+      for (const sym of structure.symbols || []) {
+        symbols.push({ name: sym.name, kind: sym.kind, startLine: sym.startLine });
+        for (const method of sym.methods || []) {
+          symbols.push({ name: method.name, kind: "method", startLine: method.startLine });
+        }
+      }
+      imports = (structure.imports || []).map((imp) => imp.source).slice(0, 20);
+      language = structure.language || "unknown";
+    } else if (ext === ".json") {
+      language = "json";
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          for (const key of Object.keys(parsed).slice(0, 30)) {
+            const val = parsed[key];
+            const valStr = typeof val === "string" ? `:${val}` : "";
+            symbols.push({ name: `${key}${valStr}`.slice(0, 50), kind: "property", startLine: 1 });
+          }
+        }
+      } catch (_) {
+      }
+    } else if (ext === ".toml" || ext === ".yaml" || ext === ".yml" || ext === ".plist" || ext === ".env") {
+      language = ext.replace(".", "");
+      const lines = content.split("\n");
+      for (let i2 = 0; i2 < Math.min(lines.length, 100); i2++) {
+        const line = lines[i2].trim();
+        const m = line.match(/^([a-zA-Z0-9_-]+)\s*[:=]\s*(.+)$/);
+        if (m) {
+          const key = m[1];
+          const val = m[2].replace(/["']/g, "").trim().slice(0, 30);
+          symbols.push({ name: `${key}:${val}`, kind: "property", startLine: i2 + 1 });
+        }
+      }
+    } else {
+      language = ext ? ext.replace(".", "") : "text";
+      symbols.push({ name: basename, kind: "file", startLine: 1 });
     }
     return {
       path: relativePath,
       mtimeMs: stat.mtimeMs,
       size: stat.size,
-      language: structure.language || "unknown",
+      language,
       symbols: symbols.slice(0, 40),
-      imports: (structure.imports || []).map((imp) => imp.source).slice(0, 20)
+      imports: imports.slice(0, 20)
     };
   }
   /** Refresh entries for the given files; parses only what changed. */
@@ -44686,7 +44833,7 @@ var ModuleIndex = class {
     let parsed = 0;
     for (const relativePath of relativePaths) {
       const fullPath = path7.join(this.projectRoot, relativePath);
-      if (!fs7.existsSync(fullPath) || !isSource(relativePath)) continue;
+      if (!fs7.existsSync(fullPath) || !isIndexable(relativePath)) continue;
       let stat;
       try {
         stat = fs7.statSync(fullPath);
@@ -44695,8 +44842,11 @@ var ModuleIndex = class {
       }
       const cached2 = this.entries.get(relativePath);
       if (cached2 && cached2.mtimeMs === stat.mtimeMs && cached2.size === stat.size) continue;
-      this.entries.set(relativePath, this._parse(relativePath));
-      parsed += 1;
+      const entry = this._parse(relativePath);
+      if (entry) {
+        this.entries.set(relativePath, entry);
+        parsed += 1;
+      }
       if (parsed >= MAX_INDEXED_PER_CALL) break;
     }
     if (parsed > 0) this.save();
@@ -44740,19 +44890,87 @@ var ModuleIndex = class {
 
 // packages/process-host/src/sanitizer.mjs
 function stripAnsi(text) {
+  if (typeof text !== "string") return "";
   return text.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, "").replace(/\r/g, "\n");
 }
 function redactSecrets(text) {
+  if (typeof text !== "string") return "";
   return text.replace(/(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36}/g, "[REDACTED_GITHUB_TOKEN]").replace(/sk-[a-zA-Z0-9]{32,}/g, "[REDACTED_API_KEY]").replace(
     /(?:password|token|secret|key|bearer)\s*[:=]\s*['"]?([a-zA-Z0-9_\-.~+]{8,})['"]?/gi,
     (match, val) => match.replace(val, "[REDACTED]")
   );
 }
+function extractDiagnosticBlocks(lines, maxBlocks = 3, maxLinesPerBlock = 16) {
+  const blocks = [];
+  const visited = /* @__PURE__ */ new Set();
+  for (let i2 = 0; i2 < lines.length; i2++) {
+    if (visited.has(i2)) continue;
+    const line = lines[i2];
+    const isAnchor = line.match(/^(?:not ok \d+|\s*✖\s+|FAIL\s+|FAILED\s+)/i) || line.match(/(?:AssertionError|ERR_ASSERTION|expected .+ to|received .+)/i) || line.match(/^(?:[A-Za-z0-9_]*Error|Exception|fatal error|panic):/i) || line.match(/\b(SyntaxError|TypeError|ReferenceError|RangeError):/) || line.match(/^.+:\d+:\d+:\s*(?:error|fatal error):/i);
+    if (isAnchor) {
+      let start2 = i2;
+      let lookback = 0;
+      while (start2 > 0 && lookback < 4 && !visited.has(start2 - 1)) {
+        const candidate = lines[start2 - 1];
+        if (!candidate.trim() || candidate.match(/^(?:ok \d+|not ok \d+|# Subtest:|\s*✔\s+|PASS\s+)/i)) {
+          if (candidate.match(/^# Subtest:/i)) {
+            start2 -= 1;
+          }
+          break;
+        }
+        start2 -= 1;
+        lookback += 1;
+        if (candidate.match(/^[a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+:\d+/)) {
+          break;
+        }
+      }
+      let end = i2 + 1;
+      let inYaml = false;
+      while (end < lines.length && end - start2 < maxLinesPerBlock) {
+        const curr = lines[end];
+        if (curr.trim() === "---") inYaml = true;
+        if (inYaml && curr.trim() === "...") {
+          end += 1;
+          break;
+        }
+        if (curr.match(/^(?:ok \d+|# Subtest:|\s*✔\s+|PASS\s+)/i)) {
+          break;
+        }
+        if (end - start2 > 3 && (curr.match(/^(?:not ok \d+|\s*✖\s+|FAIL\s+|FAILED\s+)/i) || curr.match(/^# Subtest:/i))) {
+          break;
+        }
+        end += 1;
+      }
+      for (let k = start2; k < end; k++) visited.add(k);
+      const blockLines = lines.slice(start2, end);
+      if (blockLines.length > 0) {
+        blocks.push(blockLines.join("\n"));
+      }
+      if (blocks.length >= maxBlocks) break;
+    }
+  }
+  return blocks;
+}
 function sanitizeTerminalOutput(rawText, options = {}) {
   const maxChars = options.maxChars || 1500;
   const exitCode = options.exitCode !== void 0 ? options.exitCode : 0;
+  const raw = Boolean(options.raw);
+  const command = String(options.command || "");
+  const mode = options.mode || "auto";
   let cleaned = stripAnsi(rawText);
   cleaned = redactSecrets(cleaned);
+  if (raw) {
+    const trimmed = cleaned.trimEnd();
+    return {
+      text: trimmed.length > maxChars ? trimmed.slice(0, maxChars - 30) + "\n...[output truncated]" : trimmed,
+      summary: `Command executed with exit code ${exitCode} (${trimmed.length} chars).`,
+      exitCode,
+      errors: [],
+      diagnostics: [],
+      warnings: [],
+      distinctFiles: []
+    };
+  }
   const lines = cleaned.split("\n").map((l) => l.trimEnd()).filter((l) => l.length > 0);
   const nonNoiseLines = lines.filter((line) => {
     if (line.match(/^\[\d+\/\d+\]\s+Compiling/i)) return false;
@@ -44762,19 +44980,35 @@ function sanitizeTerminalOutput(rawText, options = {}) {
   });
   const errors = [];
   const warnings = [];
-  for (const line of nonNoiseLines) {
-    if (exitCode !== 0 && line.match(/error[:\s]|failed|failure|exception|fatal/i)) {
+  for (let i2 = 0; i2 < nonNoiseLines.length; i2++) {
+    const line = nonNoiseLines[i2];
+    if (exitCode !== 0 && (line.match(/error[:\s]|failed|failure|exception|fatal|AssertionError|ERR_ASSERTION/i) || line.trim().startsWith("\u2716") || line.trim().startsWith("+") || line.trim().startsWith("-"))) {
       errors.push(line);
     } else if (line.match(/warning[:\s]|warn[:\s]/i)) {
       warnings.push(line);
     }
   }
+  const diagnostics = exitCode !== 0 ? extractDiagnosticBlocks(nonNoiseLines, 3, 16) : [];
+  const isQuery = mode === "query" || /^(rg|grep|find|cat|sed|ls|git\s+(status|diff|log|branch)|jq|awk)\b/i.test(command.trim());
+  const distinctFiles = [];
+  const fileSeen = /* @__PURE__ */ new Set();
+  for (const line of nonNoiseLines) {
+    const m = line.match(/^([a-zA-Z0-9_./-]+\.[a-zA-Z0-9]+)(:\d+)?/);
+    if (m) {
+      const f = m[1];
+      if (!fileSeen.has(f) && !f.startsWith("http")) {
+        fileSeen.add(f);
+        distinctFiles.push(f);
+      }
+    }
+  }
   let summary = "";
   if (exitCode === 0) {
+    const fileSuffix = distinctFiles.length > 0 ? `, ${distinctFiles.length} file(s)` : "";
     if (lines.length <= 15 && cleaned.length <= maxChars) {
-      summary = `Command succeeded (${lines.length} lines).`;
+      summary = `Command succeeded (${lines.length} lines${fileSuffix}).`;
     } else {
-      summary = `Command succeeded (${lines.length} lines collapsed).`;
+      summary = `Command succeeded (${lines.length} lines collapsed${fileSuffix}).`;
     }
     if (warnings.length > 0) {
       summary += ` ${warnings.length} warning(s).`;
@@ -44786,8 +45020,35 @@ function sanitizeTerminalOutput(rawText, options = {}) {
   if (exitCode === 0) {
     if (lines.length <= 15 && cleaned.length <= maxChars) {
       resultText = lines.join("\n");
+    } else if (isQuery) {
+      let queryBody = "";
+      if (distinctFiles.length > 0) {
+        queryBody += `Matched files (${distinctFiles.length}):
+` + distinctFiles.slice(0, 15).map((f) => `- ${f}`).join("\n") + (distinctFiles.length > 15 ? `
+... (+${distinctFiles.length - 15} more)` : "") + "\n\nTop matches:\n";
+      }
+      const topCount = Math.min(nonNoiseLines.length, 20);
+      const topLines = nonNoiseLines.slice(0, topCount);
+      queryBody += topLines.join("\n");
+      if (nonNoiseLines.length > topCount) {
+        queryBody += `
+... (${nonNoiseLines.length - topCount} more lines omitted, full output in receipt log)`;
+      }
+      resultText = `${summary}
+
+${queryBody}`;
     } else {
       resultText = summary;
+      if (nonNoiseLines.length > 0) {
+        const head = nonNoiseLines.slice(0, 5).join("\n");
+        const tail = nonNoiseLines.slice(-5).join("\n");
+        resultText += `
+
+Output Preview:
+${head}
+...
+${tail}`;
+      }
     }
     if (warnings.length > 0) {
       resultText += "\n\nWarnings:\n" + warnings.slice(0, 5).join("\n");
@@ -44796,7 +45057,7 @@ function sanitizeTerminalOutput(rawText, options = {}) {
     resultText = `${summary}
 
 Key Failures & Errors:
-` + errors.slice(0, 15).join("\n");
+` + (diagnostics.length ? diagnostics.join("\n\n---\n\n") : errors.slice(0, 15).join("\n"));
     const remainingBudget = maxChars - resultText.length;
     if (remainingBudget > 200) {
       const tail = nonNoiseLines.slice(-10).join("\n");
@@ -44814,13 +45075,25 @@ ${tail}`;
     summary,
     exitCode,
     errors: errors.slice(0, 10),
-    warnings: warnings.slice(0, 5)
+    diagnostics,
+    warnings: warnings.slice(0, 5),
+    distinctFiles: distinctFiles.slice(0, 30)
   };
 }
 
 // packages/code-intel/src/code-tools.mjs
 import fs8 from "node:fs";
 import path8 from "node:path";
+function buildLocators(filePath, symbols = []) {
+  return symbols.map((symbol) => ({
+    path: filePath,
+    symbol: symbol.name,
+    startLine: symbol.startLine,
+    endLine: symbol.endLine,
+    hash: symbol.hash,
+    role: "implementation"
+  }));
+}
 var CodeTools = class {
   /**
    * 1. Outline: Progressive L1 structure view
@@ -44888,14 +45161,7 @@ var CodeTools = class {
       filePath,
       content,
       newHash,
-      locators: structure.symbols.map((s) => ({
-        path: filePath,
-        symbol: s.name,
-        startLine: s.startLine,
-        endLine: s.endLine,
-        hash: s.hash,
-        role: "implementation"
-      }))
+      locators: buildLocators(filePath, structure.symbols)
     };
   }
   /**
@@ -44917,6 +45183,31 @@ var CodeTools = class {
           targetSymbol = symMatch[1];
         }
       }
+    } else if (typeof selector === "object" && selector !== null && Array.isArray(selector.ranges) && selector.ranges.length > 0) {
+      const snippets = [];
+      const extractedRanges = [];
+      for (const r of selector.ranges) {
+        let s = r.startLine !== void 0 && r.startLine !== null ? Number(r.startLine) : 1;
+        let e = r.endLine !== void 0 && r.endLine !== null ? Number(r.endLine) : lines.length;
+        s = Math.max(1, Math.min(s, lines.length));
+        e = Math.max(s, Math.min(e, lines.length));
+        extractedRanges.push({ startLine: s, endLine: e });
+        const slice = lines.slice(s - 1, e);
+        snippets.push(`// [L${s}-L${e}]
+` + slice.join("\n"));
+      }
+      const codeSnippet2 = snippets.join("\n\n");
+      const hash2 = calculateHash2(codeSnippet2);
+      return {
+        filePath,
+        ranges: extractedRanges,
+        startLine: extractedRanges[0]?.startLine ?? 1,
+        endLine: extractedRanges[extractedRanges.length - 1]?.endLine ?? lines.length,
+        totalLines: lines.length,
+        symbol: null,
+        code: codeSnippet2,
+        hash: hash2
+      };
     } else if (selector.symbol) {
       targetSymbol = selector.symbol;
     } else if (selector.method) {
@@ -44959,7 +45250,32 @@ var CodeTools = class {
   /**
    * 3. Edit: Surgical code edit with automatic relocalization (re-anchoring)
    */
-  static edit(filePath, content, { targetContent = null, replacementContent, startLine = null, endLine = null, symbol = null } = {}) {
+  static edit(filePath, content, { targetContent = null, replacementContent = "", startLine = null, endLine = null, symbol = null, append = null, fullFile = false } = {}) {
+    if (fullFile) {
+      if (typeof replacementContent !== "string") {
+        throw new Error("CodeTools.edit requires replacementContent");
+      }
+      const updatedStructure2 = LanguageRegistry.parseStructure(filePath, replacementContent);
+      const newHash2 = calculateHash2(replacementContent);
+      return {
+        filePath,
+        newContent: replacementContent,
+        newHash: newHash2,
+        updatedLocators: buildLocators(filePath, updatedStructure2.symbols)
+      };
+    }
+    if (append !== null && append !== void 0) {
+      const appendStr = String(append);
+      const newContent2 = content + (content.endsWith("\n") ? "" : "\n") + appendStr + (appendStr.endsWith("\n") ? "" : "\n");
+      const updatedStructure2 = LanguageRegistry.parseStructure(filePath, newContent2);
+      const newHash2 = calculateHash2(newContent2);
+      return {
+        filePath,
+        newContent: newContent2,
+        newHash: newHash2,
+        updatedLocators: buildLocators(filePath, updatedStructure2.symbols)
+      };
+    }
     if (replacementContent === void 0 || typeof replacementContent !== "string") {
       throw new Error("CodeTools.edit requires replacementContent");
     }
@@ -44998,34 +45314,61 @@ var CodeTools = class {
         const chunkStart = Math.max(0, (effectiveStart ?? 1) - 1);
         const chunkEnd = Math.min(lines.length, effectiveEnd ?? lines.length);
         const chunk = lines.slice(chunkStart, chunkEnd).join("\n");
-        const occurrences = chunk.split(targetContent).length - 1;
+        let occurrences = chunk.split(targetContent).length - 1;
+        if (occurrences === 0) {
+          const trimmedTarget = targetContent.trim();
+          if (trimmedTarget && chunk.includes(trimmedTarget)) {
+            const trimmedOcc = chunk.split(trimmedTarget).length - 1;
+            if (trimmedOcc === 1) {
+              const replacedChunk = chunk.replace(trimmedTarget, () => replacementContent);
+              newContent = [
+                ...lines.slice(0, chunkStart),
+                replacedChunk,
+                ...lines.slice(chunkEnd)
+              ].join("\n");
+              occurrences = 1;
+            }
+          }
+        } else {
+          if (occurrences > 1) {
+            throw new Error(
+              `TargetContent found ${occurrences} times in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
+            );
+          }
+          const replacedChunk = chunk.replace(targetContent, () => replacementContent);
+          newContent = [
+            ...lines.slice(0, chunkStart),
+            replacedChunk,
+            ...lines.slice(chunkEnd)
+          ].join("\n");
+        }
         if (occurrences === 0) {
           throw new Error(
             `TargetContent not found in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
           );
         }
-        if (occurrences > 1) {
-          throw new Error(
-            `TargetContent found ${occurrences} times in specified range [L${effectiveStart ?? 1}-L${effectiveEnd ?? lines.length}] of ${filePath}`
-          );
-        }
-        const replacedChunk = chunk.replace(targetContent, () => replacementContent);
-        newContent = [
-          ...lines.slice(0, chunkStart),
-          replacedChunk,
-          ...lines.slice(chunkEnd)
-        ].join("\n");
       } else {
-        const occurrences = content.split(targetContent).length - 1;
+        let occurrences = content.split(targetContent).length - 1;
+        if (occurrences === 0) {
+          const trimmedTarget = targetContent.trim();
+          if (trimmedTarget && content.includes(trimmedTarget)) {
+            const trimmedOcc = content.split(trimmedTarget).length - 1;
+            if (trimmedOcc === 1) {
+              newContent = content.replace(trimmedTarget, () => replacementContent);
+              occurrences = 1;
+            }
+          }
+        } else {
+          if (occurrences > 1) {
+            throw new Error(
+              `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
+            );
+          }
+          newContent = content.replace(targetContent, () => replacementContent);
+        }
         if (occurrences === 0) {
           throw new Error(`TargetContent not found in ${filePath}`);
         }
-        if (occurrences > 1) {
-          throw new Error(
-            `TargetContent found ${occurrences} times in ${filePath}. Provide startLine and endLine (top-level or in selector) to disambiguate.`
-          );
-        }
-        newContent = content.replace(targetContent, () => replacementContent);
       }
     }
     const updatedStructure = LanguageRegistry.parseStructure(filePath, newContent);
@@ -45034,14 +45377,7 @@ var CodeTools = class {
       filePath,
       newContent,
       newHash,
-      updatedLocators: updatedStructure.symbols.map((s) => ({
-        path: filePath,
-        symbol: s.name,
-        startLine: s.startLine,
-        endLine: s.endLine,
-        hash: s.hash,
-        role: "implementation"
-      }))
+      updatedLocators: buildLocators(filePath, updatedStructure.symbols)
     };
   }
   /**
@@ -45204,12 +45540,33 @@ var CodeTools = class {
 
 // packages/orchestrator/src/pipelines.mjs
 var OUTLINE_CLIP = 1200;
-var SEARCH_CLIP = 900;
-function clip(text, max) {
+var SEARCH_CLIP = 360;
+function compactOutlineData(text) {
+  if (typeof text !== "string") return "";
+  const lines = text.split(/\r?\n/);
+  const symbols = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^[-*]\s+\*\*([a-zA-Z]+)\*\*\s+`([^`]+)`\s+\[(L\d+-L\d+)\]/);
+    if (match) {
+      const [, kind, name2, range] = match;
+      symbols.push(`${kind} ${name2} ${range}`);
+    }
+  }
+  if (symbols.length) {
+    const slice = symbols.slice(0, 8);
+    return `(${slice.join(", ")}${symbols.length > 8 ? ` +${symbols.length - 8}` : ""})`;
+  }
+  return clip(text, 200);
+}
+function clip(text, max, { withHint = false } = {}) {
   const value = typeof text === "string" ? text : JSON.stringify(text, null, 2);
-  if (value.length <= max) return value;
-  return `${value.slice(0, max - 24)}
-... (+${value.length - max + 24} chars omitted)`;
+  if (max === Infinity || value.length <= max) return value;
+  const hint = withHint ? `
+[TRUNCATED: budget exceeded. Action required: specify 'ranges: [{startLine, endLine}]' or pass 'budget: "full"' to receive the entire content]` : "";
+  const cutLen = Math.max(0, max - 24 - hint.length);
+  return `${value.slice(0, cutLen)}
+... (+${value.length - cutLen} chars omitted)${hint}`;
 }
 function stringify(value) {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -45235,17 +45592,47 @@ function resolvePreviewPath(projectRoot, inputPath) {
   }
   return { fullPath, relativePath };
 }
-function previewEdit(projectRoot, spec = {}) {
-  const resolved = resolvePreviewPath(projectRoot, spec.path);
+function previewEdit(projectRoot, spec = {}, store = null) {
+  let specPath = spec.path;
+  let specSymbol = spec.symbol;
+  if (spec.slot && store) {
+    const slotData = store.getSlot(spec.slot);
+    if (slotData) {
+      specPath = slotData.path || specPath;
+      specSymbol = slotData.symbol || specSymbol;
+    }
+  }
+  const resolved = resolvePreviewPath(projectRoot, specPath);
   const fallback = {
-    filePath: resolved.relativePath || spec.path || "(missing)",
+    filePath: resolved.relativePath || specPath || "(missing)",
     before: typeof spec.target === "string" ? spec.target : "",
-    after: typeof spec.replacement === "string" ? spec.replacement : "",
+    after: typeof spec.replacement === "string" ? spec.replacement : spec.append || "",
     matches: 0,
     unique: false
   };
   if (resolved.error) return { ...fallback, error: resolved.error };
   if (!fs9.existsSync(resolved.fullPath)) return { ...fallback, error: "file not found" };
+  if (spec.fullFile) {
+    const content = fs9.readFileSync(resolved.fullPath, "utf8");
+    return {
+      filePath: resolved.relativePath,
+      before: content,
+      after: spec.replacement ?? "",
+      matches: 1,
+      unique: true,
+      scope: "fullFile"
+    };
+  }
+  if (spec.append) {
+    return {
+      filePath: resolved.relativePath,
+      before: "(end of file)",
+      after: spec.append,
+      matches: 1,
+      unique: true,
+      scope: "append"
+    };
+  }
   try {
     const content = fs9.readFileSync(resolved.fullPath, "utf8");
     const target = typeof spec.target === "string" ? spec.target : "";
@@ -45263,7 +45650,8 @@ function previewEdit(projectRoot, spec = {}) {
       replacementContent: spec.replacement ?? "",
       startLine: spec.startLine ?? null,
       endLine: spec.endLine ?? null,
-      symbol: spec.symbol ?? null
+      symbol: specSymbol ?? null,
+      append: spec.append ?? null
     });
     const matches = target ? countOccurrences(content, target) : 1;
     return {
@@ -45355,7 +45743,9 @@ async function explorePipeline(ctx, input = {}) {
   const identifiers = extractIdentifiers(intent);
   const tokens = tokenize(`${intent} ${paths.join(" ")} ${identifiers.join(" ")}`);
   const dirty = [...obs.untracked, ...obs.changed];
-  const systemChanged = obs.systemChanged || [];
+  const systemChanged = (obs.systemChanged || []).filter(
+    (p) => !p.endsWith(".sqlite") && !p.endsWith(".sqlite-shm") && !p.endsWith(".sqlite-wal")
+  );
   const nowLines = [
     `- Session: \`${session.id}\` (${session.status})`,
     `- Intent: ${intent || "(none yet)"}`,
@@ -45370,7 +45760,12 @@ async function explorePipeline(ctx, input = {}) {
   }
   if (session.receipts.length) {
     const last = session.receipts[session.receipts.length - 1];
-    nowLines.push(`- Last receipt: \`${last.command}\` exit ${last.exitCode} (${last.id || "n/a"}, ${receiptStatus(last)})`);
+    const olderFailed = session.receipts.slice(0, -1).filter((r) => r.exitCode !== 0 && r.status !== "superseded");
+    const maskInfo = olderFailed.length > 0 ? ` (${olderFailed.length} older failed receipt${olderFailed.length > 1 ? "s" : ""} masked)` : "";
+    nowLines.push(`- Last receipt: \`${last.command}\` exit ${last.exitCode} (${last.id || "n/a"}, ${receiptStatus(last)})${maskInfo}`);
+  }
+  if (session.touchedFiles.length >= 6 || session.receipts.length >= 5) {
+    nowLines.push(`\u{1F4A1} [Context Health] State safely saved in OS blackboard (.contextos/blackboard.md). You can /clear anytime; call explore() to resume in ~150 tokens.`);
   }
   const whereLines = [];
   const index = new ModuleIndex({ projectRoot });
@@ -45390,21 +45785,69 @@ async function explorePipeline(ctx, input = {}) {
       resolvedPaths.push(target);
     }
   }
-  const filePaths = Array.from(new Set(resolvedPaths)).slice(0, 3);
   const modules = index.lookup(`${intent} ${paths.join(" ")}`);
   for (const module2 of modules) {
     const files = module2.files.slice(0, 3).map((file) => `\`${file}\``).join(", ");
     whereLines.push(`- **${module2.id}** (${module2.directory}) \u2014 ${files}${module2.files.length > 3 ? ` (+${module2.files.length - 3})` : ""}`);
+    if (resolvedPaths.length < 6) {
+      for (const f of module2.files) {
+        if (!resolvedPaths.includes(f)) resolvedPaths.push(f);
+      }
+    }
   }
-  tracer.step("modules", { hits: modules.length, indexed: index.entries.size });
+  if (resolvedPaths.length === 0 && index.entries.size > 0) {
+    const allFiles = Array.from(index.entries.keys()).filter((f) => !f.includes("node_modules"));
+    const srcFiles = allFiles.filter((f) => f.startsWith("src/") || f.startsWith("lib/") || f.startsWith("packages/"));
+    const candidates = srcFiles.length > 0 ? srcFiles : allFiles;
+    for (const f of candidates.slice(0, 5)) {
+      resolvedPaths.push(f);
+    }
+  }
+  const filePaths = Array.from(new Set(resolvedPaths)).slice(0, 6);
   if (filePaths.length) {
     for (const target of filePaths) {
       const outline = await caps.code({ action: "outline", path: target });
-      whereLines.push(outline.ok ? `- \`${target}\`
-${clip(outline.data, OUTLINE_CLIP)}` : `- \`${target}\`: ${outline.error}`);
+      if (outline.ok) {
+        if (input.depth === "deep") {
+          whereLines.push(`- \`${target}\`
+${clip(outline.data, OUTLINE_CLIP)}`);
+        } else {
+          whereLines.push(`- \`${target}\` ${compactOutlineData(outline.data)}`);
+        }
+      } else {
+        whereLines.push(`- \`${target}\`: ${outline.error}`);
+      }
     }
     tracer.step("outline", { paths: filePaths });
   }
+  const isQuery = /[?？]/.test(intent) || /(在哪|谁在调用|为什么|怎么实现|在哪里)/.test(intent) || /^(where|who|why|how)\b/i.test(intent.trim());
+  const sliceLines = [];
+  const slots = {};
+  let slotIdx = 1;
+  if (!isQuery) {
+    for (const target of filePaths.slice(0, 2)) {
+      const read = await caps.code({ action: "read", path: target, startLine: 1, endLine: 40 });
+      if (read.ok && read.data) {
+        sliceLines.push(`### \`${target}\`
+\`\`\`text
+${clip(read.data, 400)}
+\`\`\``);
+        const slotId = `S${slotIdx++}`;
+        slots[slotId] = { path: target, action: "edit" };
+      }
+    }
+  }
+  const slotLines = [];
+  for (const [sId, sData] of Object.entries(slots)) {
+    slotLines.push(`- [${sId}] Edit \`${sData.path}\` -> \`change({ slot: "${sId}", append: "..." })\` or \`change({ slot: "${sId}", symbol: "...", replacement: "..." })\``);
+  }
+  if (!isQuery && Object.keys(slots).length > 0) {
+    const defaultVerify = profile.verify && profile.verify.length ? profile.verify[0] : "npm test";
+    const verifySlotId = `S${slotIdx++}`;
+    slots[verifySlotId] = { action: "verify", command: defaultVerify };
+    slotLines.push(`- [${verifySlotId}] Verify -> in-situ in \`change({ verify: "${defaultVerify}" })\` or \`verify({ command: "${defaultVerify}" })\``);
+  }
+  store.setSlots(slots);
   const blocks = await caps.blocks();
   if (blocks.ok && blocks.data.length) {
     const scored = blocks.data.map((block) => ({
@@ -45447,16 +45890,24 @@ ${clip(search.data, SEARCH_CLIP)}`);
   if (headings.length) memoryLines.push(...headings);
   const nextLines = [`\u{1F449} ${computeNext({ session, changedCount: dirty.length, profile, stage: "explore", intent })}`];
   const budget = resolveBudget(input.depth, ctx.profile?.budget);
-  const { text, meta: meta2 } = fitSections(
-    [
-      { key: "next", title: "Next", priority: 0, lines: nextLines },
-      { key: "now", title: "Now", priority: 1, lines: nowLines },
-      { key: "where", title: "Where to look", priority: 2, lines: whereLines },
-      { key: "rules", title: "Applicable rules", priority: 3, lines: rulesLines },
-      { key: "memory", title: "Memory", priority: 4, lines: memoryLines }
-    ],
-    { maxChars: budget }
+  const sections = [
+    { key: "next", title: "Next", priority: 0, lines: nextLines }
+  ];
+  if (slotLines.length) {
+    sections.push({ key: "slots", title: "Available Action Slots (Pick a slot or pass directly)", priority: 1, lines: slotLines });
+  }
+  sections.push(
+    { key: "where", title: "Where to look", priority: 2, lines: whereLines },
+    { key: "now", title: "Now", priority: 3, lines: nowLines }
   );
+  if (sliceLines.length) {
+    sections.push({ key: "slices", title: "Code Slices (Direct Preview)", priority: 4, lines: sliceLines });
+  }
+  sections.push(
+    { key: "rules", title: "Applicable rules", priority: 5, lines: rulesLines },
+    { key: "memory", title: "Memory", priority: 6, lines: memoryLines }
+  );
+  const { text, meta: meta2 } = fitSections(sections, { maxChars: budget });
   tracer.step("explore.response", { budget, ...meta2 });
   return `# ContextOS explore
 
@@ -45466,8 +45917,46 @@ ${text}
 }
 async function changePipeline(ctx, input = {}) {
   const { caps, store, tracer, profile } = ctx;
-  const creates = Array.isArray(input.create) ? input.create : [];
-  const edits = Array.isArray(input.edits) ? input.edits : [];
+  const creates = Array.isArray(input.create) ? [...input.create] : [];
+  const rawEdits = Array.isArray(input.edits) ? [...input.edits] : [];
+  if (input.path && typeof input.content === "string") {
+    creates.push({
+      path: input.path,
+      content: input.content,
+      overwrite: input.overwrite ?? true
+    });
+  }
+  if (input.slot || input.append || input.symbol || input.replacement || input.target || input.fullFile) {
+    if (!rawEdits.length && (input.path || input.slot)) {
+      rawEdits.push({
+        slot: input.slot,
+        path: input.path,
+        target: input.target,
+        replacement: input.replacement,
+        symbol: input.symbol,
+        append: input.append,
+        startLine: input.startLine,
+        endLine: input.endLine,
+        fullFile: input.fullFile
+      });
+    }
+  }
+  const edits = rawEdits.map((spec) => {
+    let filePath = spec.path;
+    let symbol = spec.symbol;
+    if (spec.slot) {
+      const slotData = store.getSlot(spec.slot);
+      if (slotData) {
+        filePath = slotData.path || filePath;
+        symbol = slotData.symbol || symbol;
+      }
+    }
+    return {
+      ...spec,
+      path: filePath,
+      symbol
+    };
+  });
   const resultLines = [];
   const touched = [];
   if (input.dryRun === true) {
@@ -45482,12 +45971,13 @@ async function changePipeline(ctx, input = {}) {
       }
       const exists = fs9.existsSync(resolved.fullPath);
       const before = exists ? fs9.readFileSync(resolved.fullPath, "utf8") : "";
+      const wouldCreate = exists ? spec?.overwrite ? "true (overwrite)" : "false (file already exists)" : "true";
       previewLines.push(
         [
           `### Create ${index + 1}`,
           `- File: \`${resolved.relativePath}\``,
           `- Target unique: n/a (create)`,
-          `- Would create: ${exists ? "false (file already exists)" : "true"}`,
+          `- Would create: ${wouldCreate}`,
           "- Before:",
           "```text",
           before,
@@ -45500,7 +45990,7 @@ async function changePipeline(ctx, input = {}) {
       );
     });
     edits.forEach((spec, index) => {
-      previewLines.push(renderEditPreview(previewEdit(ctx.projectRoot, spec), index));
+      previewLines.push(renderEditPreview(previewEdit(ctx.projectRoot, spec, store), index));
     });
     if (!previewLines.length) {
       previewLines.push("No edits or creates supplied.");
@@ -45539,7 +46029,8 @@ ${text2}`;
     ...creates.map((spec) => ({
       kind: "create",
       path: spec?.path,
-      content: spec?.content ?? ""
+      content: spec?.content ?? "",
+      overwrite: Boolean(spec?.overwrite)
     })),
     ...edits.map((spec) => ({
       kind: "edit",
@@ -45548,9 +46039,24 @@ ${text2}`;
       replacement: spec?.replacement ?? "",
       startLine: spec?.startLine,
       endLine: spec?.endLine,
-      symbol: spec?.symbol
+      symbol: spec?.symbol,
+      append: spec?.append,
+      fullFile: Boolean(spec?.fullFile)
     }))
   ];
+  const backups = /* @__PURE__ */ new Map();
+  if (input.autoRevert === true && input.verify) {
+    for (const edit of edits) {
+      if (!edit?.path) continue;
+      const fullPath = path9.resolve(ctx.projectRoot, edit.path);
+      if (fs9.existsSync(fullPath) && !backups.has(fullPath)) {
+        try {
+          backups.set(fullPath, fs9.readFileSync(fullPath, "utf8"));
+        } catch (_) {
+        }
+      }
+    }
+  }
   const changeset = await caps.code({ action: "changeset", changes, format: "json" });
   if (!changeset.ok) {
     tracer.step("changeset", { ok: false, error: changeset.error });
@@ -45573,18 +46079,150 @@ ${text2}`;
     touched.push(file.path);
   }
   tracer.step("changeset", { ok: true, files: touched });
-  const session = store.touch(touched, "edit");
-  const nextLines = [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
+  let session = store.touch(touched, "edit");
+  const verifyLines = [];
+  const failureLines = [];
+  let verifyPassed = true;
+  if (input.verify) {
+    const verifyCommands = input.verify === true ? profile.verify : Array.isArray(input.verify) ? input.verify : [input.verify];
+    if (verifyCommands && verifyCommands.length) {
+      for (const cmd of verifyCommands) {
+        const res = await caps.run({
+          command: cmd,
+          cwd: input.cwd,
+          timeoutMs: input.timeoutMs ?? profile.timeoutMs
+        });
+        if (!res.ok) {
+          verifyPassed = false;
+          verifyLines.push(`- \`${cmd}\` \u2192 \u2717 ${res.error}`);
+          continue;
+        }
+        const receipt = res.data;
+        store.attachReceipt(receipt);
+        session = store.current;
+        const label = redactSecrets(cmd);
+        verifyLines.push(`- \`${label}\` \u2192 exit ${receipt.exitCode} (${receipt.durationMs}ms, receipt ${receipt.id})`);
+        if (receipt.exitCode !== 0) {
+          verifyPassed = false;
+          const diag = receipt.diagnostics && receipt.diagnostics.length ? receipt.diagnostics.join("\n\n---\n\n") : receipt.errors && receipt.errors.length ? receipt.errors.slice(0, 5).join("\n") : clip(receipt.summary || "failed", 240);
+          failureLines.push(`### \`${label}\`
+${diag}`);
+        }
+        tracer.step("change_verify", { command: cmd, exitCode: receipt.exitCode });
+      }
+      if (!verifyPassed && input.autoRevert === true) {
+        for (const spec of creates) {
+          if (!spec?.path) continue;
+          const fullPath = path9.resolve(ctx.projectRoot, spec.path);
+          if (fs9.existsSync(fullPath)) {
+            try {
+              fs9.rmSync(fullPath, { force: true });
+            } catch (_) {
+            }
+          }
+        }
+        for (const [fullPath, originalContent] of backups) {
+          try {
+            fs9.writeFileSync(fullPath, originalContent, "utf8");
+          } catch (_) {
+          }
+        }
+        resultLines.push(`- \u21BA autoReverted disk changes due to verify failure`);
+      } else if (verifyPassed) {
+        resultLines.push("\u{1F4A1} [Milestone Reached] Verification passed. State saved to blackboard (.contextos/blackboard.md). You may /clear anytime; explore() will resume in ~150 tokens.");
+      }
+    }
+  }
+  const nextLines = input.verify ? verifyPassed ? [`\u{1F449} ship(${JSON.stringify({ summary: input.intent || "<what changed and why>" })})`] : [`\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to repair and verify again`] : [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
   const touchedLines = session.touchedFiles.slice(-8).map((entry) => `- \`${entry.path}\` (${entry.source})`);
-  const { text } = fitSections(
-    [
-      { key: "next", title: "Next", priority: 0, lines: nextLines },
-      { key: "result", title: "Result", priority: 1, lines: resultLines },
-      { key: "touched", title: "Touched", priority: 2, lines: touchedLines }
-    ],
-    { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
-  );
+  const sections = [
+    { key: "next", title: "Next", priority: 0, lines: nextLines },
+    { key: "result", title: "Result", priority: 1, lines: resultLines }
+  ];
+  if (verifyLines.length) {
+    sections.push({
+      key: "verdict",
+      title: verifyPassed ? "Verify: PASS" : "Verify: FAIL",
+      priority: 2,
+      lines: verifyLines
+    });
+  }
+  if (failureLines.length) {
+    sections.push({ key: "failures", title: "Failures", priority: 3, lines: failureLines });
+  }
+  sections.push({ key: "touched", title: "Touched", priority: 4, lines: touchedLines });
+  const { text } = fitSections(sections, { maxChars: resolveBudget(input.depth, ctx.profile?.budget) });
   return `# ContextOS change
+
+${text}`;
+}
+async function inspectPipeline(ctx, input = {}) {
+  const { caps, store } = ctx;
+  let targetPath = input.path;
+  let symbol = input.symbol;
+  if (input.slot) {
+    const slotData = store.getSlot(input.slot);
+    if (slotData) {
+      targetPath = slotData.path || targetPath;
+      symbol = slotData.symbol || symbol;
+    }
+  }
+  const requestedBudget = input.budget || input.depth;
+  const isFull = requestedBudget === "full";
+  const explicitMaxChars = typeof input.maxChars === "number" && input.maxChars > 0 ? input.maxChars : null;
+  const contentMaxChars = isFull ? Infinity : explicitMaxChars ?? 2500;
+  const paths = Array.isArray(input.paths) && input.paths.length ? input.paths : targetPath ? [targetPath] : [];
+  if (!paths.length) {
+    return '# ContextOS inspect\n\nNo target path provided. Pass `path`, `paths`, or `slot` (e.g. `slot: "S1"`).';
+  }
+  const isOutline = input.mode === "outline" || Boolean(input.outline);
+  const outLines = [];
+  for (let p of paths) {
+    const fullP = path9.join(ctx.projectRoot, p);
+    if (!fs9.existsSync(fullP) && fs9.existsSync(`${fullP}.log`)) {
+      p = `${p}.log`;
+    }
+    if (isOutline) {
+      const outline = await caps.code({
+        action: "outline",
+        path: p
+      });
+      if (outline.ok) {
+        outLines.push(`### \`${p}\` (AST Outline)
+\`\`\`markdown
+${clip(outline.data, contentMaxChars, { withHint: true })}
+\`\`\``);
+      } else {
+        outLines.push(`### \`${p}\`: \u2717 ${outline.error}`);
+      }
+    } else {
+      const read = await caps.code({
+        action: "read",
+        path: p,
+        symbol: symbol || void 0,
+        startLine: input.startLine,
+        endLine: input.endLine,
+        ranges: input.ranges,
+        budget: input.budget,
+        maxChars: input.maxChars,
+        fullFile: isFull || input.fullFile || false
+      });
+      if (read.ok) {
+        outLines.push(`### \`${p}\`${symbol ? ` (${symbol})` : ""}
+\`\`\`text
+${clip(read.data, contentMaxChars, { withHint: true })}
+\`\`\``);
+      } else {
+        outLines.push(`### \`${p}\`: \u2717 ${read.error}`);
+      }
+    }
+  }
+  const budget = isFull ? Infinity : explicitMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget);
+  const { text } = fitSections(
+    [{ key: "inspect", title: "Inspection Result", priority: 0, lines: outLines }],
+    { maxChars: budget }
+  );
+  return `# ContextOS inspect
 
 ${text}`;
 }
@@ -45650,9 +46288,9 @@ ${clip(body2, resolveBudget(input.depth, ctx.profile?.budget))}`;
     commandLines.push(`- \`${label}\` \u2192 exit ${receipt.exitCode} (${receipt.durationMs}ms, receipt ${receipt.id})`);
     if (receipt.exitCode !== 0) {
       passed = false;
-      const errors = (receipt.errors || []).slice(0, 5);
+      const diag = receipt.diagnostics && receipt.diagnostics.length ? receipt.diagnostics.join("\n\n---\n\n") : receipt.errors && receipt.errors.length ? receipt.errors.slice(0, 5).join("\n") : clip(receipt.summary || "no stderr captured", 600);
       failureLines.push(`### \`${label}\`
-${errors.length ? errors.join("\n") : clip(receipt.summary || "no stderr captured", 600)}`);
+${diag}`);
     }
     tracer.step("run", { command, exitCode: receipt.exitCode });
   }
@@ -45731,18 +46369,50 @@ ${text2}`;
       ...extraLines.length ? ["", "## Attempted", ...extraLines] : []
     ].join("\n");
   }
-  const attributionLines = [];
   const attributablePaths = (session.touchedFiles || []).filter((entry) => entry.deleted !== true).map((entry) => entry.path);
+  const known = await caps.blocks();
+  const curatedBlocks = (known.ok ? known.data : []).filter((b) => !b.id.startsWith("mod-"));
+  const isCuratedCovered = (filePath) => {
+    const normalized = String(filePath).replace(/\\/g, "/").replace(/^\.\//, "");
+    return curatedBlocks.some(
+      (block) => (block.artifactRefs || []).some((ref) => {
+        const binding = String(ref.path || "").replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
+        return ref.anchorKind === "tree" ? normalized === binding || normalized.startsWith(`${binding}/`) : normalized === binding;
+      })
+    );
+  };
+  const isMajorSubsystem = (filePath) => {
+    const normalized = String(filePath).replace(/\\/g, "/").replace(/^\.\//, "");
+    const segments = normalized.split("/");
+    return segments.length >= 2 && (segments[0] === "apps" || segments[0] === "packages");
+  };
+  const unmappedMajorFiles = attributablePaths.filter(
+    (filePath) => isMajorSubsystem(filePath) && !isCuratedCovered(filePath)
+  );
+  const isStrictArchitecture = Boolean(profile.strict || profile.strictArchitecture);
+  if (isStrictArchitecture && unmappedMajorFiles.length > 0) {
+    return [
+      "# ContextOS ship \u2014 BLOCKED (architecture governance gate)",
+      "",
+      `- Architecture completeness check failed: ${unmappedMajorFiles.length} file(s) in applications or packages are not covered by explicit Curated Blocks.`,
+      "- Unmapped files:",
+      ...unmappedMajorFiles.map((f) => `  - \`${f}\``),
+      "",
+      "- Action required: Run `ops block bind` to bind a curated Block and `ops chain link` to connect it to an architectural chain, or disable `strictArchitecture` / `strict` in `.contextos/profile.json`.",
+      ...extraLines.length ? ["", "## Attempted", ...extraLines] : []
+    ].join("\n");
+  }
+  const attributionLines = [];
   const index = new ModuleIndex({ projectRoot });
   index.ensure(attributablePaths);
   const attribution = index.attribute(attributablePaths);
-  const known = await caps.blocks();
   const owned = /* @__PURE__ */ new Set();
   for (const block of known.ok ? known.data : []) {
     for (const ref of block.artifactRefs || []) owned.add(ref.path);
   }
   const unclassified = attributablePaths.filter((filePath) => !owned.has(filePath));
-  for (const filePath of unclassified.slice(0, 8)) {
+  for (let i2 = 0; i2 < unclassified.length; i2++) {
+    const filePath = unclassified[i2];
     const moduleId = attribution.get(filePath);
     const bound = await caps.block({
       action: "bind_auto",
@@ -45750,10 +46420,12 @@ ${text2}`;
       path: filePath,
       blockData: { title: `Derived module ${moduleId}`, kind: "module" }
     });
-    attributionLines.push(bound.ok ? `- \`${filePath}\` \u2192 **${moduleId}** (auto-bound)` : `- \`${filePath}\` \u2192 ${moduleId} (advisory only: ${bound.error})`);
+    if (i2 < 8) {
+      attributionLines.push(bound.ok ? `- \`${filePath}\` \u2192 **${moduleId}** (auto-bound)` : `- \`${filePath}\` \u2192 ${moduleId} (advisory only: ${bound.error})`);
+    }
   }
   if (unclassified.length > 8) {
-    attributionLines.push(`- (+${unclassified.length - 8} more attributed to derived modules)`);
+    attributionLines.push(`- (+${unclassified.length - 8} more auto-bound to derived modules)`);
   }
   tracer.step("attribute", { touched: (session.touchedFiles || []).length, unclassified: unclassified.length });
   const graph = await caps.exportGraph();
@@ -45796,6 +46468,225 @@ ${text2}`;
   return `# ContextOS ship
 
 ${text}`;
+}
+function normalizeAction(action, projectRoot) {
+  if (!action || typeof action !== "object") {
+    throw new Error(`Invalid action in pipeline: expected object, got ${typeof action}`);
+  }
+  let tool = action.tool;
+  let args2 = { ...action };
+  delete args2.tool;
+  if (!tool) {
+    if ("inspect" in action) {
+      tool = "inspect";
+      args2 = typeof action.inspect === "string" ? { path: action.inspect } : { ...action.inspect };
+    } else if ("change" in action) {
+      tool = "change";
+      args2 = typeof action.change === "string" ? { path: action.change } : { ...action.change };
+    } else if ("verify" in action) {
+      tool = "verify";
+      args2 = typeof action.verify === "string" ? { command: action.verify } : action.verify === true ? {} : { ...action.verify };
+    } else if ("ship" in action) {
+      tool = "ship";
+      args2 = typeof action.ship === "string" ? { summary: action.ship } : { ...action.ship };
+    } else if ("run" in action || "run_command" in action) {
+      tool = "ops";
+      const cmd = action.run || action.run_command;
+      const cmdArgs = typeof cmd === "string" ? { command: cmd } : { ...cmd };
+      if (action.raw !== void 0) cmdArgs.raw = action.raw;
+      if (action.maxChars !== void 0) cmdArgs.maxChars = action.maxChars;
+      if (action.mode !== void 0) cmdArgs.mode = action.mode;
+      args2 = {
+        capability: "run_command",
+        args: cmdArgs
+      };
+    } else if ("block" in action) {
+      tool = "ops";
+      args2 = {
+        capability: "block",
+        ...typeof action.block === "object" ? action.block : { action: "open", id: action.block }
+      };
+    } else if ("chain" in action && !Array.isArray(action.chain)) {
+      tool = "ops";
+      args2 = {
+        capability: "chain",
+        ...typeof action.chain === "object" ? action.chain : { action: "open", id: action.chain }
+      };
+    } else if ("plan" in action) {
+      tool = "ops";
+      args2 = {
+        capability: "plan",
+        ...typeof action.plan === "object" ? action.plan : { action: "open", id: action.plan }
+      };
+    } else if ("task" in action) {
+      tool = "ops";
+      args2 = {
+        capability: "task",
+        ...typeof action.task === "object" ? action.task : { action: "open", id: action.task }
+      };
+    } else if ("ops" in action) {
+      tool = "ops";
+      args2 = { ...action.ops };
+    } else if ("explore" in action) {
+      tool = "explore";
+      args2 = typeof action.explore === "string" ? { intent: action.explore } : { ...action.explore };
+    }
+  }
+  if (!tool) {
+    throw new Error(`Could not determine tool for action: ${JSON.stringify(action)}`);
+  }
+  return {
+    tool,
+    input: {
+      ...args2,
+      projectRoot: args2.projectRoot || projectRoot
+    }
+  };
+}
+async function pipelinePipeline(ctx, input = {}) {
+  let steps = input.steps || input.flow || input.actions;
+  if (!steps) {
+    if (input.parallel) steps = [{ parallel: input.parallel }];
+    else if (input.chain) steps = [{ chain: input.chain }];
+    else steps = [];
+  }
+  if (!Array.isArray(steps) || !steps.length) {
+    return "# ContextOS pipeline\n- No steps provided in pipeline. Pass `steps: [...]`, `chain: [...]`, or `parallel: [...]`.";
+  }
+  const results = [];
+  let halted = false;
+  let haltReason = null;
+  for (let i2 = 0; i2 < steps.length; i2++) {
+    const step = steps[i2];
+    const stepNum = i2 + 1;
+    if (Array.isArray(step) || step && Array.isArray(step.parallel)) {
+      const items = Array.isArray(step) ? step : step.parallel;
+      const subResults = await Promise.all(
+        items.map(async (action, idx) => {
+          try {
+            const normalized = normalizeAction(action, ctx.projectRoot);
+            const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
+            return { index: idx + 1, tool: normalized.tool, ok: true, output: res };
+          } catch (err2) {
+            return { index: idx + 1, tool: action.tool || "unknown", ok: false, error: err2.message };
+          }
+        })
+      );
+      results.push({
+        step: stepNum,
+        kind: "parallel",
+        items: subResults,
+        ok: subResults.every((r) => r.ok)
+      });
+      continue;
+    }
+    if (step && Array.isArray(step.chain)) {
+      const items = step.chain;
+      const subResults = [];
+      let chainFailed = false;
+      for (let j = 0; j < items.length; j++) {
+        const action = items[j];
+        try {
+          const normalized = normalizeAction(action, ctx.projectRoot);
+          const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
+          const isFail = typeof res === "string" && (res.includes("Verdict: FAIL") || res.includes("BLOCKED"));
+          subResults.push({ index: j + 1, tool: normalized.tool, ok: !isFail, output: res });
+          if (isFail) {
+            chainFailed = true;
+            haltReason = `Chain step ${j + 1} (${normalized.tool}) failed verification/gate`;
+            break;
+          }
+        } catch (err2) {
+          subResults.push({ index: j + 1, tool: action.tool || "unknown", ok: false, error: err2.message });
+          chainFailed = true;
+          haltReason = `Chain step ${j + 1} (${action.tool || "action"}) threw error: ${err2.message}`;
+          break;
+        }
+      }
+      results.push({
+        step: stepNum,
+        kind: "chain",
+        items: subResults,
+        ok: !chainFailed
+      });
+      if (chainFailed) {
+        halted = true;
+        break;
+      }
+      continue;
+    }
+    try {
+      const normalized = normalizeAction(step, ctx.projectRoot);
+      const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
+      const isFail = typeof res === "string" && (res.includes("Verdict: FAIL") || res.includes("BLOCKED"));
+      results.push({
+        step: stepNum,
+        kind: "single",
+        tool: normalized.tool,
+        ok: !isFail,
+        output: res
+      });
+      if (isFail) {
+        halted = true;
+        haltReason = `Step ${stepNum} (${normalized.tool}) failed verification/gate`;
+        break;
+      }
+    } catch (err2) {
+      results.push({
+        step: stepNum,
+        kind: "single",
+        tool: step.tool || "unknown",
+        ok: false,
+        error: err2.message
+      });
+      halted = true;
+      haltReason = `Step ${stepNum} threw error: ${err2.message}`;
+      break;
+    }
+  }
+  const lines = [
+    `# ContextOS pipeline \u2014 ${halted ? "HALTED \u26A0\uFE0F" : "COMPLETED \u2705"}`,
+    `- Total steps executed: ${results.length} / ${steps.length}`,
+    `- Status: ${halted ? `Stopped early: ${haltReason}` : "All pipeline steps executed successfully"}`,
+    "",
+    "## Step Breakdown:"
+  ];
+  function formatPipelineOutput(output, budget = 1200) {
+    if (!output) return "";
+    if (typeof output === "string") return clip(output, budget);
+    if (typeof output === "object") {
+      if (output.text) return clip(output.text, budget);
+      if (output.summary) return clip(output.summary, budget);
+      return clip(JSON.stringify(output, null, 2), budget);
+    }
+    return clip(String(output), budget);
+  }
+  for (const r of results) {
+    if (r.kind === "parallel") {
+      lines.push(`### Step ${r.step} [Parallel Concurrency: ${r.items.length} actions] (${r.ok ? "PASS" : "FAIL"})`);
+      for (const item of r.items) {
+        lines.push(`- **Action ${item.index} (${item.tool})**: ${item.ok ? "OK" : `FAIL: ${item.error}`}`);
+        if (item.output) {
+          lines.push("```text", formatPipelineOutput(item.output, 1200), "```");
+        }
+      }
+    } else if (r.kind === "chain") {
+      lines.push(`### Step ${r.step} [Sequential Chain: ${r.items.length} actions] (${r.ok ? "PASS" : "HALTED"})`);
+      for (const item of r.items) {
+        lines.push(`- **Chain Action ${item.index} (${item.tool})**: ${item.ok ? "OK" : `FAILED: ${item.error || "Verification/gate failed"}`}`);
+        if (item.output) {
+          lines.push("```text", formatPipelineOutput(item.output, 1200), "```");
+        }
+      }
+    } else {
+      lines.push(`### Step ${r.step} [Single Action: ${r.tool}] (${r.ok ? "PASS" : "FAIL"})`);
+      if (r.error) lines.push(`- Error: ${r.error}`);
+      if (r.output) {
+        lines.push("```text", formatPipelineOutput(r.output, 1200), "```");
+      }
+    }
+  }
+  return lines.join("\n");
 }
 
 // packages/orchestrator/src/index.mjs
@@ -45853,7 +46744,8 @@ var Orchestrator = class {
       tracer,
       profile: loadProfile(this.projectRoot),
       projectRoot: this.projectRoot,
-      projectId: this.projectId
+      projectId: this.projectId,
+      orchestrator: this
     };
   }
   async dispatch(tool, input = {}) {
@@ -45866,6 +46758,8 @@ var Orchestrator = class {
       switch (tool) {
         case "explore":
           return await explorePipeline(ctx, input);
+        case "inspect":
+          return await inspectPipeline(ctx, input);
         case "change":
           return await changePipeline(ctx, input);
         case "verify":
@@ -45874,6 +46768,8 @@ var Orchestrator = class {
           return await shipPipeline(ctx, input);
         case "ops":
           return await this._ops(ctx, input);
+        case "pipeline":
+          return await pipelinePipeline(ctx, input);
         default:
           throw new Error(`Unknown orchestrator tool '${tool}'`);
       }
@@ -46550,32 +47446,7 @@ var V2Database = class {
       );
     }
   }
-  getPlan(planId) {
-    const stmt = this.db.prepare("SELECT * FROM plans WHERE id = ?");
-    const row = stmt.get(planId);
-    if (!row) return null;
-    const phasesStmt = this.db.prepare("SELECT * FROM phases WHERE plan_id = ? ORDER BY phase_order ASC");
-    const phases = phasesStmt.all(planId).map((p) => ({
-      id: p.id,
-      order: p.phase_order,
-      objective: p.objective,
-      scope: p.scope,
-      deliverables: JSON.parse(p.deliverables_json || "[]"),
-      status: p.status,
-      taskIds: JSON.parse(p.task_ids_json || "[]"),
-      acceptance: JSON.parse(p.acceptance_json || "[]")
-    }));
-    const cpStmt = this.db.prepare("SELECT * FROM checkpoints WHERE plan_id = ?");
-    const checkpoints = cpStmt.all(planId).map((c) => ({
-      id: c.id,
-      planId: c.plan_id,
-      phaseId: c.phase_id,
-      title: c.title,
-      criteria: c.criteria,
-      status: c.status,
-      evidenceRefs: JSON.parse(c.evidence_refs_json || "[]"),
-      completedAt: c.completed_at
-    }));
+  _planFromRow(row, phases, checkpoints) {
     return {
       id: row.id,
       projectId: row.project_id,
@@ -46594,10 +47465,70 @@ var V2Database = class {
       updatedAt: row.updated_at
     };
   }
+  _phaseFromRow(row) {
+    return {
+      id: row.id,
+      order: row.phase_order,
+      objective: row.objective,
+      scope: row.scope,
+      deliverables: JSON.parse(row.deliverables_json || "[]"),
+      status: row.status,
+      taskIds: JSON.parse(row.task_ids_json || "[]"),
+      acceptance: JSON.parse(row.acceptance_json || "[]")
+    };
+  }
+  _checkpointFromRow(row) {
+    return {
+      id: row.id,
+      planId: row.plan_id,
+      phaseId: row.phase_id,
+      title: row.title,
+      criteria: row.criteria,
+      status: row.status,
+      evidenceRefs: JSON.parse(row.evidence_refs_json || "[]"),
+      completedAt: row.completed_at
+    };
+  }
+  getPlan(planId) {
+    const row = this.db.prepare("SELECT * FROM plans WHERE id = ?").get(planId);
+    if (!row) return null;
+    const phases = this.db.prepare("SELECT * FROM phases WHERE plan_id = ? ORDER BY phase_order ASC").all(planId).map((phase) => this._phaseFromRow(phase));
+    const checkpoints = this.db.prepare("SELECT * FROM checkpoints WHERE plan_id = ?").all(planId).map((checkpoint) => this._checkpointFromRow(checkpoint));
+    return this._planFromRow(row, phases, checkpoints);
+  }
   listPlans(projectId) {
-    const stmt = projectId ? this.db.prepare("SELECT id FROM plans WHERE project_id = ? ORDER BY created_at DESC") : this.db.prepare("SELECT id FROM plans ORDER BY created_at DESC");
-    const rows = projectId ? stmt.all(projectId) : stmt.all();
-    return rows.map((r) => this.getPlan(r.id));
+    const rows = projectId ? this.db.prepare("SELECT * FROM plans WHERE project_id = ? ORDER BY created_at DESC").all(projectId) : this.db.prepare("SELECT * FROM plans ORDER BY created_at DESC").all();
+    if (rows.length === 0) return [];
+    const phaseRows = projectId ? this.db.prepare(`
+          SELECT phases.*
+          FROM phases
+          JOIN plans ON plans.id = phases.plan_id
+          WHERE plans.project_id = ?
+          ORDER BY phases.plan_id ASC, phases.phase_order ASC
+        `).all(projectId) : this.db.prepare("SELECT * FROM phases ORDER BY plan_id ASC, phase_order ASC").all();
+    const checkpointRows = projectId ? this.db.prepare(`
+          SELECT checkpoints.*
+          FROM checkpoints
+          JOIN plans ON plans.id = checkpoints.plan_id
+          WHERE plans.project_id = ?
+        `).all(projectId) : this.db.prepare("SELECT * FROM checkpoints").all();
+    const phasesByPlan = /* @__PURE__ */ new Map();
+    for (const phase of phaseRows) {
+      const list = phasesByPlan.get(phase.plan_id) || [];
+      list.push(this._phaseFromRow(phase));
+      phasesByPlan.set(phase.plan_id, list);
+    }
+    const checkpointsByPlan = /* @__PURE__ */ new Map();
+    for (const checkpoint of checkpointRows) {
+      const list = checkpointsByPlan.get(checkpoint.plan_id) || [];
+      list.push(this._checkpointFromRow(checkpoint));
+      checkpointsByPlan.set(checkpoint.plan_id, list);
+    }
+    return rows.map((row) => this._planFromRow(
+      row,
+      phasesByPlan.get(row.id) || [],
+      checkpointsByPlan.get(row.id) || []
+    ));
   }
   deletePlan(planId) {
     return this.transaction((db) => {
@@ -46869,22 +47800,20 @@ var V2Database = class {
       if (!desiredRefIds.has(refId)) deleteRef.run(refId);
     }
   }
-  getBlock(blockId) {
-    const stmt = this.db.prepare("SELECT * FROM blocks WHERE id = ?");
-    const row = stmt.get(blockId);
-    if (!row) return null;
-    const refsStmt = this.db.prepare("SELECT * FROM artifact_refs WHERE block_id = ?");
-    const refs = refsStmt.all(blockId).map((r) => ({
-      path: r.path,
-      symbol: r.symbol,
-      anchorKind: r.anchor_kind || (r.symbol ? "symbol" : "file"),
-      startLine: r.start_line,
-      endLine: r.end_line,
-      hash: r.hash,
-      role: r.role,
-      hashMode: r.hash_mode || null,
-      manifest: r.manifest || null
-    }));
+  _artifactRefFromRow(row) {
+    return {
+      path: row.path,
+      symbol: row.symbol,
+      anchorKind: row.anchor_kind || (row.symbol ? "symbol" : "file"),
+      startLine: row.start_line,
+      endLine: row.end_line,
+      hash: row.hash,
+      role: row.role,
+      hashMode: row.hash_mode || null,
+      manifest: row.manifest || null
+    };
+  }
+  _blockFromRow(row, artifactRefs) {
     return {
       id: row.id,
       projectId: row.project_id,
@@ -46892,16 +47821,34 @@ var V2Database = class {
       kind: row.kind ?? "",
       summary: row.summary,
       details: row.details,
-      artifactRefs: refs,
+      artifactRefs,
       history: JSON.parse(row.history_json || "[]"),
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
   }
+  getBlock(blockId) {
+    const row = this.db.prepare("SELECT * FROM blocks WHERE id = ?").get(blockId);
+    if (!row) return null;
+    const artifactRefs = this.db.prepare("SELECT * FROM artifact_refs WHERE block_id = ?").all(blockId).map((ref) => this._artifactRefFromRow(ref));
+    return this._blockFromRow(row, artifactRefs);
+  }
   listBlocks(projectId) {
-    const stmt = projectId ? this.db.prepare("SELECT id FROM blocks WHERE project_id = ? ORDER BY created_at ASC") : this.db.prepare("SELECT id FROM blocks ORDER BY created_at ASC");
-    const rows = projectId ? stmt.all(projectId) : stmt.all();
-    return rows.map((r) => this.getBlock(r.id));
+    const rows = projectId ? this.db.prepare("SELECT * FROM blocks WHERE project_id = ? ORDER BY created_at ASC").all(projectId) : this.db.prepare("SELECT * FROM blocks ORDER BY created_at ASC").all();
+    if (rows.length === 0) return [];
+    const refRows = projectId ? this.db.prepare(`
+          SELECT artifact_refs.*
+          FROM artifact_refs
+          JOIN blocks ON blocks.id = artifact_refs.block_id
+          WHERE blocks.project_id = ?
+        `).all(projectId) : this.db.prepare("SELECT * FROM artifact_refs").all();
+    const refsByBlock = /* @__PURE__ */ new Map();
+    for (const ref of refRows) {
+      const list = refsByBlock.get(ref.block_id) || [];
+      list.push(this._artifactRefFromRow(ref));
+      refsByBlock.set(ref.block_id, list);
+    }
+    return rows.map((row) => this._blockFromRow(row, refsByBlock.get(row.id) || []));
   }
   deleteBlock(blockId) {
     this.transaction((self) => {
@@ -47123,6 +48070,13 @@ var SyncEngine = class {
   constructor(db) {
     this.db = db;
   }
+  _parseGraph(jsonText) {
+    try {
+      return JSON.parse(jsonText);
+    } catch (error2) {
+      throw new Error(`Invalid JSON syntax in graph: ${error2.message}`);
+    }
+  }
   _lastExportedHash(projectId) {
     return this.db.getSyncState(`last_exported_hash:${projectId}`) || this.db.getSyncState("last_exported_hash");
   }
@@ -47293,12 +48247,7 @@ var SyncEngine = class {
     return result || { changed: false, reason: "no outbox" };
   }
   importGraphFromJson(jsonText, projectRoot) {
-    let graph;
-    try {
-      graph = JSON.parse(jsonText);
-    } catch (err2) {
-      throw new Error(`Invalid JSON syntax in graph: ${err2.message}`);
-    }
+    const graph = this._parseGraph(jsonText);
     const projectId = graph.projectId || graph.project?.id || graph.id || "contextos";
     const graphRevision = graph.graphRevision || graph.project?.graphRevision || 0;
     const sha256 = calculateSha256(jsonText);
@@ -47372,12 +48321,7 @@ var SyncEngine = class {
     if (currentSha256 === lastHash) {
       return { changed: false, reason: "Hash identical to last export" };
     }
-    let graph;
-    try {
-      graph = JSON.parse(jsonText);
-    } catch (err2) {
-      throw new Error(`Invalid JSON syntax in graph: ${err2.message}`);
-    }
+    const graph = this._parseGraph(jsonText);
     const project = this.db.getProject(projectId);
     const currentRevision = project?.graph_revision || 0;
     const incomingRevision = graph.graphRevision || graph.project?.graphRevision || 0;
@@ -48122,7 +49066,6 @@ var DecisionDocument = class {
 ${content.trim()}
 `;
     if (existingIndex >= 0) {
-      const section = this.sections[existingIndex];
       const regex = new RegExp(`##\\s+\\[${id}\\][\\s\\S]*?(?=(##\\s+\\[|$))`);
       this.rawMarkdown = this.rawMarkdown.replace(regex, formattedContent);
     } else {
@@ -48421,9 +49364,18 @@ var PlanService = class {
   repairStateHygiene(projectId, { staleMs = 6 * 60 * 60 * 1e3 } = {}) {
     const changedPlanIds = [];
     const now = Date.now();
-    for (const rawPlan of this.db.listPlans(projectId)) {
+    const plans = this.db.listPlans(projectId);
+    const planIds = new Set(plans.map((plan) => plan.id));
+    const tasksByPlan = /* @__PURE__ */ new Map();
+    for (const task of this.db.listTasks()) {
+      if (!planIds.has(task.planId)) continue;
+      const tasks = tasksByPlan.get(task.planId) || [];
+      tasks.push(task);
+      tasksByPlan.set(task.planId, tasks);
+    }
+    for (const rawPlan of plans) {
       if (rawPlan.status !== "active") continue;
-      const tasks = this.db.listTasks(rawPlan.id);
+      const tasks = tasksByPlan.get(rawPlan.id) || [];
       const hasActiveTask = tasks.some(
         (task) => ["active", "checking", "syncing"].includes(task.status)
       );
@@ -48559,7 +49511,8 @@ function planChangeset(projectRoot, changes = []) {
     let state = states.get(resolved.fullPath);
     if (change.kind === "create") {
       if (state) throw new Error(`Changeset operation ${index + 1} cannot create '${resolved.relativePath}' twice`);
-      if (fs13.existsSync(resolved.fullPath)) {
+      const exists = fs13.existsSync(resolved.fullPath);
+      if (exists && !change.overwrite) {
         throw new Error(`Changeset operation ${index + 1} cannot create existing file '${resolved.relativePath}'`);
       }
       if (typeof change.content !== "string") {
@@ -48569,12 +49522,12 @@ function planChangeset(projectRoot, changes = []) {
       state = {
         path: resolved.relativePath,
         fullPath: resolved.fullPath,
-        existed: false,
-        originalContent: null,
+        existed: exists,
+        originalContent: exists ? fs13.readFileSync(resolved.fullPath, "utf8") : null,
         newContent: change.content,
         newHash: created.newHash,
         locators: created.locators,
-        mode: 420
+        mode: exists ? fs13.statSync(resolved.fullPath).mode : 420
       };
       states.set(resolved.fullPath, state);
       results.push({ index, kind: "create", path: resolved.relativePath, newHash: created.newHash, locators: created.locators });
@@ -48603,12 +49556,27 @@ function planChangeset(projectRoot, changes = []) {
       };
       states.set(resolved.fullPath, state);
     }
+    if (change.fullFile) {
+      if (typeof change.replacement !== "string") {
+        throw new Error(`Changeset operation ${index + 1} requires string replacement for fullFile edit '${resolved.relativePath}'`);
+      }
+      const edited2 = CodeTools.edit(resolved.relativePath, state.newContent, {
+        replacementContent: change.replacement,
+        fullFile: true
+      });
+      state.newContent = edited2.newContent;
+      state.newHash = edited2.newHash;
+      state.locators = edited2.updatedLocators;
+      results.push({ index, kind: "edit", path: resolved.relativePath, newHash: edited2.newHash, locators: edited2.updatedLocators });
+      continue;
+    }
     const edited = CodeTools.edit(resolved.relativePath, state.newContent, {
       targetContent: change.target ?? null,
       replacementContent: change.replacement ?? "",
       startLine: change.startLine ?? null,
       endLine: change.endLine ?? null,
-      symbol: change.symbol ?? null
+      symbol: change.symbol ?? null,
+      append: change.append ?? null
     });
     state.newContent = edited.newContent;
     state.newHash = edited.newHash;
@@ -48820,10 +49788,10 @@ var CoverageChecker = class {
   static checkCoverage(filePaths, blocks = []) {
     const fileCoverageMap = /* @__PURE__ */ new Map();
     for (const filePath of filePaths) {
-      fileCoverageMap.set(filePath, {
+      fileCoverageMap.set(normalizeBindingPath(filePath), {
         path: filePath,
-        coveredByBlocks: [],
-        symbolsCovered: []
+        coveredByBlocks: /* @__PURE__ */ new Set(),
+        symbolsCovered: /* @__PURE__ */ new Set()
       });
     }
     for (const block of blocks) {
@@ -48832,27 +49800,35 @@ var CoverageChecker = class {
         const hasHash = typeof ref.hash === "string" && ref.hash.trim() && ref.hash !== "untracked";
         const hasSymbol = typeof ref.symbol === "string" && ref.symbol.trim() && ref.symbol !== "*";
         if (!ref.path || !hasHash || anchorKind === "symbol" && !hasSymbol) continue;
-        for (const [filePath, entry] of fileCoverageMap.entries()) {
-          if (!bindingMatchesPath(ref.path, anchorKind, filePath)) continue;
-          if (!entry.coveredByBlocks.includes(block.id)) {
-            entry.coveredByBlocks.push(block.id);
+        const applyCoverage = (entry) => {
+          entry.coveredByBlocks.add(block.id);
+          if (hasSymbol) entry.symbolsCovered.add(ref.symbol);
+        };
+        if (anchorKind === "tree") {
+          for (const entry of fileCoverageMap.values()) {
+            if (bindingMatchesPath(ref.path, anchorKind, entry.path)) applyCoverage(entry);
           }
-          if (ref.symbol && !entry.symbolsCovered.includes(ref.symbol)) {
-            entry.symbolsCovered.push(ref.symbol);
-          }
+        } else {
+          const entry = fileCoverageMap.get(normalizeBindingPath(ref.path));
+          if (entry) applyCoverage(entry);
         }
       }
     }
     const coveredFiles = [];
     const uncoveredFiles = [];
     const gaps = [];
-    for (const [filePath, entry] of fileCoverageMap.entries()) {
-      if (entry.coveredByBlocks.length > 0) {
-        coveredFiles.push(entry);
+    for (const entry of fileCoverageMap.values()) {
+      const result = {
+        path: entry.path,
+        coveredByBlocks: Array.from(entry.coveredByBlocks),
+        symbolsCovered: Array.from(entry.symbolsCovered)
+      };
+      if (result.coveredByBlocks.length > 0) {
+        coveredFiles.push(result);
       } else {
-        uncoveredFiles.push(filePath);
+        uncoveredFiles.push(result.path);
         gaps.push({
-          path: filePath,
+          path: result.path,
           reason: "No Block currently owns this code file."
         });
       }
@@ -49074,7 +50050,7 @@ var TaskService = class {
     }
     task.baseline.initializedAt = task.baseline.initializedAt || (/* @__PURE__ */ new Date()).toISOString();
   }
-  _refreshFileAstAndLocators(relPath, content, dbBlocks, task) {
+  _refreshFileAstAndLocators(relPath, content, blockRefsByPath, task) {
     try {
       const structure = LanguageRegistry.parseStructure(relPath, content);
       const fileHash = crypto7.createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16);
@@ -49086,39 +50062,37 @@ var TaskService = class {
         hash: s.hash,
         role: "implementation"
       }));
+      const locatorsByName = new Map(newLocators.map((locator) => [locator.symbol, locator]));
       if (task && task.contextSlice) {
         const remaining = (task.contextSlice.locators || []).filter((l) => l.path !== relPath);
         task.contextSlice.locators = [...remaining, ...newLocators];
       }
-      for (const block of dbBlocks || []) {
-        let blockModified = false;
-        for (const ref of block.artifactRefs || []) {
-          if (ref.path !== relPath) continue;
-          const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
-          if (anchorKind === "symbol") {
-            const symbol = newLocators.find((locator) => locator.symbol === ref.symbol);
-            if (!symbol) continue;
-            ref.anchorKind = "symbol";
-            if (ref.hash !== symbol.hash) {
-              ref.hash = symbol.hash;
-              blockModified = true;
-            }
-            if (ref.startLine !== symbol.startLine || ref.endLine !== symbol.endLine) {
-              ref.startLine = symbol.startLine;
-              ref.endLine = symbol.endLine;
-              blockModified = true;
-            }
-          } else {
-            ref.anchorKind = "file";
-            if (ref.hash !== fileHash) {
-              ref.hash = fileHash;
-              blockModified = true;
-            }
+      const modifiedBlocks = /* @__PURE__ */ new Set();
+      for (const { block, ref } of blockRefsByPath.get(relPath) || []) {
+        const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
+        if (anchorKind === "symbol") {
+          const symbol = locatorsByName.get(ref.symbol);
+          if (!symbol) continue;
+          ref.anchorKind = "symbol";
+          if (ref.hash !== symbol.hash) {
+            ref.hash = symbol.hash;
+            modifiedBlocks.add(block);
+          }
+          if (ref.startLine !== symbol.startLine || ref.endLine !== symbol.endLine) {
+            ref.startLine = symbol.startLine;
+            ref.endLine = symbol.endLine;
+            modifiedBlocks.add(block);
+          }
+        } else {
+          ref.anchorKind = "file";
+          if (ref.hash !== fileHash) {
+            ref.hash = fileHash;
+            modifiedBlocks.add(block);
           }
         }
-        if (blockModified) {
-          this.db.saveBlock(block);
-        }
+      }
+      for (const block of modifiedBlocks) {
+        this.db.saveBlock(block);
       }
     } catch (_) {
     }
@@ -49149,6 +50123,14 @@ var TaskService = class {
       ),
       ...readScopedGitChangedPaths(projectRoot, scope)
     ]);
+    const blockRefsByPath = /* @__PURE__ */ new Map();
+    for (const block of dbBlocks || []) {
+      for (const ref of block.artifactRefs || []) {
+        const refs = blockRefsByPath.get(ref.path) || [];
+        refs.push({ block, ref });
+        blockRefsByPath.set(ref.path, refs);
+      }
+    }
     for (const relPath of candidateFiles) {
       if (!isInsideProject(projectRoot, relPath)) continue;
       const fullPath = path15.isAbsolute(relPath) ? relPath : path15.join(projectRoot, relPath);
@@ -49187,7 +50169,7 @@ var TaskService = class {
           continue;
         }
         const currentHash = crypto7.createHash("sha256").update(content).digest("hex").slice(0, 16);
-        const blockRef = dbBlocks.flatMap((b) => b.artifactRefs || []).find((r) => r.path === relPath);
+        const blockRef = blockRefsByPath.get(relPath)?.[0]?.ref || null;
         const baseHash = snapshot ? snapshot.hash : blockRef?.hash || null;
         if (!baseHash || currentHash !== baseHash) {
           task.addFileToWorkingSet(relPath);
@@ -49198,7 +50180,7 @@ var TaskService = class {
             modifiedLocally: true,
             lastReconciledAt: (/* @__PURE__ */ new Date()).toISOString()
           };
-          this._refreshFileAstAndLocators(relPath, content.toString("utf8"), dbBlocks, task);
+          this._refreshFileAstAndLocators(relPath, content.toString("utf8"), blockRefsByPath, task);
           task.addNote({
             text: `[Host Native Modification] Detected external disk modification in '${relPath}' via mtime/SHA256 comparison (${baseHash ? `${baseHash.slice(0, 8)} -> ${currentHash.slice(0, 8)}` : `new: ${currentHash.slice(0, 8)}`}). Working set and AST outlines refreshed.`,
             kind: "system"
@@ -49358,11 +50340,13 @@ var TaskService = class {
         task.block(
           plan?.status === "completed" ? `Plan '${plan.id}' is completed.` : `Task lease expired after ${staleMs}ms without progress.`
         );
-        this.db.saveTask(task.toJSON());
+        const blocked = task.toJSON();
+        this.db.saveTask(blocked);
+        Object.assign(raw, blocked);
         blockedTaskIds.push(task.id);
       }
     }
-    const remainingActive = this.db.listTasks().filter(
+    const remainingActive = tasks.filter(
       (task) => planMap.has(task.planId) && planMap.get(task.planId)?.status === "active" && ["active", "checking", "syncing"].includes(task.status)
     ).sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt)));
     for (const raw of remainingActive.slice(0, -1)) {
@@ -49786,7 +50770,9 @@ async function runCommand({
   env = process.env,
   maxChars = 1500,
   timeoutMs = 6e4,
-  projectRoot = cwd
+  projectRoot = cwd,
+  raw = false,
+  mode = "auto"
 }) {
   const receiptId = `receipt-${Date.now()}-${crypto8.randomBytes(3).toString("hex")}`;
   const startTime = Date.now();
@@ -49799,9 +50785,10 @@ async function runCommand({
     let stderrData = "";
     let captureTruncated = false;
     let killedByTimeout = false;
+    const safeCommand = typeof command === "string" ? command : "";
     const isWin = process.platform === "win32";
     const shell = isWin ? process.env.ComSpec || "cmd.exe" : "/bin/sh";
-    const shellArgs = isWin ? ["/d", "/s", "/c", command] : ["-c", command];
+    const shellArgs = isWin ? ["/d", "/s", "/c", safeCommand] : ["-c", safeCommand];
     const child = spawn(shell, shellArgs, {
       cwd,
       env,
@@ -49840,7 +50827,7 @@ async function runCommand({
       }
       stderrData += chunk.toString("utf8").slice(0, maxCaptureChars - stderrData.length);
     });
-    child.on("close", (code2, signal) => {
+    child.on("close", (code2) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
       const rawOutput = stdoutData + (stderrData ? `
@@ -49851,7 +50838,7 @@ ${stderrData}` : "") + (captureTruncated ? "\n--- CAPTURE TRUNCATED ---\n" : "")
       } catch (_) {
       }
       const exitCode = killedByTimeout ? 124 : code2 !== null ? code2 : 1;
-      const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars });
+      const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars, raw, mode, command: safeCommand });
       const relativeLogHandle = path18.relative(projectRoot, logFile);
       resolve({
         id: receiptId,
@@ -49862,6 +50849,7 @@ ${stderrData}` : "") + (captureTruncated ? "\n--- CAPTURE TRUNCATED ---\n" : "")
         summary: killedByTimeout ? `Command timed out after ${timeoutMs}ms.` : sanitized.summary,
         text: sanitized.text,
         errors: sanitized.errors,
+        diagnostics: sanitized.diagnostics || [],
         warnings: sanitized.warnings,
         logHandle: relativeLogHandle,
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -50176,84 +51164,218 @@ var NetworkLayoutEngine = class {
     const gapY = options.gapY || 100;
     const paddingX = options.paddingX || 120;
     const paddingY = options.paddingY || 120;
+    const xStep = nodeWidth + gapX;
+    const yStep = nodeHeight + gapY;
     const blockMap = /* @__PURE__ */ new Map();
-    for (const b of blocks) {
-      blockMap.set(b.id, b);
+    for (const block of blocks) {
+      if (!blockMap.has(block.id)) blockMap.set(block.id, block);
     }
-    const occupied = /* @__PURE__ */ new Set();
-    const cellKey = (x, y) => `${x},${y}`;
+    const blockIds = [...blockMap.keys()];
     const placedNodes = [];
     const placedMap = /* @__PURE__ */ new Map();
-    let currentTrackY = 0;
-    for (const chain of chains) {
-      const memberIds = chain.memberIds || [];
-      if (memberIds.length === 0) continue;
-      const trackY = currentTrackY;
-      currentTrackY += 1;
-      let nextX = 0;
-      for (const mId of memberIds) {
-        if (placedMap.has(mId)) {
+    const placeBlock = (id, title, chainId, cellX, cellY) => {
+      placedMap.set(id, { x: cellX, y: cellY });
+      placedNodes.push({
+        id,
+        title,
+        chainId,
+        kind: "block",
+        x: paddingX + cellX * xStep,
+        y: paddingY + cellY * yStep,
+        width: nodeWidth,
+        height: nodeHeight
+      });
+    };
+    if (blockIds.length === 0) {
+      return {
+        nodes: [],
+        edges: links.map((link) => ({
+          id: link.id,
+          from: link.from || link.sourceId,
+          to: link.to || link.targetId,
+          kind: link.kind || "depends_on"
+        })),
+        bounds: { width: 1200, height: 800 }
+      };
+    }
+    const normalizedChains = chains.map((chain, sourceIndex) => {
+      const seen = /* @__PURE__ */ new Set();
+      const memberIds = (chain.memberIds || []).filter((id) => {
+        if (!blockMap.has(id) || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+      return {
+        id: String(chain.id ?? `chain-${sourceIndex}`),
+        memberIds,
+        sourceIndex
+      };
+    }).filter((chain) => chain.memberIds.length > 0).sort(
+      (left, right) => right.memberIds.length - left.memberIds.length || left.id.localeCompare(right.id) || left.sourceIndex - right.sourceIndex
+    );
+    const assignedChain = /* @__PURE__ */ new Map();
+    const edgeNeighbors = /* @__PURE__ */ new Map();
+    for (const link of links) {
+      const source = link.from || link.sourceId;
+      const target = link.to || link.targetId;
+      if (!source || !target || source === target) continue;
+      if (!edgeNeighbors.has(source)) edgeNeighbors.set(source, /* @__PURE__ */ new Set());
+      if (!edgeNeighbors.has(target)) edgeNeighbors.set(target, /* @__PURE__ */ new Set());
+      edgeNeighbors.get(source).add(target);
+      edgeNeighbors.get(target).add(source);
+    }
+    const ownedBlocks = /* @__PURE__ */ new Set();
+    const segments = [];
+    for (const chain of normalizedChains) {
+      const members2 = chain.memberIds;
+      const unownedIndices = members2.map((id, index) => ownedBlocks.has(id) ? -1 : index).filter((index) => index >= 0);
+      if (unownedIndices.length === 0) continue;
+      let run2 = [];
+      const flushRun = () => {
+        if (run2.length === 0) return;
+        const first = run2[0];
+        const last = run2[run2.length - 1];
+        const previous = members2.slice(0, first).reverse().find((id) => ownedBlocks.has(id));
+        const next = members2.slice(last + 1).find((id) => ownedBlocks.has(id));
+        const anchorIds = [previous, next].filter(Boolean);
+        segments.push({
+          id: `chain:${chain.id}:${first}`,
+          memberIds: run2.map((index) => members2[index]),
+          anchorIds,
+          insertAfterAnchorID: previous || null
+        });
+        run2 = [];
+      };
+      for (let index = 0; index < members2.length; index += 1) {
+        if (ownedBlocks.has(members2[index])) {
+          flushRun();
+        } else {
+          run2.push(index);
+        }
+      }
+      flushRun();
+      for (const index of unownedIndices) {
+        const id = members2[index];
+        ownedBlocks.add(id);
+        assignedChain.set(id, chain.id);
+      }
+    }
+    const chainOwnedBlocks = new Set(ownedBlocks);
+    for (const id of blockIds.filter((blockId) => !ownedBlocks.has(blockId)).sort()) {
+      const anchorIds = [...edgeNeighbors.get(id) || []].filter((anchorId) => chainOwnedBlocks.has(anchorId)).sort();
+      segments.push({
+        id: `block:${id}`,
+        memberIds: [id],
+        anchorIds,
+        insertAfterAnchorID: anchorIds[0] || null
+      });
+      ownedBlocks.add(id);
+    }
+    const chooseShelf = () => {
+      let best = null;
+      for (let columns = 1; columns <= blockIds.length; columns += 1) {
+        const chunks = [];
+        let splitCount = 0;
+        for (const segment of segments) {
+          if (segment.memberIds.length > columns) {
+            splitCount += Math.ceil(segment.memberIds.length / columns) - 1;
+          }
+          for (let start2 = 0; start2 < segment.memberIds.length; start2 += columns) {
+            chunks.push({
+              id: `${segment.id}:${start2 / columns}`,
+              memberIds: segment.memberIds.slice(start2, start2 + columns),
+              anchorIds: [],
+              insertAfterAnchorID: null
+            });
+          }
+        }
+        chunks.sort(
+          (left, right) => right.memberIds.length - left.memberIds.length || left.id.localeCompare(right.id)
+        );
+        const rows2 = [];
+        for (const chunk of chunks) {
+          let target = -1;
+          for (let row = 0; row < rows2.length; row += 1) {
+            if (rows2[row].length + chunk.memberIds.length > columns) continue;
+            if (target === -1 || rows2[row].length < rows2[target].length) target = row;
+          }
+          if (target === -1) rows2.push([...chunk.memberIds]);
+          else rows2[target].push(...chunk.memberIds);
+        }
+        const rowWidths = rows2.map((row) => row.length);
+        const maxWidth = Math.max(...rowWidths);
+        const minWidth = Math.min(...rowWidths);
+        const pixelWidth = (maxWidth - 1) * xStep + nodeWidth + paddingX * 2;
+        const pixelHeight = (rows2.length - 1) * yStep + nodeHeight + paddingY * 2;
+        const squareness = Math.abs(Math.log(pixelWidth / pixelHeight));
+        const fill = blockIds.length / (columns * rows2.length);
+        const balance = (maxWidth - minWidth) / columns;
+        const score = squareness + splitCount * 0.16 + (1 - fill) * 0.18 + balance * 0.08;
+        const candidate = { columns, rows: rows2, score };
+        if (best === null || candidate.score < best.score - 1e-9 || Math.abs(candidate.score - best.score) <= 1e-9 && candidate.columns > best.columns) {
+          best = candidate;
+        }
+      }
+      return best;
+    };
+    const shelf = chooseShelf();
+    let rows = shelf.rows;
+    const anchoredSegments = segments.filter((segment) => segment.anchorIds.length > 0);
+    const anchoredIDs = new Set(anchoredSegments.flatMap((segment) => segment.memberIds));
+    if (anchoredIDs.size > 0) {
+      rows = rows.map((row) => row.filter((id) => !anchoredIDs.has(id))).filter((row) => row.length > 0);
+      for (const segment of anchoredSegments) {
+        const anchorCells = [];
+        for (const anchorID of segment.anchorIds) {
+          const rowIndex = rows.findIndex((row) => row.includes(anchorID));
+          if (rowIndex < 0) continue;
+          anchorCells.push({ row: rowIndex, column: rows[rowIndex].indexOf(anchorID) });
+        }
+        if (anchorCells.length === 0) {
+          rows.push([...segment.memberIds]);
           continue;
         }
-        while (occupied.has(cellKey(nextX, trackY))) {
-          nextX += 1;
+        const anchorRowCounts = /* @__PURE__ */ new Map();
+        for (const cell of anchorCells) {
+          anchorRowCounts.set(cell.row, (anchorRowCounts.get(cell.row) || 0) + 1);
         }
-        occupied.add(cellKey(nextX, trackY));
-        placedMap.set(mId, { x: nextX, y: trackY });
-        const b = blockMap.get(mId) || { id: mId, title: mId };
-        placedNodes.push({
-          id: mId,
-          title: b.title,
-          chainId: chain.id,
-          kind: "block",
-          x: paddingX + nextX * (nodeWidth + gapX),
-          y: paddingY + trackY * (nodeHeight + gapY),
-          width: nodeWidth,
-          height: nodeHeight
-        });
-        nextX += 1;
+        const targetRow = [...anchorRowCounts.keys()].sort((left, right) => {
+          const countDelta = anchorRowCounts.get(right) - anchorRowCounts.get(left);
+          return countDelta || left - right;
+        })[0];
+        const targetColumns = anchorCells.filter((cell) => cell.row === targetRow).map((cell) => cell.column);
+        let insertionIndex = Math.min(rows[targetRow].length, Math.min(...targetColumns));
+        if (segment.insertAfterAnchorID) {
+          const rowIndex = rows.findIndex((row) => row.includes(segment.insertAfterAnchorID));
+          if (rowIndex >= 0) {
+            insertionIndex = Math.min(
+              rows[rowIndex].length,
+              rows[rowIndex].indexOf(segment.insertAfterAnchorID) + 1
+            );
+          }
+        }
+        rows[targetRow].splice(insertionIndex, 0, ...segment.memberIds);
       }
     }
-    const unchained = blocks.filter((b) => !placedMap.has(b.id)).sort((a, b) => a.id.localeCompare(b.id));
-    if (unchained.length > 0) {
-      let nextX = 0;
-      let trackY = currentTrackY;
-      for (const b of unchained) {
-        while (occupied.has(cellKey(nextX, trackY))) {
-          nextX += 1;
-        }
-        occupied.add(cellKey(nextX, trackY));
-        placedMap.set(b.id, { x: nextX, y: trackY });
-        placedNodes.push({
-          id: b.id,
-          title: b.title,
-          chainId: null,
-          kind: "block",
-          x: paddingX + nextX * (nodeWidth + gapX),
-          y: paddingY + trackY * (nodeHeight + gapY),
-          width: nodeWidth,
-          height: nodeHeight
-        });
-        nextX += 1;
-        if (nextX >= 4) {
-          nextX = 0;
-          trackY += 1;
-        }
-      }
-    }
+    rows.forEach((row, rowIndex) => {
+      row.forEach((id, columnIndex) => {
+        const block = blockMap.get(id) || { id, title: id };
+        placeBlock(id, block.title, assignedChain.get(id) || null, columnIndex, rowIndex);
+      });
+    });
     let maxX = 0;
     let maxY = 0;
-    for (const n of placedNodes) {
-      maxX = Math.max(maxX, n.x + n.width + paddingX);
-      maxY = Math.max(maxY, n.y + n.height + paddingY);
+    for (const node2 of placedNodes) {
+      maxX = Math.max(maxX, node2.x + node2.width + paddingX);
+      maxY = Math.max(maxY, node2.y + node2.height + paddingY);
     }
     return {
       nodes: placedNodes,
-      edges: links.map((l) => ({
-        id: l.id,
-        from: l.from || l.sourceId,
-        to: l.to || l.targetId,
-        kind: l.kind || "depends_on"
+      edges: links.map((link) => ({
+        id: link.id,
+        from: link.from || link.sourceId,
+        to: link.to || link.targetId,
+        kind: link.kind || "depends_on"
       })),
       bounds: { width: Math.max(1200, maxX), height: Math.max(800, maxY) }
     };
@@ -50698,12 +51820,12 @@ var ContextOSV2Service = class {
     this.stateConflict = after.conflict ? after : null;
     return { reason: before, healed: !after.conflict };
   }
-  async _withWriteLock(label, callback, { allowConflict = false } = {}) {
+  async _withWriteLock(label, callback, { allowConflict = false, reconcile = true } = {}) {
     if (this.writeContext.getStore() === true) return callback();
     return withProjectWriteLock(
       this.projectRoot,
       async () => this.writeContext.run(true, async () => {
-        if (!this._ensureStateReconciled() && !allowConflict) {
+        if (reconcile && !this._ensureStateReconciled() && !allowConflict) {
           throw new Error(`State conflict blocks ${label}: ${this.stateConflict.reason}`);
         }
         return callback();
@@ -50791,8 +51913,10 @@ var ContextOSV2Service = class {
   }
   // ================= 1. os_context =================
   async osContext({ action = "brief", query = "", entityId = "", format = "markdown" }) {
-    await this._withWriteLock("os_context.preflight", async () => {
-    }, { allowConflict: true });
+    if (action !== "reconcile") {
+      await this._withWriteLock("os_context.preflight", async () => {
+      }, { allowConflict: true });
+    }
     switch (action) {
       case "brief": {
         const project = this.db.getProject(this.projectId) || { id: this.projectId, repo_root: this.projectRoot };
@@ -50810,7 +51934,7 @@ var ContextOSV2Service = class {
         if (!activePlan) {
           activePlan = plans.filter((plan) => plan.status === "active").sort((a, b) => String(a.updatedAt).localeCompare(String(b.updatedAt))).at(-1) || null;
         }
-        const displayTask = activeTask || (activePlan ? this.db.listTasks(activePlan.id).find((task) => task.status !== "completed") || null : null);
+        const displayTask = activeTask || (activePlan ? projectTasks.find((task) => task.planId === activePlan.id && task.status !== "completed") || null : null);
         const processes = this.processManager.listProcesses().filter((p) => p.status === "running" || p.status === "ready");
         const recentBlocks = this.db.listBlocks(this.projectId);
         const writeLock = inspectProjectWriteLock(this.projectRoot);
@@ -50916,6 +52040,7 @@ Members: ${chain.memberIds.join(", ")}`;
           const hygiene = res.conflict ? { changed: 0, blockedTaskIds: [] } : this.taskService.repairStateHygiene(this.projectId);
           const planHygiene = res.conflict ? { changed: 0, changedPlanIds: [] } : this.planService.repairStateHygiene(this.projectId);
           if (hygiene.changed > 0 || planHygiene.changed > 0) {
+            this.syncEngine.exportGraphToJson(this.projectId, this.projectRoot);
           }
           if (res.changed) {
             return `External Git/JSON change applied! Graph revision updated to ${res.revision}.`;
@@ -50925,7 +52050,7 @@ Members: ${chain.memberIds.join(", ")}`;
           }
           const hygieneMessage = hygiene.changed > 0 || planHygiene.changed > 0 ? ` Archived ${hygiene.changed} stale task(s) and ${planHygiene.changed} stale plan(s).` : "";
           return `ContextOS database and graph.json are already in sync.${hygieneMessage}`;
-        }, { allowConflict: true });
+        }, { allowConflict: true, reconcile: false });
       }
       default:
         throw new Error(`Unknown os_context action: ${action}`);
@@ -50935,7 +52060,9 @@ Members: ${chain.memberIds.join(", ")}`;
   async plan(input) {
     return this._withWriteLock("plan", () => this._plan(input));
   }
-  async _plan({ action, id, planData = {}, checkpointId, passed, evidenceRef, format = "markdown" }) {
+  async _plan({ action, id, planId, planData = {}, checkpointId, passed, evidenceRef, reason, format = "markdown" }) {
+    const targetId = id || planId || planData.id;
+    const targetCpId = checkpointId || planData.checkpointId;
     switch (action) {
       case "list": {
         const plans = this.db.listPlans(this.projectId);
@@ -50946,7 +52073,7 @@ Members: ${chain.memberIds.join(", ")}`;
         const ruleRefs = this._validateRuleRefs(planData.ruleRefs ?? planData.rule_refs);
         const created = this.planService.createPlan({
           ...planData,
-          id: id || planData.id,
+          id: targetId || planData.id,
           projectId: this.projectId,
           ruleRefs
         });
@@ -50957,30 +52084,30 @@ Members: ${chain.memberIds.join(", ")}`;
         if (updates.ruleRefs !== void 0 || updates.rule_refs !== void 0) {
           updates.ruleRefs = this._validateRuleRefs(updates.ruleRefs ?? updates.rule_refs);
         }
-        const updated = this.planService.updatePlan(id, updates);
+        const updated = this.planService.updatePlan(targetId, updates);
         return format === "json" ? updated : MarkdownRenderer.renderPlan(updated);
       }
       case "upsert": {
-        if (!this.db.getPlan(id)) return this._plan({ action: "create", id, planData: { ...planData, id }, format });
-        return this._plan({ action: "update", id, planData, format });
+        if (!this.db.getPlan(targetId)) return this._plan({ action: "create", id: targetId, planData: { ...planData, id: targetId }, format });
+        return this._plan({ action: "update", id: targetId, planData, format });
       }
       case "open": {
-        const plan = this.db.getPlan(id);
-        if (!plan) throw new Error(`Plan '${id}' not found`);
+        const plan = this.db.getPlan(targetId);
+        if (!plan) throw new Error(`Plan '${targetId}' not found`);
         return format === "json" ? plan : MarkdownRenderer.renderPlan(plan);
       }
       case "check": {
-        const cp = this.planService.checkCheckpoint(id, checkpointId, { passed, evidenceRef });
-        return `Checkpoint '${checkpointId}' in Plan '${id}' marked as ${cp.status}.`;
+        const cp = this.planService.checkCheckpoint(targetId, targetCpId, { passed, evidenceRef, reason });
+        return `Checkpoint '${targetCpId}' in Plan '${targetId}' marked as ${cp.status}.`;
       }
       case "complete": {
-        const completed = this.planService.completePlan(id, planData);
-        return format === "json" ? completed : `Plan '${id}' completed successfully!
+        const completed = this.planService.completePlan(targetId, planData);
+        return format === "json" ? completed : `Plan '${targetId}' completed successfully!
 Summary: ${completed.completedSummary}`;
       }
       case "delete": {
-        const deleted = this.planService.deletePlan(id);
-        return format === "json" ? { deleted, id } : `Plan '${id}' deleted successfully.`;
+        const deleted = this.planService.deletePlan(targetId);
+        return format === "json" ? { deleted, id: targetId } : `Plan '${targetId}' deleted successfully.`;
       }
       default:
         throw new Error(`Unknown plan action: ${action}`);
@@ -51021,6 +52148,8 @@ Summary: ${completed.completedSummary}`;
   async _task({
     action,
     id,
+    taskId,
+    planId,
     taskData = {},
     ruleId,
     rules,
@@ -51035,9 +52164,9 @@ Summary: ${completed.completedSummary}`;
     files,
     format = "markdown"
   }) {
+    const targetId = id || taskId || taskData.id;
     switch (action) {
       case "start": {
-        const targetId = taskData.id || id;
         const existing = targetId ? this.db.getTask(targetId) : null;
         if (existing) {
           const patch = {};
@@ -51050,8 +52179,9 @@ Summary: ${completed.completedSummary}`;
           return format === "json" ? { task: started2, autoPlanId: null, lightweight: false, preserved: true } : `Task '${started2.id}' started in state '${started2.status}'.`;
         }
         const payload = { ...taskData };
-        payload.id = payload.id || id || `task-${Date.now()}`;
+        payload.id = targetId || `task-${Date.now()}`;
         payload.title = payload.title || "Untitled task";
+        if (planId && !payload.planId) payload.planId = planId;
         const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : void 0);
         if (incomingRules !== void 0) payload.rules = this._validateRuleRefs(incomingRules);
         let autoPlanId = null;
@@ -51650,7 +52780,7 @@ Members: ${chain.memberIds.join(", ")}`;
     }
     this.db.saveTask(activeTask);
   }
-  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = "markdown", changes = [] }) {
+  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = "markdown", changes = [], ranges, budget, maxChars }) {
     if (action === "changeset") {
       const result = applyChangeset(this.projectRoot, changes);
       this._recordChangedFiles(result.files);
@@ -51771,13 +52901,16 @@ No symbol or text match. Scanned ${text.scanned} files${text.truncated ? " (walk
         return format === "json" ? res.structure : res.markdown;
       }
       case "read": {
-        const effectiveSelector = selector || (startLine !== void 0 || endLine !== void 0 ? { startLine, endLine } : null);
+        const effectiveSelector = selector || (Array.isArray(ranges) && ranges.length ? { ranges } : startLine !== void 0 || endLine !== void 0 ? { startLine, endLine } : null);
         const res = CodeTools.read(relPath, content, effectiveSelector || { fullFile: true });
         if (format === "json") return res;
         const fence = (code2) => `\`\`\`${path21.extname(relPath).slice(1) || "text"}
 // ${relPath} [L${res.startLine}-L${res.endLine}] (hash: ${res.hash})
 ${code2}
 \`\`\``;
+        if (budget === "full" || maxChars === Infinity || typeof maxChars === "number" && maxChars > 2e4) {
+          return fence(res.code);
+        }
         if (res.code.length <= 2e4) return fence(res.code);
         return `${fence(res.code.slice(0, 2e4))}
 
@@ -51860,7 +52993,9 @@ ${code2}
     command,
     cwd,
     maxChars = 1500,
-    timeoutMs = 6e4
+    timeoutMs = 6e4,
+    raw = false,
+    mode = "auto"
   }) {
     const targetCwd = cwd ? this._resolveProjectPath(cwd, "cwd").fullPath : this.projectRoot;
     const receipt = await runCommand({
@@ -51868,7 +53003,9 @@ ${code2}
       cwd: targetCwd,
       maxChars,
       timeoutMs,
-      projectRoot: this.projectRoot
+      projectRoot: this.projectRoot,
+      raw,
+      mode
     });
     await this._withWriteLock("run_command.record", async () => {
       this.db.saveCommandReceipt(receipt);
@@ -52905,6 +54042,102 @@ function projectDbPath(projectRoot) {
 // packages/mcp/src/system-tools.mjs
 import fs24 from "node:fs";
 import path25 from "node:path";
+
+// package.json
+var package_default = {
+  name: "contextos",
+  version: "2.6.0",
+  description: "AI \u7F16\u7801\u7684\u9AD8\u7CBE\u5EA6\u5916\u9AA8\u9ABC\u52A8\u529B\u88C5\u7532\uFF1A\u901A\u8FC7 MCP \u81EA\u52A8\u7BA1\u7406\u4E0A\u4E0B\u6587\uFF0C\u5B9E\u6D4B\u51CF\u5C11 90%+ \u4E0A\u4E0B\u6587\u5F00\u9500\u3002(High-Precision Powered Exoskeleton for AI Coding: Auto-governs context via MCP, reducing context window waste by 90%+)",
+  license: "MIT",
+  type: "module",
+  homepage: "https://dashend.cn",
+  bugs: {
+    url: "https://github.com/yubinbin32-ops/ContextOS/issues"
+  },
+  engines: {
+    node: ">=22"
+  },
+  keywords: [
+    "context-window",
+    "context-optimization",
+    "ai-coding",
+    "model-context-protocol",
+    "mcp",
+    "agent-memory",
+    "spatial-canvas",
+    "ast",
+    "developer-tools",
+    "code-navigation",
+    "local-first",
+    "llm-agents",
+    "architecture-graph",
+    "cursor",
+    "claude-code",
+    "windsurf"
+  ],
+  bin: {
+    contextos: "./plugins/contextos/server/contextos-mcp.mjs"
+  },
+  repository: {
+    type: "git",
+    url: "https://github.com/yubinbin32-ops/ContextOS.git"
+  },
+  files: [
+    "plugins/contextos/server/contextos-mcp.mjs",
+    "plugins/contextos/skills/contextos/SKILL.md",
+    "packages/code-intel/grammars/",
+    "AI_SETUP.md",
+    "README.md",
+    "README_zh.md",
+    "LICENSE"
+  ],
+  workspaces: [
+    "packages/*"
+  ],
+  scripts: {
+    mcp: "node packages/mcp/src/v3-server.mjs",
+    test: "node scripts/sync-version.mjs && node --test packages/*/test/*.test.mjs apps/*/test/*.test.mjs",
+    "version:sync": "node scripts/sync-version.mjs",
+    "version:check": "node scripts/sync-version.mjs --check",
+    "preplugin:build": "npm run version:sync",
+    verify: "npm test && npm run plugin:verify && npm run dist:smoke && npm run acceptance:real && node scripts/verify-doc-contract.mjs && npm run sim && node scripts/manual-tree-bindings.mjs && node scripts/comprehensive-dev-eval.mjs && node scripts/manual-state-consistency.mjs && node scripts/manual-admin-cli.mjs && node scripts/verify-all-features.mjs && npm run desktop:build",
+    benchmark: "node scripts/benchmark.mjs",
+    "benchmark:stress": "node scripts/comprehensive-dual-cohort-eval.mjs",
+    sim: "node scripts/dev-flow-sim.mjs",
+    rearchitect: "node scripts/manual-rearchitect.mjs",
+    "plugin:build": "node scripts/build-plugin.mjs",
+    "plugin:verify": "npm run plugin:build && node scripts/plugin-smoke.mjs",
+    "dist:smoke": "node scripts/distribution-smoke.mjs",
+    "acceptance:real": "node scripts/p7-real-acceptance.mjs",
+    "preplugin:install": "npm run version:sync",
+    "plugin:install": "npm run plugin:build && node scripts/install-plugin.mjs",
+    "predesktop:build": "npm run version:sync",
+    "desktop:build": "swift build --package-path apps/desktop",
+    "desktop:run": "swift run --package-path apps/desktop contextos-desktop",
+    "predesktop:package": "npm run version:sync",
+    "desktop:package": "node scripts/package-macos.mjs",
+    "predesktop:win:dev": "npm run version:sync",
+    "desktop:win:dev": "npm --prefix apps/desktop-win run dev",
+    "predesktop:win:build": "npm run version:sync",
+    "desktop:win:build": "npm --prefix apps/desktop-win run build",
+    "predesktop:win:package": "npm run version:sync",
+    "desktop:win:package": "node scripts/package-windows.mjs",
+    "prepackage-windows": "npm run version:sync",
+    "package-windows": "node scripts/package-windows.mjs"
+  },
+  dependencies: {
+    "@babel/parser": "^8.0.5",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "tree-sitter-wasm": "^2.0.1",
+    "web-tree-sitter": "^0.27.0",
+    zod: "^4.1.5"
+  },
+  devDependencies: {
+    esbuild: "^0.25.9"
+  }
+};
+
+// packages/mcp/src/system-tools.mjs
 function runInit(input) {
   const root = requireProjectRoot(input.projectRoot);
   if (input.saveGlobalCloud && input.cloudUrl) {
@@ -52951,7 +54184,7 @@ function runInit(input) {
       skillSource,
       pluginSource,
       selectedPlatforms: input.platforms,
-      version: process.env.CONTEXTOS_VERSION || null
+      version: process.env.CONTEXTOS_VERSION || package_default.version
     });
     editorSummary = `
 
@@ -53092,7 +54325,7 @@ async function runSwitch(input) {
 }
 
 // packages/mcp/src/v3-server.mjs
-var VERSION = "2.5.0";
+var VERSION = package_default.version;
 function ensureWorkspace(projectRoot) {
   const marker = path26.join(projectRoot, ".contextos", "project.json");
   if (fs25.existsSync(marker)) return false;
@@ -53104,18 +54337,21 @@ function textResult(content) {
   return { content: [{ type: "text", text }] };
 }
 var editSpec = object2({
-  path: string2(),
+  slot: string2().optional().describe('Action slot identifier from explore (e.g. "S1").'),
+  path: string2().optional().describe("Relative file path to modify (optional if slot is provided)."),
   target: string2().optional(),
   replacement: string2().optional(),
   symbol: string2().optional(),
+  append: string2().optional().describe("Code to append to the end of the file."),
   startLine: number2().optional(),
-  endLine: number2().optional()
+  endLine: number2().optional(),
+  fullFile: boolean2().optional().describe("When true, replaces entire file content with replacement.")
 });
 function createV3Server() {
   const server = new McpServer(
     { name: "contextos", version: VERSION },
     {
-      instructions: "ContextOS is a context operating system for AI coding agents. State your intent and let the OS run the internals: explore(intent) to locate and resume, change(edits|create) to patch code surgically, verify(commands) to prove it runs, ship(summary) to close the loop with evidence. Use ops({capability, action, args}) only when you need a legacy facade explicitly. Never read whole files: the OS returns budgeted slices."
+      instructions: "ContextOS is a context operating system for AI coding agents. State your intent and let the OS run the internals: explore(intent) to locate, pre-slice and pick action slots, inspect(slot|path) to read code, change(slot|edits) to patch code surgically with in-situ verify, ship(summary) to close the loop with evidence. Never read whole files: the OS returns budgeted slices."
     }
   );
   const dispatch = async (tool, input) => {
@@ -53133,7 +54369,7 @@ function createV3Server() {
   server.registerTool(
     "explore",
     {
-      description: "Understand, locate or resume. The OS inspects git state, picks candidate modules, outlines symbols and injects the applicable rules, all inside one context budget.",
+      description: "Understand, locate or resume. The OS inspects git state, pre-slices candidate code, outlines symbols and provides actionable slots, all inside one context budget.",
       inputSchema: {
         intent: string2().describe("What you want to understand or find, in plain language."),
         paths: array(string2()).optional().describe("Optional file paths to focus on instead of letting the OS infer them."),
@@ -53144,13 +54380,46 @@ function createV3Server() {
     async (input) => textResult(await dispatch("explore", input))
   );
   server.registerTool(
+    "inspect",
+    {
+      description: "Inspect code slices or files directly. Supports slot identifier (e.g. S1), symbol name, multiple line ranges, or multiple file paths in parallel.",
+      inputSchema: {
+        slot: string2().optional().describe('Action slot identifier from explore (e.g. "S1").'),
+        path: string2().optional().describe("File path to inspect."),
+        paths: array(string2()).optional().describe("Multiple file paths to inspect in parallel (batch inspection)."),
+        ranges: array(object2({ startLine: number2(), endLine: number2() })).optional().describe("Multiple line ranges to inspect within the same file (e.g. [{ startLine: 1, endLine: 20 }])."),
+        symbol: string2().optional().describe("Optional symbol/function name to slice."),
+        startLine: number2().optional(),
+        endLine: number2().optional(),
+        mode: _enum(["slices", "outline"]).optional().describe('Inspection mode: "slices" for code slices/methods, "outline" for AST symbol hierarchy and signatures.'),
+        outline: boolean2().optional().describe('Quick shorthand for mode: "outline".'),
+        fullFile: boolean2().optional(),
+        budget: _enum(["shallow", "normal", "deep", "full"]).optional().describe('Character budget preset. Use "full" to disable clipping and read entire long documents.'),
+        maxChars: number2().optional().describe("Explicit maximum characters to return."),
+        depth: _enum(["shallow", "normal", "deep"]).default("normal"),
+        projectRoot: string2().describe("Absolute path of the active workspace.")
+      }
+    },
+    async (input) => textResult(await dispatch("inspect", input))
+  );
+  server.registerTool(
     "change",
     {
-      description: "Modify or create code. The OS locates the anchor, applies a surgical AST edit, re-anchors symbols and records the touched files.",
+      description: "Modify or create code. Supports slot-based quick editing, symbol body replacement, code append, full-file overwrite, and in-situ atomic verification. TIP: Batch multi-file modifications in edits/create arrays or call concurrently to minimize turns.",
       inputSchema: {
         intent: string2().optional().describe("What the change should accomplish."),
-        edits: array(editSpec).optional().describe("Surgical replacements. `target` must uniquely match existing text (or pass symbol/startLine/endLine)."),
-        create: array(object2({ path: string2(), content: string2() })).optional(),
+        slot: string2().optional().describe('Action slot identifier to target (e.g. "S1").'),
+        path: string2().optional().describe("Target file path (shorthand for single edit or file overwrite)."),
+        content: string2().optional().describe("Entire file content to overwrite (used with overwrite: true)."),
+        overwrite: boolean2().optional().describe("When true, overwrites existing file content entirely."),
+        target: string2().optional().describe("Target text to replace (shorthand for single edit)."),
+        replacement: string2().optional().describe("Replacement text (shorthand for single edit)."),
+        symbol: string2().optional().describe("AST symbol name to replace (shorthand for single edit)."),
+        append: string2().optional().describe("Code to append to file (shorthand for single edit)."),
+        edits: array(editSpec).optional().describe("Surgical replacements or appends across multiple files."),
+        create: array(object2({ path: string2(), content: string2(), overwrite: boolean2().optional() })).optional(),
+        verify: union([string2(), array(string2()), boolean2()]).optional().describe("Run verification immediately after writing files in the same turn."),
+        autoRevert: boolean2().optional().describe("true to automatically revert files on disk if verification fails."),
         dryRun: boolean2().optional().describe("true to preview edits without writing files, touching the session, or running verification."),
         paths: array(string2()).optional().describe("Used for a read-only preview when no edits are supplied."),
         depth: _enum(["shallow", "normal", "deep"]).default("normal"),
@@ -53166,7 +54435,8 @@ function createV3Server() {
       inputSchema: {
         commands: array(string2()).optional(),
         command: string2().optional(),
-        mode: _enum(["once", "serve", "list", "status", "logs", "stop"]).default("once"),
+        mode: _enum(["once", "serve", "list", "status", "logs", "stop", "query"]).default("once"),
+        raw: boolean2().optional().describe("Pass true to preserve terminal output without collapsing."),
         id: string2().optional(),
         lines: number2().optional(),
         grep: string2().optional(),
@@ -53208,6 +54478,20 @@ function createV3Server() {
       }
     },
     async (input) => textResult(await dispatch("ops", input))
+  );
+  server.registerTool(
+    "pipeline",
+    {
+      description: 'Universal multi-task orchestrator. Execute multiple MCP commands in parallel, sequence (sequential chain), or nested combinations in a single round. Supports ANY MCP tool: inspect, change, verify, ship, ops (run_command, block, chain, plan, task). Use parallel array [action1, action2] or { parallel: [...] } for concurrent execution (e.g. parallel inspect or search queries via run: "rg ...", raw: true), and { chain: [action1, action2] } for transactional sequential execution that halts on failure. Query command outputs retain top matching lines and distinct file lists without being collapsed.',
+      inputSchema: {
+        steps: array(any()).optional().describe("List of steps to execute. Supports single actions, parallel arrays, and { chain: [...] }."),
+        chain: array(any()).optional().describe("Direct sequential chain of actions. Halts immediately on failure."),
+        parallel: array(any()).optional().describe("Direct parallel list of actions to execute concurrently."),
+        flow: array(any()).optional().describe("Alias for steps."),
+        projectRoot: string2().describe("Absolute path of the active workspace.")
+      }
+    },
+    async (input) => textResult(await dispatch("pipeline", input))
   );
   return server;
 }

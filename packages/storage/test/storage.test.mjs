@@ -34,6 +34,20 @@ test('V2Database basic CRUD and relations', () => {
   assert.equal(fetchedPlan.checkpoints.length, 1);
   assert.equal(fetchedPlan.checkpoints[0].id, 'cp-1');
 
+  db.savePlan({
+    id: 'plan-2',
+    projectId: 'proj-test',
+    title: 'Second Plan',
+    priority: 'normal',
+    status: 'draft',
+    phases: [{ id: 'P0', order: 0, objective: 'Batch hydrate', status: 'pending' }],
+    checkpoints: [{ id: 'cp-2', title: 'Verify batch', status: 'pending' }],
+  });
+  const listedPlans = db.listPlans('proj-test');
+  assert.equal(listedPlans.length, 2);
+  assert.equal(listedPlans.find((plan) => plan.id === 'plan-1').phases.length, 2);
+  assert.equal(listedPlans.find((plan) => plan.id === 'plan-2').checkpoints[0].id, 'cp-2');
+
   db.saveTask({
     id: 'task-plan-preserve',
     planId: 'plan-1',
@@ -62,6 +76,17 @@ test('V2Database basic CRUD and relations', () => {
   assert.equal(fetchedBlock.title, 'Block 1');
   assert.equal(fetchedBlock.artifactRefs.length, 2);
   assert.equal(fetchedBlock.artifactRefs[0].symbol, 'main');
+
+  db.saveBlock({
+    id: 'block-2',
+    projectId: 'proj-test',
+    title: 'Block 2',
+    artifactRefs: [{ path: 'src/second.js', anchorKind: 'file', hash: 'h3' }],
+  });
+  const listedBlocks = db.listBlocks('proj-test');
+  assert.equal(listedBlocks.length, 2);
+  assert.equal(listedBlocks.find((block) => block.id === 'block-1').artifactRefs.length, 2);
+  assert.equal(listedBlocks.find((block) => block.id === 'block-2').artifactRefs[0].path, 'src/second.js');
 
   assert.throws(
     () => db.saveBlock({

@@ -6,7 +6,7 @@ COPY packages ./packages
 
 RUN npm ci --ignore-scripts
 RUN mkdir -p plugins/contextos/server
-RUN npm run plugin:build
+RUN npm --ignore-scripts run plugin:build
 
 FROM node:22-bookworm-slim
 

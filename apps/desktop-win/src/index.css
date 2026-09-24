@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply m-0 p-0 overflow-hidden bg-white text-slate-800 antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+.font-rounded {
+  font-family: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+}
+
+/* Custom minimal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.7);
+}
+
+/* Markdown styling inside knowledge view */
+.markdown-body h1 {
+  @apply text-xl font-bold border-b border-slate-200 pb-2 mb-4 mt-2 text-slate-900;
+}
+
+.markdown-body h2 {
+  @apply text-lg font-semibold border-b border-slate-100 pb-1.5 mb-3 mt-4 text-slate-800;
+}
+
+.markdown-body h3 {
+  @apply text-base font-semibold mb-2 mt-3 text-slate-800;
+}
+
+.markdown-body p {
+  @apply mb-3 text-slate-700 leading-relaxed;
+}
+
+.markdown-body ul, .markdown-body ol {
+  @apply pl-6 mb-3;
+}
+
+.markdown-body li {
+  @apply mb-1;
+}
+
+.markdown-body pre {
+  @apply p-3 bg-slate-900 text-slate-100 rounded-lg text-xs font-mono overflow-x-auto mb-4;
+}
+
+.markdown-body code {
+  @apply px-1.5 py-0.5 bg-slate-100 text-slate-800 rounded font-mono text-xs;
+}
+
+.markdown-body blockquote {
+  @apply border-l-4 border-slate-300 pl-3 italic text-slate-600 my-3;
+}
+
+.markdown-body table {
+  @apply w-full border-collapse border border-slate-200 text-xs mb-4;
+}
+
+.markdown-body th, .markdown-body td {
+  @apply border border-slate-200 px-3 py-1.5 text-left;
+}
+
+.markdown-body th {
+  @apply bg-slate-50 font-semibold;
+}

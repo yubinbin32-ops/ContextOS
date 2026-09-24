@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1012,
-  "exportedAt": "2026-09-21T04:13:01.719Z",
+  "graphRevision": 1081,
+  "exportedAt": "2026-09-24T04:16:08.137Z",
   "data": {
     "plans": [
       {
@@ -172,6 +172,230 @@
         ],
         "createdAt": "2026-09-21T03:27:30.510Z",
         "updatedAt": "2026-09-21T03:39:40.583Z"
+      },
+      {
+        "id": "plan-contextos-governance-and-desktop-hardening",
+        "projectId": "mdflow",
+        "title": "ContextOS 协议缺口修补、Windows去Mock与UI架构深度治理",
+        "priority": "high",
+        "status": "completed",
+        "summary": "系统性修复 Codex 调改决策暴增 100w Token 暴露的 SKILL 与内核缺口、彻底清除 Windows 端所有 Mock 并打磨至上线标准、封堵架构 Block 漏绑漏洞、修复 UI UNKNOWN/空白缺陷，并实现 Plan 完结归档与进程解耦。",
+        "completedSummary": "ContextOS 协议缺口修补、Windows去Mock与UI架构深度治理全量闭环：SKILL规范与长文档范式落地、Orchestrator与Code-Intel并发直读与整文档覆盖能力实现、Block强绑定架构门禁确立、桌面UI拓扑链与Plan归档解耦完成、Windows端Tauri原生IPC完全替换Mock、全仓134个自动化测试及端到端内核能力验证100%全绿通过。",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "P0",
+            "order": 0,
+            "objective": "修补 SKILL.md 规则缺口与 Agent 调用心智漏洞",
+            "scope": "SKILL.md",
+            "deliverables": [
+              "plugins/contextos/skills/contextos/SKILL.md"
+            ],
+            "status": "completed",
+            "taskIds": [
+              "task-p0-skill-gaps"
+            ],
+            "acceptance": [
+              "工具可见时绝对禁止调用 tool_search，仅命名空间缺失时允许搜索",
+              "明确单工具单请求批量传参与模型并行调用多个工具的区别，严禁并发独立 tool calls",
+              "补充长文档/决策文档的 inspect 与 change 明确操作范式"
+            ]
+          },
+          {
+            "id": "P1",
+            "order": 1,
+            "objective": "补齐 Orchestrator 与 Code-Intel 的并发直读与整文档写入能力",
+            "scope": "packages/orchestrator, packages/code-intel",
+            "deliverables": [
+              "packages/orchestrator/src/pipelines.mjs",
+              "packages/orchestrator/src/context-budget.mjs",
+              "packages/code-intel/src/code-tools.mjs",
+              "packages/code-intel/src/changeset.mjs"
+            ],
+            "status": "completed",
+            "taskIds": [
+              "task-p1-inspect-change"
+            ],
+            "acceptance": [
+              "inspect 支持同一文件传入 ranges: [{startLine, endLine}] 多片段直读",
+              "inspect 支持 budget: 'full' 或 maxChars 参数，移除 2500 字符硬编码裁切",
+              "预算截断时返回包含恢复动作的 Machine-Actionable 明确提示语",
+              "change 支持 overwrite: true 或 fullFile 模式安全整文档覆盖写入"
+            ]
+          },
+          {
+            "id": "P2",
+            "order": 2,
+            "objective": "建立架构实体强绑定门禁（Block & Chain Hard Gate）",
+            "scope": "packages/orchestrator, packages/application",
+            "deliverables": [
+              "packages/orchestrator/src/pipelines.mjs",
+              "packages/application/src/task-service.mjs"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "ship 与 verify 在 strict 模式或检测到新建模块/目录时，校验是否绑定至 Curated Block",
+              "禁止整目录新增文件时静默回退至派生模块 mod-* 自动蒙混过关"
+            ]
+          },
+          {
+            "id": "P3",
+            "order": 3,
+            "objective": "修复桌面端 UI 拓扑链渲染缺陷（UNKNOWN、双圆点、连线空白）",
+            "scope": "apps/desktop, apps/desktop-win",
+            "deliverables": [
+              "apps/desktop/Sources/ContextOSDesktop/ProjectDatabase.swift",
+              "apps/desktop/Sources/ContextOSDesktop/DetailView.swift",
+              "apps/desktop-win/src/components/DetailView.tsx"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "修复 SQLite loadV2Snapshot() 中 deliveryState 与 healthState 硬编码 unknown 的缺陷",
+              "修复 architectureLayer 为空导致的连续双圆点显示异常",
+              "优化 CALLS / DEPENDS ON 连线渲染，若无 contract 则平滑显示 reason 或紧凑折叠，消除悬空大片空白"
+            ]
+          },
+          {
+            "id": "P4",
+            "order": 4,
+            "objective": "实现边栏 Plan 完结自动归档与后台进程（Running Processes）视觉解耦",
+            "scope": "apps/desktop, apps/desktop-win",
+            "deliverables": [
+              "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
+              "apps/desktop-win/src/components/ContentView.tsx"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "边栏主列表仅展示 active / pending 状态的当前活跃 Plan",
+              "已通过 complete 或 archived 的计划收纳进‘已完结 Plan’独立折叠归档区",
+              "Plan 业务生命周期卡片与底部的 Running Processes 长期系统进程彻底在视觉和数据流上分离"
+            ]
+          },
+          {
+            "id": "P5",
+            "order": 5,
+            "objective": "彻底清除 Windows 桌面端所有 Mock 假逻辑，打磨至线上发布生产标准",
+            "scope": "apps/desktop-win",
+            "deliverables": [
+              "apps/desktop-win/vite.config.ts",
+              "apps/desktop-win/src-tauri/src/lib.rs",
+              "apps/desktop-win/src/appUpdater.ts",
+              "apps/desktop-win/src/pluginInstaller.ts",
+              "apps/desktop-win/src/graphStore.ts"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "彻底删除 vite.config.ts 中的 600 行假后端中间件，转为纯净构建配置",
+              "在 src-tauri/src/lib.rs 中实现真实的文件选择、Node环境检测、真实平台插件配置读写与更新器下载安装命令",
+              "重写 appUpdater.ts 移除假定时器，对接真实 Tauri 原生能力",
+              "重写 pluginInstaller.ts 真实探测 Windows 路径（Claude、Cursor、Antigravity、Codex、OpenCode）并写入配置"
+            ]
+          },
+          {
+            "id": "P6",
+            "order": 6,
+            "objective": "端到端长文档实测验证与全平台回归发布验收",
+            "scope": "全仓",
+            "deliverables": [
+              "自动化回归测试与端到端验收证据"
+            ],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "运行跨会话修改真实长文件（如 DECISION.md），验证交互在 1~2 轮内闭环且 Token 在合理范围",
+              "验证 Windows 端与 macOS 端全量测试 pass，构建产物运行无 mock 依赖"
+            ]
+          }
+        ],
+        "checkpoints": [
+          {
+            "id": "cp-p0-skill-gaps",
+            "planId": "plan-contextos-governance-and-desktop-hardening",
+            "phaseId": null,
+            "title": "SKILL.md 规则缺口修复验收",
+            "criteria": "SKILL.md 中明确工具可见时严禁 tool_search、区分 Batch 与 Parallel 并规范长文档模式",
+            "status": "passed",
+            "evidenceRefs": [
+              "task-p0-skill-gaps-verified"
+            ],
+            "completedAt": "2026-09-23T19:12:20.786Z"
+          },
+          {
+            "id": "cp-p1-inspect-change-capabilities",
+            "planId": "plan-contextos-governance-and-desktop-hardening",
+            "phaseId": null,
+            "title": "inspect 与 change 内核能力补全验收",
+            "criteria": "inspect 支持多 ranges 和 budget: full 零裁切，change 支持 overwrite/fullFile 整文件覆盖，测试全部 PASS",
+            "status": "passed",
+            "evidenceRefs": [
+              "task-p1-inspect-change-verified"
+            ],
+            "completedAt": "2026-09-23T19:12:23.705Z"
+          },
+          {
+            "id": "cp-p2-block-governance-gate",
+            "planId": "plan-contextos-governance-and-desktop-hardening",
+            "phaseId": null,
+            "title": "架构绑定强约束门禁验收",
+            "criteria": "新增顶级子系统/模块时未绑定 Curated Block 严禁通过 ship/verify",
+            "status": "passed",
+            "evidenceRefs": [
+              "task-p2-block-governance-gate-verified"
+            ],
+            "completedAt": "2026-09-23T19:12:26.295Z"
+          },
+          {
+            "id": "cp-p3-ui-defect-fixes",
+            "planId": "plan-contextos-governance-and-desktop-hardening",
+            "phaseId": null,
+            "title": "UI 渲染缺陷与未知状态修复验收",
+            "criteria": "消除 LEAF CHAIN 下方 UNKNOWN 与双圆点，CALLS/DEPENDS ON 悬空空白平滑折叠",
+            "status": "passed",
+            "evidenceRefs": [],
+            "completedAt": "2026-09-23T19:26:08.000Z"
+          },
+          {
+            "id": "cp-p4-plan-archive-separation",
+            "planId": "plan-contextos-governance-and-desktop-hardening",
+            "phaseId": null,
+            "title": "Plan 归档与进程解耦交互验收",
+            "criteria": "已完结 Plan 自动沉淀归档，边栏仅聚焦 Active Plans 并与后台常驻进程彻底解耦",
+            "status": "passed",
+            "evidenceRefs": [],
+            "completedAt": "2026-09-23T19:26:13.006Z"
+          },
+          {
+            "id": "cp-p5-windows-desktop-production",
+            "planId": "plan-contextos-governance-and-desktop-hardening",
+            "phaseId": null,
+            "title": "Windows 端纯净去 Mock 与上线级打磨验收",
+            "criteria": "彻底移除 vite.config.ts 的假中间件与假更新器，Tauri IPC 真实支撑平台插件同步与更新",
+            "status": "passed",
+            "evidenceRefs": [],
+            "completedAt": "2026-09-23T19:26:15.213Z"
+          },
+          {
+            "id": "cp-p6-e2e-verification",
+            "planId": "plan-contextos-governance-and-desktop-hardening",
+            "phaseId": null,
+            "title": "端到端真实测试与回归验证",
+            "criteria": "真实 10KB+ 长文档修改测试轮次 ≤2 轮，构建与全量测试全绿并通过真实跨会话验收",
+            "status": "passed",
+            "evidenceRefs": [
+              "e2e-verification"
+            ],
+            "completedAt": "2026-09-23T19:48:54.411Z"
+          }
+        ],
+        "createdAt": "2026-09-23T18:53:10.031Z",
+        "updatedAt": "2026-09-23T19:49:42.354Z"
       },
       {
         "id": "plan-contextos-production-hardening",
@@ -558,6 +782,121 @@
         "updatedAt": "2026-09-20T08:51:02.847Z"
       },
       {
+        "id": "plan-stress-test-optimization",
+        "projectId": "mdflow",
+        "title": "ContextOS 20轮全功能压力测试与系统级深度调优",
+        "priority": "normal",
+        "status": "completed",
+        "summary": "执行 20 轮全功能极限深度测试，构建包含 8 个模块、25+ 严苛用例的 omni-clearing-platform。同步梳理并修复 ContextOS 5 大核心系统瓶颈：诊断信息就地直出（杜绝多轮查日志）、模板字符串误转义自愈、explore 拓扑与槽位生存权加固、MCP 并发调用指引，以及跨会话黑板零损耗复水。",
+        "completedSummary": "20 轮深度交互全功能极限压测顺利完成，26 个金融级清结算测试用例 100% 绿灯，5 大系统级瓶颈（诊断直出、模板转义防御、explore拓扑保留、并发指引、黑板秒级复水）全面优化并经 npm run verify 全部 121 个测试通过验收。",
+        "historyRef": null,
+        "ruleRefs": [],
+        "decisionRefs": [],
+        "dependencyRefs": [],
+        "phases": [
+          {
+            "id": "P0",
+            "order": 0,
+            "objective": "系统瓶颈优化：诊断块提取、模板转义防御与拓扑槽位生存权加固",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "单测报错直接在当前轮次输出完整错误块、断言对比和代码位置，不再需要 logs 命令"
+            ]
+          },
+          {
+            "id": "P1",
+            "order": 1,
+            "objective": "落地 20 轮全功能深度压力测试（omni-clearing-platform 金融级清结算引擎）",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "20 轮真实交互覆盖 6 个 MCP 核心工具，25+ 测试用例全部绿灯，黑板无损复水"
+            ]
+          },
+          {
+            "id": "P2",
+            "order": 2,
+            "objective": "全系统质量验证、构建更新与报告交付",
+            "scope": "",
+            "deliverables": [],
+            "status": "completed",
+            "taskIds": [],
+            "acceptance": [
+              "mdflow 119 个单元测试全部通过，发布包与客户端构建成功，生成详细走查报告"
+            ]
+          }
+        ],
+        "checkpoints": [
+          {
+            "id": "cp-1-diag-blocks",
+            "planId": "plan-stress-test-optimization",
+            "phaseId": null,
+            "title": "诊断信息就地直出：重构 process-host sanitizer 与 pipelines，消除查日志往返",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1790170675817-4fcd55"
+            ],
+            "completedAt": "2026-09-23T13:39:17.300Z"
+          },
+          {
+            "id": "cp-2-escape-defense",
+            "planId": "plan-stress-test-optimization",
+            "phaseId": null,
+            "title": "模板字符串误转义预检防御：增强 code-intel changeset 语法自愈",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1790170700090-2b9260"
+            ],
+            "completedAt": "2026-09-23T13:39:25.879Z"
+          },
+          {
+            "id": "cp-3-explore-priority",
+            "planId": "plan-stress-test-optimization",
+            "phaseId": null,
+            "title": "explore 拓扑与槽位优先级治理：保障大工程截断时不丢失结构",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1790170695783-25ee8c"
+            ],
+            "completedAt": "2026-09-23T13:39:38.130Z"
+          },
+          {
+            "id": "cp-4-stress-test-20-rounds",
+            "planId": "plan-stress-test-optimization",
+            "phaseId": null,
+            "title": "20 轮深度交互极限压测：8 模块与 25+ 测试用例 100% 绿灯通过",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "receipt-1790171199185-c85227"
+            ],
+            "completedAt": "2026-09-23T13:46:59.688Z"
+          },
+          {
+            "id": "cp-5-mdflow-verify",
+            "planId": "plan-stress-test-optimization",
+            "phaseId": null,
+            "title": "ContextOS 全链路验证与交付物归档",
+            "criteria": "",
+            "status": "passed",
+            "evidenceRefs": [
+              "task-1656-npm-run-verify"
+            ],
+            "completedAt": "2026-09-23T13:47:24.274Z"
+          }
+        ],
+        "createdAt": "2026-09-23T13:33:53.671Z",
+        "updatedAt": "2026-09-23T13:47:30.778Z"
+      },
+      {
         "id": "plan-v2-rebuild",
         "projectId": "mdflow",
         "title": "ContextOS V2 Comprehensive Evaluation",
@@ -735,6 +1074,126 @@
         "updatedAt": "2026-09-20T18:14:37.873Z"
       },
       {
+        "id": "task-p0-skill-gaps",
+        "planId": "plan-contextos-governance-and-desktop-hardening",
+        "phaseId": "P0",
+        "title": "修补 SKILL.md 规则缺口与 Agent 调用心智漏洞",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "修复 SKILL.md 中的 tool_search 误用、批处理混淆、长文档心智断层与 Block 绑定模糊等问题",
+          "constraints": [],
+          "references": {},
+          "nextSteps": [],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "plugins/contextos/skills/contextos/SKILL.md"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [],
+        "notes": [
+          {
+            "id": "note-1790189702335-c946e",
+            "text": "[Host Native Modification] Detected external disk modification in 'plugins/contextos/skills/contextos/SKILL.md' via mtime/SHA256 comparison (c76b6c08 -> 4824a8d8). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-23T18:55:02.335Z"
+          },
+          {
+            "id": "note-1790190159197-f99u1",
+            "text": "[Host Native Modification] Detected external disk modification in 'plugins/contextos/skills/contextos/SKILL.md' via mtime/SHA256 comparison (4824a8d8 -> c76b6c08). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-23T19:02:39.197Z"
+          }
+        ],
+        "checks": [
+          {
+            "id": "check-1790189702335-yoyy7",
+            "receiptId": null,
+            "description": "SKILL.md 规则缺口修复与 Agent 心智对齐完成",
+            "passed": true,
+            "evidence": "Updated plugins/contextos/skills/contextos/SKILL.md and global SKILL.md",
+            "recordedAt": "2026-09-23T18:55:02.335Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-intent-surface",
+            "block-orchestrator",
+            "block-module-index",
+            "block-capability-registry",
+            "block-ast-engine",
+            "block-surgical-code",
+            "block-coverage-advisory",
+            "block-sqlite-store",
+            "block-graph-sync",
+            "block-domain-models",
+            "block-app-services",
+            "block-command-gateway",
+            "block-process-supervisor",
+            "block-context-renderer",
+            "block-metro-layout",
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-desktop-installer",
+            "block-plugin-bootstrap",
+            "block-cloud-hub",
+            "block-verification-suite",
+            "mod-packages-mcp-src",
+            "mod-plugins-contextos-server",
+            "block-macos-app-shell",
+            "block-macos-app-resources",
+            "block-macos-packaging",
+            "mod-apps-desktop-sources-contextosdesktop",
+            "mod-packages-context-test",
+            "mod-packages-storage-test",
+            "mod-packages-mcp-test",
+            "mod-packages-code-intel-test",
+            "mod-packages-code-intel-src",
+            "mod-scripts",
+            "block-runtime-log-store",
+            "block-distribution-verification",
+            "block-p7-real-acceptance",
+            "mod-apps-desktop-tests-contextosdesktoptests",
+            "mod-root",
+            "mod-apps-desktop-resources",
+            "mod-packages-orchestrator",
+            "mod-plugins-contextos-codex-plugin",
+            "mod-apps-daemon-test",
+            "mod-packages-process-host-test",
+            "mod-packages-application-test",
+            "mod-packages-domain-test",
+            "mod-agents",
+            "mod-docs",
+            "mod-github",
+            "mod-apps-desktop-contextos-desktop-xcodeproj",
+            "mod-apps-desktop",
+            "mod-plugins-contextos-skills-contextos",
+            "mod-apps-desktop-win",
+            "mod-apps-desktop-win-src"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 1,
+            "coveredFiles": 1,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-23T18:55:02.478Z"
+        },
+        "createdAt": "2026-09-23T18:54:04.044Z",
+        "updatedAt": "2026-09-23T19:02:39.197Z"
+      },
+      {
         "id": "task-p0-ui-db-graph-fact-parity",
         "planId": "plan-contextos-production-hardening",
         "phaseId": "P0",
@@ -815,6 +1274,118 @@
         "syncResult": null,
         "createdAt": "2026-09-20T16:54:58.507Z",
         "updatedAt": "2026-09-20T16:54:58.507Z"
+      },
+      {
+        "id": "task-p1-inspect-change",
+        "planId": "plan-contextos-governance-and-desktop-hardening",
+        "phaseId": "P1",
+        "title": "补齐 Orchestrator 与 Code-Intel 的并发直读与整文档写入能力",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "补齐 inspect 多 ranges 直读、budget: full 零截断，以及 change 的 overwrite/fullFile 整文档覆盖能力",
+          "constraints": [],
+          "references": {},
+          "nextSteps": [],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "packages/code-intel/src/code-tools.mjs",
+            "packages/code-intel/src/changeset.mjs",
+            "packages/orchestrator/src/pipelines.mjs",
+            "packages/orchestrator/src/context-budget.mjs",
+            "packages/mcp/src/v3-server.mjs"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [],
+        "notes": [],
+        "checks": [
+          {
+            "id": "check-1790192977742-lxvml",
+            "receiptId": "receipt-1790192876535-763c94",
+            "description": "P1 inspect and change verified via npm test",
+            "passed": true,
+            "evidence": "Command succeeded (834 lines collapsed). 18 warning(s). [.contextos/logs/receipt-1790192876535-763c94.log]",
+            "recordedAt": "2026-09-23T19:49:37.742Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-intent-surface",
+            "block-orchestrator",
+            "block-module-index",
+            "block-capability-registry",
+            "block-ast-engine",
+            "block-surgical-code",
+            "block-coverage-advisory",
+            "block-sqlite-store",
+            "block-graph-sync",
+            "block-domain-models",
+            "block-app-services",
+            "block-command-gateway",
+            "block-process-supervisor",
+            "block-context-renderer",
+            "block-metro-layout",
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-desktop-installer",
+            "block-plugin-bootstrap",
+            "block-cloud-hub",
+            "block-verification-suite",
+            "mod-packages-mcp-src",
+            "mod-plugins-contextos-server",
+            "block-macos-app-shell",
+            "block-macos-app-resources",
+            "block-macos-packaging",
+            "mod-apps-desktop-sources-contextosdesktop",
+            "mod-packages-context-test",
+            "mod-packages-storage-test",
+            "mod-packages-mcp-test",
+            "mod-packages-code-intel-test",
+            "mod-packages-code-intel-src",
+            "mod-scripts",
+            "block-runtime-log-store",
+            "block-distribution-verification",
+            "block-p7-real-acceptance",
+            "mod-apps-desktop-tests-contextosdesktoptests",
+            "mod-root",
+            "mod-apps-desktop-resources",
+            "mod-packages-orchestrator",
+            "mod-plugins-contextos-codex-plugin",
+            "mod-apps-daemon-test",
+            "mod-packages-process-host-test",
+            "mod-packages-application-test",
+            "mod-packages-domain-test",
+            "mod-agents",
+            "mod-docs",
+            "mod-github",
+            "mod-apps-desktop-contextos-desktop-xcodeproj",
+            "mod-apps-desktop",
+            "mod-plugins-contextos-skills-contextos",
+            "mod-apps-desktop-win",
+            "mod-apps-desktop-win-src",
+            "block-desktop-win"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 5,
+            "coveredFiles": 5,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-23T19:49:37.883Z"
+        },
+        "createdAt": "2026-09-23T18:55:37.132Z",
+        "updatedAt": "2026-09-23T19:49:37.883Z"
       },
       {
         "id": "task-p2-raw-kind-navigation",
@@ -2671,6 +3242,30 @@
         "updatedAt": "2026-09-20T08:38:28.188Z"
       },
       {
+        "id": "block-desktop-win",
+        "projectId": "mdflow",
+        "title": "Windows 桌面端应用主体",
+        "kind": "app-shell",
+        "summary": "Tauri + React Windows 桌面端外壳、进程监控与平台插件配置",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop-win",
+            "symbol": null,
+            "anchorKind": "tree",
+            "startLine": null,
+            "endLine": null,
+            "hash": "146ce456e32b0a16",
+            "role": "resource",
+            "hashMode": "manifest",
+            "manifest": "apps/desktop-win/package-lock.json"
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T19:11:49.916Z",
+        "updatedAt": "2026-09-23T19:11:49.916Z"
+      },
+      {
         "id": "block-distribution-verification",
         "projectId": "mdflow",
         "title": "独立分发验收入口",
@@ -2912,7 +3507,7 @@
             "anchorKind": "tree",
             "startLine": null,
             "endLine": null,
-            "hash": "17154a40226754c0",
+            "hash": "24bfc5e85eb35c99",
             "role": "resource",
             "hashMode": "content",
             "manifest": null
@@ -2936,7 +3531,7 @@
             "anchorKind": "tree",
             "startLine": null,
             "endLine": null,
-            "hash": "135fe6bea11d3bdd",
+            "hash": "c23f08005b8b4b92",
             "role": "resource",
             "hashMode": "content",
             "manifest": null
@@ -4185,17 +4780,6 @@
             "manifest": null
           },
           {
-            "path": "scripts/manual-tree-bindings.mjs",
-            "symbol": "manual-tree-bindings.mjs",
-            "anchorKind": "file",
-            "startLine": 1,
-            "endLine": 110,
-            "hash": "9c2875e9cddeb3ab",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "scripts/benchmark.mjs",
             "symbol": "hash",
             "anchorKind": "symbol",
@@ -4245,6 +4829,150 @@
         "updatedAt": "2026-09-20T08:38:28.613Z"
       },
       {
+        "id": "mod-apps-cloud",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-cloud",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/cloud/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 11,
+            "hash": "77125c5feb298f5c",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.051Z",
+        "updatedAt": "2026-09-24T03:26:14.051Z"
+      },
+      {
+        "id": "mod-apps-daemon",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-daemon",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/daemon/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 9,
+            "hash": "503e4e3b3592db78",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.056Z",
+        "updatedAt": "2026-09-24T03:26:14.056Z"
+      },
+      {
+        "id": "mod-apps-daemon-test",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-daemon-test",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/daemon/test/daemon.test.mjs",
+            "symbol": "daemon.test.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 105,
+            "hash": "4c58fe36b63a146f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T15:59:35.271Z",
+        "updatedAt": "2026-09-21T15:59:35.271Z"
+      },
+      {
+        "id": "mod-apps-desktop",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/generate_xcodeproj.rb",
+            "symbol": "generate_xcodeproj.rb",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 107,
+            "hash": "bb778db3b07ebf47",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T13:18:04.272Z",
+        "updatedAt": "2026-09-23T13:18:04.272Z"
+      },
+      {
+        "id": "mod-apps-desktop-contextos-desktop-xcodeproj",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-contextos-desktop-xcodeproj",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/contextos-desktop.xcodeproj/project.pbxproj",
+            "symbol": "project.pbxproj",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 480,
+            "hash": "29a397461923af26",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T13:18:04.269Z",
+        "updatedAt": "2026-09-23T13:18:04.269Z"
+      },
+      {
+        "id": "mod-apps-desktop-resources",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-resources",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/Resources/Info.plist",
+            "symbol": "Info.plist",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 35,
+            "hash": "77ed518aa407da46",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T04:54:46.547Z",
+        "updatedAt": "2026-09-21T04:54:46.547Z"
+      },
+      {
         "id": "mod-apps-desktop-sources-contextosdesktop",
         "projectId": "mdflow",
         "title": "Derived module mod-apps-desktop-sources-contextosdesktop",
@@ -4262,11 +4990,1441 @@
             "role": "implementation",
             "hashMode": null,
             "manifest": null
+          },
+          {
+            "path": "apps/desktop/Sources/ContextOSDesktop/ContextOSVersion.swift",
+            "symbol": "ContextOSVersion",
+            "anchorKind": "symbol",
+            "startLine": 3,
+            "endLine": 5,
+            "hash": "5e9884f522275c84",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
           }
         ],
         "history": [],
         "createdAt": "2026-09-20T17:08:50.377Z",
         "updatedAt": "2026-09-20T17:08:50.377Z"
+      },
+      {
+        "id": "mod-apps-desktop-tests-contextosdesktoptests",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-tests-contextosdesktoptests",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop/Tests/ContextOSDesktopTests/PluginInstallerTests.swift",
+            "symbol": "PluginInstallerTests",
+            "anchorKind": "symbol",
+            "startLine": 4,
+            "endLine": 76,
+            "hash": "c6e7614236d5cf30",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop/Tests/ContextOSDesktopTests/AppUpdaterTests.swift",
+            "symbol": "AppUpdaterTests",
+            "anchorKind": "symbol",
+            "startLine": 5,
+            "endLine": 166,
+            "hash": "2d36555347c5c04d",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T04:54:46.534Z",
+        "updatedAt": "2026-09-21T04:54:46.534Z"
+      },
+      {
+        "id": "mod-apps-desktop-win",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-win",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop-win/index.html",
+            "symbol": "index.html",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 14,
+            "hash": "3651752d3729c38c",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 36,
+            "hash": "22875192aa348008",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/postcss.config.js",
+            "symbol": "postcss.config.js",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 7,
+            "hash": "e32657baf631d7c5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/package-lock.json",
+            "symbol": "package-lock.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 3048,
+            "hash": "7a9a8c7abfa3f0a2",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T17:59:59.723Z",
+        "updatedAt": "2026-09-23T17:59:59.723Z"
+      },
+      {
+        "id": "mod-apps-desktop-win-src",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-win-src",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop-win/src/CanvasScene.ts",
+            "symbol": "ChainEnvelopeGeometry",
+            "anchorKind": "symbol",
+            "startLine": 18,
+            "endLine": 24,
+            "hash": "7bba57cf315ca6c9",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/CanvasScene.ts",
+            "symbol": "chainEnvelopeIntersectsUnrelatedBlock",
+            "anchorKind": "symbol",
+            "startLine": 26,
+            "endLine": 28,
+            "hash": "6c6777e203de3333",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/CanvasScene.ts",
+            "symbol": "chainEnvelopeContains",
+            "anchorKind": "symbol",
+            "startLine": 30,
+            "endLine": 36,
+            "hash": "05c49bdf44fd114b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/CanvasScene.ts",
+            "symbol": "polygonContains",
+            "anchorKind": "symbol",
+            "startLine": 38,
+            "endLine": 50,
+            "hash": "693eb1822ca356d6",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/CanvasScene.ts",
+            "symbol": "Edge",
+            "anchorKind": "symbol",
+            "startLine": 52,
+            "endLine": 55,
+            "hash": "df87293949a7368e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/CanvasScene.ts",
+            "symbol": "ChainEnvelopeEngine",
+            "anchorKind": "symbol",
+            "startLine": 57,
+            "endLine": 287,
+            "hash": "7746f9fdea54a32a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/CanvasScene.ts",
+            "symbol": "ChainEnvelopeLaneAllocator",
+            "anchorKind": "symbol",
+            "startLine": 289,
+            "endLine": 328,
+            "hash": "ee1577a15304c06c",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/CanvasScene.ts",
+            "symbol": "CanvasScene",
+            "anchorKind": "symbol",
+            "startLine": 330,
+            "endLine": 602,
+            "hash": "fc927f35f84896d5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/appUpdater.ts",
+            "symbol": "invokeTauri",
+            "anchorKind": "symbol",
+            "startLine": 3,
+            "endLine": 14,
+            "hash": "1429686ad64cd540",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/appUpdater.ts",
+            "symbol": "AppUpdater",
+            "anchorKind": "symbol",
+            "startLine": 16,
+            "endLine": 293,
+            "hash": "7ee31c3116d7ce54",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/graphStore.ts",
+            "symbol": "GraphStore",
+            "anchorKind": "symbol",
+            "startLine": 33,
+            "endLine": 1717,
+            "hash": "14fb809ba6f03e3b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "ProjectDescriptor",
+            "anchorKind": "symbol",
+            "startLine": 3,
+            "endLine": 9,
+            "hash": "87b17006a0eca0cd",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "RecentProject",
+            "anchorKind": "symbol",
+            "startLine": 11,
+            "endLine": 18,
+            "hash": "0d87c5c87435c991",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "ProjectInfo",
+            "anchorKind": "symbol",
+            "startLine": 20,
+            "endLine": 25,
+            "hash": "a5db672e7c9effb8",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "BlockItem",
+            "anchorKind": "symbol",
+            "startLine": 27,
+            "endLine": 42,
+            "hash": "8705eb8673de8bd3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "isBlockGhost",
+            "anchorKind": "symbol",
+            "startLine": 44,
+            "endLine": 46,
+            "hash": "eefd84713e65731e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "ChainItem",
+            "anchorKind": "symbol",
+            "startLine": 48,
+            "endLine": 62,
+            "hash": "f8319fe929ad5c7f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "ChainMemberItem",
+            "anchorKind": "symbol",
+            "startLine": 64,
+            "endLine": 71,
+            "hash": "bf29089820846958",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "LinkItem",
+            "anchorKind": "symbol",
+            "startLine": 73,
+            "endLine": 85,
+            "hash": "5d97d3c4ac7ad473",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "ChainNode",
+            "anchorKind": "symbol",
+            "startLine": 87,
+            "endLine": 92,
+            "hash": "75c657703a4ed110",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "ChainEdge",
+            "anchorKind": "symbol",
+            "startLine": 94,
+            "endLine": 98,
+            "hash": "85eb3bc23f31960d",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "WorkProgress",
+            "anchorKind": "symbol",
+            "startLine": 100,
+            "endLine": 103,
+            "hash": "f09bea0e015f28b0",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "GateProgress",
+            "anchorKind": "symbol",
+            "startLine": 105,
+            "endLine": 108,
+            "hash": "55820a542c87d355",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanProgress",
+            "anchorKind": "symbol",
+            "startLine": 110,
+            "endLine": 120,
+            "hash": "51670ad6e5ff8062",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanItem",
+            "anchorKind": "symbol",
+            "startLine": 122,
+            "endLine": 143,
+            "hash": "f8840795633ec00c",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "BlockCoverage",
+            "anchorKind": "symbol",
+            "startLine": 145,
+            "endLine": 155,
+            "hash": "cd6d47c865a93ebd",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "ArchitectureCoverage",
+            "anchorKind": "symbol",
+            "startLine": 159,
+            "endLine": 173,
+            "hash": "a40f4de79b11709a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanChainReference",
+            "anchorKind": "symbol",
+            "startLine": 175,
+            "endLine": 179,
+            "hash": "4ff3c68f4617dade",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanDependency",
+            "anchorKind": "symbol",
+            "startLine": 181,
+            "endLine": 185,
+            "hash": "d70d0c99e55809a6",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanStep",
+            "anchorKind": "symbol",
+            "startLine": 187,
+            "endLine": 199,
+            "hash": "a0a1883819c88e6b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanCheckpointReference",
+            "anchorKind": "symbol",
+            "startLine": 201,
+            "endLine": 207,
+            "hash": "e30d8c619d176e68",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanChainScopeItem",
+            "anchorKind": "symbol",
+            "startLine": 209,
+            "endLine": 225,
+            "hash": "20736e99390a9b7a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanChangeItem",
+            "anchorKind": "symbol",
+            "startLine": 227,
+            "endLine": 243,
+            "hash": "0b155ff6e0534175",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "PlanChainChangeReference",
+            "anchorKind": "symbol",
+            "startLine": 245,
+            "endLine": 250,
+            "hash": "fb24839bf36a79c1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "BackgroundScope",
+            "anchorKind": "symbol",
+            "startLine": 252,
+            "endLine": 256,
+            "hash": "517fccc3bc10f0e4",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "DecisionItem",
+            "anchorKind": "symbol",
+            "startLine": 258,
+            "endLine": 268,
+            "hash": "ab158548fbfe1ea5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "DecisionScope",
+            "anchorKind": "symbol",
+            "startLine": 270,
+            "endLine": 274,
+            "hash": "38d7eda9b0bb2998",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "SourceReference",
+            "anchorKind": "symbol",
+            "startLine": 276,
+            "endLine": 289,
+            "hash": "88331ac42b1c9aa4",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "CheckpointItem",
+            "anchorKind": "symbol",
+            "startLine": 291,
+            "endLine": 308,
+            "hash": "1249fbbd43a4842b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "CheckpointBinding",
+            "anchorKind": "symbol",
+            "startLine": 310,
+            "endLine": 317,
+            "hash": "3f5841dbf35ceef0",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "CheckpointDependency",
+            "anchorKind": "symbol",
+            "startLine": 319,
+            "endLine": 324,
+            "hash": "c48630170631ce0e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "HistoryFieldDiff",
+            "anchorKind": "symbol",
+            "startLine": 326,
+            "endLine": 330,
+            "hash": "4b03764f0fd433ba",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "HistoryItem",
+            "anchorKind": "symbol",
+            "startLine": 332,
+            "endLine": 346,
+            "hash": "af26f51c1cd3e30c",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "ChangeItem",
+            "anchorKind": "symbol",
+            "startLine": 348,
+            "endLine": 353,
+            "hash": "2f1504172598881a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "LocalizedTextItem",
+            "anchorKind": "symbol",
+            "startLine": 355,
+            "endLine": 361,
+            "hash": "d738552da88391a3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "GraphSnapshot",
+            "anchorKind": "symbol",
+            "startLine": 363,
+            "endLine": 390,
+            "hash": "54d6f101b30188f4",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "GraphSelection",
+            "anchorKind": "symbol",
+            "startLine": 394,
+            "endLine": 397,
+            "hash": "6a516a35b74a4228",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "RunningProcessItem",
+            "anchorKind": "symbol",
+            "startLine": 412,
+            "endLine": 420,
+            "hash": "25911eedeea1df0b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "EditorPlatformStatus",
+            "anchorKind": "symbol",
+            "startLine": 422,
+            "endLine": 435,
+            "hash": "2156d3757663a9fd",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "AppReleaseAsset",
+            "anchorKind": "symbol",
+            "startLine": 437,
+            "endLine": 442,
+            "hash": "f5f2d97a300987d7",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "AppRelease",
+            "anchorKind": "symbol",
+            "startLine": 444,
+            "endLine": 454,
+            "hash": "bc72b4977eb9c278",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "LocalNodeEnvironment",
+            "anchorKind": "symbol",
+            "startLine": 458,
+            "endLine": 463,
+            "hash": "7bde21e6589cd89a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/models.ts",
+            "symbol": "emptyGraphSnapshot",
+            "anchorKind": "symbol",
+            "startLine": 476,
+            "endLine": 505,
+            "hash": "8578ad6a9f37403a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/pluginInstaller.ts",
+            "symbol": "invokeTauri",
+            "anchorKind": "symbol",
+            "startLine": 4,
+            "endLine": 15,
+            "hash": "1429686ad64cd540",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/pluginInstaller.ts",
+            "symbol": "PluginInstaller",
+            "anchorKind": "symbol",
+            "startLine": 17,
+            "endLine": 138,
+            "hash": "8d00454c97dd9fad",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T17:59:59.737Z",
+        "updatedAt": "2026-09-23T17:59:59.737Z"
+      },
+      {
+        "id": "mod-apps-desktop-win-src-components",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-win-src-components",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "ContentViewProps",
+            "anchorKind": "symbol",
+            "startLine": 13,
+            "endLine": 15,
+            "hash": "f32cc9ad60156c9e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "ContentView",
+            "anchorKind": "symbol",
+            "startLine": 17,
+            "endLine": 357,
+            "hash": "c89a5282faf1325e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "ProjectHeader",
+            "anchorKind": "symbol",
+            "startLine": 360,
+            "endLine": 466,
+            "hash": "43f6e921c1113dae",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "SidebarCollapsibleSection",
+            "anchorKind": "symbol",
+            "startLine": 469,
+            "endLine": 490,
+            "hash": "0417851d1beeedd5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "SidebarItemButton",
+            "anchorKind": "symbol",
+            "startLine": 492,
+            "endLine": 529,
+            "hash": "57c8e6a1f8b7385a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "RunningProcessesSection",
+            "anchorKind": "symbol",
+            "startLine": 532,
+            "endLine": 598,
+            "hash": "c1b99c191a060e70",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "SidebarLegend",
+            "anchorKind": "symbol",
+            "startLine": 601,
+            "endLine": 643,
+            "hash": "a63606b349b3c22e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "CanvasToolbar",
+            "anchorKind": "symbol",
+            "startLine": 646,
+            "endLine": 698,
+            "hash": "923f5372349fd9f4",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "SettingsModal",
+            "anchorKind": "symbol",
+            "startLine": 701,
+            "endLine": 1138,
+            "hash": "fe0ccf34f26bbb09",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/ContentView.tsx",
+            "symbol": "EditorPlatformRow",
+            "anchorKind": "symbol",
+            "startLine": 1141,
+            "endLine": 1259,
+            "hash": "2d66b2268427f423",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "DetailViewProps",
+            "anchorKind": "symbol",
+            "startLine": 19,
+            "endLine": 22,
+            "hash": "a3f120cb41f8722f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "DetailView",
+            "anchorKind": "symbol",
+            "startLine": 24,
+            "endLine": 113,
+            "hash": "0c0ebe4a24608750",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "SectionHeader",
+            "anchorKind": "symbol",
+            "startLine": 117,
+            "endLine": 121,
+            "hash": "e99d73dbe4906ae2",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "DetailSection",
+            "anchorKind": "symbol",
+            "startLine": 123,
+            "endLine": 131,
+            "hash": "866a90d2a912ddfb",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "MetadataPills",
+            "anchorKind": "symbol",
+            "startLine": 133,
+            "endLine": 144,
+            "hash": "dfe4739733d5cb37",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "BlockDetail",
+            "anchorKind": "symbol",
+            "startLine": 147,
+            "endLine": 362,
+            "hash": "22ba7185a104f526",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "ChainDetail",
+            "anchorKind": "symbol",
+            "startLine": 365,
+            "endLine": 555,
+            "hash": "b020311b2f3cba0e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "LinkDetail",
+            "anchorKind": "symbol",
+            "startLine": 558,
+            "endLine": 593,
+            "hash": "2d22655cefeb3942",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "PlanDetail",
+            "anchorKind": "symbol",
+            "startLine": 596,
+            "endLine": 816,
+            "hash": "0c2640a51a9249e3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "DecisionDetail",
+            "anchorKind": "symbol",
+            "startLine": 819,
+            "endLine": 837,
+            "hash": "a049674b7cbbd369",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "RevisionSection",
+            "anchorKind": "symbol",
+            "startLine": 840,
+            "endLine": 858,
+            "hash": "61c41665c0486b4e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "CheckpointsSection",
+            "anchorKind": "symbol",
+            "startLine": 861,
+            "endLine": 905,
+            "hash": "0e362e9810b5ef79",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/DetailView.tsx",
+            "symbol": "HistorySection",
+            "anchorKind": "symbol",
+            "startLine": 908,
+            "endLine": 955,
+            "hash": "2c07193d7894782a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/KnowledgeView.tsx",
+            "symbol": "KnowledgeDocument",
+            "anchorKind": "symbol",
+            "startLine": 9,
+            "endLine": 18,
+            "hash": "9b193361c7ff6ce2",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/KnowledgeView.tsx",
+            "symbol": "KnowledgeLibrary",
+            "anchorKind": "symbol",
+            "startLine": 20,
+            "endLine": 56,
+            "hash": "fb1897f05c7da583",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/KnowledgeView.tsx",
+            "symbol": "KnowledgeViewProps",
+            "anchorKind": "symbol",
+            "startLine": 60,
+            "endLine": 67,
+            "hash": "af5d2d278e42154f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/components/KnowledgeView.tsx",
+            "symbol": "KnowledgeView",
+            "anchorKind": "symbol",
+            "startLine": 69,
+            "endLine": 196,
+            "hash": "c2308237a119c38c",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T19:50:08.808Z",
+        "updatedAt": "2026-09-23T19:50:08.808Z"
+      },
+      {
+        "id": "mod-apps-desktop-win-src-tauri",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-win-src-tauri",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop-win/src-tauri/Cargo.toml",
+            "symbol": "Cargo.toml",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 25,
+            "hash": "d95ed445dfbb5920",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/build.rs",
+            "symbol": "main",
+            "anchorKind": "symbol",
+            "startLine": 5,
+            "endLine": 21,
+            "hash": "7c5395fecaec05e0",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/tauri.conf.json",
+            "symbol": "tauri.conf.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 45,
+            "hash": "49a63c12e872fd22",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T19:50:08.787Z",
+        "updatedAt": "2026-09-23T19:50:08.787Z"
+      },
+      {
+        "id": "mod-apps-desktop-win-src-tauri-src",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-win-src-tauri-src",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "find_repo_root",
+            "anchorKind": "symbol",
+            "startLine": 7,
+            "endLine": 26,
+            "hash": "ec694d28136df26e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "get_project_root",
+            "anchorKind": "symbol",
+            "startLine": 29,
+            "endLine": 31,
+            "hash": "03797602c63997c8",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "choose_project",
+            "anchorKind": "symbol",
+            "startLine": 34,
+            "endLine": 39,
+            "hash": "3c5d0b8c4d71d792",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "load_snapshot",
+            "anchorKind": "symbol",
+            "startLine": 42,
+            "endLine": 51,
+            "hash": "81bd55dc86fef3e9",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "reveal_source",
+            "anchorKind": "symbol",
+            "startLine": 54,
+            "endLine": 61,
+            "hash": "21ec2af238259906",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "NodeEnvironmentInfo",
+            "anchorKind": "symbol",
+            "startLine": 64,
+            "endLine": 71,
+            "hash": "6e56ffbe26eb33f6",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "check_node_environment",
+            "anchorKind": "symbol",
+            "startLine": 74,
+            "endLine": 106,
+            "hash": "f7db575139d84a04",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "get_user_home",
+            "anchorKind": "symbol",
+            "startLine": 108,
+            "endLine": 119,
+            "hash": "299cee09225b291c",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "get_appdata_dir",
+            "anchorKind": "symbol",
+            "startLine": 121,
+            "endLine": 129,
+            "hash": "b67e3134f8847b5a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "EditorPlatformInfo",
+            "anchorKind": "symbol",
+            "startLine": 132,
+            "endLine": 155,
+            "hash": "03c18e4ee87d8cc2",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "get_platform_paths",
+            "anchorKind": "symbol",
+            "startLine": 157,
+            "endLine": 207,
+            "hash": "c32389d4914f2621",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "detect_installed_editors",
+            "anchorKind": "symbol",
+            "startLine": 210,
+            "endLine": 295,
+            "hash": "5b8ca57bd488489d",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "sync_editor_plugin",
+            "anchorKind": "symbol",
+            "startLine": 298,
+            "endLine": 370,
+            "hash": "519d0f652c5f3ce0",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "check_app_update",
+            "anchorKind": "symbol",
+            "startLine": 373,
+            "endLine": 407,
+            "hash": "8b0e76699b6e0743",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "download_and_install_update",
+            "anchorKind": "symbol",
+            "startLine": 410,
+            "endLine": 457,
+            "hash": "585ce86ddd830535",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "execute_staged_installer",
+            "anchorKind": "symbol",
+            "startLine": 460,
+            "endLine": 485,
+            "hash": "a68fc25442d279e7",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "list_processes",
+            "anchorKind": "symbol",
+            "startLine": 488,
+            "endLine": 497,
+            "hash": "5ad0c6f4ac333084",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "stop_process",
+            "anchorKind": "symbol",
+            "startLine": 500,
+            "endLine": 536,
+            "hash": "7fa21cd0b2d3704e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "load_knowledge",
+            "anchorKind": "symbol",
+            "startLine": 539,
+            "endLine": 563,
+            "hash": "fb4d61686de7ff8f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src-tauri/src/lib.rs",
+            "symbol": "run",
+            "anchorKind": "symbol",
+            "startLine": 565,
+            "endLine": 585,
+            "hash": "7a04301e3223bb55",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T19:50:08.792Z",
+        "updatedAt": "2026-09-23T19:50:08.792Z"
+      },
+      {
+        "id": "mod-github",
+        "projectId": "mdflow",
+        "title": "Derived module mod-github",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": ".github/RELEASE_NOTES.md",
+            "symbol": "RELEASE_NOTES.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 81,
+            "hash": "a308b4a6793b8114",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-22T08:52:46.259Z",
+        "updatedAt": "2026-09-22T08:52:46.259Z"
+      },
+      {
+        "id": "mod-github-workflows",
+        "projectId": "mdflow",
+        "title": "Derived module mod-github-workflows",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": ".github/workflows/mcp-registry.yml",
+            "symbol": "mcp-registry.yml",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 79,
+            "hash": "f48dfea7260bac74",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.047Z",
+        "updatedAt": "2026-09-24T03:26:14.047Z"
+      },
+      {
+        "id": "mod-packages-application",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-application",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/application/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "217f0f4d376c5574",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.092Z",
+        "updatedAt": "2026-09-24T03:26:14.092Z"
+      },
+      {
+        "id": "mod-packages-application-test",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-application-test",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/application/test/application.test.mjs",
+            "symbol": "application.test.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 691,
+            "hash": "8ca381c5e8aa85d3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T15:59:35.281Z",
+        "updatedAt": "2026-09-21T15:59:35.281Z"
+      },
+      {
+        "id": "mod-packages-code-intel",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-code-intel",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/code-intel/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "5f37a15113e00c64",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.097Z",
+        "updatedAt": "2026-09-24T03:26:14.097Z"
       },
       {
         "id": "mod-packages-code-intel-src",
@@ -4372,6 +6530,30 @@
         "updatedAt": "2026-09-20T17:08:50.392Z"
       },
       {
+        "id": "mod-packages-context",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-context",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/context/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "3d5bfd1c29d9ca93",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.102Z",
+        "updatedAt": "2026-09-24T03:26:14.102Z"
+      },
+      {
         "id": "mod-packages-context-test",
         "projectId": "mdflow",
         "title": "Derived module mod-packages-context-test",
@@ -4394,6 +6576,102 @@
         "history": [],
         "createdAt": "2026-09-20T17:08:50.381Z",
         "updatedAt": "2026-09-20T17:08:50.381Z"
+      },
+      {
+        "id": "mod-packages-domain",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-domain",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/domain/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "c53108752d9c2ccb",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.106Z",
+        "updatedAt": "2026-09-24T03:26:14.106Z"
+      },
+      {
+        "id": "mod-packages-domain-test",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-domain-test",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/domain/test/domain.test.mjs",
+            "symbol": "domain.test.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 443,
+            "hash": "0fd294fe95a07307",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T15:59:35.285Z",
+        "updatedAt": "2026-09-21T15:59:35.285Z"
+      },
+      {
+        "id": "mod-packages-layout",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-layout",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/layout/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "0dd1ba8856e379eb",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.112Z",
+        "updatedAt": "2026-09-24T03:26:14.112Z"
+      },
+      {
+        "id": "mod-packages-mcp",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-mcp",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/mcp/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "795b670d89fb4d35",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.117Z",
+        "updatedAt": "2026-09-24T03:26:14.117Z"
       },
       {
         "id": "mod-packages-mcp-src",
@@ -4437,11 +6715,142 @@
             "role": "implementation",
             "hashMode": null,
             "manifest": null
+          },
+          {
+            "path": "packages/mcp/test/bootstrap-util.test.mjs",
+            "symbol": "bootstrap-util.test.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 171,
+            "hash": "51ffe88d353ff569",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
           }
         ],
         "history": [],
         "createdAt": "2026-09-20T17:08:50.388Z",
         "updatedAt": "2026-09-20T17:08:50.388Z"
+      },
+      {
+        "id": "mod-packages-orchestrator",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-orchestrator",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/orchestrator/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 11,
+            "hash": "8728c552dfe56642",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T04:54:46.560Z",
+        "updatedAt": "2026-09-21T04:54:46.560Z"
+      },
+      {
+        "id": "mod-packages-process-host",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-process-host",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/process-host/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "33d572406ab68338",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.121Z",
+        "updatedAt": "2026-09-24T03:26:14.121Z"
+      },
+      {
+        "id": "mod-packages-process-host-test",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-process-host-test",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/process-host/test/process-host.test.mjs",
+            "symbol": "process-host.test.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 138,
+            "hash": "c1ef75a4b374f9b5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T15:59:35.275Z",
+        "updatedAt": "2026-09-21T15:59:35.275Z"
+      },
+      {
+        "id": "mod-packages-protocol",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-protocol",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/protocol/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "31e726ed8d71da7d",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.126Z",
+        "updatedAt": "2026-09-24T03:26:14.126Z"
+      },
+      {
+        "id": "mod-packages-storage",
+        "projectId": "mdflow",
+        "title": "Derived module mod-packages-storage",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "packages/storage/package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 6,
+            "hash": "fd4b65cd1c77944a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T03:26:14.130Z",
+        "updatedAt": "2026-09-24T03:26:14.130Z"
       },
       {
         "id": "mod-packages-storage-test",
@@ -4466,6 +6875,30 @@
         "history": [],
         "createdAt": "2026-09-20T17:08:50.384Z",
         "updatedAt": "2026-09-20T17:08:50.384Z"
+      },
+      {
+        "id": "mod-plugins-contextos-codex-plugin",
+        "projectId": "mdflow",
+        "title": "Derived module mod-plugins-contextos-codex-plugin",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "plugins/contextos/.codex-plugin/plugin.json",
+            "symbol": "plugin.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 39,
+            "hash": "0de9b0adf1626b12",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T04:54:46.564Z",
+        "updatedAt": "2026-09-21T04:54:46.564Z"
       },
       {
         "id": "mod-plugins-contextos-server",
@@ -11378,6 +13811,109 @@
         "updatedAt": "2026-09-20T09:27:44.149Z"
       },
       {
+        "id": "mod-plugins-contextos-skills-contextos",
+        "projectId": "mdflow",
+        "title": "Derived module mod-plugins-contextos-skills-contextos",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "plugins/contextos/skills/contextos/SKILL.md",
+            "symbol": "SKILL.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 187,
+            "hash": "c76b6c086f13b861",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-23T13:47:46.838Z",
+        "updatedAt": "2026-09-23T13:47:46.838Z"
+      },
+      {
+        "id": "mod-root",
+        "projectId": "mdflow",
+        "title": "Derived module mod-root",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "README.md",
+            "symbol": "README.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 199,
+            "hash": "b6856005f005de0a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "README_zh.md",
+            "symbol": "README_zh.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 199,
+            "hash": "1ac03d524090df79",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "package-lock.json",
+            "symbol": "package-lock.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 1848,
+            "hash": "3b9a7b4718b1feb0",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "package.json",
+            "symbol": "package.json",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 79,
+            "hash": "f30f6ea170ac1d24",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "AI_SETUP.md",
+            "symbol": "AI_SETUP.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 147,
+            "hash": "2d22da673c460b90",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "Dockerfile",
+            "symbol": "Dockerfile",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 25,
+            "hash": "2d63ab43574af486",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-21T04:54:46.538Z",
+        "updatedAt": "2026-09-21T04:54:46.538Z"
+      },
+      {
         "id": "mod-scripts",
         "projectId": "mdflow",
         "title": "Derived module mod-scripts",
@@ -11392,6 +13928,149 @@
             "startLine": 1,
             "endLine": 151,
             "hash": "2ac9ab6af1b8a4f0",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/verify-doc-contract.mjs",
+            "symbol": "read",
+            "anchorKind": "symbol",
+            "startLine": 6,
+            "endLine": 6,
+            "hash": "ff4700558d6d8e6e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/comprehensive-dual-cohort-eval.mjs",
+            "symbol": "estTokens",
+            "anchorKind": "symbol",
+            "startLine": 36,
+            "endLine": 36,
+            "hash": "efd9b1a0398b62f5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/comprehensive-dual-cohort-eval.mjs",
+            "symbol": "setupFixtureRepo",
+            "anchorKind": "symbol",
+            "startLine": 42,
+            "endLine": 407,
+            "hash": "4e27c6ceb3fc6fc1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/comprehensive-dual-cohort-eval.mjs",
+            "symbol": "runComprehensiveDualCohortEval",
+            "anchorKind": "symbol",
+            "startLine": 413,
+            "endLine": 1021,
+            "hash": "cfdc062e7d708478",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/package-windows.mjs",
+            "symbol": "package-windows.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 112,
+            "hash": "2ca748b0b8067076",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/sync-version.mjs",
+            "symbol": "read",
+            "anchorKind": "symbol",
+            "startLine": 11,
+            "endLine": 13,
+            "hash": "65cd0c0689d48182",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/sync-version.mjs",
+            "symbol": "writeIfChanged",
+            "anchorKind": "symbol",
+            "startLine": 15,
+            "endLine": 20,
+            "hash": "43d36dda076522ef",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/sync-version.mjs",
+            "symbol": "replaceRequired",
+            "anchorKind": "symbol",
+            "startLine": 22,
+            "endLine": 27,
+            "hash": "31efba059417eb7f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/sync-version.mjs",
+            "symbol": "updateJson",
+            "anchorKind": "symbol",
+            "startLine": 29,
+            "endLine": 33,
+            "hash": "d78bd4b561f5d13b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/version.mjs",
+            "symbol": "readPackageVersion",
+            "anchorKind": "symbol",
+            "startLine": 11,
+            "endLine": 17,
+            "hash": "a6da5d54e34dc514",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/version.mjs",
+            "symbol": "versionBuildNumber",
+            "anchorKind": "symbol",
+            "startLine": 19,
+            "endLine": 23,
+            "hash": "1d82f37e3be313a2",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/build-plugin.mjs",
+            "symbol": "build-plugin.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 17,
+            "hash": "acf15bf7b69d3a81",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/manual-admin-cli.mjs",
+            "symbol": "runAdmin",
+            "anchorKind": "symbol",
+            "startLine": 21,
+            "endLine": 28,
+            "hash": "00f5c4d5a3212290",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -11436,17 +14115,18 @@
         "id": "chain-desktop",
         "projectId": "mdflow",
         "title": "桌面端链",
-        "summary": "macOS 原生工作台：外壳、画布、检视器与插件同步。",
-        "kind": "linear",
+        "summary": "",
+        "kind": "leaf",
         "memberIds": [
           "block-desktop-shell",
           "block-desktop-canvas",
           "block-desktop-inspector",
-          "block-desktop-installer"
+          "block-desktop-installer",
+          "block-desktop-win"
         ],
         "metadata": {},
         "createdAt": "2026-09-20T08:38:28.672Z",
-        "updatedAt": "2026-09-20T08:38:28.672Z"
+        "updatedAt": "2026-09-23T19:12:03.201Z"
       },
       {
         "id": "chain-distribution",
@@ -11724,6 +14404,32 @@
         "revision": 1,
         "createdAt": "2026-09-20T08:38:28.854Z",
         "updatedAt": "2026-09-20T08:38:28.854Z"
+      },
+      {
+        "id": "block-desktop-win->block-desktop-canvas",
+        "projectId": "mdflow",
+        "from": "block-desktop-win",
+        "to": "block-desktop-canvas",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Windows 桌面端承载图谱画布与拓扑视图",
+        "revision": 1,
+        "createdAt": "2026-09-23T19:12:07.039Z",
+        "updatedAt": "2026-09-23T19:12:07.039Z"
+      },
+      {
+        "id": "block-desktop-win->block-desktop-installer",
+        "projectId": "mdflow",
+        "from": "block-desktop-win",
+        "to": "block-desktop-installer",
+        "kind": "depends_on",
+        "provenance": "authored",
+        "confidence": 1,
+        "reason": "Windows 桌面端调用插件安装与同步逻辑",
+        "revision": 1,
+        "createdAt": "2026-09-23T19:12:11.385Z",
+        "updatedAt": "2026-09-23T19:12:11.385Z"
       },
       {
         "id": "block-distribution-verification->block-macos-packaging",

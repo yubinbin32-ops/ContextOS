@@ -201,7 +201,7 @@ export class TaskService {
     task.baseline.initializedAt = task.baseline.initializedAt || new Date().toISOString();
   }
 
-  _refreshFileAstAndLocators(relPath, content, dbBlocks, task) {
+  _refreshFileAstAndLocators(relPath, content, blockRefsByPath, task) {
     try {
       const structure = LanguageRegistry.parseStructure(relPath, content);
       const fileHash = crypto.createHash('sha256').update(content, 'utf8').digest('hex').slice(0, 16);
@@ -213,6 +213,7 @@ export class TaskService {
         hash: s.hash,
         role: 'implementation',
       }));
+      const locatorsByName = new Map(newLocators.map((locator) => [locator.symbol, locator]));
 
       // 1. Update task locators
       if (task && task.contextSlice) {
@@ -220,36 +221,33 @@ export class TaskService {
         task.contextSlice.locators = [...remaining, ...newLocators];
       }
 
-      // 2. Update matching block artifactRefs
-      for (const block of dbBlocks || []) {
-        let blockModified = false;
-        for (const ref of block.artifactRefs || []) {
-          if (ref.path !== relPath) continue;
-          const anchorKind = ref.anchorKind || (ref.symbol ? 'symbol' : 'file');
-          if (anchorKind === 'symbol') {
-            const symbol = newLocators.find((locator) => locator.symbol === ref.symbol);
-            if (!symbol) continue;
-            ref.anchorKind = 'symbol';
-            if (ref.hash !== symbol.hash) {
-              ref.hash = symbol.hash;
-              blockModified = true;
-            }
-            if (ref.startLine !== symbol.startLine || ref.endLine !== symbol.endLine) {
-              ref.startLine = symbol.startLine;
-              ref.endLine = symbol.endLine;
-              blockModified = true;
-            }
-          } else {
-            ref.anchorKind = 'file';
-            if (ref.hash !== fileHash) {
-              ref.hash = fileHash;
-              blockModified = true;
-            }
+      // 2. Update only Block refs anchored to this file, and persist each Block once.
+      const modifiedBlocks = new Set();
+      for (const { block, ref } of blockRefsByPath.get(relPath) || []) {
+        const anchorKind = ref.anchorKind || (ref.symbol ? 'symbol' : 'file');
+        if (anchorKind === 'symbol') {
+          const symbol = locatorsByName.get(ref.symbol);
+          if (!symbol) continue;
+          ref.anchorKind = 'symbol';
+          if (ref.hash !== symbol.hash) {
+            ref.hash = symbol.hash;
+            modifiedBlocks.add(block);
+          }
+          if (ref.startLine !== symbol.startLine || ref.endLine !== symbol.endLine) {
+            ref.startLine = symbol.startLine;
+            ref.endLine = symbol.endLine;
+            modifiedBlocks.add(block);
+          }
+        } else {
+          ref.anchorKind = 'file';
+          if (ref.hash !== fileHash) {
+            ref.hash = fileHash;
+            modifiedBlocks.add(block);
           }
         }
-        if (blockModified) {
-          this.db.saveBlock(block);
-        }
+      }
+      for (const block of modifiedBlocks) {
+        this.db.saveBlock(block);
       }
     } catch (_) {}
   }
@@ -282,6 +280,15 @@ export class TaskService {
       ),
       ...readScopedGitChangedPaths(projectRoot, scope),
     ]);
+
+    const blockRefsByPath = new Map();
+    for (const block of dbBlocks || []) {
+      for (const ref of block.artifactRefs || []) {
+        const refs = blockRefsByPath.get(ref.path) || [];
+        refs.push({ block, ref });
+        blockRefsByPath.set(ref.path, refs);
+      }
+    }
 
     // High-precision host modification detection via mtime + SHA256 hash comparison.
     for (const relPath of candidateFiles) {
@@ -326,7 +333,7 @@ export class TaskService {
         }
 
         const currentHash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
-        const blockRef = dbBlocks.flatMap((b) => b.artifactRefs || []).find((r) => r.path === relPath);
+        const blockRef = blockRefsByPath.get(relPath)?.[0]?.ref || null;
         const baseHash = snapshot ? snapshot.hash : (blockRef?.hash || null);
 
         if (!baseHash || currentHash !== baseHash) {
@@ -343,7 +350,7 @@ export class TaskService {
           };
 
           // Seamlessly refresh AST outlines and update block locators
-          this._refreshFileAstAndLocators(relPath, content.toString('utf8'), dbBlocks, task);
+          this._refreshFileAstAndLocators(relPath, content.toString('utf8'), blockRefsByPath, task);
 
           task.addNote({
             text: `[Host Native Modification] Detected external disk modification in '${relPath}' via mtime/SHA256 comparison (${baseHash ? `${baseHash.slice(0, 8)} -> ${currentHash.slice(0, 8)}` : `new: ${currentHash.slice(0, 8)}`}). Working set and AST outlines refreshed.`,
@@ -545,13 +552,14 @@ export class TaskService {
             ? `Plan '${plan.id}' is completed.`
             : `Task lease expired after ${staleMs}ms without progress.`
         );
-        this.db.saveTask(task.toJSON());
+        const blocked = task.toJSON();
+        this.db.saveTask(blocked);
+        Object.assign(raw, blocked);
         blockedTaskIds.push(task.id);
       }
     }
 
-    const remainingActive = this.db
-      .listTasks()
+    const remainingActive = tasks
       .filter(
         (task) =>
           planMap.has(task.planId) &&

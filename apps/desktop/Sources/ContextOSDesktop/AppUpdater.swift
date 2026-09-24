@@ -149,6 +149,12 @@ public enum UpdateState: Equatable, Sendable {
     }
 }
 
+enum AppSignatureIdentity: Equatable, Sendable {
+    case developerID(teamIdentifier: String)
+    case adHoc
+    case unknown
+}
+
 // MARK: - AppUpdater Engine
 
 @MainActor
@@ -176,7 +182,7 @@ public final class AppUpdater: NSObject, ObservableObject {
         if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, !version.isEmpty {
             return version
         }
-        return "2.5.0"
+        return ContextOSVersion.current
     }
 
     public var currentBuildNumber: String {
@@ -448,8 +454,11 @@ public final class AppUpdater: NSObject, ObservableObject {
 
             do {
                 try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                var keepStaging = false
                 defer {
-                    try? fm.removeItem(at: tempDir)
+                    if !keepStaging {
+                        try? fm.removeItem(at: tempDir)
+                    }
                     try? fm.removeItem(at: downloadedZipURL)
                 }
                 let zipDest = tempDir.appendingPathComponent("update.zip")
@@ -493,6 +502,7 @@ public final class AppUpdater: NSObject, ObservableObject {
                     try Self.verifyCodeSignature(stagedApp: stagedApp, currentApp: Bundle.main.bundleURL)
                 }
 
+                keepStaging = true
                 await self?.updateStateOnMain(.readyToInstall(stagedAppURL: stagedApp, version: release.version))
             } catch {
                 await self?.updateStateOnMain(.failed(message: error.localizedDescription))
@@ -578,46 +588,67 @@ public final class AppUpdater: NSObject, ObservableObject {
         return output
     }
 
-    nonisolated private static func teamIdentifier(for appURL: URL) -> String? {
-        guard let output = try? runTool("/usr/bin/codesign", arguments: ["-dv", "--verbose=4", appURL.path]) else {
-            return nil
+    nonisolated static func signatureIdentity(from details: String) -> AppSignatureIdentity {
+        let lines = details.split(whereSeparator: \.isNewline).map {
+            String($0).trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        for line in output.split(whereSeparator: \.isNewline) {
-            let value = String(line)
-            if value.hasPrefix("TeamIdentifier=") {
-                let team = String(value.dropFirst("TeamIdentifier=".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-                return team.isEmpty ? nil : team
-            }
+        if lines.contains("Signature=adhoc") {
+            return .adHoc
         }
-        return nil
+
+        let team = lines.first(where: { $0.hasPrefix("TeamIdentifier=") })
+            .map { String($0.dropFirst("TeamIdentifier=".count)).trimmingCharacters(in: .whitespacesAndNewlines) }
+        let hasDeveloperIDAuthority = lines.contains(where: { $0.hasPrefix("Authority=Developer ID Application") })
+        guard hasDeveloperIDAuthority,
+              let team,
+              !team.isEmpty,
+              team != "not set" else {
+            return .unknown
+        }
+        return .developerID(teamIdentifier: team)
+    }
+
+    nonisolated static func validateSignatureCompatibility(current: AppSignatureIdentity, staged: AppSignatureIdentity) throws {
+        switch (current, staged) {
+        case (.developerID(let currentTeam), .developerID(let stagedTeam)) where currentTeam == stagedTeam:
+            return
+        case (.adHoc, .adHoc):
+            return
+        case (.adHoc, .developerID):
+            // A local/ad-hoc installation may migrate to a properly signed release.
+            return
+        case (.developerID, .adHoc):
+            throw NSError(domain: "AppUpdater", code: 11, userInfo: [
+                NSLocalizedDescriptionKey: "更新包是 ad-hoc 签名，低于当前应用的 Developer ID 签名等级，已拒绝自动更新",
+            ])
+        case (.developerID, .developerID):
+            throw NSError(domain: "AppUpdater", code: 11, userInfo: [
+                NSLocalizedDescriptionKey: "更新包签名 TeamIdentifier 与当前应用不一致",
+            ])
+        case (.unknown, _), (_, .unknown):
+            throw NSError(domain: "AppUpdater", code: 12, userInfo: [
+                NSLocalizedDescriptionKey: "无法确认更新包或当前应用的签名身份，已拒绝自动更新",
+            ])
+        }
     }
 
     nonisolated private static func verifyCodeSignature(stagedApp: URL, currentApp: URL) throws {
         _ = try runTool("/usr/bin/codesign", arguments: ["--verify", "--deep", "--strict", "--verbose=2", stagedApp.path])
-        guard let currentTeam = teamIdentifier(for: currentApp), !currentTeam.isEmpty else {
-            throw NSError(domain: "AppUpdater", code: 10, userInfo: [
-                NSLocalizedDescriptionKey: "当前应用没有 Developer ID TeamIdentifier，已拒绝自动更新",
-            ])
-        }
-        guard let stagedTeam = teamIdentifier(for: stagedApp), stagedTeam == currentTeam else {
-            throw NSError(domain: "AppUpdater", code: 11, userInfo: [
-                NSLocalizedDescriptionKey: "更新包签名 TeamIdentifier 与当前应用不一致",
-            ])
-        }
-        let details = try runTool("/usr/bin/codesign", arguments: ["-dv", "--verbose=4", stagedApp.path])
-        let hasDeveloperIDAuthority = details.split(whereSeparator: \.isNewline).contains { line in
-            line.hasPrefix("Authority=Developer ID Application")
-        }
-        guard hasDeveloperIDAuthority else {
-            throw NSError(domain: "AppUpdater", code: 12, userInfo: [
-                NSLocalizedDescriptionKey: "更新包不是 Developer ID Application 签名",
-            ])
-        }
-        guard Bundle(url: stagedApp)?.bundleIdentifier == Bundle(url: currentApp)?.bundleIdentifier else {
+
+        guard let currentBundleID = Bundle(url: currentApp)?.bundleIdentifier,
+              let stagedBundleID = Bundle(url: stagedApp)?.bundleIdentifier,
+              currentBundleID == stagedBundleID else {
             throw NSError(domain: "AppUpdater", code: 13, userInfo: [
                 NSLocalizedDescriptionKey: "更新包 Bundle Identifier 与当前应用不一致",
             ])
         }
+
+        let currentDetails = try runTool("/usr/bin/codesign", arguments: ["-dv", "--verbose=4", currentApp.path])
+        let stagedDetails = try runTool("/usr/bin/codesign", arguments: ["-dv", "--verbose=4", stagedApp.path])
+        try validateSignatureCompatibility(
+            current: signatureIdentity(from: currentDetails),
+            staged: signatureIdentity(from: stagedDetails)
+        )
     }
 
     // MARK: - Final Swap & Relaunch
@@ -641,6 +672,13 @@ public final class AppUpdater: NSObject, ObservableObject {
         PID="$CONTEXTOS_UPDATE_PID"
         STAGED="$CONTEXTOS_UPDATE_STAGED"
         TARGET="$CONTEXTOS_UPDATE_TARGET"
+        STAGING_ROOT="${CONTEXTOS_UPDATE_STAGING_ROOT:-}"
+
+        cleanup_staging() {
+            if [ -n "$STAGING_ROOT" ] && [ -d "$STAGING_ROOT" ]; then
+                rm -rf "$STAGING_ROOT"
+            fi
+        }
 
         while kill -0 "$PID" 2>/dev/null; do
             sleep 0.2
@@ -653,12 +691,14 @@ public final class AppUpdater: NSObject, ObservableObject {
         if /usr/bin/ditto "$STAGED" "$TARGET"; then
             rm -rf "$BACKUP"
             /usr/bin/open "$TARGET"
+            cleanup_staging
             rm -f "$0"
             exit 0
         fi
 
         rm -rf "$TARGET"
         mv "$BACKUP" "$TARGET"
+        cleanup_staging
         rm -f "$0"
         exit 1
         """
@@ -675,6 +715,10 @@ public final class AppUpdater: NSObject, ObservableObject {
             environment["CONTEXTOS_UPDATE_PID"] = String(pid)
             environment["CONTEXTOS_UPDATE_STAGED"] = stagedAppURL.path
             environment["CONTEXTOS_UPDATE_TARGET"] = currentBundleURL.path
+            environment["CONTEXTOS_UPDATE_STAGING_ROOT"] = stagedAppURL
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .path
             process.environment = environment
             try process.run()
 
@@ -746,29 +790,18 @@ public final class AppUpdater: NSObject, ObservableObject {
     }
 
     private static func queryNodeVersion(executablePath: String) -> String? {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: executablePath)
-        process.arguments = ["-v"]
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            return output.isEmpty ? nil : output
-        } catch {
-            return nil
-        }
+        runProcess(executablePath: executablePath, arguments: ["-v"])
     }
 
     private static func runShell(_ command: String) -> String? {
+        runProcess(executablePath: "/bin/zsh", arguments: ["-l", "-c", command])
+    }
+
+    private static func runProcess(executablePath: String, arguments: [String]) -> String? {
         let process = Process()
         let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-l", "-c", command]
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
         process.standardOutput = pipe
         process.standardError = Pipe()
         do {

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import path from 'node:path';
-import fs from 'node:fs';
 import { V2Database, SyncEngine } from '../../../packages/storage/src/index.mjs';
 import { IPCServer, getSocketPath } from '../../../packages/protocol/src/index.mjs';
 

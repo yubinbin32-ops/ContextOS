@@ -103,23 +103,23 @@ export class LanguageRegistry {
       } else if (lang === 'python') {
         this._parsePython(lines, symbols, imports, content);
       } else if (lang === 'go') {
-        this._parseGo(lines, symbols, imports, content);
+        this._parseGo(lines, symbols);
       } else if (lang === 'rust') {
-        this._parseRust(lines, symbols, imports, content);
+        this._parseRust(lines, symbols);
       } else if (lang === 'swift') {
-        this._parseSwift(lines, symbols, imports, content);
+        this._parseSwift(lines, symbols, imports);
       } else if (lang === 'java') {
-        this._parseJava(lines, symbols, imports, content);
+        this._parseJava(lines, symbols, imports);
       } else if (lang === 'kotlin') {
-        this._parseKotlin(lines, symbols, imports, content);
+        this._parseKotlin(lines, symbols, imports);
       } else if (lang === 'cpp') {
-        this._parseCpp(lines, symbols, imports, content);
+        this._parseCpp(lines, symbols, imports);
       } else if (lang === 'csharp') {
-        this._parseCSharp(lines, symbols, imports, content);
+        this._parseCSharp(lines, symbols, imports);
       } else if (lang === 'php') {
-        this._parsePhp(lines, symbols, imports, content);
+        this._parsePhp(lines, symbols, imports);
       } else if (lang === 'ruby') {
-        this._parseRuby(lines, symbols, imports, content);
+        this._parseRuby(lines, symbols, imports);
       } else {
         // Fallback L1
         symbols.push({
@@ -148,8 +148,8 @@ export class LanguageRegistry {
   static _parseJsTs(lines, symbols, imports, fullText) {
     try {
       this._parseJsTsWithBabel(lines, symbols, imports, fullText);
-    } catch (err) {
-      this._parseJsTsFallback(lines, symbols, imports, fullText);
+    } catch {
+      this._parseJsTsFallback(lines, symbols, imports);
     }
   }
 
@@ -332,12 +332,11 @@ export class LanguageRegistry {
     }
   }
 
-  static _parseJsTsFallback(lines, symbols, imports, fullText) {
+  static _parseJsTsFallback(lines, symbols, imports) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const trimmed = line.trim();
       const lineNum = i + 1;
 
       // Imports
@@ -547,7 +546,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parseGo(lines, symbols, imports, fullText) {
+  static _parseGo(lines, symbols) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const lineNum = i + 1;
@@ -597,7 +596,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parseRust(lines, symbols, imports, fullText) {
+  static _parseRust(lines, symbols) {
     let currentImpl = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -667,7 +666,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parseSwift(lines, symbols, imports, fullText) {
+  static _parseSwift(lines, symbols, imports) {
     let currentType = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -741,7 +740,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parseJava(lines, symbols, imports, fullText) {
+  static _parseJava(lines, symbols, imports) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -800,7 +799,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parseKotlin(lines, symbols, imports, fullText) {
+  static _parseKotlin(lines, symbols, imports) {
     let currentType = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -851,7 +850,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parseCpp(lines, symbols, imports, fullText) {
+  static _parseCpp(lines, symbols, imports) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -921,7 +920,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parseCSharp(lines, symbols, imports, fullText) {
+  static _parseCSharp(lines, symbols, imports) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -980,7 +979,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parsePhp(lines, symbols, imports, fullText) {
+  static _parsePhp(lines, symbols, imports) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {
@@ -1034,7 +1033,7 @@ print(json.dumps({"imports": imports, "symbols": symbols}))
     }
   }
 
-  static _parseRuby(lines, symbols, imports, fullText) {
+  static _parseRuby(lines, symbols, imports) {
     let currentClass = null;
 
     for (let i = 0; i < lines.length; i++) {

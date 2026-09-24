@@ -945,3 +945,65 @@ end
   assert.ok(pipeSym.calls.includes('finish'));
   assert.equal(pipeSym.calls.includes('doSecretWork'), false);
 });
+
+test('CodeTools.read supports multiple ranges', () => {
+  const read = CodeTools.read('src/engine.js', JS_CODE, {
+    ranges: [
+      { startLine: 1, endLine: 2 },
+      { startLine: 9, endLine: 12 },
+    ],
+  });
+  assert.equal(read.ranges.length, 2);
+  assert.ok(read.code.includes("import fs from 'node:fs';"));
+  assert.ok(read.code.includes("console.log('Starting ' + this.name);"));
+  assert.ok(!read.code.includes('constructor(name)'));
+});
+
+test('CodeTools.edit supports fullFile replacement', () => {
+  const replacement = 'export const full = 42;\n';
+  const edited = CodeTools.edit('src/engine.js', JS_CODE, {
+    replacementContent: replacement,
+    fullFile: true,
+  });
+  assert.equal(edited.newContent, replacement);
+  assert.ok(edited.newHash);
+  assert.ok(Array.isArray(edited.updatedLocators));
+});
+
+test('applyChangeset supports overwrite: true for create on existing file', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'changeset-overwrite-'));
+  try {
+    const filePath = path.join(tmpDir, 'test.txt');
+    fs.writeFileSync(filePath, 'original content', 'utf8');
+
+    // Without overwrite: true, it throws
+    assert.throws(
+      () => applyChangeset(tmpDir, [{ kind: 'create', path: 'test.txt', content: 'new content' }]),
+      /cannot create existing file/
+    );
+
+    // With overwrite: true, it successfully overwrites
+    const result = applyChangeset(tmpDir, [{ kind: 'create', path: 'test.txt', content: 'overwritten content', overwrite: true }]);
+    assert.equal(result.files.length, 1);
+    assert.equal(fs.readFileSync(filePath, 'utf8'), 'overwritten content');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('applyChangeset supports fullFile: true for edit', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'changeset-fullfile-'));
+  try {
+    const filePath = path.join(tmpDir, 'fullfile.js');
+    fs.writeFileSync(filePath, 'const oldCode = 1;\n', 'utf8');
+
+    const result = applyChangeset(tmpDir, [
+      { kind: 'edit', path: 'fullfile.js', replacement: 'const newCode = 2;\n', fullFile: true },
+    ]);
+    assert.equal(result.files.length, 1);
+    assert.equal(fs.readFileSync(filePath, 'utf8'), 'const newCode = 2;\n');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+

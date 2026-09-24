@@ -2,61 +2,71 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NetworkLayoutEngine } from '../src/index.mjs';
 
-test('NetworkLayoutEngine computes deterministic Metro Map layout without long snake', () => {
-  const blocks = [
-    { id: 'b1', title: 'Input Gateway' },
-    { id: 'b2', title: 'Auth Service' },
-    { id: 'b3', title: 'Billing Service' },
-    { id: 'b4', title: 'Notification Service' },
-    { id: 'b5', title: 'Analytics' },
-    { id: 'b6', title: 'Database' },
-  ];
+test('NetworkLayoutEngine computes deterministic square shelf layout', () => {
+  const blocks = Array.from({ length: 59 }, (_, index) => ({
+    id: `b${String(index + 1).padStart(2, '0')}`,
+    title: `Block ${index + 1}`,
+  }));
 
-  const chains = [
-    { id: 'chain-core', memberIds: ['b1', 'b2', 'b6'] },
-    { id: 'chain-business', memberIds: ['b3', 'b4', 'b5'] },
-  ];
-
-  const links = [
-    { id: 'l1', from: 'b1', to: 'b2', kind: 'flows_to' },
-    { id: 'l2', from: 'b2', to: 'b3', kind: 'calls' },
-    { id: 'l3', from: 'b2', to: 'b4', kind: 'calls' },
-    { id: 'l4', from: 'b3', to: 'b6', kind: 'depends_on' },
-    { id: 'l5', from: 'b4', to: 'b5', kind: 'flows_to' },
-  ];
-
-  const layout = NetworkLayoutEngine.computeLayout({
-    blocks,
-    chains,
-    links,
+  const lengths = [9, 8, 7, 6, 5, 4, 3, 3, 3, 2, 2, 2, 1];
+  let cursor = 0;
+  const chains = lengths.map((length, index) => {
+    const memberIds = blocks.slice(cursor, cursor + length).map((block) => block.id);
+    cursor += length;
+    return { id: `chain-${index + 1}`, memberIds };
   });
 
-  assert.equal(layout.nodes.length, 6);
-  assert.equal(layout.edges.length, 5);
-  assert.ok(layout.bounds.width >= 1200);
-  assert.ok(layout.bounds.height >= 800);
+  const links = blocks.slice(1).map((block, index) => ({
+    id: `l${index + 1}`,
+    from: blocks[index].id,
+    to: block.id,
+    kind: 'flows_to',
+  }));
 
-  // Metro Track validation:
-  // Nodes in chain-core (track 0) share the same Y
-  const nodeB1 = layout.nodes.find((n) => n.id === 'b1');
-  const nodeB2 = layout.nodes.find((n) => n.id === 'b2');
-  const nodeB6 = layout.nodes.find((n) => n.id === 'b6');
-  assert.equal(nodeB1.y, nodeB2.y);
-  assert.equal(nodeB2.y, nodeB6.y);
+  const layout = NetworkLayoutEngine.computeLayout({ blocks, chains, links });
 
-  // Consecutive stations along the line proceed from left to right
-  assert.ok(nodeB1.x < nodeB2.x);
-  assert.ok(nodeB2.x < nodeB6.x);
+  assert.equal(layout.nodes.length, blocks.length);
+  assert.equal(layout.edges.length, links.length);
+  assert.deepEqual(
+    layout.nodes.map((node) => node.id).sort(),
+    blocks.map((block) => block.id).sort(),
+  );
 
-  // Nodes in chain-business reside on a subsequent track (track 1) with higher Y
-  const nodeB3 = layout.nodes.find((n) => n.id === 'b3');
-  assert.ok(nodeB1.y < nodeB3.y);
+  const occupied = layout.nodes.map((node) => `${node.x},${node.y}`);
+  assert.equal(new Set(occupied).size, blocks.length, 'blocks must not overlap in the shelf grid');
+  assert.ok(new Set(layout.nodes.map((node) => node.x)).size > 1, 'layout must use multiple columns');
+  assert.ok(new Set(layout.nodes.map((node) => node.y)).size > 1, 'layout must use multiple rows');
 
-  // Re-running layout must be 100% deterministic (same positions)
-  const layout2 = NetworkLayoutEngine.computeLayout({
-    blocks,
-    chains,
-    links,
-  });
+  const aspect = layout.bounds.width / layout.bounds.height;
+  assert.ok(aspect > 0.72 && aspect < 1.4, `layout bounds should be near-square, received ${aspect}`);
+  assert.ok(layout.bounds.height < layout.bounds.width * 1.6, 'layout must not regress to a vertical stack');
+
+  const layout2 = NetworkLayoutEngine.computeLayout({ blocks, chains, links });
   assert.deepEqual(layout.nodes, layout2.nodes);
+});
+
+test('NetworkLayoutEngine keeps a shared-chain suffix near its owned anchors', () => {
+  const anchors = Array.from({ length: 7 }, (_, index) => `anchor-${index}`);
+  const filler = Array.from({ length: 40 }, (_, index) => `f${String(index).padStart(2, '0')}`);
+  const detached = 'detached';
+  const blocks = [...anchors, detached, ...filler].map((id) => ({ id, title: id }));
+  const chains = [
+    { id: 'primary', memberIds: anchors },
+    { id: 'shared-suffix', memberIds: [anchors[1], anchors[2], detached] },
+  ];
+  const links = anchors.slice(1).map((id, index) => ({
+    id: `anchor-link-${index}`,
+    from: anchors[index],
+    to: id,
+  }));
+
+  const layout = NetworkLayoutEngine.computeLayout({ blocks, chains, links });
+  const detachedNode = layout.nodes.find((node) => node.id === detached);
+  const anchorNode = layout.nodes.find((node) => node.id === anchors[2]);
+
+  assert.ok(detachedNode);
+  assert.ok(anchorNode);
+  const columnDistance = Math.abs(detachedNode.x - anchorNode.x) / 300;
+  const rowDistance = Math.abs(detachedNode.y - anchorNode.y) / 200;
+  assert.ok(columnDistance + rowDistance <= 2, 'shared-chain suffix must stay beside its anchors');
 });

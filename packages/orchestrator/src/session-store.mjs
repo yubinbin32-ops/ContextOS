@@ -21,6 +21,7 @@ function emptySession(projectId, intent) {
     touchedFiles: [],
     receipts: [],
     notes: [],
+    slots: {},
     startedAt: now,
     updatedAt: now,
     closedAt: null,
@@ -41,7 +42,41 @@ export class SessionStore {
     this.projectId = projectId;
     this.dotDir = path.join(projectRoot, '.contextos');
     this.sessionPath = path.join(this.dotDir, 'session.json');
+    this.blackboardPath = path.join(this.dotDir, 'blackboard.md');
     this.historyPath = path.join(this.dotDir, 'logs', 'sessions', 'history.jsonl');
+  }
+
+  renderBlackboard(session = this.current) {
+    if (!session) {
+      return '# ContextOS Blackboard\n- Status: idle (no open session)\n';
+    }
+    const lines = [
+      '# ContextOS Blackboard',
+      `- Session: \`${session.id}\` (${session.status})`,
+      `- Intent: ${session.intent || '(none)'}`,
+    ];
+    if (session.touchedFiles.length) {
+      const paths = session.touchedFiles.slice(-5).map((f) => `\`${f.path}\``).join(', ');
+      lines.push(`- Working Files: ${paths}${session.touchedFiles.length > 5 ? ` (+${session.touchedFiles.length - 5})` : ''}`);
+    }
+    if (session.receipts.length) {
+      const last = session.receipts[session.receipts.length - 1];
+      lines.push(`- Last Verify: \`${last.command}\` -> exit ${last.exitCode} (${last.status || 'done'})`);
+    }
+    if (session.notes.length) {
+      const lastNote = session.notes[session.notes.length - 1];
+      lines.push(`- Note: ${lastNote.text.slice(0, 100)}`);
+    }
+    return lines.join('\n') + '\n';
+  }
+
+  saveBlackboard(session = this.current) {
+    const md = this.renderBlackboard(session);
+    try {
+      fs.mkdirSync(this.dotDir, { recursive: true });
+      fs.writeFileSync(this.blackboardPath, md, 'utf8');
+    } catch (_) {}
+    return md;
   }
 
   load() {
@@ -57,6 +92,7 @@ export class SessionStore {
     session.updatedAt = new Date().toISOString();
     fs.mkdirSync(this.dotDir, { recursive: true });
     fs.writeFileSync(this.sessionPath, JSON.stringify(session, null, 2) + '\n', 'utf8');
+    this.saveBlackboard(session);
     return session;
   }
 
@@ -163,6 +199,18 @@ export class SessionStore {
       session.notes = session.notes.slice(-MAX_NOTES);
     }
     return this.save(session);
+  }
+
+  setSlots(slots = {}) {
+    const session = this.ensureSession();
+    session.slots = { ...(session.slots || {}), ...slots };
+    return this.save(session);
+  }
+
+  getSlot(slotKey) {
+    const session = this.current;
+    if (!session || !session.slots) return null;
+    return session.slots[slotKey] || null;
   }
 
   close(summary = '') {

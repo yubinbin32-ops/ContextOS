@@ -2,24 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   Plan,
-  Phase,
-  PlanCheckpoint,
   Task,
   Block,
   ArtifactRef,
-  Chain,
-  Link,
   DecisionDocument,
   Rule,
   assertBlockHasRealCode,
-  assertCheckpointBelongsToPlan,
   checkTaskCoverage,
-  assertPlanCanBeCompleted,
   assertPlanCanBeCompletedWithTasks,
   assertPlanStatusTransition,
   assertPlanStructure,
   assertTaskStatusTransition,
-  InvariantViolationError,
 } from '../src/index.mjs';
 
 test('Plan and Checkpoints lifecycle', () => {

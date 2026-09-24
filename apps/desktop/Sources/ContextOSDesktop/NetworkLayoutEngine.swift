@@ -64,7 +64,14 @@ enum NetworkLayoutEngine {
                 return $0.joined(separator: "\u{0}") < $1.joined(separator: "\u{0}")
             }
 
-        let cells = place(nodes: nodes, edges: validEdges, chains: chains, metadata: metadata, districts: districts)
+        let cells = place(
+            nodes: nodes,
+            edges: validEdges,
+            chains: chains,
+            metadata: metadata,
+            districts: districts,
+            cardSize: cardSize
+        )
         let minimumX = cells.values.map(\.x).min() ?? 0
         let minimumY = cells.values.map(\.y).min() ?? 0
         let xStep = cardSize.width + 80
@@ -98,71 +105,218 @@ enum NetworkLayoutEngine {
         return directFirstRoute(source: sourceFrame, target: targetFrame, obstacles: [], used: [], lane: lane)
             ?? fallbackRoute(source: sourceFrame, target: targetFrame, horizontal: horizontal, sourceOffset: lane, targetOffset: lane)
     }
+    // MARK: - Chain-aware Square Shelf Placement
 
-    static func routeLane(index: Int, count: Int, maximumSpread: CGFloat = 24) -> CGFloat {
-        guard count > 1 else { return 0 }
-        let step = min(5, maximumSpread * 2 / CGFloat(count - 1))
-        return (CGFloat(index) - CGFloat(count - 1) / 2) * step
+    private struct PlacementSegment {
+        let id: String
+        let memberIds: [String]
+        let anchorIds: [String]
+        let insertAfterAnchorID: String?
     }
 
-    // MARK: - Metro Map Rail Placement
+    private struct ShelfCandidate {
+        let columns: Int
+        let rows: [[String]]
+        let score: Double
+    }
 
     private static func place(
         nodes: [String], edges: [LayoutEdge], chains: [[String]],
-        metadata: [String: LayoutNodeMetadata], districts: [String: Int]
+        metadata: [String: LayoutNodeMetadata], districts: [String: Int], cardSize: CGSize
     ) -> [String: Cell] {
-        var result: [String: Cell] = [:]
-        var occupied: Set<Cell> = []
+        let sortedNodes = nodes.sorted()
+        guard !sortedNodes.isEmpty else { return [:] }
 
-        func reserve(_ node: String, at cell: Cell) {
-            result[node] = cell
-            occupied.insert(cell)
+        let nodeSet = Set(sortedNodes)
+        var edgeNeighbors: [String: Set<String>] = [:]
+        for edge in edges {
+            edgeNeighbors[edge.sourceID, default: []].insert(edge.targetID)
+            edgeNeighbors[edge.targetID, default: []].insert(edge.sourceID)
+        }
+        let xStep = max(1, cardSize.width + 80)
+        let yStep = max(1, cardSize.height + 90)
+        var ownedBlocks: Set<String> = []
+        var segments: [PlacementSegment] = []
+
+        for path in chains {
+            var seen: Set<String> = []
+            let members = path.filter { nodeSet.contains($0) && seen.insert($0).inserted }
+            let unownedIndices = members.indices.filter { !ownedBlocks.contains(members[$0]) }
+            guard !unownedIndices.isEmpty else { continue }
+
+            // Keep each unowned run attached to its nearest owned Chain
+            // neighbours instead of treating a shared-chain suffix as a new
+            // standalone Block.
+            var run: [Int] = []
+            func flushRun() {
+                guard let first = run.first, let last = run.last else { return }
+                let previous = members[..<first].last { ownedBlocks.contains($0) }
+                let next = members[(last + 1)...].first { ownedBlocks.contains($0) }
+                let anchors = [previous, next].compactMap { $0 }
+                segments.append(
+                    PlacementSegment(
+                        id: "chain:\(members.joined(separator: "\u{0}")):\(first)",
+                        memberIds: run.map { members[$0] },
+                        anchorIds: anchors,
+                        insertAfterAnchorID: previous
+                    )
+                )
+                run = []
+            }
+
+            for index in members.indices {
+                if ownedBlocks.contains(members[index]) {
+                    flushRun()
+                } else {
+                    run.append(index)
+                }
+            }
+            flushRun()
+            for index in unownedIndices { ownedBlocks.insert(members[index]) }
         }
 
-        var currentTrackY = 0
+        let chainOwnedBlocks = ownedBlocks
+        for node in sortedNodes where !ownedBlocks.contains(node) {
+            let anchors = edgeNeighbors[node, default: []]
+                .filter { chainOwnedBlocks.contains($0) }
+                .sorted()
+            segments.append(
+                PlacementSegment(
+                    id: "block:\(node)",
+                    memberIds: [node],
+                    anchorIds: anchors,
+                    insertAfterAnchorID: anchors.first
+                )
+            )
+            ownedBlocks.insert(node)
+        }
 
-        // 1. Place each Chain as a distinct horizontal rail line track
-        for path in chains {
-            guard !path.isEmpty else { continue }
-            let trackY = currentTrackY
-            currentTrackY += 1
+        func chooseShelf() -> ShelfCandidate {
+            var best: ShelfCandidate?
 
-            var nextX = 0
-            for node in path {
-                if result[node] != nil {
-                    // Interchange station already placed on an earlier line
+            for columns in 1...sortedNodes.count {
+                var chunks: [PlacementSegment] = []
+                var splitCount = 0
+
+                for segment in segments {
+                    let count = segment.memberIds.count
+                    if count > columns { splitCount += (count - 1) / columns }
+                    var start = 0
+                    while start < count {
+                        let end = min(start + columns, count)
+                        chunks.append(
+                            PlacementSegment(
+                                id: "\(segment.id):\(start / columns)",
+                                memberIds: Array(segment.memberIds[start..<end]),
+                                anchorIds: [],
+                                insertAfterAnchorID: nil
+                            )
+                        )
+                        start += columns
+                    }
+                }
+
+                chunks.sort {
+                    if $0.memberIds.count != $1.memberIds.count {
+                        return $0.memberIds.count > $1.memberIds.count
+                    }
+                    return $0.id < $1.id
+                }
+
+                var rows: [[String]] = []
+                for chunk in chunks {
+                    var target: Int?
+                    for rowIndex in rows.indices {
+                        guard rows[rowIndex].count + chunk.memberIds.count <= columns else { continue }
+                        if target == nil || rows[rowIndex].count < rows[target!].count {
+                            target = rowIndex
+                        }
+                    }
+                    if let target {
+                        rows[target].append(contentsOf: chunk.memberIds)
+                    } else {
+                        rows.append(chunk.memberIds)
+                    }
+                }
+
+                let rowWidths = rows.map(\.count)
+                let maxWidth = rowWidths.max() ?? 0
+                let minWidth = rowWidths.min() ?? 0
+                let pixelWidth = CGFloat(maxWidth - 1) * xStep + cardSize.width + 240
+                let pixelHeight = CGFloat(rows.count - 1) * yStep + cardSize.height + 240
+                let squareness = abs(log(Double(pixelWidth / pixelHeight)))
+                let fill = Double(sortedNodes.count) / Double(columns * rows.count)
+                let balance = Double(maxWidth - minWidth) / Double(columns)
+                let score = squareness + Double(splitCount) * 0.16 + (1 - fill) * 0.18 + balance * 0.08
+                let candidate = ShelfCandidate(columns: columns, rows: rows, score: score)
+
+                if let current = best {
+                    if candidate.score < current.score - 1e-9 ||
+                        (abs(candidate.score - current.score) <= 1e-9 && candidate.columns > current.columns) {
+                        best = candidate
+                    }
+                } else {
+                    best = candidate
+                }
+            }
+
+            return best!
+        }
+
+        let shelf = chooseShelf()
+        var rows = shelf.rows
+        // Shelf packing owns density; this pass restores local topology by
+        // inserting anchored runs beside their already placed neighbours.
+        let anchoredSegments = segments.filter { !$0.anchorIds.isEmpty }
+        let anchoredIDs = Set(anchoredSegments.flatMap(\.memberIds))
+        if !anchoredIDs.isEmpty {
+            rows = rows
+                .map { $0.filter { !anchoredIDs.contains($0) } }
+                .filter { !$0.isEmpty }
+
+            for segment in anchoredSegments {
+                let anchorCells = segment.anchorIds.compactMap { anchorID -> (row: Int, column: Int)? in
+                    for (rowIndex, row) in rows.enumerated() {
+                        if let column = row.firstIndex(of: anchorID) {
+                            return (rowIndex, column)
+                        }
+                    }
+                    return nil
+                }
+                guard !anchorCells.isEmpty else {
+                    rows.append(segment.memberIds)
                     continue
                 }
-                while occupied.contains(Cell(x: nextX, y: trackY)) {
-                    nextX += 1
+
+                var anchorRowCounts: [Int: Int] = [:]
+                for cell in anchorCells { anchorRowCounts[cell.row, default: 0] += 1 }
+                let targetRow = anchorRowCounts.keys.sorted {
+                    if anchorRowCounts[$0] != anchorRowCounts[$1] {
+                        return anchorRowCounts[$0, default: 0] > anchorRowCounts[$1, default: 0]
+                    }
+                    return $0 < $1
+                }.first!
+                let targetColumns = anchorCells.filter { $0.row == targetRow }.map(\.column)
+                let insertionIndex: Int
+                if let insertAfterAnchorID = segment.insertAfterAnchorID,
+                   let rowIndex = rows.indices.first(where: { rows[$0].contains(insertAfterAnchorID) }),
+                   let anchorIndex = rows[rowIndex].firstIndex(of: insertAfterAnchorID) {
+                    insertionIndex = min(rows[rowIndex].count, anchorIndex + 1)
+                } else {
+                    insertionIndex = min(rows[targetRow].count, targetColumns.min() ?? rows[targetRow].count)
                 }
-                reserve(node, at: Cell(x: nextX, y: trackY))
-                nextX += 1
+                rows[targetRow].insert(contentsOf: segment.memberIds, at: insertionIndex)
             }
         }
 
-        // 2. Place remaining unchained Blocks on bottom tracks
-        let remaining = nodes.filter { result[$0] == nil }.sorted()
-        if !remaining.isEmpty {
-            var unchainedX = 0
-            var trackY = currentTrackY
-            for node in remaining {
-                while occupied.contains(Cell(x: unchainedX, y: trackY)) {
-                    unchainedX += 1
-                }
-                reserve(node, at: Cell(x: unchainedX, y: trackY))
-                unchainedX += 1
-                if unchainedX >= 4 {
-                    unchainedX = 0
-                    trackY += 1
-                }
+        var result: [String: Cell] = [:]
+        for (rowIndex, row) in rows.enumerated() {
+            for (columnIndex, node) in row.enumerated() {
+                result[node] = Cell(x: columnIndex, y: rowIndex)
             }
         }
-
         return result
     }
-
-
 
     private static func prioritizedEdges(edges: [LayoutEdge], chains: [[String]]) -> [String: Int] {
         var pairPriority: [Pair: Int] = [:]
@@ -200,9 +354,11 @@ enum NetworkLayoutEngine {
                     }
                 }
         )
-        // Reserve enough space for both the Link road and the Chain enclosure
-        // drawn around it, so neither can cover an unrelated Block.
-        let obstacles = frames.values.map { $0.insetBy(dx: -20, dy: -20) }
+        // Reserve enough space for both the Link road and the base Chain
+        // enclosure drawn around it. The envelope half-width is 25pt before
+        // additional lane expansion, so a 20pt obstacle boundary was too small.
+        let routingObstacleInset: CGFloat = 32
+        let obstacles = frames.values.map { $0.insetBy(dx: -routingObstacleInset, dy: -routingObstacleInset) }
         var used: [[CGPoint]] = []
         var result: [String: [CGPoint]] = [:]
         let orderedEdges = edges.sorted {
@@ -210,15 +366,10 @@ enum NetworkLayoutEngine {
             let right = priorities[$1.id] ?? Int.max
             return left == right ? $0.id < $1.id : left < right
         }
-        // The obstacle grid is intentionally reserved for the interactive,
-        // small-map case. Its state space grows with every building in the
-        // corridor and its overlap scoring grows with every earlier road. On a
-        // 300-Block overview that turns one layout refresh into an effectively
-        // unbounded search. Large maps still get deterministic orthogonal roads
-        // (and direct roads continue to avoid buildings), while avoiding a
-        // frame-blocking all-pairs search. Detailed routing remains available
-        // when the user focuses a smaller subgraph.
-        let useBoundedRouting = frames.count <= 120 && edges.count <= 180
+        // Detailed obstacle-grid routing is only worth its state-space cost for
+        // small focused graphs. Overview updates stay on the linear candidate
+        // router so checkbox toggles do not trigger an A* search per Link.
+        let useBoundedRouting = frames.count <= 32 && edges.count <= 64
 
         for edge in orderedEdges {
             guard let source = frames[edge.sourceID], let target = frames[edge.targetID] else { continue }
@@ -230,7 +381,10 @@ enum NetworkLayoutEngine {
             let parallelOffset = parallelLaneOffsets[edge.id, default: 0]
             let separatedSourceOffset = sourceOffset + parallelOffset
             let separatedTargetOffset = targetOffset + parallelOffset
-            let excluded = [source.insetBy(dx: -20, dy: -20), target.insetBy(dx: -20, dy: -20)]
+            let excluded = [
+                source.insetBy(dx: -routingObstacleInset, dy: -routingObstacleInset),
+                target.insetBy(dx: -routingObstacleInset, dy: -routingObstacleInset)
+            ]
             let activeObstacles = obstacles.filter { obstacle in !excluded.contains(where: { nearlyEqual($0, obstacle) }) }
             let lane = abs(separatedSourceOffset - separatedTargetOffset) < 0.1 ? separatedSourceOffset : 0
             let path: [CGPoint]
@@ -243,19 +397,11 @@ enum NetworkLayoutEngine {
                     obstacles: activeObstacles, used: used
                 ) ?? fallbackRoute(source: source, target: target, horizontal: horizontal, sourceOffset: separatedSourceOffset, targetOffset: separatedTargetOffset)
             } else {
-                // On an overview, do not feed every previously routed road into
-                // the scoring loop. This keeps route work linear in the number
-                // of buildings and makes repeated canvas updates predictable.
-                // A direct road is still preferred, but the bounded obstacle
-                // grid is the safe fallback for crowded corridors. Falling
-                // straight through the old unconstrained fallback can draw a
-                // road across an unrelated Block on a large overview.
+                // Overview routing stays deterministic and linear: first try a
+                // direct obstacle-clearing candidate, then use the bounded
+                // fallback tracks instead of expanding a grid search.
                 path = directFirstRoute(
                     source: source, target: target, obstacles: activeObstacles, used: [], lane: lane
-                ) ?? gridRoute(
-                    source: source, target: target, horizontal: horizontal,
-                    sourceOffset: separatedSourceOffset, targetOffset: separatedTargetOffset,
-                    obstacles: activeObstacles, used: []
                 ) ?? fallbackRoute(
                     source: source, target: target, horizontal: horizontal,
                     sourceOffset: separatedSourceOffset, targetOffset: separatedTargetOffset, obstacles: activeObstacles
@@ -342,19 +488,20 @@ enum NetworkLayoutEngine {
         guard pointSet.contains(escapeKey), pointSet.contains(approachKey) else { return nil }
 
         var neighbors: [RoutePoint: [RoutePoint]] = [:]
-        for y in ys {
-            let row = xs.map { RoutePoint(x: $0, y: y) }.filter(pointSet.contains)
-            for pair in zip(row, row.dropFirst()) where segmentIsClear(pair.0.cgPoint, pair.1.cgPoint, obstacles: obstacles) {
+
+        func connectAdjacent(_ points: [RoutePoint]) {
+            for pair in zip(points, points.dropFirst())
+            where segmentIsClear(pair.0.cgPoint, pair.1.cgPoint, obstacles: obstacles) {
                 neighbors[pair.0, default: []].append(pair.1)
                 neighbors[pair.1, default: []].append(pair.0)
             }
         }
+
+        for y in ys {
+            connectAdjacent(xs.map { RoutePoint(x: $0, y: y) }.filter(pointSet.contains))
+        }
         for x in xs {
-            let column = ys.map { RoutePoint(x: x, y: $0) }.filter(pointSet.contains)
-            for pair in zip(column, column.dropFirst()) where segmentIsClear(pair.0.cgPoint, pair.1.cgPoint, obstacles: obstacles) {
-                neighbors[pair.0, default: []].append(pair.1)
-                neighbors[pair.1, default: []].append(pair.0)
-            }
+            connectAdjacent(ys.map { RoutePoint(x: x, y: $0) }.filter(pointSet.contains))
         }
 
         let initial = RouteState(point: escapeKey, direction: nil)

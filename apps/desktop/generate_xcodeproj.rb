@@ -1,9 +1,17 @@
 #!/usr/bin/env ruby
 
 require "fileutils"
+require "json"
 require "xcodeproj"
 
 root = File.expand_path(__dir__)
+package_json = JSON.parse(File.read(File.expand_path("../../package.json", root)))
+package_version = package_json.fetch("version")
+version_parts = package_version.split("-", 2).first.split(".").map(&:to_i)
+build_number = version_parts.fetch(0, 0) * 10_000 + version_parts.fetch(1, 0) * 100 + version_parts.fetch(2, 0)
+
+version_swift_path = File.join(root, "Sources/ContextOSDesktop/ContextOSVersion.swift")
+File.write(version_swift_path, "// Generated from package.json version #{package_version}. Do not edit manually.\n\nenum ContextOSVersion {\n    static let current = \"#{package_version}\"\n}\n")
 project_path = File.join(root, "contextos-desktop.xcodeproj")
 FileUtils.rm_rf(project_path)
 
@@ -57,6 +65,8 @@ plugin_phase.output_paths = [
 common_settings = {
   "PRODUCT_BUNDLE_IDENTIFIER" => "com.contextos.desktop",
   "PRODUCT_NAME" => "ContextOS",
+  "MARKETING_VERSION" => package_version,
+  "CURRENT_PROJECT_VERSION" => build_number.to_s,
   "INFOPLIST_FILE" => "Resources/Info.plist",
   "GENERATE_INFOPLIST_FILE" => "NO",
   "MACOSX_DEPLOYMENT_TARGET" => "14.0",

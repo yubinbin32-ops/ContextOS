@@ -19,6 +19,8 @@
 		9B97C0DCF1E2E8443CD34311 /* GraphCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31BB6ADC4F82384B6B57766D /* GraphCanvasView.swift */; };
 		A1012E264FF6C03F871346A3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18F1723269D6CA447B5C3501 /* Theme.swift */; };
 		B49179793BC9564A7B05A929 /* GraphStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEFC7A2EB420601BC4929B59 /* GraphStore.swift */; };
+		C0DE00000000000000000001 /* ContextOSVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000002 /* ContextOSVersion.swift */; };
+		C0DE00000000000000000003 /* WrappingHStackLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000004 /* WrappingHStackLayout.swift */; };
 		D3ACC6A2DA7452A1CCA51BAA /* ProjectLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA89952E0064C197616B8BD4 /* ProjectLocation.swift */; };
 		D466BDDE606477C1E8E15B18 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 29C02B2D84EEF800CF1B093C /* AppIcon.icns */; };
 		DA133E04F323D56F8404F561 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10D7424A64C7B936FF398782 /* ContentView.swift */; };
@@ -39,6 +41,8 @@
 		9B20B7264BD50CDF8689D81D /* CanvasScene.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CanvasScene.swift; sourceTree = "<group>"; };
 		C12A851D4F7BBA4BFA5E297F /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		C50C3E667653563A3C331EC3 /* Models.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		C0DE00000000000000000002 /* ContextOSVersion.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ContextOSVersion.swift; sourceTree = "<group>"; };
+		C0DE00000000000000000004 /* WrappingHStackLayout.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WrappingHStackLayout.swift; sourceTree = "<group>"; };
 		CB821FD54D1D463CE4752F07 /* shim.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = shim.h; sourceTree = "<group>"; };
 		CEF99B3739A1286F88C144DF /* PluginInstaller.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginInstaller.swift; sourceTree = "<group>"; };
 		D3627082E75332978D1A5ABF /* module.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = module.modulemap; sourceTree = "<group>"; };
@@ -114,6 +118,7 @@
 				9B20B7264BD50CDF8689D81D /* CanvasScene.swift */,
 				10D7424A64C7B936FF398782 /* ContentView.swift */,
 				E776947BB048EC3DAFAB4165 /* ContextOSDesktopApp.swift */,
+				C0DE00000000000000000002 /* ContextOSVersion.swift */,
 				F8A5799A076A8333FD4582C2 /* DetailView.swift */,
 				31BB6ADC4F82384B6B57766D /* GraphCanvasView.swift */,
 				EEFC7A2EB420601BC4929B59 /* GraphStore.swift */,
@@ -125,6 +130,7 @@
 				61C675EDBCE6EEC793620F1E /* ProjectDatabase.swift */,
 				FA89952E0064C197616B8BD4 /* ProjectLocation.swift */,
 				18F1723269D6CA447B5C3501 /* Theme.swift */,
+				C0DE00000000000000000004 /* WrappingHStackLayout.swift */,
 			);
 			name = ContextOSDesktop;
 			path = ContextOSDesktop;
@@ -239,6 +245,7 @@
 				81A7C0C76A9B6ED815D319F2 /* CanvasScene.swift in Sources */,
 				DA133E04F323D56F8404F561 /* ContentView.swift in Sources */,
 				7B56B05A544633682DF9690A /* ContextOSDesktopApp.swift in Sources */,
+				C0DE00000000000000000001 /* ContextOSVersion.swift in Sources */,
 				F29C364245A8714F205A037C /* DetailView.swift in Sources */,
 				9B97C0DCF1E2E8443CD34311 /* GraphCanvasView.swift in Sources */,
 				B49179793BC9564A7B05A929 /* GraphStore.swift in Sources */,
@@ -250,6 +257,7 @@
 				2BD57D08C4AFD1C6469570C4 /* ProjectDatabase.swift in Sources */,
 				D3ACC6A2DA7452A1CCA51BAA /* ProjectLocation.swift in Sources */,
 				A1012E264FF6C03F871346A3 /* Theme.swift in Sources */,
+				C0DE00000000000000000003 /* WrappingHStackLayout.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -346,6 +354,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.contextos.desktop;
 				PRODUCT_NAME = ContextOS;
+				MARKETING_VERSION = 2.6.0;
+				CURRENT_PROJECT_VERSION = 20600;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -443,6 +453,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.contextos.desktop;
 				PRODUCT_NAME = ContextOS;
+				MARKETING_VERSION = 2.6.0;
+				CURRENT_PROJECT_VERSION = 20600;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Sources/CSQLite";

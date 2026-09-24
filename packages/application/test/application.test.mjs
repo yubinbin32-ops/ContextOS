@@ -366,7 +366,7 @@ test('TaskService detects host native modifications via mtime + SHA256 compariso
   });
 
   // 3. Create and activate Task
-  const task = taskService.createTask(
+  taskService.createTask(
     {
       id: 'task-host-1',
       planId: 'plan-host-1',
@@ -533,7 +533,7 @@ test('TaskService handles external file deletion and non-git project modificatio
     }],
   });
 
-  const task = taskService.createTask(
+  taskService.createTask(
     {
       id: 'task-ext-1',
       planId: 'plan-ext-1',

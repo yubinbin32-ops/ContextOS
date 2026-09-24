@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { packageVersion } from './version.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const bundlePath = path.join(repoRoot, 'plugins', 'contextos', 'server', 'contextos-mcp.mjs');
@@ -44,13 +45,13 @@ const transport = new StdioClientTransport({
   cwd: workDir,
   stderr: 'inherit',
 });
-const client = new Client({ name: 'contextos-distribution-smoke', version: '2.5.0' });
+const client = new Client({ name: 'contextos-distribution-smoke', version: packageVersion });
 
 try {
   await client.connect(transport);
   const listing = await client.listTools();
   const names = listing.tools.map((tool) => tool.name).sort();
-  assert.deepEqual(names, ['change', 'explore', 'ops', 'ship', 'verify']);
+  assert.deepEqual(names, ['change', 'explore', 'inspect', 'ops', 'pipeline', 'ship', 'verify']);
 
   const result = await client.callTool({
     name: 'ops',

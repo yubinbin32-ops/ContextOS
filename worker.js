@@ -4,6 +4,10 @@
  * Supports MCP over HTTP (SSE & Streamable JSON-RPC) + REST API + Bearer Token Auth
  */
 
+import packageMetadata from './package.json' with { type: 'json' };
+
+const VERSION = packageMetadata.version;
+
 const BASE_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, x-contextos-token, x-contextos-project-id',
@@ -562,9 +566,16 @@ async function executeTool(tool, input = {}, projectId = 'contextos', db) {
       result = [];
     }
   } else if (tool === 'knowledge') {
-    result = `Knowledge rule retrieved from cloud hub.`;
+    const action = input.action || 'list';
+    if (action === 'list') {
+      result = [];
+    } else if (action === 'get') {
+      result = null;
+    } else {
+      result = [];
+    }
   } else {
-    result = `Tool '${tool}' completed on cloud hub.`;
+    throw new Error(`Unknown tool: ${tool}`);
   }
 
   return typeof result === 'string' ? result : JSON.stringify(result, null, 2);
@@ -670,7 +681,7 @@ async function handleJsonRpc(msg, env, db, projectId = 'contextos') {
         },
         serverInfo: {
           name: 'contextos',
-          version: '2.1.0',
+          version: VERSION,
         },
         instructions:
           'ContextOS Cloud Hub: Spatial architecture and C-D-C-S context manager for AI coding agents. Plans, tasks, and blocks synchronize with Cloudflare edge D1 SQLite.',
@@ -813,7 +824,7 @@ export default {
       return new Response(
         JSON.stringify({
           status: 'ok',
-          version: '2.1.0',
+          version: VERSION,
           mode: 'cloud',
           storage: db ? 'd1' : 'ephemeral',
           authRequired: hasAuthToken,
