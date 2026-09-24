@@ -3,6 +3,7 @@ FROM node:22-bookworm-slim AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY packages ./packages
+COPY scripts ./scripts
 
 RUN npm ci --ignore-scripts
 RUN mkdir -p plugins/contextos/server

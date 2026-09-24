@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1081,
-  "exportedAt": "2026-09-24T04:16:08.137Z",
+  "graphRevision": 1082,
+  "exportedAt": "2026-09-24T05:09:02.230Z",
   "data": {
     "plans": [
       {
@@ -6072,6 +6072,30 @@
         "history": [],
         "createdAt": "2026-09-23T19:50:08.787Z",
         "updatedAt": "2026-09-23T19:50:08.787Z"
+      },
+      {
+        "id": "mod-apps-desktop-win-src-tauri-icons",
+        "projectId": "mdflow",
+        "title": "Derived module mod-apps-desktop-win-src-tauri-icons",
+        "kind": "module",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "apps/desktop-win/src-tauri/icons/icon.ico",
+            "symbol": "icon.ico",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 48,
+            "hash": "435bf2394cee45fc",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-24T05:09:02.214Z",
+        "updatedAt": "2026-09-24T05:09:02.214Z"
       },
       {
         "id": "mod-apps-desktop-win-src-tauri-src",
