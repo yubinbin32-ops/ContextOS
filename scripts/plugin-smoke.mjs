@@ -17,6 +17,7 @@ const transport = new StdioClientTransport({
   command: "node",
   args: ["plugins/contextos/server/contextos-mcp.mjs"],
   cwd: projectRoot,
+  env: { ...process.env, CONTEXTOS_LEAN_SURFACE: "0" },
 });
 const client = new Client({ name: "contextos-plugin-smoke", version: packageVersion });
 const fixture = createFixtureProject({ prefix: "ctxos-plugin" });
@@ -32,24 +33,30 @@ const skillPath = path.join("plugins", "contextos", "skills", "contextos", "SKIL
 assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");
 const skillText = fs.readFileSync(skillPath, "utf8");
 const capabilityReference = path.join("plugins", "contextos", "skills", "contextos", "references", "capabilities.md");
-assert.ok(skillText.includes("意图级开发入口"), "Skill must document the intent-level entry");
+assert.ok(skillText.includes("## Route work"), "Skill must document repository execution routing");
 assert.ok(skillText.includes("references/capabilities.md"), "Skill must route advanced capabilities to its reference");
 assert.ok(fs.existsSync(capabilityReference), "ContextOS capability reference is missing");
 const capabilityText = fs.readFileSync(capabilityReference, "utf8");
-for (const term of ["decision_write", "rule_write", "bind_rule", "bind_auto", "chain", "compose", "link", "task.finish"]) {
+for (const term of ["decision_write", "rule_write", "bind_rule", "bind_auto", "chain", "compose", "link", "task.finish", "telemetry", "audit", "scope"]) {
   assert.ok(capabilityText.includes(term), `Capability reference must document ${term}`);
 }
 for (const tool of EXPECTED_TOOLS) {
-  assert.ok(skillText.includes(`\`${tool}\``), `Skill must document the ${tool} tool`);
+  assert.ok(new RegExp(`\\b${tool}\\b`).test(skillText), `Skill must document the ${tool} tool`);
 }
-assert.ok(skillText.includes("ops({ capability"), "Skill must document the ops passthrough");
-assert.ok(skillText.length < 12000, `Skill must stay lean for context budgets (got ${skillText.length} chars)`);
+assert.ok(skillText.includes("capability:"), "Skill must document capability routing through ops");
+assert.ok(skillText.length < 7000, `Skill must stay lean for context budgets (got ${skillText.length} chars; limit 7000)`);
 
 try {
   await client.connect(transport);
   const listing = await client.listTools();
   const names = listing.tools.map((tool) => tool.name).sort();
   assert.deepEqual(names, [...EXPECTED_TOOLS].sort(), "bundled server must expose exactly the V3 tools");
+  const exploreTool = listing.tools.find((tool) => tool.name === "explore");
+  const inspectTool = listing.tools.find((tool) => tool.name === "inspect");
+  assert.match(JSON.stringify(exploreTool?.inputSchema), /refresh/, "bundled explore must expose refresh");
+  assert.match(JSON.stringify(exploreTool?.inputSchema), /dedupeReads/, "bundled explore must expose dedupeReads");
+  assert.match(JSON.stringify(inspectTool?.inputSchema), /refresh/, "bundled inspect must expose refresh");
+  assert.match(JSON.stringify(inspectTool?.inputSchema), /dedupeReads/, "bundled inspect must expose dedupeReads");
 
   const call = async (name, args) => {
     const res = await client.callTool({ name, arguments: { projectRoot: fixture.root, ...args } });
@@ -67,6 +74,13 @@ try {
   });
   assert.match(fixture.read("src/strings.mjs"), /hi \$\{name\}/, "surgical edit must land on disk");
 
+  fixture.write("src/obsolete.mjs", "export const obsolete = true;\n");
+  const deleted = await call("change", {
+    delete: [{ path: "src/obsolete.mjs" }],
+  });
+  assert.equal(fs.existsSync(path.join(fixture.root, "src", "obsolete.mjs")), false, "bundled delete must land on disk");
+  assert.match(deleted, /deleted `src\/obsolete\.mjs`/);
+
   // 3. verify + sanitization of a leaked secret
   const runText = await call("verify", {
     commands: ['echo "error: failed with token ghp_123456789012345678901234567890123456" && exit 1'],
@@ -77,12 +91,52 @@ try {
   // 4. ship closes the session
   const shipped = await call("ship", { summary: "greet() wording" });
   assert.match(shipped, /Closure/);
+  const blocksAfterShip = JSON.parse(await call("ops", {
+    capability: "block",
+    action: "list",
+    args: { format: "json" },
+  }));
+  assert.ok(
+    !blocksAfterShip.items.some((block) => String(block.id || "").startsWith("mod-") || block.kind === "module"),
+    "ship must not turn ModuleIndex navigation hints into semantic module Blocks"
+  );
 
   // 5. ops passthrough keeps every legacy capability reachable
   const rules = await call("ops", { capability: "knowledge", action: "rule_list" });
   assert.ok(!rules.includes("isError"), "ops knowledge rule_list failed");
   const blocks = await call("ops", { capability: "block", action: "list", args: { format: "json" } });
   assert.ok(blocks.length > 0, "ops block list returned nothing");
+
+  // 6. lean surface forwards object verify commands to the runner
+  const leanTransport = new StdioClientTransport({
+    command: "node",
+    args: ["plugins/contextos/server/contextos-mcp.mjs"],
+    cwd: projectRoot,
+    env: { ...process.env, CONTEXTOS_LEAN_SURFACE: "1" },
+  });
+  const leanClient = new Client({ name: "contextos-plugin-lean-smoke", version: packageVersion });
+  await leanClient.connect(leanTransport);
+  try {
+    const leanResult = await leanClient.callTool({
+      name: "contextos",
+      arguments: {
+        action: "change",
+        args: {
+          create: [{ path: "src/lean-verify.mjs", content: "export const verified = true;\n" }],
+          verify: { commands: ["node --check src/lean-verify.mjs"] },
+        },
+        projectRoot: fixture.root,
+      },
+    });
+    const leanText = (leanResult.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!leanResult.isError, leanText);
+    assert.match(leanText, /`node --check src\/lean-verify\.mjs`/);
+    assert.match(leanText, /Verify: PASS/);
+    assert.doesNotMatch(leanText, /- `` → exit/);
+  } finally {
+    await leanClient.close();
+    await leanTransport.close();
+  }
 
   console.log("# ContextOS Plugin Smoke Verification Passed!");
   console.log(`- MCP tools: ${names.length} (${names.join(", ")})`);

@@ -5,9 +5,9 @@
  */
 
 export const BUDGET_PRESETS = Object.freeze({
-  shallow: 1200,
-  normal: 2800,
-  deep: 7500,
+  shallow: 2000,
+  normal: 10000,
+  deep: 20000,
   full: Infinity,
 });
 

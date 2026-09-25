@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import test from "node:test";
 import { spawnSync } from "node:child_process";
@@ -8,16 +9,161 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createV3Server } from "../src/v3-server.mjs";
 import { createFixtureProject } from "../../../scripts/fixture-project.mjs";
 import { packageVersion } from "../../../scripts/version.mjs";
+import { SessionStore } from "../../orchestrator/src/session-store.mjs";
 
 const EXPECTED_TOOLS = ["explore", "inspect", "change", "verify", "ship", "ops", "pipeline"];
 
 async function boot() {
-  const server = createV3Server();
+  const server = createV3Server({ surface: "legacy" });
   const client = new Client({ name: "contextos-v3-test", version: packageVersion });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return client;
 }
+
+test("V3 default surface exposes one compact transport tool", async () => {
+  const server = createV3Server();
+  const client = new Client({ name: "contextos-v3-lean-test", version: packageVersion });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const listing = await client.listTools();
+  assert.deepEqual(listing.tools.map((tool) => tool.name), ["contextos"]);
+  assert.match(JSON.stringify(listing.tools[0].inputSchema), /work/);
+  assert.match(listing.tools[0].description, /pipeline.*direct/i);
+  assert.match(listing.tools[0].description, /delivery/i);
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-lean-work" });
+  const work = await client.callTool({
+    name: "contextos",
+    arguments: {
+      action: "work",
+      args: {
+        create: [{ path: "src/lean-work.mjs", content: "export const value = 1;\n" }],
+        verify: ["node --check src/lean-work.mjs"],
+      },
+      projectRoot: fixture.root,
+    },
+  });
+  const workText = (work.content || []).map((chunk) => chunk.text ?? "").join("\n");
+  assert.ok(!work.isError, workText);
+  assert.match(workText, /work=OK/);
+  assert.match(fixture.read("src/lean-work.mjs"), /value = 1/);
+  await client.close();
+  fixture.cleanup();
+});
+
+test("V3 change preserves the content alias for fullFile edits", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-fullfile" });
+  fs.writeFileSync(path.join(fixture.root, "note.txt"), "old\n");
+  const client = await boot();
+  try {
+    const result = await client.callTool({
+      name: "change",
+      arguments: {
+        edits: [{ path: "note.txt", content: "new\n", fullFile: true }],
+        projectRoot: fixture.root,
+      },
+    });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!result.isError, text);
+    assert.equal(fixture.read("note.txt"), "new\n");
+  } finally {
+    await client.close();
+    fixture.cleanup();
+  }
+});
+
+test("V3 change preserves curated architecture for same-turn Block and Chain binding", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-architecture" });
+  fs.writeFileSync(path.join(fixture.root, "note.txt"), "old\n");
+  const client = await boot();
+  try {
+    const result = await client.callTool({
+      name: "change",
+      arguments: {
+        edits: [{ path: "note.txt", content: "new\n", fullFile: true }],
+        verify: "node -e \"0\"",
+        architecture: {
+          blocks: [{
+            id: "block-note-service",
+            title: "Note service",
+            kind: "service",
+            paths: ["note.txt"],
+          }],
+          chains: [{
+            id: "chain-note-flow",
+            title: "Note flow",
+            kind: "feature",
+            memberIds: ["block-note-service"],
+          }],
+        },
+        projectRoot: fixture.root,
+      },
+    });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!result.isError, text);
+    assert.match(text, /1 curated Block\(s\) bound/);
+    assert.match(text, /1 Chain\(s\) composed/);
+  } finally {
+    await client.close();
+    fixture.cleanup();
+  }
+});
+
+test("V3 lean micro forwards bulk input args into the Micro client", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-lean-micro" });
+  const requests = [];
+  const provider = http.createServer((req, res) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      const parsed = JSON.parse(body || "{}");
+      requests.push(parsed);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        choices: [{ message: { role: "assistant", content: "micro final answer" } }],
+        usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+      }));
+    });
+  });
+  await new Promise((resolve) => provider.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${provider.address().port}`;
+  fs.writeFileSync(path.join(fixture.root, "diagnostic.log"), "failure trace\ncorrelation=42\n");
+  fs.mkdirSync(path.join(fixture.root, ".contextos"), { recursive: true });
+  fs.writeFileSync(path.join(fixture.root, ".contextos", "profile.json"), JSON.stringify({
+    micro: { url, model: "mock-micro", requireBulkInput: true },
+  }, null, 2));
+
+  const server = createV3Server();
+  const client = new Client({ name: "contextos-v3-lean-micro-test", version: packageVersion });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+  try {
+    const result = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "micro",
+        args: { preset: "triage", inputRef: "diagnostic.log", task: "summarize the failure" },
+        projectRoot: fixture.root,
+      },
+    });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!result.isError, text);
+    assert.match(text, /micro final answer/);
+    assert.equal(requests.length, 1);
+    const usageLine = fs.readFileSync(path.join(fixture.root, ".contextos", "logs", "micro-usage.jsonl"), "utf8")
+      .split("\n").filter(Boolean).at(-1);
+    const usage = JSON.parse(usageLine);
+    assert.equal(usage.inputSource, "inputRef");
+    assert.equal(usage.preset, "triage");
+    assert.equal(usage.totalTokens, 15);
+  } finally {
+    await client.close();
+    await new Promise((resolve) => provider.close(resolve));
+    fixture.cleanup();
+  }
+});
 
 test("V3 server entrypoint works through a symlinked path", { skip: process.platform === "win32" }, () => {
   const tempDir = fs.mkdtempSync(path.join(process.env.TMPDIR || "/tmp", "contextos-entry-"));
@@ -51,6 +197,12 @@ test("V3 MCP surface exposes exactly the intent-level tools", async () => {
   const listing = await client.listTools();
   const names = listing.tools.map((tool) => tool.name).sort();
   assert.deepEqual(names, [...EXPECTED_TOOLS].sort());
+  const exploreTool = listing.tools.find((tool) => tool.name === "explore");
+  const inspectTool = listing.tools.find((tool) => tool.name === "inspect");
+  assert.match(JSON.stringify(exploreTool?.inputSchema), /refresh/);
+  assert.match(JSON.stringify(exploreTool?.inputSchema), /dedupeReads/);
+  assert.match(JSON.stringify(inspectTool?.inputSchema), /refresh/);
+  assert.match(JSON.stringify(inspectTool?.inputSchema), /dedupeReads/);
   await client.close();
 });
 
@@ -61,6 +213,78 @@ test("V3 rejects calls without an explicit projectRoot", async () => {
   const text = (res.content || []).map((chunk) => chunk.text ?? "").join("\n");
   assert.match(text, /projectRoot|Invalid arguments/i);
   await client.close();
+});
+
+test("V3 session history returns a compact targeted summary by default", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-session-history" });
+  const store = new SessionStore({ projectRoot: fixture.root, projectId: "fixture" });
+  const session = store.ensureSession("history intent ".repeat(60));
+  store.touch(Array.from({ length: 200 }, (_, index) => ({ path: `src/generated-${index}.mjs` })));
+  for (let index = 0; index < 10; index += 1) {
+    store.attachReceipt({
+      id: `receipt-history-${index}`,
+      command: `npm test ${"verbose ".repeat(20)}`,
+      cwd: fixture.root,
+      exitCode: index === 9 ? 0 : 1,
+      durationMs: 5,
+    });
+  }
+  store.close("history summary ".repeat(120));
+
+  const client = await boot();
+  try {
+    const result = await client.callTool({
+      name: "ops",
+      arguments: {
+        projectRoot: fixture.root,
+        capability: "session",
+        action: "history",
+        args: { sessionId: session.id, limit: 10 },
+      },
+    });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!result.isError, text);
+    assert.ok(text.length < 2200, `history must stay bounded (${text.length} chars)`);
+    const parsed = JSON.parse(text);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0].id, session.id);
+    assert.equal(parsed[0].touchedFileCount, 200);
+    assert.ok(parsed[0].touchedFiles.length <= 4);
+    assert.ok(parsed[0].receipts.length <= 2);
+
+    store.ensureSession("large open session");
+    store.touch(Array.from({ length: 200 }, (_, index) => ({ path: `src/open-${index}.mjs` })));
+    for (let index = 0; index < 50; index += 1) {
+      store.attachReceipt({
+        id: `open-receipt-${index}`,
+        command: `npm test ${index}`,
+        cwd: fixture.root,
+        exitCode: 0,
+        durationMs: 1,
+      });
+    }
+    const raw = store.current;
+    raw.readReceipts = Array.from({ length: 200 }, (_, index) => ({ path: `src/open-${index}.mjs`, hash: `hash-${index}` }));
+    store.save(raw);
+    const statusResult = await client.callTool({
+      name: "ops",
+      arguments: {
+        projectRoot: fixture.root,
+        capability: "session",
+        action: "status",
+      },
+    });
+    const statusText = (statusResult.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!statusResult.isError, statusText);
+    assert.ok(statusText.length < 2200, `status must stay bounded (${statusText.length} chars)`);
+    const status = JSON.parse(statusText);
+    assert.equal(status.touchedFileCount, 200);
+    assert.equal(status.receiptCount, 50);
+    assert.equal(Object.hasOwn(status, "readReceipts"), false);
+  } finally {
+    await client.close();
+    fixture.cleanup();
+  }
 });
 
 test("V3 ops block bind rejects Ghost Blocks", async () => {
@@ -189,6 +413,13 @@ test("V3 ops search, receipt logs, plan update, and optional Rules are usable en
   assert.equal(updated.title, "P5 updated");
   assert.deepEqual(updated.ruleRefs, ["rule-optional-p5"]);
 
+  const activePlan = JSON.parse(await call("ops", {
+    capability: "plan",
+    action: "get",
+    args: { format: "json" },
+  }));
+  assert.equal(activePlan.id, "plan-p5-optional");
+
   const task = JSON.parse(await call("ops", {
     capability: "task",
     action: "create",
@@ -200,6 +431,7 @@ test("V3 ops search, receipt logs, plan update, and optional Rules are usable en
         phaseId: "P0",
         title: "P5 optional task",
         contextSlice: { objective: "preserve this" },
+        workingSet: { files: ["src/math.mjs"] },
         rules: ["rule-optional-p5"],
       },
     },
@@ -213,6 +445,24 @@ test("V3 ops search, receipt logs, plan update, and optional Rules are usable en
   assert.equal(restarted.preserved, true);
   assert.equal(restarted.task.contextSlice.objective, "preserve this");
   assert.deepEqual(restarted.task.rules, ["rule-optional-p5"]);
+
+  const compactOpen = JSON.parse(await call("ops", {
+    capability: "task",
+    action: "open",
+    args: { id: "task-p5-optional", format: "json" },
+  }));
+  assert.equal(compactOpen.contextSlice.locators.length, 0, "task open must not reconcile or expand locators implicitly");
+  assert.equal(compactOpen.notes.length, 0, "task open must not append host-change notes implicitly");
+
+  // Make the explicit path observable: reconcile refreshes AST locators when
+  // the scoped file actually changed, while the preceding open remains pure.
+  fs.appendFileSync(path.join(fixture.root, "src/math.mjs"), "\nexport const extra = 1;\n");
+  const reconciledOpen = JSON.parse(await call("ops", {
+    capability: "task",
+    action: "open",
+    args: { id: "task-p5-optional", reconcile: true, format: "json" },
+  }));
+  assert.ok(reconciledOpen.contextSlice.locators.length > 0, "reconciliation remains available when explicitly requested");
 
   const unknownRule = await client.callTool({
     name: "ops",
@@ -245,7 +495,7 @@ test("V3 ops search, receipt logs, plan update, and optional Rules are usable en
   fixture.cleanup();
 });
 
-test("V3 loop completes a real change with evidence and attribution", async () => {
+test("V3 loop completes a real change with evidence and advisory architecture gaps", async () => {
   const fixture = createFixtureProject({ prefix: "ctxos-v3-mcp" });
   const client = await boot();
 
@@ -258,6 +508,10 @@ test("V3 loop completes a real change with evidence and attribution", async () =
   const explored = await call("explore", { intent: "了解 src/math.mjs 的结构", paths: ["src/math.mjs"] });
   assert.match(explored, /# ContextOS explore/);
   assert.ok(explored.length <= 5200, `explore must respect the context budget (${explored.length} chars)`);
+  const reused = await call("explore", { intent: "了解 src/math.mjs 的结构", paths: ["src/math.mjs"] });
+  assert.match(reused, /explore \(reused\)/);
+  const refreshed = await call("explore", { intent: "了解 src/math.mjs 的结构", paths: ["src/math.mjs"], refresh: true });
+  assert.doesNotMatch(refreshed, /explore \(reused\)/);
 
   await call("change", {
     edits: [{ path: "src/math.mjs", target: "export function add(a, b) {", replacement: "export function add(a, b, c = 0) {" }],
@@ -269,14 +523,17 @@ test("V3 loop completes a real change with evidence and attribution", async () =
 
   const shipped = await call("ship", { summary: "add() optional operand" });
   assert.match(shipped, /Closure/);
-  assert.match(shipped, /Attribution/);
+  assert.match(shipped, /Curated architecture: 1 gap/);
+  assert.match(shipped, /Module index hints \(navigation only\)/);
+  assert.match(shipped, /src\/math\.mjs/);
+  assert.ok(!shipped.includes("BLOCKED"));
 
   const session = JSON.parse(fs.readFileSync(path.join(fixture.root, ".contextos", "session.json"), "utf8"));
   assert.equal(session.status, "closed");
   assert.ok(session.receipts.some((receipt) => receipt.exitCode === 0));
 
   const passthrough = await call("ops", { capability: "block", action: "list", args: { format: "json" } });
-  assert.ok(passthrough.length > 0);
+  assert.ok(!passthrough.includes('"mod-'));
 
   await client.close();
   fixture.cleanup();
@@ -307,6 +564,51 @@ test("V3 MCP surface handles inspect ranges and change overwrite", async () => {
   });
   assert.match(changed, /ContextOS change/);
   assert.equal(fixture.read("src/math.mjs"), "export const version = '3.0.0';\n");
+
+  await client.close();
+  fixture.cleanup();
+});
+
+test("V3 inspect resolves globs and pipeline accepts receipt plus run aliases", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-pipeline-contract" });
+  const client = await boot();
+
+  const call = async (name, args) => {
+    const res = await client.callTool({ name, arguments: { projectRoot: fixture.root, ...args } });
+    assert.ok(!res.isError, `${name} failed: ${(res.content || []).map((chunk) => chunk.text).join('\n')}`);
+    return (res.content || []).map((chunk) => chunk.text ?? "").join("\n");
+  };
+
+  const inspected = await call("inspect", { globs: ["src/*.mjs"], mode: "outline" });
+  assert.match(inspected, /src\/math\.mjs/);
+  assert.match(inspected, /src\/strings\.mjs/);
+
+  const changed = await call("change", {
+    path: "src/math.mjs",
+    append: "export const verified = true;\n",
+    verify: { command: "node --test test/math.test.mjs" },
+  });
+  assert.match(changed, /verify: PASS/);
+
+  const parallel = await call("pipeline", {
+    mode: "receipt",
+    parallel: [
+      { run: "node -e \"console.log('ok')\"" },
+      { inspect: { path: "src/math.mjs" } },
+    ],
+  });
+  assert.match(parallel, /pipeline=OK/);
+  assert.match(parallel, /ops=OK/);
+  assert.match(parallel, /inspect=OK/);
+
+  const chained = await call("pipeline", {
+    chain: [
+      { action: "run", args: { command: "node -e \"process.exit(0)\"" } },
+      { verify: { command: "node --test test/math.test.mjs" } },
+    ],
+  });
+  assert.match(chained, /pipeline=OK/);
+  assert.match(chained, /Verdict: PASS/);
 
   await client.close();
   fixture.cleanup();

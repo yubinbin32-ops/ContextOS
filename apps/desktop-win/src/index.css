@@ -82,3 +82,80 @@
 .markdown-body th {
   @apply bg-slate-50 font-semibold;
 }
+
+/* Compact Markdown styling for DetailView */
+.markdown-content p {
+  margin-bottom: 0.25rem;
+}
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+.markdown-content strong {
+  font-weight: 600;
+  color: #0f172a;
+}
+.markdown-content em {
+  font-style: italic;
+}
+.markdown-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  background-color: #f1f5f9;
+  color: #0f172a;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+.markdown-content pre {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 4px 0;
+  overflow-x: auto;
+}
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  border: none;
+}
+.markdown-content pre .language {
+  display: block;
+  font-size: 9px;
+  font-weight: bold;
+  color: #94a3b8;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.markdown-content .list-item {
+  margin: 2px 0;
+  line-height: 1.4;
+}
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  font-weight: 600;
+  color: #0f172a;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+.markdown-content h1 { font-size: 13px; }
+.markdown-content h2 { font-size: 12.5px; }
+.markdown-content h3 { font-size: 12px; }
+.markdown-content blockquote {
+  border-left: 3px solid #cbd5e1;
+  padding-left: 6px;
+  color: #64748b;
+  margin: 4px 0;
+  font-style: italic;
+}
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 6px 0;
+}
+.markdown-content a {
+  color: #2563eb;
+  text-decoration: underline;
+}

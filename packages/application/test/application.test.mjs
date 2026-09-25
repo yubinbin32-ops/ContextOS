@@ -139,6 +139,7 @@ test('Task sync covers source and dependency tree bindings without an artifact l
     tempDir
   );
   taskService.activateTask('task-tree-binding', tempDir);
+  assert.equal(taskService.activateTask('task-tree-binding', tempDir).status, 'active');
   taskService.addCheck('task-tree-binding', {
     description: 'Tree binding validated',
     passed: true,

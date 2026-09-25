@@ -21,14 +21,14 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
-    console.log(`ContextOS bootstrap\n\nUsage:\n  node scripts/bootstrap.mjs --target-root <workspace> (--platforms cursor,codex | --all) [options]\n\nOptions:\n  --mode <local|cloud>       Project storage mode (default: local)\n  --cloud-url <url>          Cloud endpoint for cloud mode\n  --token <token>            Cloud token for cloud mode\n  --project-id <id>          Project id (default: contextos)\n  --platforms <list>         Comma-separated platform ids; no implicit all\n  --all                      Explicitly select every detected platform\n  --save-global-cloud        Persist cloud credentials to ~/.contextos/cloud.json\n  --dry-run                  Print the plan without writing any files\n  --help, -h                 Show this help`);
+    console.log(`ContextOS bootstrap\n\nUsage:\n  node scripts/bootstrap.mjs --target-root <workspace> (--platforms cursor,codex | --all) [options]\n\nOptions:\n  --mode <local|cloud>       Project storage mode (default: local)\n  --cloud-url <url>          Cloud endpoint for cloud mode\n  --token <token>            Cloud token for cloud mode\n  --project-id <id>          Project id (default: preserve existing or derive from directory)\n  --platforms <list>         Comma-separated platform ids; no implicit all\n  --all                      Explicitly select every detected platform\n  --save-global-cloud        Persist cloud credentials to ~/.contextos/cloud.json\n  --dry-run                  Print the plan without writing any files\n  --help, -h                 Show this help`);
     process.exit(0);
   }
 
   let mode = 'local';
   let cloudUrl = '';
   let token = '';
-  let projectId = 'contextos';
+  let projectId = null;
   let targetRoot = process.cwd();
   let platformsArg = '';
   let allPlatforms = false;
@@ -118,7 +118,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(2);
   }
 
-  console.log(`[ContextOS Bootstrap] Project Storage Mode: ${mode} | Project ID: ${projectId}`);
+  console.log(`[ContextOS Bootstrap] Project Storage Mode: ${mode} | Project ID: ${projectId || 'auto (preserve or derive)'}`);
   if (allPlatforms) {
     console.log('[ContextOS Bootstrap] Platforms: All detected (explicit --all)');
   } else {

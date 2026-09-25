@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "Context operating system for AI coding agents: the agent states intent and the OS orchestrates AST slicing, out-of-context commands, derived architecture indexing and evidence capture.",
   "author": {
     "name": "ContextOS"
@@ -31,7 +31,7 @@
       "Read-only README in the knowledge reader"
     ],
     "defaultPrompt": [
-      "Use ContextOS explore/change/verify/ship to do this task and keep the project graph synchronized."
+      "Use ContextOS for repository reads, edits, and verification. Batch changes with verify."
     ]
   },
   "mcpServers": "./.mcp.json"

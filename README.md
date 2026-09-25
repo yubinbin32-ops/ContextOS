@@ -12,6 +12,8 @@
 
   <br/>
 
+  <p><strong>Version: <span id="contextos-version">2.6.1</span></strong> · Five-host MCP and Skill adapters · Multi-turn Micro subagent</p>
+
   [**Download macOS App**](https://github.com/yubinbin32-ops/ContextOS/releases/latest) · [**Quick Setup Guide**](#start-in-30-seconds-ai-auto-setup) · [**中文文档**](README_zh.md)
 </div>
 
@@ -31,14 +33,14 @@ In complex software repositories, autonomous AI coding agents face a fundamental
 
 **ContextOS addresses this as a Context Operating System implemented over the Model Context Protocol (MCP)**:
 
-| Subsystem | Architectural Mechanism | Empirical Impact |
+| Subsystem | Architectural Mechanism | Evidence Boundary |
 |---|---|---|
-| **Syntax-Directed Access** | Tree-sitter multi-language AST engine extracting surgical symbol outlines and method slices | Eliminates whole-file dumps; reduces code ingestion volume by >80% |
-| **Out-of-Band Execution** | Process execution and raw logs isolated outside the LLM context; returns signed receipts and diagnostic frames | Strips >98% of terminal noise; zero-turn error inspection |
-| **Metro Map Topology** | Materializes files, symbols, and dependencies into a strongly typed Block-Chain-Link graph | Provides a deterministic structural backbone, preventing cross-module hallucinations |
-| **Persistent State Blackboard** | Minimal 300-byte incremental snapshot decoupling active state from chat history | Resumes full working context in ~150 tokens on cold boot |
+| **Syntax-Directed Access** | Tree-sitter multi-language AST engine extracting surgical symbol outlines and method slices | Bounded symbol slices instead of whole-file dumps |
+| **Out-of-Band Execution** | Process execution and raw logs isolated outside the LLM context; returns signed receipts and diagnostic frames | Receipts plus diagnostic frames; raw logs stay out of context |
+| **Metro Map Topology** | Materializes files, symbols, and dependencies into a strongly typed Block-Chain-Link graph | Deterministic structural navigation and impact context |
+| **Persistent State Blackboard** | Compact incremental snapshot decoupling active state from chat history | Recovery receipt for cold starts and cross-session handoffs |
 
-> Across real-world multi-step benchmarks, ContextOS reduces redundant context consumption by over 90%, stabilizing attention and ensuring long-horizon development convergence.
+> Performance claims in this README are limited to the checked-in live-development validation below. Host tokens, peak context, provider tokens, and correctness are reported separately.
 
 ---
 
@@ -60,6 +62,8 @@ Blocks bind to real files, AST symbols, or directory trees (zero ghost blocks al
 - **Parallel Batching Over Serial Turns**:
   - Conventional AI tools encourage conversational, single-file serial editing that balloons context quadratically across turns.
   - ContextOS natively supports multi-concurrency: batch multi-file modifications in `edits: [...]` arrays and inspect multiple microservices in parallel via `inspect({ paths: [...] })`, cutting round-trip latency by over 60%.
+- **Receipt-First Pipeline Output**:
+  - `pipeline({ mode: "receipt" })` returns only bounded status, receipt, artifact, verdict, and exit references for successful batched actions. Use `mode: "summary"` or `mode: "full"` only when the action bodies are needed; batching should reduce host turns without re-expanding raw output.
 - **Topological Retention Priority**:
   - Uses a priority-weighted context budgeting algorithm: `next` (0) → `slots` (1) → `where` (2) → `now` (3) → `slices` (4). In large repos, local code previews are clipped first, **guaranteeing that the system architecture map and action slots are never truncated**.
 - **Lightweight Real-Time Blackboard & Instant Hydration (`.contextos/blackboard.md`)**:
@@ -90,6 +94,40 @@ Every `verify` run produces a signed receipt. Checkpoints track pass/fail status
 ### 7. Long-running processes are monitored live
 
 Dev servers, watchers, and background workers are managed by the Process Host and displayed in the Desktop App's bottom-left sidebar with live PID and port tracking.
+
+## Supported Hosts
+
+ContextOS supports five primary host families: Codex, Claude Code, OpenCode, Cursor, and Antigravity. Each integration uses the compact MCP surface plus the ContextOS Skill. The former lifecycle Hook layer has been removed so routing and recovery have one policy path instead of two competing implementations.
+
+| Host | MCP and Skill | Status |
+|---|---|---|
+| Codex | Yes | Supported |
+| Claude Code | Yes | MCP + Skill |
+| OpenCode | Yes | MCP + Skill |
+| Cursor | Yes | MCP + Skill |
+| Antigravity | Yes | MCP + Skill |
+
+The default MCP surface is the compact single `contextos` transport; the legacy multi-tool surface is opt-in with `CONTEXTOS_LEAN_SURFACE=0`. Repository reads, edits, and verification keep one evidence path through ContextOS MCP.
+
+## Micro Task Subagent
+
+Micro is an optional, multi-turn, controlled task subagent for bounded work such as log triage, contract distillation, and diagnostic summarization. Configure any OpenAI-compatible endpoint in `.contextos/profile.json` with `url`, `model`, `key`, and `sessionHeader`. OpenCode Go is the recommended subscription for users who want a low-friction hosted endpoint.
+
+Micro keeps session state outside the main conversation, enforces turn and context limits, keeps tools disabled by default, and returns only the final result plus a receipt. Full reasoning and tool traces stay in the artifact store. Session actions are `create`, `send`, `get`, `list`, `close`, and `delete`.
+
+Provider spend is bounded separately from host context. Each preset has a default provider-token ceiling; `maxProviderTokens`, `maxCostUsd`, `inputUsdPerMillion`, and `outputUsdPerMillion` can be set in the `micro` profile. Set `requireBulkInput: true` when a workflow must pass logs or artifacts through `inputRef`/`inputArtifact`/`inputReceipt` instead of inlining them. Sessions have a TTL, stale in-flight turns recover after a bounded interval, and cross-process writes use a lock file under `.contextos/micro-sessions/`.
+
+When Micro needs repository evidence, attach it directly to the first call with `pipeline: { steps: [...] }` (the compatible `preload` form is also accepted). ContextOS runs that Pipeline once, briefly caches unchanged read-only evidence, keeps the raw result in an artifact, and injects only bounded evidence into Micro; direct evidence defaults to 2,400 characters and one provider request unless an explicit `invocation` budget opts into more. Do not call Pipeline separately and copy the same output into a second Micro call. Choose `delivery: "immediate"`, `"defer"`, `"errors-only"`, or `"auto"` to control whether the answer returns now, is recovered on the next top-level OS call, is hidden after a successful graph write, or is routed by Micro's `needsHost` decision; delivery changes host visibility, not provider cost.
+
+Task `open` is read-only: it does not implicitly scan the working set, refresh AST locators, or append host-change notes. Request reconciliation explicitly with `task(action: "reconcile")` or `reconcile: true`, so cross-round recovery reads compact state instead of expanding durable context on every lookup.
+
+Independent Micro tasks belong in one `action:"batch"` call; both their evidence preloads and provider requests are concurrency-bounded at four by default (hard maximum eight), while a shared-evidence task should use one attached Pipeline instead of duplicate reads.
+
+Session and Micro-session state is scoped to the absolute workspace root. A copied checkout or worktree therefore starts with a clean session instead of inheriting another workspace's intent, receipts, touched files, or Micro history. Recorded host telemetry can be compared with `ops({ capability: "telemetry", action: "compare", args: { leftSessionId, rightSessionId } })`; its token values are estimates unless the host supplies actual usage.
+
+Use `ops({ capability: "telemetry", action: "audit", args: { sessionId, baselineSessionId?, limit? } })` for a compact OS versus OS+Micro routing audit. It joins host calls/replay, Micro provider usage, delivery outcomes, and optional right-minus-baseline deltas without replaying raw logs. `savings.actualPercent` is populated only when both host and provider usage are complete actual receipts; character-derived host tokens and `replayChars / 4` remain proxies.
+
+The repository also retains a 2026-09-26 historical development snapshot below. It is provenance, not a release gate: its arms used different turn counts and the run is not reproducible from the current checkout. Current acceptance requires the repeatable tests, bundle smoke, and real MCP acceptance described in the verification notes.
 
 ---
 
@@ -145,7 +183,7 @@ Download the package matching your environment from [GitHub Releases](https://gi
 
 ### Option B: AI Auto-Setup via Prompt (Zero Effort) {#start-in-30-seconds-ai-auto-setup}
 
-If you are already in an AI coding assistant (Cursor / Codex / Claude Code / Windsurf / Antigravity), let the AI configure everything automatically:
+If you are already in an AI coding assistant (Codex / Claude Code / OpenCode / Cursor / Antigravity), let the AI configure everything automatically. Other hosts are supported through an AI-written adaptation layer:
 
 > **Copy and paste this instruction into your AI coding assistant:**  
 > **"Please read `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`, detect my system environment, and configure ContextOS for me."**
@@ -174,67 +212,68 @@ ContextOS treats the **local workspace project directory** as the absolute sourc
 
 ---
 
-## Reproducible ContextOS Benchmark
+## Development Validation Notes
 
-### 1. Real Industrial Benchmark: 8 Distributed Microservices
+Validation uses real sub-agent conversations, not benchmarks, leaderboards, or synthetic scores. The purpose is to observe a complex feature through discovery, a failing test, diagnosis, repair, verification, and closure.
 
-In an industrial stress test across 8 distributed financial clearing microservices (multi-currency double-entry ledger, dynamic FX conversion, sliding-window TTL idempotency, poison transaction dead-letter queue, step timeout and backward compensation Saga, SHA-256 Merkle audit chain, 3-state circuit breaker, and 5-worker concurrent balance contention), the system demonstrated the following performance metrics:
+### Manual A/B/C protocol
 
-| Evaluation Metric | Conventional AI Assistant | ContextOS Intent OS | Measured Impact |
-|---|---|---|---|
-| **Task Completion Round-Trips** | 8 – 12 turns (inspect ➔ edit ➔ test ➔ check logs ➔ re-edit ➔ re-test) | **2 – 3 turns** (`explore` slots ➔ in-situ `change({ verify })` ➔ `ship`) | 70%+ fewer round-trips; substantially reduced idle latency |
-| **Test Failure Diagnosis Cost** | 2 – 3 extra turns calling log tools (20k – 40k tokens wasted per failure) | **0 extra turns** (assertion diffs and stack frames inlined directly) | 100% elimination of redundant log-fetching turns |
-| **Multi-File Operations** | Serial turn-by-turn round-trips (5 – 8 separate API calls) | **Single-turn parallel batching** (`inspect({ paths })` + `change({ edits })`) | 60%+ reduction in API calls and accumulated history |
-| **Large-Repo Architecture Visibility** | Blind file reading; long files push architectural context out of view | **Topological priority retention** (`where` preserved over local slices) | Eliminates architectural blindness and cross-module hallucinations |
-| **Session Rehydration (/clear)** | History lost; requires re-feeding full codebase context (20,000+ tokens) | **300-byte blackboard** (`/clear` followed by `explore` resumes in **~150 tokens**) | 99.2% reduction in rehydration cost; seamless task handoffs |
-| **Prompt Cache Hit Rate** | Drifting prompt structures yield poor cache rates | **Stable input/output schemas yield a 98.8% OpenAI Prompt Cache hit rate** | Over 90% reduction in actual API billing costs |
-| **Financial-Grade Concurrency & Resilience** | Vulnerable to race conditions, floating-point drift, or partial rollbacks | **26 rigorous test cases pass 100% green** (including 5-worker race conditions) | Production-grade distributed systems reliability |
+All arms use the same job-system fixture, tests, acceptance oracle, and isolated roots. The task is fixed to five rounds:
 
----
+1. Discover the structure and target symbols without editing.
+2. Preserve two intentional implementation defects, run the tests, and save bounded receipt/artifact evidence.
+3. Diagnose the failure: A reads the failure directly, B reuses the receipt, and C attaches one bounded Pipeline directly to Micro when evidence is heavy.
+4. Apply the repair and verify it; B/C use one atomic change/work route.
+5. Run the acceptance oracle and close with an explicit semantic Block/Chain payload in ship. ModuleIndex navigation hints never count as ownership.
 
-### 2. 20-Task Comprehensive Dual-Cohort Stress Benchmark
-
-To empirically evaluate system throughput, stability, and token governance under extended workloads, we designed and executed an intensive benchmark spanning **20 comprehensive lifecycle tasks** against identical distributed Saga settlement scenarios, comparing a conventional AI assistant (Cohort A Baseline) against ContextOS (Cohort B Intent OS):
-
-- **Task Coverage Dimensions**: Architecture planning and Phase synchronization, high-concurrency multi-module AST inspection, surgical business logic mutation with in-situ test verification, compile & assertion failure inline diagnostic extraction, external API schema ingestion, zero-loss cross-conversation rehydration via 300-byte blackboard, high-contention race condition validation, rapid code defect localization, multi-file atomic refactoring, speculative optimization with automatic rollback, 8-path concurrent AST outline extraction, out-of-context benchmark execution, and release boundary finalization.
-
-| Evaluation Metric | Cohort A (Baseline) | Cohort B (ContextOS) | Measured Impact |
-|---|---|---|---|
-| **Total Interaction Turns (Round-Trips)** | 91 turns | **21 turns** | **-76.92% (4.3x faster turn-around)** |
-| **Cumulative Context Consumption (Tokens)** | 157,042 tokens | **10,124 tokens** | **-93.55% (15.5x token compression)** |
-| **Cumulative Context (Characters)** | 628,165 chars | **40,460 chars** | **-93.55% (587,705 chars eliminated)** |
-| **Total Tool Invocations** | 91 calls | **22 calls** | **4.14x tool dispatch convergence** |
-| **Average Calls per Complex Task** | 4.55 calls / task | **1.10 calls / task** | Near 1:1 direct execution |
-
-#### ContextOS Tool Invocation Breakdown (Cohort B):
-- `change` (in-situ verify & atomic rollback): **10 calls** (45.5%) — primary workhorse
-- `explore` (intent discovery & slot dispatch): **3 calls** (13.6%) — cold start & cross-conversation relay
-- `inspect` (batch AST outlines & signatures): **3 calls** (13.6%) — multi-path architectural audit
-- `verify` (sanitized execution & receipt signing): **3 calls** (13.6%) — checkpoint integrity proofs
-- `ops` (graph & plan state machine mutations): **2 calls** (9.1%) — architectural bindings
-- `ship` (boundary sealing & receipt archival): **1 call** (4.5%) — release closure
-
----
-
-### 3. Static Codebase Context Savings Benchmark
-
-The benchmark is generated from the current repository and is intentionally not hard-coded to a historical Block/Chain/Link count. Run it locally to produce the measurements for your checkout:
-
-| Development Phase | Traditional AI Workflow | ContextOS Intent Workflow | Reduction |
+| Arm | Responsibility | Main route | Micro |
 |---|---|---|---:|
-| **Session Bootstrap** | Full graph & repo files · 61,902 chars (~15,476 tokens) | Progressive L0-L1 Markdown · 1,987 chars (~497 tokens) | **96.79%** |
-| **Code Structure Exploration** | Full file inspections · 34,045 chars (~8,512 tokens) | AST Symbol Outlines · 4,374 chars (~1,093 tokens) | **87.15%** |
-| **Code Reading & Inspection** | Full file reads across 4 modules · 34,045 chars | Surgical Method Extraction · 6,898 chars | **79.74%** |
-| **Terminal & Test Noise** | Raw build & test logs · 16,713 chars (~4,179 tokens) | Compact Receipt + Diagnostics · 251 chars (~63 tokens) | **98.50%** |
-| **Cumulative Session Total** | **129,373 chars (~32,344 tokens)** | **13,761 chars (~3,441 tokens)** | **89.36% — saves ~28,903 tokens** |
+| A | Normal development control | shell, edit, test | 0 |
+| B | ContextOS | explore/inspect, one Pipeline, change/work, ship | 0 |
+| C | ContextOS + Micro | B's route; one bounded Pipeline attached to Micro | Only when evidence is heavy and the host needs it, normally once |
 
-Run the benchmarks locally:
+Micro has an explicit lifecycle: a pipeline can be supplied at creation so the host does not run the same discovery once and Micro again; deferred results are stored in OS and recovered on the next call; errors-only returns only failures; unnecessary answers stay out of the host conversation. Evidence tasks default to one provider request, and empty answers do not trigger unbounded retries.
 
-```bash
-node scripts/comprehensive-dual-cohort-eval.mjs # 20-task comprehensive dual-cohort stress benchmark
-node scripts/benchmark.mjs                      # Static codebase context savings benchmark
-node scripts/comprehensive-dev-eval.mjs        # 10-dimension complete capability benchmark
-```
+### Current reproducible result
+
+The latest real five-round sub-agent run completed implementation, tests, and acceptance for A/B/C. A used normal shell, B used ContextOS, and C used one direct Pipeline→Micro route. The run exposed two real defects: an unsynchronized installed bundle silently dropped ship.architecture, and an older Micro route reported a forbidden second request as a budget error after an empty answer. The install path now synchronizes the repository bundle, plugin cache, and ~/.contextos; the empty-answer path now reports the empty result and explicitly skips a retry once the request budget is reached. Any already-running MCP process still requires a new session before it can be evidence for the new build.
+
+Host-visible actions and OS-internal telemetry are counted separately; internal Pipeline fan-out is not presented as extra host conversation. The observed five-round run was:
+
+| Arm | Rounds | External calls | Internal calls | Provider | Result |
+|---|---:|---:|---:|---:|---|
+| A | 5 | 12 shell + 2 edits | n/a | 0 | Tests and acceptance passed |
+| B | 5 | 10 | 11 | 0 | Repair, tests, and acceptance passed |
+| C | 5 | 9 | 9 | Two attempts in an older session; 1,695 provider tokens | Repair, tests, and acceptance passed; old-session architecture failure was isolated |
+
+The local MCP proxy does not expose the host model's input/cached/output/reasoning tokens, so character-derived proxy values are never presented as billing savings. Micro prompt/completion/total usage is recorded separately in .contextos/logs/micro-usage.jsonl. A savings comparison is valid only when the arms use the same rounds, acceptance, implementation hash, and MCP build; the old-session contamination means this run does not claim a universal 50–80% or 80% saving.
+
+### Graph hygiene and ownership
+
+The repository graph is now curated through ContextOS ops as 31 semantic Blocks, 12 Chains, and 32 Links, with Chinese titles/summaries. Validation reports a valid Chain layout, zero duplicate artifact locators, zero deleted paths, zero mod-* or kind=module Blocks, zero orphan Blocks, and no dangling members or links.
+
+A Block is a stable semantic responsibility; a Chain is a meaningful business or runtime flow; a Link is a cross-responsibility relationship. ModuleIndex is navigation only. Rebinding uses replacePaths=true as a complete ownership refresh, preventing stale scripts, moved files, and duplicate symbol locators from surviving. The verification Block binds only current runnable acceptance/smoke/fixture scripts; deleted benchmark scripts are not mounted.
+
+### Local acceptance commands
+
+npm test
+
+npm run plugin:verify
+
+npm run dist:smoke
+
+npm run acceptance:real
+
+npm run acceptance:micro
+
+These are regression and distribution checks, not synthetic benchmark gates. Run npm run desktop:build when a release requires a full desktop build.
+
+### Known limits
+
+- The manual run covers one complex feature domain and one provider; its consumption figures diagnose workflow, not billing.
+- A/B/C must use fresh MCP sessions. Updating a file cannot restart an already-loaded server.
+- Micro is conditional: it helps when evidence is large enough to repay provider input and the host genuinely needs the diagnosis; small tasks should skip it.
+- SQLite, receipts, artifacts, telemetry, and sessions under .contextos are runtime recovery state, not extra source files; do not commit local runtime state.
 
 ---
 
@@ -244,7 +283,7 @@ ContextOS has deliberately changed direction as real usage exposed new costs:
 
 - **0.4.x:** regex parsing, Ghost Blocks, and a 49-tool MCP surface made architectural memory unreliable.
 - **V2:** introduced real-code Blocks, AST-backed visibility, SQLite plus `graph.json`, and formal development governance.
-- **Intent-level architecture:** collapsed the public surface to `explore` / `inspect` / `change` / `verify` / `ship` / `ops`, moved orchestration into the OS, and made module metadata derive from the codebase.
+- **Intent-level architecture:** the default public surface is one `contextos` transport routed by `action` (`explore` / `inspect` / `work` / `change` / `verify` / `ship` / `pipeline` / `ops`); named tools remain only as an opt-in compatibility surface, while orchestration stays in the OS and module metadata derives from the codebase.
 - **2.5.0:** hardens project identity, release/update paths, graph synchronization, atomic edits, and lifecycle gates.
 
 [Read the full decision history →](DECISION.md)

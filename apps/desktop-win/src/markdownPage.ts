@@ -159,4 +159,68 @@ export class MarkdownPage {
       ${html.join('\n')}
     `;
   }
+
+  static renderSnippet(markdown: string): string {
+    if (!markdown || !markdown.trim()) return '';
+    const fences: string[] = [];
+    const protectedText = markdown.replace(/(?:^|\n)(```|~~~)[^\n]*\n[\s\S]*?\n\1[^\n]*(?:\n|$)/g, (match) => {
+      fences.push(match);
+      return `\nFENCEDCONTENTTOKEN${fences.length - 1}ENDTOKEN\n`;
+    });
+
+    let clean = protectedText.replace(/<(script|style|iframe|object)[^>]*>[\s\S]*?<\/\1>/gi, '');
+    clean = clean.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, '![]($1)');
+    clean = clean.replace(/<h([1-6])[^>]*>(.*?)<\/h\1>/gi, (_, lvl, content) => '#'.repeat(parseInt(lvl)) + ' ' + content);
+    clean = clean.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+
+    for (let i = 0; i < fences.length; i++) {
+      clean = clean.replace(`FENCEDCONTENTTOKEN${i}ENDTOKEN`, fences[i].trim());
+    }
+
+    const lines = clean.split(/\r?\n/);
+    const html: string[] = [];
+    let index = 0;
+
+    while (index < lines.length) {
+      const raw = lines[index];
+      const line = raw.trim();
+
+      if (line.startsWith('```') || line.startsWith('~~~')) {
+        const fence = line.substring(0, 3);
+        const language = line.substring(3).trim();
+        const code: string[] = [];
+        index += 1;
+        while (index < lines.length && !lines[index].trim().startsWith(fence)) {
+          code.push(lines[index]);
+          index += 1;
+        }
+        html.push(`<pre><span class="language">${this.escape(language)}</span><code>${this.escape(code.join('\n'))}</code></pre>`);
+      } else if (/^#{1,6}\s/.test(line)) {
+        const match = line.match(/^(#{1,6})\s+(.*)$/);
+        if (match) {
+          const level = match[1].length;
+          const title = match[2];
+          html.push(`<h${level}>${this.inline(title)}</h${level}>`);
+        }
+      } else if (line === '---' || line === '***') {
+        html.push('<hr>');
+      } else if (line.startsWith('>')) {
+        html.push(`<blockquote>${this.inline(line.substring(1).trim())}</blockquote>`);
+      } else if (/^([-*+] |\d+\. )/.test(line)) {
+        const item = line.replace(/^([-*+] |\d+\. )/, '');
+        const markerMatch = line.match(/^(\d+\.)/);
+        const marker = markerMatch ? markerMatch[1] : '•';
+        const indent = Math.min(8, Math.floor((raw.length - raw.trimStart().length) / 2)) * 14;
+        html.push(`<div class="list-item" style="margin-left:${indent}px">${marker} ${this.inline(item)}</div>`);
+      } else if (line.length > 0) {
+        const plain = line.replace(/<[^>]+>/g, '');
+        if (plain.length > 0) {
+          html.push(`<p>${this.inline(plain)}</p>`);
+        }
+      }
+      index += 1;
+    }
+
+    return html.join('\n');
+  }
 }

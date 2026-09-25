@@ -94,7 +94,24 @@ export class ModuleIndex {
     if (!fs.existsSync(this.cachePath)) return;
     try {
       const raw = JSON.parse(fs.readFileSync(this.cachePath, 'utf8'));
-      for (const entry of raw.entries || []) this.entries.set(entry.path, entry);
+      let pruned = false;
+      for (const entry of Array.isArray(raw.entries) ? raw.entries : []) {
+        if (!entry || typeof entry.path !== 'string') {
+          pruned = true;
+          continue;
+        }
+        const fullPath = path.resolve(this.projectRoot, entry.path);
+        const relativePath = path.relative(this.projectRoot, fullPath);
+        const outsideProject = relativePath === '..'
+          || relativePath.startsWith('..' + path.sep)
+          || path.isAbsolute(relativePath);
+        if (outsideProject || !isIndexable(relativePath) || !fs.existsSync(fullPath)) {
+          pruned = true;
+          continue;
+        }
+        this.entries.set(relativePath.split(path.sep).join('/'), { ...entry, path: relativePath.split(path.sep).join('/') });
+      }
+      if (pruned) this.save();
     } catch (_) {}
   }
 
@@ -196,6 +213,10 @@ export class ModuleIndex {
       } catch (_) {
         continue;
       }
+      // Callers may provide a directory as a focus path. Directory expansion
+      // belongs to the discovery layer; never hand a directory to _parse(),
+      // which would turn a valid focus hint into an EISDIR failure.
+      if (!stat.isFile()) continue;
       const cached = this.entries.get(relativePath);
       if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) continue;
       const entry = this._parse(relativePath);

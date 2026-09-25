@@ -26,11 +26,108 @@ import { MarkdownRenderer } from '../../context/src/index.mjs';
  * graph.json that lags behind SQLite must not stop the agent from reading code.
  */
 const READ_ONLY_ACTIONS = {
+  plan: new Set(['list', 'get', 'open']),
+  task: new Set(['list', 'open']),
   code: new Set(['outline', 'read', 'search']),
   block: new Set(['list', 'open', 'search']),
   chain: new Set(['list', 'open', 'links', 'validate', 'validate_layout']),
   knowledge: new Set(['rule_list', 'rule_open', 'decision_open']),
 };
+
+const LIST_PAGE_DEFAULT = 20;
+const LIST_PAGE_MAX = 25;
+
+function createListPage(records, requestedLimit, requestedOffset) {
+  const parsedLimit = Number(requestedLimit);
+  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0
+    ? Math.max(1, Math.min(LIST_PAGE_MAX, Math.floor(parsedLimit)))
+    : LIST_PAGE_DEFAULT;
+  const parsedOffset = Number(requestedOffset);
+  const offset = Number.isFinite(parsedOffset) ? Math.max(0, Math.floor(parsedOffset)) : 0;
+  const items = records.slice(offset, offset + limit);
+  const hasMore = offset + items.length < records.length;
+  return { items, total: records.length, offset, limit, hasMore, nextOffset: hasMore ? offset + items.length : null };
+}
+
+function compactBlock(block) {
+  const refs = Array.isArray(block.artifactRefs) ? block.artifactRefs : [];
+  const paths = [...new Set(refs.map((ref) => ref.path).filter(Boolean))];
+  const summary = String(block.summary || '');
+  return {
+    id: block.id,
+    title: String(block.title || block.id || '').slice(0, 120),
+    kind: String(block.kind || '').slice(0, 48),
+    summary: summary.slice(0, 160),
+    ...(summary.length > 160 ? { summaryTruncated: true } : {}),
+    tier: block.tier,
+    artifactCount: refs.length,
+    pathCount: paths.length,
+    paths: paths.slice(0, 2).map((value) => String(value).slice(0, 120)),
+  };
+}
+
+function compactChain(chain) {
+  const memberIds = Array.isArray(chain.memberIds) ? chain.memberIds : [];
+  return {
+    id: chain.id,
+    title: String(chain.title || chain.id || '').slice(0, 120),
+    kind: String(chain.kind || '').slice(0, 48),
+    memberCount: memberIds.length,
+  };
+}
+
+function artifactRefKey(ref = {}) {
+  const anchorKind = ref.anchorKind || (ref.symbol ? 'symbol' : 'file');
+  return [ref.path || '', anchorKind, ref.symbol || ''].join('\0');
+}
+
+// Binding is a refresh operation, not an append-only event log. Keep one
+// locator per path/anchor/symbol and let the newest hash/line range win. This
+// also repairs legacy graphs created before `replacePaths` was available.
+function dedupeArtifactRefs(refs = []) {
+  const result = [];
+  const indexes = new Map();
+  for (const ref of Array.isArray(refs) ? refs : []) {
+    if (!ref || typeof ref !== 'object' || !ref.path) continue;
+    const key = artifactRefKey(ref);
+    const existingIndex = indexes.get(key);
+    if (existingIndex === undefined) {
+      indexes.set(key, result.length);
+      result.push(ref);
+    } else {
+      result[existingIndex] = ref;
+    }
+  }
+  return result;
+}
+
+function formatListRange(page, label) {
+  const count = page.items.length;
+  const start = count ? page.offset + 1 : 0;
+  const end = page.offset + count;
+  const next = page.hasMore ? ' Pass offset: ' + page.nextOffset + ' to continue.' : '';
+  return 'Showing ' + start + '-' + end + ' of ' + page.total + ' ' + label + '.' + next;
+}
+
+function assertCuratedBlockIdentity(id, blockData = {}, existing = null) {
+  const normalizedId = String(id || '').trim();
+  const kind = String(blockData.kind || existing?.kind || '').trim().toLowerCase();
+  const title = String(blockData.title || existing?.title || '').trim();
+  if (normalizedId.toLowerCase().startsWith('mod-') || kind === 'module' || /^derived module\b/i.test(title)) {
+    throw new Error(
+      `Derived ModuleIndex identity is not a curated Block: '${normalizedId}'. ` +
+      'Use a stable semantic Block id/title/kind; mod-* and kind=module are navigation-only.'
+    );
+  }
+}
+
+function isCuratedBlockRecord(block) {
+  if (!block) return false;
+  const id = String(block.id || '').toLowerCase();
+  const kind = String(block.kind || '').toLowerCase();
+  const title = String(block.title || '');
+  return !id.startsWith('mod-') && kind !== 'module' && !/^derived module\b/i.test(title);
+}
 
 export class ContextOSV2Service {
   constructor({ projectRoot = process.cwd(), projectId = 'contextos' } = {}) {
@@ -392,17 +489,97 @@ export class ContextOSV2Service {
 
   // ================= 2. plan =================
   async plan(input) {
+    if (this._isReadOnly('plan', input.action)) return this._plan(input);
     return this._withWriteLock('plan', () => this._plan(input));
   }
 
-  async _plan({ action, id, planId, planData = {}, checkpointId, passed, evidenceRef, reason, format = 'markdown' }) {
+  _resolveActivePlanId() {
+    const activePlans = this.db
+      .listPlans(this.projectId)
+      .filter((plan) => plan.status === 'active')
+      .sort((left, right) => Date.parse(right.updatedAt || 0) - Date.parse(left.updatedAt || 0));
+    if (activePlans.length === 0) throw new Error('No active plan found');
+    if (activePlans.length > 1) {
+      throw new Error(
+        `Multiple active plans found: ${activePlans.map((plan) => plan.id).join(', ')}; pass id explicitly`
+      );
+    }
+    return activePlans[0].id;
+  }
+
+  async _plan({
+    action,
+    id,
+    planId,
+    planData = {},
+    checkpointId,
+    passed,
+    evidenceRef,
+    reason,
+    status,
+    limit,
+    offset,
+    format = 'markdown',
+  }) {
     const targetId = id || planId || planData.id;
     const targetCpId = checkpointId || planData.checkpointId;
     switch (action) {
       case 'list': {
-        const plans = this.db.listPlans(this.projectId);
-        if (format === 'json') return plans;
-        return '# Project Plans\n' + (plans.length ? plans.map((p) => `- [${p.status.toUpperCase()}] **${p.title}** (${p.id}) - ${p.summary}`).join('\n') : 'No plans yet.');
+        const allPlans = this.db.listPlans(this.projectId);
+        const statusFilter = typeof status === 'string' ? status.trim().toLowerCase() : '';
+        const matchingPlans = statusFilter
+          ? allPlans.filter((plan) => String(plan.status || '').toLowerCase() === statusFilter)
+          : allPlans;
+        const total = matchingPlans.length;
+        const requestedLimit = Number(limit);
+        const pageLimit = Number.isFinite(requestedLimit) && requestedLimit > 0
+          ? Math.max(1, Math.min(Math.floor(requestedLimit), 25))
+          : 10;
+        const requestedOffset = Number(offset);
+        const pageOffset = Math.min(total, Number.isFinite(requestedOffset) && requestedOffset > 0
+          ? Math.floor(requestedOffset)
+          : 0);
+        const pagePlans = matchingPlans.slice(pageOffset, pageOffset + pageLimit);
+        const hasMore = pageOffset + pagePlans.length < total;
+        const compactSummary = (value) => {
+          const summary = String(value || '').replace(/\s+/g, ' ').trim();
+          const characters = Array.from(summary);
+          return characters.length <= 160 ? summary : `${characters.slice(0, 157).join('')}...`;
+        };
+        const records = pagePlans.map((plan) => ({
+          id: plan.id,
+          title: plan.title,
+          status: plan.status,
+          summary: compactSummary(plan.summary),
+          updatedAt: plan.updatedAt || null,
+          phases: Array.isArray(plan.phases)
+            ? plan.phases.map((phase) => ({ id: phase.id, status: phase.status, order: phase.order }))
+            : [],
+          checkpoints: Array.isArray(plan.checkpoints)
+            ? plan.checkpoints.map((checkpoint) => ({ id: checkpoint.id, status: checkpoint.status }))
+            : [],
+        }));
+        const page = {
+          plans: records,
+          total,
+          limit: pageLimit,
+          offset: pageOffset,
+          hasMore,
+          nextOffset: hasMore ? pageOffset + pagePlans.length : null,
+        };
+        if (format === 'json') return page;
+        const countLabel = pagePlans.length
+          ? `${pageOffset + 1}-${pageOffset + pagePlans.length} of ${total}`
+          : `0 of ${total}`;
+        const statusLabel = statusFilter ? `, status=${statusFilter}` : '';
+        const heading = `# Project Plans (${countLabel}${statusLabel})`;
+        const entries = pagePlans.map((plan) => {
+          const summary = compactSummary(plan.summary);
+          return '- [' + String(plan.status || 'unknown').toUpperCase() + '] **' + plan.title + '** (' + plan.id + ')' + (summary ? ' - ' + summary : '');
+        });
+        if (hasMore) entries.push(`More plans available: offset=${page.nextOffset}.`);
+        const emptyMessage = total ? 'No plans on this page.' : 'No plans yet.';
+        return [heading, entries.length ? entries.join('\n') : emptyMessage].join('\n');
       }
       case 'create': {
         const ruleRefs = this._validateRuleRefs(planData.ruleRefs ?? planData.rule_refs);
@@ -415,25 +592,29 @@ export class ContextOSV2Service {
         return format === 'json' ? created : MarkdownRenderer.renderPlan(created);
       }
       case 'update': {
+        const resolvedId = targetId || this._resolveActivePlanId();
         const updates = { ...planData };
         if (updates.ruleRefs !== undefined || updates.rule_refs !== undefined) {
           updates.ruleRefs = this._validateRuleRefs(updates.ruleRefs ?? updates.rule_refs);
         }
-        const updated = this.planService.updatePlan(targetId, updates);
+        const updated = this.planService.updatePlan(resolvedId, updates);
         return format === 'json' ? updated : MarkdownRenderer.renderPlan(updated);
       }
       case 'upsert': {
         if (!this.db.getPlan(targetId)) return this._plan({ action: 'create', id: targetId, planData: { ...planData, id: targetId }, format });
         return this._plan({ action: 'update', id: targetId, planData, format });
       }
+      case 'get':
       case 'open': {
-        const plan = this.db.getPlan(targetId);
-        if (!plan) throw new Error(`Plan '${targetId}' not found`);
+        const resolvedId = targetId || this._resolveActivePlanId();
+        const plan = this.db.getPlan(resolvedId);
+        if (!plan) throw new Error(`Plan '${resolvedId}' not found`);
         return format === 'json' ? plan : MarkdownRenderer.renderPlan(plan);
       }
       case 'check': {
-        const cp = this.planService.checkCheckpoint(targetId, targetCpId, { passed, evidenceRef, reason });
-        return `Checkpoint '${targetCpId}' in Plan '${targetId}' marked as ${cp.status}.`;
+        const resolvedId = targetId || this._resolveActivePlanId();
+        const cp = this.planService.checkCheckpoint(resolvedId, targetCpId, { passed, evidenceRef, reason });
+        return `Checkpoint '${targetCpId}' in Plan '${resolvedId}' marked as ${cp.status}.`;
       }
       case 'complete': {
         const completed = this.planService.completePlan(targetId, planData);
@@ -450,6 +631,7 @@ export class ContextOSV2Service {
 
   // ================= 3. task =================
   async task(input) {
+    if (this._isReadOnly('task', input.action)) return this._task(input);
     return this._withWriteLock('task', () => this._task(input));
   }
 
@@ -503,6 +685,7 @@ export class ContextOSV2Service {
     findings,
     targetBlockId,
     files,
+    reconcile = false,
     format = 'markdown',
   }) {
     const targetId = id || taskId || taskData.id;
@@ -573,7 +756,11 @@ export class ContextOSV2Service {
         return format === 'json' ? created : MarkdownRenderer.renderTask(created, { projectRoot: this.projectRoot });
       }
       case 'open': {
-        if (this.projectRoot) {
+        // Opening a Task is a read. Reconciliation scans the working set,
+        // refreshes AST locators, and appends host-change notes; doing that
+        // implicitly made a compact state lookup expand into a large write.
+        // Callers must opt into the mutating reconcile action explicitly.
+        if (reconcile === true && this.projectRoot) {
           try {
             this.taskService.reconcileTask(id, this.projectRoot, this.projectId);
           } catch (_) {}
@@ -798,17 +985,24 @@ export class ContextOSV2Service {
     symbols = [],
     hashMode = null,
     manifest = null,
+    replacePaths = false,
+    includeRefs = false,
+    limit,
+    offset,
     format = 'markdown',
   }) {
     switch (action) {
       case 'list': {
-        const blocks = this.db.listBlocks(this.projectId);
-        const enriched = blocks.map((b) => ({
-          ...b,
-          tier: MarkdownRenderer.getBlockTier(b),
-        }));
-        if (format === 'json') return enriched;
-        return MarkdownRenderer.renderBlockList(enriched);
+        const page = createListPage(this.db.listBlocks(this.projectId), limit, offset);
+        const items = page.items.map((block) => {
+          const enriched = { ...block, tier: MarkdownRenderer.getBlockTier(block) };
+          return includeRefs === true ? enriched : compactBlock(enriched);
+        });
+        const result = { ...page, items };
+        if (format === 'json') return result;
+        const heading = '# Architecture Blocks (' + page.total + ' total; showing ' + items.length + ')';
+        const rendered = MarkdownRenderer.renderBlockList(items).replace(/^# Architecture Blocks \\(.*\\)$/, heading);
+        return rendered + '\\n\\n' + formatListRange(result, 'Blocks');
       }
       case 'open': {
         const block = this.db.getBlock(id);
@@ -846,8 +1040,9 @@ export class ContextOSV2Service {
           throw new Error("Missing required 'id' parameter for block bind action (e.g. id: 'block-desktop-installer')");
         }
         const existing = this.db.getBlock(targetId);
+        assertCuratedBlockIdentity(targetId, blockData, existing);
         const inputArtifactRefs = blockData?.artifactRefs || [];
-        const normalizedRefs = inputArtifactRefs.map((ref) => {
+        const normalizedRefs = dedupeArtifactRefs(inputArtifactRefs.map((ref) => {
           if (typeof ref === 'string') {
             return {
               path: this._resolveProjectPath(ref, 'artifactRef path').relativePath,
@@ -862,9 +1057,9 @@ export class ContextOSV2Service {
               ? this._resolveProjectPath(ref.manifest, 'artifactRef manifest').relativePath
               : null,
           };
-        });
+        }));
 
-        const existingRefs = existing?.artifactRefs || [];
+        const existingRefs = dedupeArtifactRefs(existing?.artifactRefs || []);
         const mergedRefs = [...existingRefs];
         for (const nr of normalizedRefs) {
           const anchored = this._anchorSymbolRef(nr);
@@ -885,7 +1080,7 @@ export class ContextOSV2Service {
           ...blockData,
           id: targetId,
           projectId: this.projectId,
-          artifactRefs: mergedRefs,
+          artifactRefs: dedupeArtifactRefs(mergedRefs),
         });
         assertBlockHasRealCode(block);
         this.db.saveBlock(block.toJSON());
@@ -905,6 +1100,10 @@ export class ContextOSV2Service {
           details: blockData?.details || '',
           artifactRefs: [],
         };
+        // An explicit non-derived id is already the semantic ownership choice;
+        // Block defaults keep the legacy bind_auto API compatible when callers
+        // omit optional title/kind metadata.
+        assertCuratedBlockIdentity(targetId, blockData, this.db.getBlock(targetId));
 
         const rawPaths = [];
         if (targetPath) rawPaths.push(targetPath);
@@ -1022,10 +1221,14 @@ export class ContextOSV2Service {
           }
         }
 
-        const boundedPaths = new Set(autoArtifactRefs.map((r) => r.path));
-        const existingRefs = (existing.artifactRefs || []).filter(
-          (r) => !(boundedPaths.has(r.path) && (!r.symbol || !r.symbol.trim() || r.symbol === '*'))
-        );
+        // `replacePaths` is a complete ownership refresh.  Keeping an old
+        // locator outside the newly supplied set makes a Block continue to
+        // own files that were moved or deleted, which creates duplicate
+        // owners and stale graph references.  The default remains additive
+        // for callers that intentionally bind one more path.
+        const existingRefs = replacePaths
+          ? []
+          : dedupeArtifactRefs(existing.artifactRefs || []);
         const mergedRefs = [...existingRefs];
         for (const autoRef of autoArtifactRefs) {
           const idx = mergedRefs.findIndex((r) => r.path === autoRef.path && r.symbol === autoRef.symbol);
@@ -1041,7 +1244,7 @@ export class ContextOSV2Service {
           ...blockData,
           id: targetId,
           projectId: this.projectId,
-          artifactRefs: mergedRefs,
+          artifactRefs: dedupeArtifactRefs(mergedRefs),
         });
         assertBlockHasRealCode(updatedBlock);
         this.db.saveBlock(updatedBlock.toJSON());
@@ -1062,6 +1265,17 @@ export class ContextOSV2Service {
         this.db.deleteBlock(id);
         return `Block '${id}' deleted successfully.`;
       }
+      case 'prune_derived': {
+        const derived = this.db.listBlocks(this.projectId).filter((block) =>
+          String(block.id || '').startsWith('mod-')
+          && block.kind === 'module'
+          && block.title === `Derived module ${block.id}`
+        );
+        for (const block of derived) this.db.deleteBlock(block.id);
+        return format === 'json'
+          ? { deletedIds: derived.map((block) => block.id) }
+          : `Removed ${derived.length} legacy derived module Block(s).`;
+      }
       default:
         throw new Error(`Unknown block action: ${action}`);
     }
@@ -1073,12 +1287,17 @@ export class ContextOSV2Service {
     return this._withWriteLock('chain', () => this._chain(input));
   }
 
-  async _chain({ action, id, chainData = {}, linkData = {}, format = 'markdown' }) {
+  async _chain({ action, id, chainData = {}, linkData = {}, replaceMembers = false, includeMembers = false, limit, offset, format = 'markdown' }) {
     switch (action) {
       case 'list': {
-        const chains = this.db.listChains(this.projectId);
-        if (format === 'json') return chains;
-        return '# Feature Chains\n' + (chains.length ? chains.map((c) => `- [${c.id}] ${c.title} (${c.kind}, ${c.memberIds.length} members)`).join('\n') : 'No chains yet.');
+        const page = createListPage(this.db.listChains(this.projectId), limit, offset);
+        const items = page.items.map((chain) => includeMembers === true ? chain : compactChain(chain));
+        const result = { ...page, items };
+        if (format === 'json') return result;
+        const body = '# Feature Chains\n' + (items.length
+          ? items.map((c) => '- [' + c.id + '] ' + c.title + ' (' + c.kind + ', ' + c.memberCount + ' members)').join('\n')
+          : 'No chains yet.');
+        return body + '\n\n' + formatListRange(result, 'Chains');
       }
       case 'open': {
         const chain = this.db.getChain(id);
@@ -1086,8 +1305,43 @@ export class ContextOSV2Service {
         return format === 'json' ? chain : `# Chain: [${chain.id}] ${chain.title}\nMembers: ${chain.memberIds.join(', ')}`;
       }
       case 'compose': {
-        this.db.saveChain({ ...chainData, projectId: this.projectId });
-        return `Chain '${chainData.id}' composed successfully.`;
+        const chainId = chainData.id || id;
+        if (!chainId) throw new Error("Missing required 'id' for chain compose.");
+        const existing = this.db.getChain(chainId);
+        if (!existing && !String(chainData.title || '').trim()) {
+          throw new Error('New Chain composition requires an explicit title.');
+        }
+        const requestedMembers = Array.isArray(chainData.memberIds)
+          ? chainData.memberIds
+          : (Array.isArray(chainData.member_ids) ? chainData.member_ids : []);
+        const replace = replaceMembers === true || chainData.replaceMembers === true;
+        const memberIds = [...new Set(replace
+          ? requestedMembers
+          : [...(existing?.memberIds || []), ...requestedMembers])];
+        const invalidDerivedMembers = memberIds.filter((memberId) => String(memberId).toLowerCase().startsWith('mod-'));
+        if (invalidDerivedMembers.length) {
+          throw new Error(
+            `Chain '${chainId}' cannot include derived ModuleIndex ids: ${invalidDerivedMembers.join(', ')}. ` +
+            'Compose only curated semantic Block ids.'
+          );
+        }
+        const knownBlocks = new Map(this.db.listBlocks(this.projectId).map((block) => [block.id, block]));
+        const missingMembers = memberIds.filter((memberId) => !knownBlocks.has(memberId));
+        if (missingMembers.length) {
+          throw new Error(`Chain '${chainId}' cannot include missing Block(s): ${missingMembers.join(', ')}.`);
+        }
+        const nonCuratedMembers = memberIds.filter((memberId) => !isCuratedBlockRecord(knownBlocks.get(memberId)));
+        if (nonCuratedMembers.length) {
+          throw new Error(`Chain '${chainId}' cannot include non-curated module Block(s): ${nonCuratedMembers.join(', ')}.`);
+        }
+        this.db.saveChain({
+          ...(existing || {}),
+          ...chainData,
+          id: chainId,
+          memberIds,
+          projectId: this.projectId,
+        });
+        return `Chain '${chainId}' composed successfully.`;
       }
       case 'delete': {
         this.db.deleteChain(id);
@@ -1131,8 +1385,9 @@ export class ContextOSV2Service {
             .filter((blockId) => !blockIds.has(blockId))
             .map((blockId) => ({ chainId: chain.id, blockId }))
         );
-        // Derived modules (`mod-*`) come from ship's auto-attribution and are
-        // not curated architecture, so they never count as orphans.
+        // Legacy derived modules may remain from older state, but they are
+        // navigation-only and never count as curated architecture. Current
+        // ship does not create or auto-bind module Blocks.
         const derivedBlocks = blocks
           .filter((block) => String(block.id).startsWith('mod-'))
           .map((block) => block.id);
@@ -1142,9 +1397,31 @@ export class ContextOSV2Service {
         const danglingLinks = links
           .filter((link) => !blockIds.has(link.from) || !blockIds.has(link.to))
           .map((link) => link.id);
+        const locatorOwners = new Map();
+        for (const block of blocks) {
+          for (const ref of Array.isArray(block.artifactRefs) ? block.artifactRefs : []) {
+            const key = artifactRefKey(ref);
+            if (!locatorOwners.has(key)) locatorOwners.set(key, []);
+            locatorOwners.get(key).push(block.id);
+          }
+        }
+        const duplicateArtifactRefs = [...locatorOwners.entries()]
+          .filter(([, owners]) => new Set(owners).size > 1)
+          .map(([key, owners]) => {
+            const [refPath, anchorKind, symbol] = key.split('\0');
+            return {
+              path: refPath,
+              anchorKind,
+              ...(symbol ? { symbol } : {}),
+              blockIds: [...new Set(owners)],
+            };
+          });
         const layout = NetworkLayoutEngine.computeLayout({ blocks, chains, links });
         return {
-          valid: missingMembers.length === 0 && orphanBlocks.length === 0 && danglingLinks.length === 0,
+          valid: missingMembers.length === 0
+            && orphanBlocks.length === 0
+            && danglingLinks.length === 0
+            && duplicateArtifactRefs.length === 0,
           nodeCount: layout.nodes.length,
           edgeCount: layout.edges.length,
           bounds: layout.bounds,
@@ -1152,6 +1429,7 @@ export class ContextOSV2Service {
           orphanBlocks,
           missingMembers,
           danglingLinks,
+          duplicateArtifactRefs,
         };
       }
       default:
@@ -1172,6 +1450,15 @@ export class ContextOSV2Service {
       this.taskService.addFileToWorkingSet(activeTask.id, file.path);
       try {
         const fullPath = this._resolveProjectPath(file.path, 'changed file').fullPath;
+        if (file.deleted === true) {
+          activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
+          activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
+          activeTask.baseline.fileSnapshots[file.path] = {
+            deleted: true,
+            lastReconciledAt: new Date().toISOString(),
+          };
+          continue;
+        }
         const stat = fs.statSync(fullPath);
         activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
         activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
@@ -1186,7 +1473,7 @@ export class ContextOSV2Service {
     this.db.saveTask(activeTask);
   }
 
-  async _code({ action, path: relPath, selector, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = 'markdown', changes = [], ranges, budget, maxChars }) {
+  async _code({ action, path: relPath, selector, symbol, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = 'markdown', changes = [], ranges, budget, maxChars }) {
     if (action === 'changeset') {
       const result = applyChangeset(this.projectRoot, changes);
       this._recordChangedFiles(result.files);
@@ -1194,7 +1481,7 @@ export class ContextOSV2Service {
       return [
         '# ContextOS changeset',
         '',
-        ...result.files.map((file) => `- ${file.created ? 'created' : 'edited'} \`${file.path}\` (hash ${file.newHash || 'n/a'})`),
+        ...result.files.map((file) => `- ${file.deleted ? 'deleted' : (file.created ? 'created' : 'edited')} \`${file.path}\` (hash ${file.newHash || 'n/a'})`),
       ].join('\n');
     }
     if (action === 'search' && !relPath) {
@@ -1319,7 +1606,7 @@ export class ContextOSV2Service {
         return format === 'json' ? res.structure : res.markdown;
       }
       case 'read': {
-        const effectiveSelector = selector || (Array.isArray(ranges) && ranges.length ? { ranges } : (startLine !== undefined || endLine !== undefined ? { startLine, endLine } : null));
+        const effectiveSelector = selector || (symbol ? { symbol } : (Array.isArray(ranges) && ranges.length ? { ranges } : (startLine !== undefined || endLine !== undefined ? { startLine, endLine } : null)));
         // No selector means "give me the file": return it whole instead of
         // failing, so the agent never has to fall back to a native `cat`/`sed`.
         const res = CodeTools.read(relPath, content, effectiveSelector || { fullFile: true });

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { configureJsonMcp, configureTomlCodex, deriveProjectId, initProjectWorkspace, mergePersonalMarketplaceDocument, saveGlobalCloudConfig, syncAllPlatforms } from '../src/bootstrap-util.mjs';
+import { cleanTomlCodex, configureJsonMcp, configureOpenCodeMcp, configureTomlCodex, deriveProjectId, initProjectWorkspace, mergePersonalMarketplaceDocument, saveGlobalCloudConfig, syncAllPlatforms } from '../src/bootstrap-util.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const bootstrapScript = path.join(repoRoot, 'scripts', 'bootstrap.mjs');
@@ -105,6 +105,8 @@ test('project identity derives from the workspace directory and is used by defau
     const config = initProjectWorkspace({ projectRoot, mode: 'local' });
     assert.equal(config.id, 'my-project');
     assert.equal(config.name, 'my-project');
+    const preserved = initProjectWorkspace({ projectRoot, mode: 'local' });
+    assert.equal(preserved.id, 'my-project');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -124,6 +126,36 @@ test('TOML configuration escapes quoted values and preserves unrelated sections'
   assert.match(content, /\[other\]/);
   assert.ok(content.includes('command = "/usr/bin/node\\"quoted"'));
   assert.ok(content.includes('CONTEXTOS_CLOUD_TOKEN = "a\\"b\\\\nc"'));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('cleanTomlCodex removes legacy ContextOS MCP and hook state only', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-toml-clean-'));
+  const configPath = path.join(dir, 'config.toml');
+  fs.writeFileSync(configPath, [
+    '[other]',
+    'value = "keep"',
+    '',
+    '[hooks.state."contextos@personal:hooks.json:pre_tool_use:0:0"]',
+    'trusted_hash = "stale"',
+    '',
+    '[hooks.state."other@personal:hooks.json:pre_tool_use:0:0"]',
+    'trusted_hash = "keep"',
+    '',
+    '[mcp_servers.contextos]',
+    'command = "node"',
+    '',
+    '[after]',
+    'value = "keep"',
+    '',
+  ].join('\n'));
+  cleanTomlCodex({ configPath });
+  const content = fs.readFileSync(configPath, 'utf8');
+  assert.match(content, /\[other\]/);
+  assert.match(content, /\[hooks\.state\."other@personal:hooks\.json:pre_tool_use:0:0"\]/);
+  assert.match(content, /\[after\]/);
+  assert.doesNotMatch(content, /contextos@personal:hooks\.json/);
+  assert.doesNotMatch(content, /\[mcp_servers\.contextos\]/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -167,4 +199,17 @@ test('personal marketplace merge preserves other plugins and unknown fields', ()
   assert.ok(merged.plugins.some((plugin) => plugin.name === 'other'));
   assert.equal(merged.plugins.at(-1).name, 'contextos');
   assert.equal(merged.plugins.at(-1).source.path, './plugins/contextos');
+});
+
+test('OpenCode MCP uses the official local command array and preserves config', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-opencode-config-'));
+  const configPath = path.join(dir, 'opencode.json');
+  fs.writeFileSync(configPath, JSON.stringify({ custom: true, mcp: { existing: { type: 'remote', url: 'https://example.test' } } }));
+  configureOpenCodeMcp({ configPath, serverScript: '/tmp/contextos-mcp.mjs', nodePath: '/usr/bin/node', version: '9.9.9' });
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  assert.equal(config.custom, true);
+  assert.equal(config.mcp.existing.type, 'remote');
+  assert.equal(config.mcp.contextos.type, 'local');
+  assert.deepEqual(config.mcp.contextos.command, ['/usr/bin/node', '--no-warnings=ExperimentalWarning', '/tmp/contextos-mcp.mjs']);
+  fs.rmSync(dir, { recursive: true, force: true });
 });

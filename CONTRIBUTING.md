@@ -1,6 +1,6 @@
 # Contributing to ContextOS
 
-Thanks for helping improve ContextOS. Focused bug reports, reproducible benchmark results, documentation fixes, and small pull requests are especially useful while the project is young.
+Thanks for helping improve ContextOS. Focused bug reports, reproducible multi-round development reproductions, documentation fixes, and small pull requests are especially useful while the project is young.
 
 ## Before opening an issue
 
@@ -18,11 +18,7 @@ npm run plugin:verify
 npm run verify          # full release gate, including real MCP acceptance and desktop build
 ```
 
-For changes to context retrieval, AST slicing, mutation, storage, or log sanitization, also run:
-
-```bash
-npm run benchmark
-```
+For changes to context retrieval, AST slicing, mutation, storage, or log sanitization, add a focused regression test and, when the change affects the agent workflow, record a manual four-to-five-round A/B/C reproduction. Keep normal development evidence separate from provider usage; do not turn a synthetic score or benchmark into a release gate.
 
 The macOS app can be compiled with:
 

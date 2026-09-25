@@ -44,6 +44,7 @@ const transport = new StdioClientTransport({
   args: [runtimeBundle],
   cwd: workDir,
   stderr: 'inherit',
+  env: { ...process.env, CONTEXTOS_LEAN_SURFACE: '0' },
 });
 const client = new Client({ name: 'contextos-distribution-smoke', version: packageVersion });
 

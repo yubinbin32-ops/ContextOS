@@ -41,14 +41,17 @@ function fakeService({ exitCode = 0, exitCodes = null } = {}) {
           } else if (change.kind === 'create') {
             fs.mkdirSync(path.dirname(fullPath), { recursive: true });
             fs.writeFileSync(fullPath, change.content || '', 'utf8');
+          } else if (change.kind === 'delete') {
+            fs.rmSync(fullPath, { force: true });
           }
         }
         return {
           files: (args.changes || []).map((change, index) => ({
             path: change.path,
-            newHash: `hash-${index + 1}`,
-            locators: [1],
+            newHash: change.kind === 'delete' ? null : `hash-${index + 1}`,
+            locators: change.kind === 'delete' ? [] : [1],
             created: change.kind === 'create',
+            ...(change.kind === 'delete' ? { deleted: true } : {}),
           })),
           results: [],
         };
@@ -113,6 +116,72 @@ test('SessionStore persists and updates .contextos/blackboard.md', () => {
   }
 });
 
+test('SessionStore does not inherit an open session copied from another workspace root', () => {
+  const dir = makeTempProject();
+  try {
+    const sessionPath = path.join(dir, '.contextos', 'session.json');
+    fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
+    fs.writeFileSync(sessionPath, JSON.stringify({
+      id: 'copied-session',
+      projectId: 'test-proj',
+      workspaceRoot: '/different/worktree',
+      status: 'open',
+      intent: 'stale intent from another checkout',
+      intents: [{ text: 'stale intent from another checkout' }],
+      touchedFiles: [{ path: 'stale.mjs' }],
+      receipts: [{ command: 'npm test', exitCode: 0 }],
+      readReceipts: [],
+      notes: [],
+      slots: { stale: true },
+    }, null, 2));
+
+    const store = new SessionStore({ projectRoot: dir, projectId: 'test-proj' });
+    assert.equal(store.current, null);
+    const fresh = store.ensureSession('fresh workspace');
+    assert.notEqual(fresh.id, 'copied-session');
+    assert.equal(fresh.workspaceRoot, path.resolve(dir));
+    assert.equal(fresh.intent, 'fresh workspace');
+    assert.deepEqual(fresh.touchedFiles, []);
+    assert.deepEqual(fresh.receipts, []);
+    assert.deepEqual(fresh.slots, {});
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('inspect returns an unchanged receipt for a repeated identical read', async () => {
+  const dir = makeTempProject();
+  const service = fakeService();
+  service.projectRoot = dir;
+  const orch = new Orchestrator({ projectRoot: dir, service });
+
+  try {
+    const first = await orch.dispatch('inspect', {
+      path: 'src/math.mjs',
+      startLine: 1,
+      endLine: 3,
+    });
+    const second = await orch.dispatch('inspect', {
+      path: 'src/math.mjs',
+      startLine: 1,
+      endLine: 3,
+    });
+    const forced = await orch.dispatch('inspect', {
+      path: 'src/math.mjs',
+      startLine: 1,
+      endLine: 3,
+      full: true,
+    });
+
+    assert.match(first, /export function add/);
+    assert.match(second, /unchanged/);
+    assert.doesNotMatch(second, /export function add/);
+    assert.match(forced, /export function add/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('changePipeline executes atomic verify in a single round trip (Verify: PASS)', async () => {
   const dir = makeTempProject();
   const service = fakeService({ exitCode: 0 });
@@ -134,7 +203,7 @@ test('changePipeline executes atomic verify in a single round trip (Verify: PASS
 
     assert.ok(res.includes('Verify: PASS'), 'must include Verify: PASS in output');
     assert.ok(res.includes('node --test'), 'must mention verification command');
-    assert.ok(res.includes('👉 ship'), 'next step should directly recommend ship');
+    assert.ok(res.includes('do not rerun'), 'next step should forbid duplicate verification');
     
     // Verify receipt was attached to session
     const session = orch.store.current;
@@ -178,6 +247,44 @@ test('changePipeline auto-reverts changes on verification failure when autoRever
   }
 });
 
+test('changePipeline deletes files, previews them, and auto-reverts failed deletion', async () => {
+  const dir = makeTempProject();
+  const legacyPath = path.join(dir, 'src', 'legacy.mjs');
+  const legacyContent = 'export const legacy = true;\n';
+  fs.writeFileSync(legacyPath, legacyContent);
+  const service = fakeService({ exitCodes: [1, 0] });
+  service.projectRoot = dir;
+  const orch = new Orchestrator({ projectRoot: dir, service });
+
+  try {
+    const dryRun = await orch.dispatch('change', {
+      delete: [{ path: 'src/legacy.mjs' }],
+      dryRun: true,
+    });
+    assert.ok(dryRun.includes('Delete 1'), 'dry-run must preview the deletion');
+    assert.equal(fs.readFileSync(legacyPath, 'utf8'), legacyContent);
+
+    const failed = await orch.dispatch('change', {
+      delete: [{ path: 'src/legacy.mjs' }],
+      verify: 'node --test',
+      autoRevert: true,
+    });
+    assert.ok(failed.includes('Verify: FAIL'));
+    assert.ok(failed.includes('autoReverted disk changes'));
+    assert.equal(fs.readFileSync(legacyPath, 'utf8'), legacyContent, 'failed deletion must be restored');
+
+    const passed = await orch.dispatch('change', {
+      delete: [{ path: 'src/legacy.mjs' }],
+      verify: 'node --test',
+    });
+    assert.ok(passed.includes('Verify: PASS'));
+    assert.equal(fs.existsSync(legacyPath), false, 'successful deletion must remove the file');
+    assert.equal(orch.store.current.touchedFiles.find((entry) => entry.path === 'src/legacy.mjs')?.deleted, true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('explorePipeline uses compact outline signatures and masks older receipts', async () => {
   const dir = makeTempProject();
   const service = fakeService({ exitCode: 0 });
@@ -203,10 +310,11 @@ test('explorePipeline uses compact outline signatures and masks older receipts',
     // Verify receipt masking
     assert.ok(res.includes('Last receipt: `npm test` exit 0'));
 
-    // Verify Action Slots and Code Slices
-    assert.ok(res.includes('Available Action Slots'), 'explore must return Action Slots');
-    assert.ok(res.includes('[S1]'), 'must include slot S1');
-    assert.ok(res.includes('Code Slices'), 'must include direct code slice preview');
+    // Normal depth stays navigational; code previews and edit slots are opt-in.
+    assert.ok(!res.includes('Available Action Slots'), 'normal explore should not create action slots');
+    assert.ok(!res.includes('[S1]'), 'normal explore should not create slots');
+    assert.ok(!res.includes('Code Slices'), 'normal explore should not read code previews');
+    assert.ok(!res.includes('mod-'), 'navigation output must not expose derived IDs as architecture');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -223,8 +331,11 @@ test('inspectPipeline reads file slices and changePipeline supports slots and ap
     const exploreRes = await orch.dispatch('explore', {
       intent: 'work on math.mjs',
       paths: ['src/math.mjs'],
+      depth: 'deep',
     });
-    assert.ok(exploreRes.includes('[S1]'), 'explore must define slot S1');
+    assert.ok(exploreRes.includes('[S1]'), 'deep explore should define slot S1');
+    assert.ok(exploreRes.includes('derived navigation only; not Block ownership'));
+    assert.ok(!exploreRes.includes('mod-'), 'derived navigation IDs must stay internal');
     const slotS1 = orch.store.getSlot('S1');
     assert.ok(slotS1, 'slot S1 must be saved in session store');
     assert.equal(slotS1.path, 'src/math.mjs');
@@ -241,7 +352,7 @@ test('inspectPipeline reads file slices and changePipeline supports slots and ap
       verify: 'npm test',
     });
     assert.ok(changeRes.includes('Verify: PASS'), 'change with verify must pass in 1 turn');
-    assert.ok(changeRes.includes('Milestone Reached'), 'must indicate milestone reached');
+    assert.ok(changeRes.includes('verify: PASS'), 'must mark the passing receipt without replaying it');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -593,7 +593,7 @@ export class TaskService {
       );
     }
     const task = new Task(raw);
-    task.activate();
+    if (task.status !== 'active') task.activate();
     if (projectRoot && fs.existsSync(projectRoot)) {
       this._initializeFileSnapshots(task, projectRoot);
       this._reconcileWorkingSet(task, projectRoot, this.db.listBlocks(raw.projectId));

@@ -385,6 +385,23 @@ test('CodeTools.read surgical extraction', () => {
   );
 });
 
+test('CodeTools.searchText supports alternation and slash-delimited regex queries', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-search-'));
+  fs.writeFileSync(path.join(dir, 'sample.mjs'), [
+    'const FAILURE = true;',
+    'const healthy = true;',
+    'const errorCode = 3;',
+    '',
+  ].join('\n'));
+
+  const alternation = CodeTools.searchText(dir, 'FAILURE|errorCode');
+  assert.deepEqual(alternation.hits.map((hit) => hit.line), [1, 3]);
+
+  const regex = CodeTools.searchText(dir, '/^const\\s+(failure|errorCode)/i');
+  assert.deepEqual(regex.hits.map((hit) => hit.line), [1, 3]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('CodeTools.edit surgical modification and re-anchoring', () => {
   const target = 'return val * 2;';
   const replacement = 'return val * 10;';
@@ -472,6 +489,56 @@ test('changeset preflight and commit are atomic', () => {
   }
   assert.equal(fs.readFileSync(aPath, 'utf8'), 'beta\n');
   assert.equal(fs.readFileSync(bPath, 'utf8'), 'created\n');
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('changeset deletes files atomically, rejects invalid targets, and rolls back', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-delete-'));
+  const keepPath = path.join(root, 'keep.txt');
+  const removePath = path.join(root, 'remove.txt');
+  fs.writeFileSync(keepPath, 'keep-original\n');
+  fs.writeFileSync(removePath, 'remove-original\n');
+
+  assert.throws(
+    () => applyChangeset(root, [{ kind: 'delete', path: 'missing.txt' }]),
+    /cannot delete missing file/
+  );
+  assert.throws(
+    () => applyChangeset(root, [{ kind: 'delete', path: '../outside.txt' }]),
+    /outside project root/
+  );
+  assert.equal(fs.readFileSync(keepPath, 'utf8'), 'keep-original\n');
+  assert.equal(fs.readFileSync(removePath, 'utf8'), 'remove-original\n');
+
+  const originalRename = fs.renameSync;
+  let renameCalls = 0;
+  fs.renameSync = (...args) => {
+    renameCalls += 1;
+    if (renameCalls === 2) throw new Error('injected delete commit failure');
+    return originalRename(...args);
+  };
+  try {
+    assert.throws(
+      () => applyChangeset(root, [
+        { kind: 'delete', path: 'remove.txt' },
+        { kind: 'edit', path: 'keep.txt', startLine: 1, endLine: 1, replacement: 'keep-changed' },
+      ]),
+      /rolled back/
+    );
+  } finally {
+    fs.renameSync = originalRename;
+  }
+  assert.equal(fs.readFileSync(keepPath, 'utf8'), 'keep-original\n');
+  assert.equal(fs.readFileSync(removePath, 'utf8'), 'remove-original\n');
+
+  const applied = applyChangeset(root, [
+    { kind: 'delete', path: 'remove.txt' },
+    { kind: 'edit', path: 'keep.txt', startLine: 1, endLine: 1, replacement: 'keep-changed' },
+  ]);
+  assert.equal(fs.existsSync(removePath), false);
+  assert.equal(fs.readFileSync(keepPath, 'utf8'), 'keep-changed\n');
+  assert.equal(applied.files.find((file) => file.path === 'remove.txt')?.deleted, true);
+  assert.equal(applied.results.find((result) => result.kind === 'delete')?.path, 'remove.txt');
   fs.rmSync(root, { recursive: true, force: true });
 });
 

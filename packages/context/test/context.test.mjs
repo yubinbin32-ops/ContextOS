@@ -151,11 +151,12 @@ test('ContextOSV2Service integrates block taxonomy and micro-topology neighborho
   assert.ok(listMd.includes('## Tier 4: Infrastructure & Storage'));
 
   const listJson = await service.block({ action: 'list', format: 'json' });
-  assert.equal(Array.isArray(listJson), true);
-  assert.equal(listJson.length, 2);
-  const gatewayBlock = listJson.find((b) => b.id === 'block-gateway-test');
+  assert.equal(Array.isArray(listJson.items), true);
+  assert.equal(listJson.total, 2);
+  assert.equal(listJson.items.length, 2);
+  const gatewayBlock = listJson.items.find((b) => b.id === 'block-gateway-test');
   assert.equal(gatewayBlock.tier, 'Tier 1: Gateway & Protocol Layer');
-  const storageBlock = listJson.find((b) => b.id === 'block-storage-test');
+  const storageBlock = listJson.items.find((b) => b.id === 'block-storage-test');
   assert.equal(storageBlock.tier, 'Tier 4: Infrastructure & Storage');
 
   // 4. Test block(open) with neighborhood in markdown

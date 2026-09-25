@@ -12,6 +12,8 @@
 
   <br/>
 
+  <p><strong>版本：<span id="contextos-version">2.6.1</span></strong> · 五平台 MCP 与 Skill 适配 · Micro 多轮子代理</p>
+
   [**下载 macOS App**](https://github.com/yubinbin32-ops/ContextOS/releases/latest) · [**快速配置指南**](#30-秒极速配置ai-自动安装引导) · [**English**](README.md)
 </div>
 
@@ -31,14 +33,14 @@
 
 **ContextOS 通过模型上下文协议（MCP）为大模型构建了轻量化的确定性上下文操作系统**：
 
-| 核心子系统 | 架构机制 | 测量效能 |
+| 核心子系统 | 架构机制 | 证据边界 |
 |---|---|---|
-| **语法制导精准访问 (Syntax-Directed Access)** | 基于 Tree-sitter 多语言 AST 引擎，按需提取符号大纲与方法级语义切片 | 消除全量文件倾倒，代码查阅开销降低 80%+ |
-| **带外执行与诊断内联 (Out-of-Band Execution)** | 进程运行与脱敏日志完全下沉至宿主舱外，仅向模型返回执行凭据与结构化失败诊断帧 | 剥离 98%+ 终端噪音，单测报错 0 轮额外往返修复 |
-| **拓扑地铁图谱 (Metro Map Topology)** | 将真实文件、符号锚点与依赖关系物化为强类型 Block-Chain-Link 有向图 | 为模型提供确定性全局调用拓扑，规避跨模块幻觉 |
-| **持久化状态黑板 (Blackboard Rehydration)** | 300 字节级增量状态快照，严格解耦交互历史与运行态事实 | 150 Tokens 瞬时冷启动复水，支持无限长程任务接力 |
+| **语法制导精准访问 (Syntax-Directed Access)** | 基于 Tree-sitter 多语言 AST 引擎，按需提取符号大纲与方法级语义切片 | 用有界符号切片替代全量文件倾倒 |
+| **带外执行与诊断内联 (Out-of-Band Execution)** | 进程运行与脱敏日志完全下沉至宿主舱外，仅向模型返回执行凭据与结构化失败诊断帧 | 只回传 receipt 与诊断帧，原始日志不进入主上下文 |
+| **拓扑地铁图谱 (Metro Map Topology)** | 将真实文件、符号锚点与依赖关系物化为强类型 Block-Chain-Link 有向图 | 提供确定性的结构导航与影响范围上下文 |
+| **持久化状态黑板 (Blackboard Rehydration)** | 轻量增量状态快照，严格解耦交互历史与运行态事实 | 用于冷启动与跨会话接力的恢复 receipt |
 
-> 在大型复杂工程实测中，ContextOS 可降低 90% 以上的无效上下文开销，消除长文本遗忘，使长程开发会话平稳收敛。
+> 本文档中的性能数字仅来自下方真实开发对照验证；宿主 token、峰值上下文、provider token 与正确性分开报告。
 
 ---
 
@@ -60,6 +62,8 @@ Block 绑定真实文件、AST 符号或目录树（杜绝虚空 Ghost Block）�
 - **单轮并发批处理优先 (Parallel Batching Over Serial Turns)**：
   - 传统的 AI 工具交互习惯单文件串行“一问一答”，轮次膨胀且历史 Token 呈阶梯式暴增；
   - ContextOS 原生支持单轮多并发：支持 `edits: [...]` 单步原子批处理多文件修改、`inspect({ paths: [...] })` 单轮并发阅读整组微服务，大幅降低 API 往返延迟与累计上下文。
+- **Receipt-First Pipeline 输出**：
+  - `pipeline({ mode: "receipt" })` 对成功的批量动作只返回有界的状态、receipt、artifact、verdict 和 exit 引用。只有确实需要动作正文时才使用 `mode: "summary"` 或 `mode: "full"`；批处理必须减少宿主轮次，而不是重新膨胀原始输出。
 - **全局拓扑优先级保全 (Topological Retention Priority)**：
   - 采用独创的上下文预算权重算法：`next` (0) → `slots` (1) → `where` (2) → `now` (3) → `slices` (4)。当工程规模庞大时，OS 优先截断局部的代码预览，**绝对保全系统依赖图谱与可用动作槽位**，彻底杜绝 AI 因切片过长而产生的“架构失明”。
 - **轻量实时黑板与跨对话秒级复原 (`.contextos/blackboard.md`)**：
@@ -90,6 +94,40 @@ Block 绑定真实文件、AST 符号或目录树（杜绝虚空 Ghost Block）�
 ### 7. 长期运行进程常驻监控
 
 通过守护进程托管 Dev Server、Watcher 与后台 Worker，在桌面端左下角实时监控 PID、端口号与生命周期，支持一键安全释放进程树。
+
+## 支持的宿主
+
+ContextOS 目前支持五类主要宿主：Codex、Claude Code、OpenCode、Cursor、Antigravity。每类宿主都使用紧凑 MCP 接口与 ContextOS Skill。旧的宿主生命周期 Hook 层已移除，避免路由、恢复和轮次策略出现第二套实现。
+
+| 宿主 | MCP 与 Skill | 状态 |
+|---|---|---|
+| Codex | 支持 | 已支持 |
+| Claude Code | 支持 | MCP + Skill |
+| OpenCode | 支持 | MCP + Skill |
+| Cursor | 支持 | MCP + Skill |
+| Antigravity | 支持 | MCP + Skill |
+
+MCP 默认暴露单一紧凑 `contextos` 传输；需要旧多工具界面时显式设置 `CONTEXTOS_LEAN_SURFACE=0`。仓库读取、修改和验证统一通过 ContextOS MCP 保留单一证据链。
+
+## Micro 任务子代理
+
+Micro 是一个可选的多轮、可控任务子代理，适合日志脱毒、契约提纯、诊断摘要等有界任务。用户可在 `.contextos/profile.json` 中配置任意 OpenAI 兼容接口的 `url`、`model`、`key` 和 `sessionHeader`。若希望降低接入成本，推荐使用 OpenCode Go 订阅。
+
+Micro 会把会话状态保留在主对话之外，限制轮次和上下文长度，默认关闭工具，只把最终结果和 receipt 返回主上下文；完整推理和工具轨迹留在 artifact。支持的会话动作包括 `create`、`send`、`get`、`list`、`close`、`delete`。
+
+Provider 成本与宿主上下文分开设限。每个 preset 都有默认 provider token 上限；可在 `micro` profile 中配置 `maxProviderTokens`、`maxCostUsd`、`inputUsdPerMillion` 和 `outputUsdPerMillion`。若工作流必须通过 `inputRef`/`inputArtifact`/`inputReceipt` 传递日志或 artifact，而不是内联输入，可设置 `requireBulkInput: true`。会话带 TTL，陈旧的在途任务会在有界时间后恢复，跨进程写入使用 `.contextos/micro-sessions/` 下的锁文件。
+
+当 Micro 需要仓库证据时，第一次调用直接附带 `pipeline: { steps: [...] }`（也兼容 `preload`）。ContextOS 只执行一次 Pipeline，并按工作区指纹短暂缓存未变的只读证据，把原始结果留在 artifact，只向 Micro 注入有界证据；直接证据默认 2,400 字符、provider 一次请求，可用显式 `invocation` 预算放宽。不要先单独调用 Pipeline 再复制同一份输出。可用 `delivery: "immediate"`、`"defer"`、`"errors-only"` 或 `"auto"` 控制结果：立即返回、下一次顶层 OS 调用恢复、图谱写入成功后隐藏正文，或由 Micro 的 `needsHost` 决策路由；delivery 只改变宿主可见性，不会减少 provider 成本。
+
+Task 的 `open` 是纯读取：不会隐式扫描 working set、刷新 AST locator 或追加 host-change note；需要刷新时必须显式调用 `task(action: "reconcile")`，或传 `reconcile: true`。这样跨轮恢复只读取紧凑状态，不会因为一次查看任务而膨胀上下文和持久化状态。
+
+独立的 Micro 任务应放进一次 `action:"batch"` 调用；任务的证据预加载和 provider 请求默认最多 4 个并发、硬上限 8，任务共享证据时应使用一个附着 Pipeline，避免重复读取。
+
+Session 与 Micro session 状态绑定绝对 workspace root。复制 checkout 或 worktree 后会自动使用干净 session，不会继承另一个工作区的 intent、receipt、touched files 或 Micro history。可用 `ops({ capability: "telemetry", action: "compare", args: { leftSessionId, rightSessionId } })` 比较记录的宿主 telemetry；其中 token 只有在宿主提供实际 usage 时才是实际值，否则只是估算。
+
+要紧凑比较普通 OS 与 OS+Micro 路由，可调用 `ops({ capability: "telemetry", action: "audit", args: { sessionId, baselineSessionId?, limit? } })`。审计会合并宿主 calls/replay、Micro provider usage、delivery outcome 和可选的 right-minus-baseline delta，但不会重放原始日志。只有宿主与 provider 都提供完整 actual usage receipt 时，`savings.actualPercent` 才会填写；字符估算以及 `replayChars / 4` 都只是 proxy，不能冒充真实 token 节省。
+
+仓库下方保留了一次 2026-09-26 的历史开发快照，仅用于追溯，不是当前发布门槛：当时各组轮数不同，原始 runner 也不在当前 checkout 中。当前验收以可重复的全量测试、bundle smoke 和真实 MCP 验收为准。
 
 ---
 
@@ -145,7 +183,7 @@ graph TD
 
 ### 方案 B：把一句话发给 AI，全流程自动配置（零操作）{#30-秒极速配置ai-自动安装引导}
 
-适合已经打开 AI 编程助手（Cursor / Codex / Claude Code / Windsurf / Antigravity）的开发者。用户无需敲打命令行，只需做选择，由 AI 在后台自举完成全部配置：
+适合已经打开 AI 编程助手（Codex / Claude Code / OpenCode / Cursor / Antigravity）的开发者。其他宿主由 AI 按适配指南自行接入，用户无需敲打命令行：
 
 > **只需复制下方指令，发送给您的 AI 编程助手对话框：**  
 > **"请阅读 `https://github.com/yubinbin32-ops/ContextOS/blob/main/AI_SETUP.md`，检测我的系统环境，为我自动安装并配置好 ContextOS。"**
@@ -174,67 +212,68 @@ ContextOS 始终以**本地工作区项目目录**为核心基石（代码阅读
 
 ---
 
-## 实测 ContextOS 上下文节省基准
+## 开发流程验证记录
 
-### 1. 工业级分布式金融系统极限压测对比 (Real Industrial Benchmark: 8 Microservices)
+这里的验收采用真实子对话，不采用 benchmark、排行榜或合成分数。目标是观察一个复杂开发任务在多轮失败、诊断、修复和收口中的实际行为。
 
-在基于 8 个分布式清结算核心微服务（涵盖多币种复式记账、动态汇率折算、滑动窗口 TTL 幂等、毒丸事务死信队列、步骤超时取消与逆向补偿 Saga、SHA-256 默克尔防篡改审计链、三态熔断器与 5 线程高并发争抢）的工业级实测中，系统呈现如下参数对比：
+### 手动 A/B/C 流程
 
-| 评估维度 | 传统交互模式 (Conventional Workflow) | ContextOS 意图工作流 (Intent-Level OS) | 测量指标与系统收益 |
-|---|---|---|---|
-| **任务闭环交互轮次** | 8 ~ 12 轮（代码检索 ➔ 试探修改 ➔ 运行测试 ➔ 查阅日志 ➔ 二次修改 ➔ 复测） | **2 ~ 3 轮**（`explore` 槽位直出 ➔ `change.verify` 原地改测 ➔ `ship` 归档） | 往返交互轮次减少 70%+，显著降低调用等待延迟 |
-| **单测故障排查开销** | 需额外开启 2~3 轮独立对话查阅日志（单次多耗 20k~40k tokens） | **0 轮额外开销**（`extractDiagnosticBlocks` 就地直出断言比对与堆栈） | 完全消除查日志产生的历史级数膨胀 |
-| **多模块操作吞吐** | 单文件串行往返（单任务 5~8 次连续 API 阻塞往返） | **单轮并发批处理**（`inspect({ paths })` + `change({ edits })`） | API 调用往返减少 60%+，降低上下文累积斜率 |
-| **超大工程架构全局视野** | 局部文件盲读，局部长切片频繁挤占模型全局注意力预算 | **拓扑优先级保全**（`where` 绝对优先，地铁图一目了然） | 杜绝大工程切片过长导致的架构失明与跨模块幻觉 |
-| **会话清屏复水开销** | 清屏后丢失记忆，需重新注入完整代码与规则（20,000+ tokens） | **极简持久化黑板**（`/clear` 后 `explore` 仅需 **150 tokens** 恢复工作态） | 复水开销缩减 99.2%，实现长程会话零损耗接力 |
-| **Prompt Cache 命中率** | 历史上下文无序膨胀，缓存复用率低 | **高内聚的协议设计，OpenAI Prompt Cache 命中率稳定达 98.8%** | 实际计费 Token 降低 90% 以上，响应延迟降至 1~2 秒 |
-| **并发与一致性鲁棒度** | 易发生并发竞态脏写、浮点误差或回滚不全 | **26 个严苛测试用例 100% 通过**（含 5 线程并发争抢有限余额强一致校验） | 具备分布式金融级清结算的系统可靠性 |
+三组使用同一份 job-system fixture、同一份测试与 acceptance oracle、独立工作目录，并固定为五轮：
 
----
+1. 发现：只读取项目结构、目标符号和现有测试，不修改代码。
+2. 制造并记录失败：故意保留两个实现缺陷，执行测试，保存有界 receipt/artifact。
+3. 诊断：A 直接读取失败输出；B 复用 receipt；C 将同一个有界 Pipeline 直接附着到 Micro，按需 immediate/defer。
+4. 修复并验证：A 手工编辑；B/C 用一次原子 change/work，随后执行测试。
+5. 验收与收口：执行完整 acceptance，并在同一次 Pipeline 的 ship 中显式提交语义 Block/Chain；不允许用 mod-* 导航项冒充所有权。
 
-### 2. 20 轮复杂任务全生命周期高压对照测评 (20-Task Comprehensive Dual-Cohort Stress Benchmark)
-
-为了彻底验证系统在长程复杂工程下的吞吐、稳定度与抗压能力，我们设计并执行了由 **20 个复杂全生命周期任务** 组成的高压基准测试，在完全相同的分布式 Saga 清结算引擎真实工程场景下，对比传统 AI 助手（Cohort A）与 ContextOS 意图操作系统（Cohort B）：
-
-- **任务覆盖维度**：涵盖架构规划与 Plan 写入、多模块接口大纲并发审视、业务代码修改与即时改测、编译与单测断言失败诊断就地提取、网络查询与外部 API 契约生成、跨对话子代理接力秒级复水、高并发数据竞争与强一致性核验、代码缺陷快速精准定位、多文件原子重构、推测性优化毫秒级自动回滚、8 路径高并发符号大纲批量抽取、长程压测出舱防污染、以及终态发布收尾归档。
-
-| 核心度量指标 (Metric) | 传统基线组 (Cohort A Baseline) | ContextOS 意图系统组 (Cohort B) | 优化收益 (Measured Impact) |
-|---|---|---|---|
-| **交互总轮次 (Turns / Round Trips)** | 91 轮 | **21 轮** | **-76.92% (往返交互提速 4.3x)** |
-| **上下文累计消耗 (Tokens)** | 157,042 tokens | **10,124 tokens** | **-93.55% (上下文压缩比 15.5x)** |
-| **上下文累计字符数 (Characters)** | 628,165 字符 | **40,460 字符** | **-93.55% (消除 587,705 字符冗余)** |
-| **工具调用总量 (Tool Calls)** | 91 次调用 | **22 次调用** | **4.14x 工具调度极致收敛** |
-| **平均每任务工具调用数** | 4.55 次 / 任务 | **1.10 次 / 任务** | 接近 1:1 极简直接落地 |
-
-#### ContextOS 工具使用频次与分布 (Cohort B Tool Distribution)：
-- `change`（改测合一、就地诊断与原子回滚）：**10 次** (45.5%) — 核心生产力载荷
-- `explore`（意图探索、架构拓扑与动作槽位派发）：**3 次** (13.6%) — 冷启动与跨会话接力
-- `inspect`（多路径并发大纲与符号接口提取）：**3 次** (13.6%) — 仅在跨模块大纲审计时调用
-- `verify`（脱敏命令执行与独立密码学验签）：**3 次** (13.6%) — 关键检查点验证
-- `ops`（架构图谱与计划状态机管理）：**2 次** (9.1%) — 架构实体绑定
-- `ship`（发布边界与凭证终态归档）：**1 次** (4.5%) — 终态收尾封板
-
----
-
-### 3. 研发单任务上下文节省对比 (Static vs ContextOS)
-
-基准数据由当前代码库动态生成，不再硬编码历史版本的文件、Block、Chain、Link 数量。请在本地运行以下脚本获取当前 checkout 的真实数据：
-
-| 研发环节 | 传统开发交互（全量开销） | ContextOS 意图工作流 | 节省比率 |
+| 组 | 职责 | 允许的主路径 | Micro |
 |---|---|---|---:|
-| **会话启动 (Bootstrap)** | 全量加载架构与图谱 · 61,902 字符 (~15,476 tokens) | 渐进式 L0-L1 Markdown · 1,987 字符 (~497 tokens) | **96.79%** |
-| **代码大纲审视** | 盲读 4 个核心全量源码 · 34,045 字符 (~8,512 tokens) | AST 符号大纲提取 · 4,374 字符 (~1,093 tokens) | **87.15%** |
-| **代码阅读与查阅** | 逐文件展开全部代码 · 34,045 字符 | 手术刀提取目标方法 · 6,898 字符 | **79.74%** |
-| **命令运行与构建** | 终端原始输出 · 16,713 字符 (~4,179 tokens) | 精简回执 + 失败提取 · 251 字符 (~63 tokens) | **98.50%** |
-| **单任务全流程综合** | **129,373 字符 (~32,344 tokens)** | **13,761 字符 (~3,441 tokens)** | **89.36% — 节省 28,903 tokens** |
+| A | 普通开发对照 | shell、编辑、测试 | 0 |
+| B | ContextOS | explore/inspect、一次 Pipeline、change/work、ship | 0 |
+| C | ContextOS + Micro | B 的路径；Micro 只接收一个有界 Pipeline | 仅在证据较重且主对话需要时，通常 1 次 |
 
-本地运行基准验证：
+Micro 的生命周期是显式的：创建时可同时传入 pipeline，避免主对话先跑一次、Micro 再重复跑一次；defer 结果持久化到 OS，下一次调用恢复；errors-only 只回传错误；主对话不需要结果时不返回。一次证据任务默认最多一个 provider request，空回复不会无界重试。
 
-```bash
-node scripts/comprehensive-dual-cohort-eval.mjs # 20 轮高压全场景对照基准
-node scripts/benchmark.mjs                      # 静态代码库上下文节省基准
-node scripts/comprehensive-dev-eval.mjs        # 10 维全量核心能力基准
-```
+### 当前可复核结果
+
+本轮真实五轮子对话已经完成 A/B/C 的实现、测试和 acceptance。A 使用普通 shell；B 使用 ContextOS；C 使用一次直接 Pipeline→Micro 路由。早期复验还暴露了两个真实缺陷：安装缓存未同步导致旧 MCP 静默丢失 ship.architecture，以及旧版 Micro 在空回复时把“禁止第二次请求”误报为预算失败。前者已通过安装流程同步仓库 bundle、插件缓存和 ~/.contextos 修复；后者现在区分“空回复”和“已达到请求上限”，明确跳过无意义的 retry，并有回归覆盖。任何仍运行的旧 MCP 进程都必须新开会话，不能把旧会话结果当成新版本证据。
+
+主对话可见的消耗按工具动作记录，OS 内部 telemetry 单独记录，不把内部 Pipeline 扇出伪装成主对话轮次。当前一次五轮复验的观测值如下；字符/代理 token 不是宿主真实计费 token：
+
+| 组 | 主流程轮次 | 外部调用 | 内部调用 | provider | 结果 |
+|---|---:|---:|---:|---:|---|
+| A | 5 | 12 次 shell + 2 次编辑 | 不适用 | 0 | 测试与 acceptance 通过 |
+| B | 5 | 10 | 11 | 0 | 修复、测试与 acceptance 通过 |
+| C | 5 | 9 | 9 | 早期旧会话 2 次尝试、1,695 provider token | 修复、测试与 acceptance 通过；旧会话架构收口失败已被定位 |
+
+本地 MCP 不暴露宿主模型的 input/cached/output/reasoning token，因此不会把字符估算冒充 token 节省率。Micro provider 的 prompt/completion/total usage 单独记录在 .contextos/logs/micro-usage.jsonl。只有三组使用相同轮次、相同验收、相同实现 hash 且加载同一版本 MCP 时，才允许计算节省；本轮旧会话污染过 B/C 的架构收口，故不宣称 50–80% 或 80% 的普遍收益。
+
+### 图谱清理与所有权规则
+
+当前仓库图谱通过 ContextOS ops 重新整理为 31 个中文语义 Block、12 条中文 Chain、32 条 Link。验证结果：Chain valid、0 个重复 artifact locator、0 个已删除路径、0 个 mod-* 或 kind=module Block、0 个孤立 Block、0 个悬空 Chain member/link。
+
+Block 只表达稳定的语义职责；Chain 只表达有顺序意义的业务/运行流程；Link 只表达跨职责关系。ModuleIndex 仅用于导航。重新绑定时使用 replacePaths=true 做完整所有权刷新，避免旧脚本、移动文件和重复 symbol locator 残留。验证套件只绑定当前可运行的 acceptance/smoke/fixture 脚本，已删除的 benchmark 脚本不会再挂载。
+
+### 本地验收命令
+
+npm test
+
+npm run plugin:verify
+
+npm run dist:smoke
+
+npm run acceptance:real
+
+npm run acceptance:micro
+
+这些是功能回归和出货验收，不是合成 benchmark；完整桌面构建仍可按发布前需要执行 npm run desktop:build。
+
+### 已知限制
+
+- 目前的真实对话覆盖一个复杂功能域和一个 provider；消耗数字用于诊断工具流程，不是账单承诺。
+- A/B/C 必须使用新鲜 MCP 会话；旧进程即使文件已更新，也可能继续服务旧 bundle。
+- Micro 只有在证据体积足以抵消一次 provider 输入、且主对话确实需要外部诊断时才有优势；小任务默认不用。
+- `.contextos` 下的 SQLite、receipt、artifact、telemetry 和 session 是运行时恢复状态，不是多余源码；发布提交不应把这些本地状态纳入版本控制。
 
 ---
 
@@ -244,7 +283,7 @@ ContextOS 会随着真实使用反馈主动修正架构方向：
 
 - **0.4.x**：正则解析、Ghost Block 与 49 个工具的 MCP 面让架构记忆不可靠。
 - **V2**：引入真实代码 Block、AST 可见性、SQLite + `graph.json` 双物化和正式开发治理。
-- **意图级架构**：公开入口收敛为 `explore` / `inspect` / `change` / `verify` / `ship` / `ops`，编排下沉到 OS，模块信息从代码库自动派生。
+- **意图级架构**：默认公开入口是单一 `contextos` transport，通过 `action` 路由 `explore` / `inspect` / `work` / `change` / `verify` / `ship` / `pipeline` / `ops`；命名工具仅在兼容 surface 中启用，编排下沉到 OS，模块信息从代码库自动派生。
 - **2.5.0**：加固项目身份、发布升级链路、图谱同步、原子编辑和生命周期门禁。
 
 完整取舍与历史弯路见 [DECISION.md](DECISION.md)。

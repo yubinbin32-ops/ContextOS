@@ -32,7 +32,7 @@ function ensureParentDirectory(fullPath, createdDirectories) {
 
 function planChangeset(projectRoot, changes = []) {
   if (!Array.isArray(changes) || changes.length === 0) {
-    throw new Error('Changeset requires at least one create or edit operation');
+    throw new Error('Changeset requires at least one create, edit, or delete operation');
   }
 
   const states = new Map();
@@ -68,17 +68,56 @@ function planChangeset(projectRoot, changes = []) {
       continue;
     }
 
+    if (change.kind === 'delete') {
+      if (state?.deleted === true) {
+        throw new Error(`Changeset operation ${index + 1} cannot delete '${resolved.relativePath}' twice`);
+      }
+      if (state && !state.existed) {
+        throw new Error(`Changeset operation ${index + 1} cannot delete '${resolved.relativePath}' created in the same changeset`);
+      }
+      if (!fs.existsSync(resolved.fullPath)) {
+        throw new Error(`Changeset operation ${index + 1} cannot delete missing file '${resolved.relativePath}'`);
+      }
+      if (!fs.statSync(resolved.fullPath).isFile()) {
+        throw new Error(`Changeset operation ${index + 1} cannot delete non-file '${resolved.relativePath}'`);
+      }
+      if (!state) {
+        state = {
+          path: resolved.relativePath,
+          fullPath: resolved.fullPath,
+          existed: true,
+          originalContent: fs.readFileSync(resolved.fullPath, 'utf8'),
+          newContent: null,
+          newHash: null,
+          locators: [],
+          mode: fs.statSync(resolved.fullPath).mode,
+          deleted: true,
+        };
+        states.set(resolved.fullPath, state);
+      } else {
+        state.deleted = true;
+        state.newContent = null;
+        state.newHash = null;
+        state.locators = [];
+      }
+      results.push({ index, kind: 'delete', path: resolved.relativePath, newHash: null, locators: [], deleted: true });
+      continue;
+    }
+
     if (change.kind !== 'edit') {
       throw new Error(`Changeset operation ${index + 1} has unknown kind '${change.kind || ''}'`);
     }
-    if (!fs.existsSync(resolved.fullPath)) {
-      throw new Error(`Changeset operation ${index + 1} cannot edit missing file '${resolved.relativePath}'`);
-    }
-    if (!fs.statSync(resolved.fullPath).isFile()) {
-      throw new Error(`Changeset operation ${index + 1} cannot edit non-file '${resolved.relativePath}'`);
+    if (state?.deleted === true) {
+      throw new Error(`Changeset operation ${index + 1} cannot edit '${resolved.relativePath}' after it was deleted`);
     }
 
     if (!state) {
+      if (!fs.existsSync(resolved.fullPath)) {
+        throw new Error(`Changeset operation ${index + 1} cannot edit missing file '${resolved.relativePath}'`);
+      }
+      if (!fs.statSync(resolved.fullPath).isFile()) {
+        throw new Error(`Changeset operation ${index + 1} cannot edit non-file '${resolved.relativePath}'`);
+      }
       const originalContent = fs.readFileSync(resolved.fullPath, 'utf8');
       state = {
         path: resolved.relativePath,
@@ -131,18 +170,24 @@ function commitChangeset(plan) {
 
   try {
     for (const file of plan.files) {
-      ensureParentDirectory(file.fullPath, createdDirectories);
       const token = `${process.pid}-${randomUUID()}`;
-      const tempPath = path.join(path.dirname(file.fullPath), `.${path.basename(file.fullPath)}.contextos-${token}.tmp`);
       const backupPath = file.existed
         ? path.join(path.dirname(file.fullPath), `.${path.basename(file.fullPath)}.contextos-${token}.bak`)
         : null;
+      if (file.deleted === true) {
+        prepared.push({ ...file, tempPath: null, backupPath, committed: false });
+        continue;
+      }
+      ensureParentDirectory(file.fullPath, createdDirectories);
+      const tempPath = path.join(path.dirname(file.fullPath), `.${path.basename(file.fullPath)}.contextos-${token}.tmp`);
       fs.writeFileSync(tempPath, file.newContent, { encoding: 'utf8', mode: file.mode || 0o644 });
       prepared.push({ ...file, tempPath, backupPath, committed: false });
     }
 
     for (const file of prepared) {
-      if (file.existed) {
+      if (file.deleted === true) {
+        fs.renameSync(file.fullPath, file.backupPath);
+      } else if (file.existed) {
         fs.renameSync(file.fullPath, file.backupPath);
         fs.renameSync(file.tempPath, file.fullPath);
       } else {
@@ -160,7 +205,8 @@ function commitChangeset(plan) {
         path: file.path,
         newHash: file.newHash,
         locators: file.locators,
-        created: !file.existed,
+        created: !file.existed && file.deleted !== true,
+        ...(file.deleted === true ? { deleted: true } : {}),
       })),
       results: plan.results,
     };
@@ -181,7 +227,7 @@ function commitChangeset(plan) {
 
     for (const file of prepared) {
       try {
-        if (fs.existsSync(file.tempPath)) fs.rmSync(file.tempPath, { force: true });
+        if (file.tempPath && fs.existsSync(file.tempPath)) fs.rmSync(file.tempPath, { force: true });
         if (file.backupPath && fs.existsSync(file.backupPath)) fs.rmSync(file.backupPath, { force: true });
       } catch (_) {}
     }
@@ -203,7 +249,7 @@ function commitChangeset(plan) {
   } finally {
     for (const file of prepared) {
       try {
-        if (fs.existsSync(file.tempPath)) fs.rmSync(file.tempPath, { force: true });
+        if (file.tempPath && fs.existsSync(file.tempPath)) fs.rmSync(file.tempPath, { force: true });
       } catch (_) {}
     }
   }

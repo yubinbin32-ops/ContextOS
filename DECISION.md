@@ -14,7 +14,7 @@ This document records ContextOS's architectural history, lessons learned from pa
 | 2.5.0 生产加固 (DEC-012/020/021/022) | 项目身份派生、显式 workspace root、原子 changeset、图谱同步自愈、分发/升级验证、Plan/Task 生命周期门禁、Cloud 鉴权 | 从功能可用推进到可发布、可升级、可审计的工程状态 |
 | 2.5.3 动作槽位与改测合一闭环 (DEC-023) | Action Slots [S1]、change 原地原子 verify 与 autoRevert、独立 inspect 深度切片、纯提问自适应节流、精简双安装模式 | 彻底消灭参数行号对齐失误，多轮开发压缩为 2 轮极速闭环，纯提问上下文再降 50% |
 
-当前公开入口固定为 `explore`、`inspect`、`change`、`verify`、`ship`、`ops`。代码事实由真实文件与 AST 锚点维护；SQLite 负责事务状态，`graph.json` 负责 Git 可移植投影；安装方式统一收敛为 macOS 桌面端和一句话发给 AI 自动配置两种方式。
+当前默认公开入口是单一 `contextos` transport，通过 `action:"explore"`、`"inspect"`、`"work"`、`"change"`、`"verify"`、`"ship"`、`"pipeline"`、`"ops"` 路由；`CONTEXTOS_LEAN_SURFACE=0` 才启用命名工具兼容面。代码事实由真实文件与 AST 锚点维护；SQLite 负责事务状态，`graph.json` 负责 Git 可移植投影；安装方式统一收敛为 macOS 桌面端和一句话发给 AI 自动配置两种方式。
 
 ---
 
@@ -286,7 +286,7 @@ V2 入口与插件产物在 P0 阶段保持不变（plugin smoke 仍校验 12 �
 DEC-016 把入口收敛到 5 个意图级工具后，治理层仍有一处结构性成本：模块必须人工声明（本仓库 69 blocks / 20 chains / 109 links），`task.sync` 的 100% 覆盖率门禁把元数据缺失升级为硬失败，AI 因此要先做图书管理员再做程序员。同时 DEC-014 要求保留 35KB 的综合性 Skill 手册，与"减少 AI 认知负担"的目标直接冲突。
 
 ### 2. 决策
-1. 新增 `ModuleIndex`：由 AST（`LanguageRegistry.parseStructure`）与目录聚类派生 `mod-*` 模块，按 mtime+size 增量缓存于 `.contextos/module-index.json`；`explore` 优先展示派生模块。`ship` 对被改动且无归属的文件执行 best-effort `block.bind_auto`，把派生模块写回图谱 —— 永不阻塞、永不打断闭环。
+1. 新增 `ModuleIndex`：由 AST（`LanguageRegistry.parseStructure`）与目录聚类派生 `mod-*` 导航提示，按 mtime+size 增量缓存于 `.contextos/module-index.json`；`explore` 优先展示这些提示。它们不写入语义 Block，`ship` 也不对无归属文件自动执行 `block.bind_auto`；需要持久化 ownership 时，必须由开发者提供稳定的 curated Block 与 Chain。
 2. 治理降级为 advisory：V3 路径不再触发任何覆盖率或证据硬门禁（无绿色回执仍可 `ship`，仅标记 unverified）；`.contextos/profile.json` 的 `strict: true` 为需要强制的团队保留硬门禁。
 3. 插件产物改为打包 `v3-server.mjs`，V2 facade 全部经 `ops` 直通保留；SKILL.md 重写为 ≤10KB 的意图级手册；`plugin-smoke` 改为校验 5 工具 + 完整循环 + 脱敏 + ops 可达性。`npm run mcp:v2` 保留 V2 入口作为回滚通道。
 
@@ -294,55 +294,52 @@ DEC-016 把入口收敛到 5 个意图级工具后，治理层仍有一处结构
 替代方案是继续保留双入口并行（V2 与 V3 同时暴露 17 个工具）：但工具定义本身占上下文，双入口让 AI 重新陷入"该点哪个"的选择负担，与 DEC-016 的目标相悖。完全删除 V2 facade 则会丢失 Plan/Checkpoint/Chain 等仍有用户价值的治理能力，因此改为 `ops` 内层保留、外层收敛。Skill 瘦身上，DEC-014 的"最小增量"条款在入口已反转后不再成立：手册的主要篇幅是在教 12 个 facade 的用法，而这正是被移除的认知负担本身。
 
 ### 4. 影响与后果
-MCP 工具 12 → 5，SKILL.md 35KB → 约 5.5KB，单次 `explore` 实测约 3KB（≈750 token）即可命中目标模块与符号。派生模块会随首次 `ship` 写入 graph.json（kind: `module`），桌面端可见但不再要求 AI 创建；`no-ghost-blocks` 不变式仍然成立，因为每个派生 Block 都由真实文件与 AST 符号锚定。代价是架构图谱的语义质量从"人工策展"下降为"自动聚类"，需要策展语义时仍可用 `ops` 的 block/chain 覆盖。
+MCP 工具 12 → 5，入口 SKILL.md 初版压缩到约 6.3KB，后续生命周期与 Micro 约束补齐后稳定在约 7.0KB；单次 `explore` 实测约 3KB（≈750 token）即可命中目标模块与符号。`mod-*` 只作为导航提示，不进入 curated Block/Chain ownership；旧状态中的 legacy module 可用 `block.prune_derived` 清理。代价是架构图谱不会替开发者猜测语义，需持久化 ownership 时必须显式提供稳定的 Block/Chain。
 
 ---
 
-## [DEC-018] Development-Flow Simulation as the Acceptance Gate
+## [DEC-018] 真实子对话作为工作流验收
 
 ### 1. 背景
-前 17 条决策全部以"理论上的上下文节省率"作为验收依据（DEC-011 的双基准、DEC-016 的单次返回体积）。但真正的判据是：AI 能不能用这套接口把一个真实开发任务从头做完。缺少端到端的行为验证，就无法判断精简后的接口是否还能覆盖开发需要。
+
+静态能力检查和合成分数无法发现 ContextOS 在真实开发中的脏对话、重复调用、Micro 误用、Block/Chain 误绑定和旧 MCP 进程问题。验收必须模拟复杂任务，而不是优化一个可刷分的 runner。
 
 ### 2. 决策
-新增 `scripts/dev-flow-sim.mjs` 作为验收门禁，并纳入 `npm run verify`。它用同一份 fixture 跑四个真实开发任务（新增功能并补测试、修 bug、第一版修复失败后迭代到通过、纯理解定位），分别在 V3 意图面与 V2 facade 上各跑一遍，统计调用次数、返回字符数、因门禁触发的修复回合与最终状态是否落库。V3 侧的智能体只提供 intent 与补丁，其余步骤全部取自 OS 返回的 `👉 tool({...})` 机器可读提示。
 
-### 3. 原因与替代方案取舍
-替代方案是继续维护 `comprehensive-dev-eval.mjs` 这类按维度打分的静态评测，但它只检查能力是否存在，不检查完成一个任务要付多少代价。模拟真实流程才能同时覆盖"功能不丢失"与"成本是否下降"两个判据。V2 对照实验中特意让智能体只记录通过的 check —— 若照文档如实记录一次失败 check，`task.sync` 会直接拒绝（`Cannot sync task with 1 failed checks`），任务再也无法推进，这本身就是门禁代价的证据。
+采用手动 A/B/C 子对话：A 使用普通 shell/edit/test，B 只使用 ContextOS，C 使用 ContextOS 加 Micro。三组使用同一 fixture、同一测试和 acceptance oracle、独立工作目录，固定五轮：发现、失败记录、证据诊断、修复验证、验收收口。B/C 的主流程优先合并为一次有界 Pipeline 或 work；C 只有在主对话确实需要结果且证据足够重时才启用 Micro。
 
-### 4. 影响与后果
-实测（2026-09-20，M1/Node 22）：V3 15 次调用 / 7108 字符 vs V2 48 次调用 / 22666 字符，往返与上下文各降约 69%；V2 因覆盖率门禁产生 6 个修复回合，V3 为 0。四个场景 V3 均完成且状态落库（会话 closed + 绿色回执）。门禁判据固定为：完成、`≤ maxCalls`、零修复回合、调用数与字符数均低于 V2 —— 任一项失败则 `npm run verify` 退出非零。
+外部主对话调用、OS 内部 Pipeline 扇出、provider usage 分开记账。宿主真实 token 不可见时只能报告字符/代理指标；缺少相同轮次、相同实现 hash、相同 MCP build 和完整验收时，不发布节省率结论。
 
----
+### 3. 影响
 
-## [DEC-019] Delete the V2 Facade Surface and Its Tooling
+复杂多轮任务中的错误会以真实失败收口，而不是被静态分数掩盖。验收记录必须包含每轮目的、工具动作、receipt/artifact、测试结果、provider 请求数和最终 Block/Chain 状态。旧 MCP 进程必须标记为无效证据并新开会话。
+
+## [DEC-019] 单一意图入口与能力路由
+
+### 1. 决策
+
+默认 MCP surface 使用 explore、inspect、change、verify、ship、pipeline 和 ops；高级能力通过 ops 路由。Pipeline 负责把多个动作压成一个有界宿主调用，不能把每个 Block、Chain 或 receipt 再拆成主对话轮次。命名 facade 只作为兼容入口，新增流程不得依赖重复工具面。
+
+### 2. 约束
+
+一次请求只选择必要能力：探索用 bounded inspect，修改用原子 change/work，验证复用 receipt，收口用显式 ship architecture。只读结果返回摘要、receipt 或 artifact 引用；完整内容必须显式请求。任何失败都要保留可恢复证据，不能用无上下文的 BLOCKED 或 OK 敷衍。
+
+## [DEC-020] 中文语义图谱与完整所有权刷新
 
 ### 1. 背景
-DEC-017 之后 V2 的 12 个 facade 只剩回滚价值，但它们的存在本身是成本：`tool-contract.mjs` 与 `v2-server.mjs` 需要同步维护，`plugin-smoke` 之外还有一整套 V2 端到端脚本，AI 侧还要在文档里看到两套入口。保留双入口与 DEC-016 的"减少选择负担"目标相悖。
+
+旧图谱存在英文标题、重复 artifact locator、已删除脚本、跨职责混用和把 ModuleIndex 当成语义 Block 的问题。这些状态会直接污染 explore 上下文，并让后续 AI 误以为模块提示是真实架构。
 
 ### 2. 决策
-删除 `packages/mcp/src/v2-server.mjs`、`server.mjs`、`service.mjs`、`tool-contract.mjs`、`packages/mcp/test/v2-mcp.test.mjs`、`scripts/manual-zero-project-verification.mjs` 与 `scripts/v3-smoke.mjs`；移除 `mcp:v2`、`plugin:build:v2`、`v3:smoke` 三个 npm 脚本与 `dist/contextos-mcp-v2.mjs` 产物。V3 的 MCP 面测试迁入 `packages/mcp/test/v3-mcp.test.mjs`（随 `npm test` 运行），出货产物仍由 `plugin-smoke` 守，验收由 `dev-flow-sim` 守。`dev-flow-sim` 的 V2 对照改为直接驱动 `ContextOSV2Service`（服务层仍在，供 `ops` 与编排器复用），因此 A/B 测量继续有效。
 
-### 3. 原因与替代方案取舍
-替代方案是把 V2 冻结为"不再维护但保留"的死代码：省一次删除，却要长期承担文档分叉、契约漂移与新人误用的成本，且 `tool-contract` 的单源真理约束会持续制造维护负担。删除的唯一真实损失是回滚通道 —— 但 V2 协议的问题正是本次重构要消除的对象（覆盖率门禁、失败 check 卡死、状态机记账），回滚到它没有意义；真要回滚可用 git 历史。V2 端到端脚本覆盖的云端切换、chain/link、进程托管等能力仍可通过 `ops` 手工验证，`system-tools.mjs` 未删。
+当前图谱按稳定职责重新编排为中文语义 Block、按业务/运行流程编排 Chain、按跨职责依赖保留 Link。ModuleIndex 的 mod-* 只做导航，永远不能成为 ownership。Block 重新绑定必须使用 replacePaths=true 完整刷新路径集合；否则移动文件和旧脚本会残留。Chain membership 使用 chain.compose，chain.link 只表达关系，不能替代成员关系。
 
-### 4. 影响与后果
-`npm test` 由 79 降为 70 项（删 11 项 V2 MCP 测试、增 2 项 V3 MCP 测试），`npm run verify` 链路缩短且全绿。仓库内已无任何代码 import 被删模块；`self-adopt.mjs` 中的文件清单同步更新为 V3 入口。`worker.js` / `apps/cloud` 中的 C-D-C-S 文案属于云端 Hub 侧，本次不动。
+当前仓库已通过 ContextOS ops 完成 31 个 Block、12 条 Chain、32 条 Link 的整理；校验为 valid，重复 locator、已删除路径、mod-* Block、孤立 Block 和悬空成员均为零。验证 Block 只挂载当前可运行的 fixture、smoke、acceptance 脚本，不挂载已删除的合成测试脚本。
 
----
+### 3. 维护规则
 
-## [DEC-020] Chinese Graph Re-foundation and Rule / Plan Purge
+新增代码先选择稳定语义边界，再一次性提交 Block 与 Chain；修复或移动文件先刷新原所有权，再检查 Chain validate；导出 graph.json 只能通过正式同步路径。任何“自动创建 module Block 来填 gap”的实现都视为回归。
 
-### 1. 背景
-图谱里还留着英文时代的状态：19 个英文 Block（其中 `block-mcp-facades` 还写着 "Consolidated 12 MCP Facades"，与 V3 事实冲突）、3 条粗粒度 Chain、18 条 Link，以及 10 个已完成的 Plan 与 22 个 Task 的历史台账；规则库 8 条里 `rule-cdcs-workflow` 已被意图闭环取代，`rule-out-of-context-commands` 与 `rule-command-sessions` 内容重叠，`rule-product-contract` 与 `rule-no-ghost-blocks` 同属"架构真理"命题。这些陈旧事实会被 `explore` 直接注入上下文，等于让 AI 读到错误的架构。
-
-### 2. 决策
-新增 `scripts/manual-rearchitect.mjs`（`npm run rearchitect`，幂等）：先清空历史 Plan/Task 与全部 Block/Chain/Link，再按 V3 的真实代码结构重建 **22 个中文 Block / 7 条 Chain / 21 条跨链 Link**，全部经 `bind_auto` 绑定真实文件与 AST 锚点。规则库由 8 条合并为 6 条并全部改写为中文：`rule-intent-loop`、`rule-out-of-context-execution`（合并两条命令规则）、`rule-surgical-code-editing`、`rule-context-budget`（取代 context-reduction）、`rule-architecture-truth`（合并 product-contract 与 no-ghost-blocks）、`rule-ui-aesthetic-precision`。DECISION.md 对已失效条目（DEC-004/008/014/015）加"状态：已被 X 取代"标记，保留历史但不再具备规范效力。
-
-### 3. 原因与替代方案取舍
-替代方案是就地改标题与摘要：成本低，但 Chain 只有 3 条、跨链关系 18 条且新旧混杂，无法表达"意图入口 → 编排内核 → 内部能力 → AST/存储/执行"的真实调用方向，地铁图也会继续呈现一团乱麻。全量重建的风险是丢失人工策展语义，因此重建时按包边界与调用方向重新划分（意图编排 / AST 代码智能 / 状态存储 / 执行 / 渲染布局 / 桌面端 / 分发云端验证），并用带类型的 Link 显式记录 `calls` 与 `depends_on`。历史 Plan 全部 completed/archived，删除不影响任何进行中的工作；Task 随外键级联删除。
-
-### 4. 影响与后果
-`graph.json` 重新导出（rev 428+），`explore` 现在会注入中文模块名与中文规则标题，跨语言一致。规则从 8 条降至 6 条，注入候选更聚焦；`rule-architecture-truth` 把"中文命名 Block/Chain"写成硬约束，防止再次漂移回英文。代价：桌面端地铁图的旧收藏与布局坐标失效，需要重新摆放一次。
 
 ## [DEC-021] 派生产物分歧自愈与只读动作免门禁
 
@@ -385,3 +382,47 @@ Project identity is derived once from the workspace directory. Legacy state crea
 - 极速开发闭环由 6~9 轮往返大幅压缩至 **2 轮实质动作**（explore ➔ change + verify ➔ ship）；
 - 彻底消灭了因行号或字符串错位导致的 `Target not unique` 报错；
 - 提问场景上下文预算再降 50%，安装引导门槛大幅降低。
+
+---
+
+## [DEC-024] 精选所有权与有界结果生命周期
+
+### 1. 背景
+
+真实开发暴露出两类会抵消 ContextOS 收益的错误：ModuleIndex 导航提示被误当成语义 Block；session、artifact 和 Micro 中间结果把完整数组或 raw trace 带回主对话，造成脏上下文和重复调用。
+
+### 2. 决策
+
+1. mod-* 只做导航，ship 不自动创建或绑定 module Block。持久化架构必须使用开发者选择的 curated Block，并通过 Chain 建立 membership。
+2. 默认 MCP 响应只返回有界摘要、receipt 或 artifact 引用。session.history 使用 compact 摘要，session.status 不回传 durable receipt 数组，完整内容必须显式 full=true。
+3. Micro 的只读 Pipeline 在同一次 Micro 调用中执行；pipeline、task、provider 结果不重复带回主对话。defer/auto 写入 OS delivery queue，下一次顶层调用只恢复一次；需要返回给主对话时才恢复，否则保留在 OS。
+4. Micro 创建或运行时可以直接接收 pipeline，禁止先由主对话探索、再让 Micro 重复探索。默认 evidence route 最多一个 provider request；达到上限时停止，而不是重试制造脏对话。
+5. A/B/C 记账分离 external host、internal Pipeline 和 provider usage。只有完整验收、相同轮次、相同实现 hash 和相同 MCP 版本同时成立时，才允许计算对比；字符代理值不能冒充宿主账单 token。
+6. micro.batch 与 pipeline.parallel 保持单轮调用但限制并发，任务按原序返回。成功 mutation/verification 后再次附着只读 evidence 默认跳过，只有显式 allowLate=true 才启动事后审计。
+7. `task.open` 必须保持纯读取；扫描 working set、刷新 AST locator 和追加 host-change note 只能由显式 `task.reconcile` 或 `reconcile: true` 触发，避免跨轮恢复把紧凑状态查询变成大范围持久化写入。
+
+### 3. 结果
+
+入口 Skill 保持精简，精确 payload 下沉到 capability reference；Block/Chain ownership 不再被派生模块污染；Micro 的输入、provider 请求和交付状态都有可追溯 receipt；内部 Pipeline 扇出不会伪装成主对话轮次。当前单元测试、bundle smoke、真实 MCP、Micro direct Pipeline、图谱校验和手动五轮 A/B/C 已覆盖上述边界。
+
+### 4. 未解决的边界
+
+Micro 不是默认加速器。小任务或证据不足时，provider 输入成本可能超过节省；旧 MCP 进程在新 bundle 安装后仍需新开会话；复杂场景的节省幅度只能通过新的、同调度手动子对话复验确认，不能从单一 fixture 外推到全场景。
+
+## [DEC-025] 跨会话 Receipt 复用必须经过状态指纹校验
+
+### 1. 背景
+
+复杂开发常把验证和最终收口分到不同宿主轮次或不同 ContextOS 会话。若新会话只能看到当前 session，就会重复运行昂贵测试；若无条件读取历史 receipt，又可能把旧代码的通过证据错误地用于当前代码。
+
+### 2. 决策
+
+`ship` 接受显式 `receiptId` 或 `receiptIds`。ContextOS 只从同一 workspace 的历史会话中查找指定 receipt，并同时校验通过状态、命令工作目录和当前 workspace fingerprint；校验失败时阻断收口并明确区分“不存在”和“状态已变更”，绝不静默降级为 advisory。有效 receipt 被导入当前 session，并在正常 ship 摘要中显式报告，避免主对话重复验证或误以为没有证据。
+
+### 3. 后果
+
+跨轮收口可少一次重复 verify，且保留可审计证据；历史凭证不是默认全量注入，必须由调用方显式选择。receipt 仍受历史保留上限约束，缺失时应重新 verify。
+
+### 4. 架构覆盖边界
+
+Block/Chain 覆盖只约束源码、可执行脚本和明确的资源/依赖边界。README、DECISION、Rule、安装说明等已经由 Overview 或 Knowledge 呈现的内容不创建伪 Block；package/config 与派生 bundle 也不参与源码 ownership 门禁。依赖或资源目录使用 `anchorKind: "tree"` 绑定整个目录，避免把稳定边界拆成大量文件级 Block。

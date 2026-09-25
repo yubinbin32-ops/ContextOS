@@ -1,14 +1,30 @@
-import { SessionStore } from './session-store.mjs';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { SessionStore, workspaceFingerprint } from './session-store.mjs';
 import { Tracer } from './tracer.mjs';
 import { createCapabilities } from './capabilities.mjs';
-import { loadProfile, saveProfile } from './profile.mjs';
-import { changePipeline, explorePipeline, inspectPipeline, pipelinePipeline, shipPipeline, verifyPipeline } from './pipelines.mjs';
+import { globalProfilePath, loadProfile, saveProfile } from './profile.mjs';
+import { changePipeline, explorePipeline, inspectPipeline, pipelinePipeline, shipPipeline, verifyPipeline, workPipeline } from './pipelines.mjs';
+import { MICRO_PRESETS, runMicroTask, runMicroTasksParallel } from './micro-client.mjs';
+import { microPreloadReceipt, runMicroPreload } from './micro-preload.mjs';
+import { buildMicroHistory, closeMicroSession, completeMicroTurn, createMicroSession, deleteMicroSession, failMicroTurn, listMicroSessions, microSessionSnapshot, readMicroSession, startMicroTurn } from './micro-session.mjs';
+import { evictArtifacts, listArtifacts, readArtifact, statArtifact, storeArtifact } from './artifact-store.mjs';
+import { compactJson, finalizeResponse, projectMicroResult, summarizeMicroUsage } from './response-budget.mjs';
+import { compareTelemetry, recordTelemetry, summarizeTelemetry } from './telemetry.mjs';
+import { auditRouting } from './routing-audit.mjs';
+import { claimMicroDeliveries, completeMicroDeliveryClaims, releaseMicroDeliveryClaims, renderMicroDeliveries } from './micro-delivery.mjs';
 
 export * from './context-budget.mjs';
 export * from './intent-router.mjs';
+export * from './micro-client.mjs';
+export * from './micro-delivery.mjs';
+export * from './micro-preload.mjs';
+export * from './micro-session.mjs';
 export * from './module-index.mjs';
 export * from './observer.mjs';
 export * from './profile.mjs';
+export * from './routing-audit.mjs';
 export * from './session-store.mjs';
 
 export const OPS_CAPABILITIES = [
@@ -24,10 +40,615 @@ export const OPS_CAPABILITIES = [
   'session',
   'system',
   'profile',
+  'micro',
+  'artifact',
+  'telemetry',
 ];
 
 function render(value) {
-  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return typeof value === 'string' ? value : compactJson(value);
+}
+
+const MUTATION_INPUT_KEYS = new Set([
+  'create', 'edits', 'delete', 'deletes', 'append', 'symbol', 'replacement',
+  'replacementContent', 'target', 'targetContent', 'content', 'overwrite',
+  'fullFile', 'architecture',
+]);
+
+function routeKind(tool, input = {}) {
+  if (tool === 'change' || (tool === 'work' && [...MUTATION_INPUT_KEYS].some((key) => input[key] !== undefined))) {
+    return 'mutation';
+  }
+  if (tool === 'work' && (input.verify !== undefined || input.commands !== undefined)) return 'verification';
+  if (tool === 'work') return 'discovery';
+  if (tool === 'verify') return 'verification';
+  if (tool === 'ship') return 'closure';
+  if (tool === 'explore' || tool === 'inspect') return 'discovery';
+  if (tool === 'pipeline') return 'orchestration';
+  if (tool !== 'ops') return 'unknown';
+
+  const capability = input.capability;
+  const action = String(input.action || '');
+  if (capability === 'micro') return 'delegation';
+  if (capability === 'code' && ['create', 'edit', 'changeset'].includes(action)) return 'mutation';
+  if (capability === 'block' && ['bind', 'bind_auto', 'prune_derived'].includes(action)) return 'mutation';
+  if (capability === 'chain' && ['compose', 'link', 'unlink', 'delete'].includes(action)) return 'mutation';
+  if (capability === 'plan' && ['create', 'update', 'complete', 'delete', 'archive'].includes(action)) return 'mutation';
+  if (capability === 'task' && ['create', 'start', 'update', 'finish', 'complete', 'delete', 'archive'].includes(action)) return 'mutation';
+  if (capability === 'knowledge' && ['decision_write', 'rule_write', 'rule_delete', 'delete'].includes(action)) return 'mutation';
+  if (capability === 'session' && ['note', 'close'].includes(action)) return 'mutation';
+  if (capability === 'profile' && action === 'set') return 'mutation';
+  if (capability === 'artifact' && action === 'evict') return 'mutation';
+  if (capability === 'telemetry' || capability === 'artifact' || capability === 'session') return 'diagnostic';
+  if (capability === 'run_command' || capability === 'process') return 'verification';
+  return 'discovery';
+}
+
+const SEMANTIC_OPS_READS = new Set([
+  'os_context:brief', 'os_context:search', 'os_context:status',
+  'plan:list', 'plan:open', 'plan:check',
+  'task:list', 'task:open', 'task:check', 'task:status',
+  'block:list', 'block:open', 'block:search',
+  'chain:list', 'chain:open', 'chain:validate',
+  'knowledge:list', 'knowledge:read', 'knowledge:status',
+  'session:history', 'session:resume', 'session:status',
+  'profile:get', 'artifact:read', 'artifact:stat', 'artifact:list',
+  'telemetry:audit', 'telemetry:compare', 'telemetry:summary',
+]);
+
+const CONVERGENCE_DISCOVERY_LIMIT = 6;
+const MICRO_BATCH_DEFAULT_CONCURRENCY = 4;
+const MICRO_BATCH_MAX_CONCURRENCY = 8;
+
+function normalizeMicroBatchConcurrency(value) {
+  const requested = Number(value);
+  if (!Number.isFinite(requested) || requested <= 0) return MICRO_BATCH_DEFAULT_CONCURRENCY;
+  return Math.min(MICRO_BATCH_MAX_CONCURRENCY, Math.max(1, Math.floor(requested)));
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index], index);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
+
+function recentUnproductiveCalls(projectRoot, sessionId) {
+  const filePath = path.join(projectRoot, '.contextos', 'logs', 'telemetry.jsonl');
+  if (!fs.existsSync(filePath)) return 0;
+  let entries = [];
+  try {
+    entries = fs.readFileSync(filePath, 'utf8')
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter((entry) => entry.sessionId === sessionId && entry.internal !== true);
+  } catch (_) {
+    return 0;
+  }
+  let count = 0;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const kind = entries[index].routeKind;
+    if (['mutation', 'verification', 'closure'].includes(kind)) break;
+    if (kind === 'discovery' || kind === 'diagnostic') count += 1;
+  }
+  return count;
+}
+
+function isUnproductiveDiscovery(tool, input = {}) {
+  if (tool === 'explore' || tool === 'inspect') return true;
+  if (tool === 'work') {
+    const hasMutation = [...MUTATION_INPUT_KEYS].some((key) => input[key] !== undefined);
+    const hasVerification = input.verify !== undefined || input.commands !== undefined;
+    return !hasMutation && !hasVerification;
+  }
+  if (tool !== 'ops' || input.capability === 'telemetry' || input.capability === 'micro') return false;
+  return [
+    'code', 'artifact', 'os_context', 'plan', 'task', 'block', 'chain', 'knowledge', 'session', 'profile',
+  ].includes(input.capability)
+    && !['create', 'update', 'complete', 'delete', 'archive', 'start', 'finish', 'close', 'set', 'bind', 'bind_auto', 'compose', 'link', 'unlink', 'evict', 'edit', 'changeset'].includes(String(input.action || ''));
+}
+
+function convergenceGate(projectRoot, sessionId, tool, input, semanticReceipt) {
+  if (semanticReceipt || !isUnproductiveDiscovery(tool, input)) return null;
+  if (input.refresh === true || input.dedupeReads === false || input.full === true || input.budget === 'full') return null;
+  const nested = input.args && typeof input.args === 'object' && !Array.isArray(input.args) ? input.args : {};
+  if (nested.refresh === true || nested.dedupeReads === false || nested.full === true || nested.budget === 'full') return null;
+  const count = recentUnproductiveCalls(projectRoot, sessionId);
+  if (count < CONVERGENCE_DISCOVERY_LIMIT) return null;
+  return [
+    '# ContextOS convergence gate',
+    `- ${count} unchanged discovery/diagnostic calls occurred since the last mutation or verification.`,
+    '- Use one bounded `work`/`change`/`verify` or a dependent `pipeline` next; existing receipts and artifacts remain available.',
+    '- Set `refresh:true` only when external state changed and a fresh read is necessary.',
+  ].join('\n');
+}
+
+function semanticOpsMemoSpec(input = {}) {
+  if (input.capability === 'telemetry') return null;
+  const capability = String(input.capability || '');
+  const action = String(input.action || '');
+  if (!SEMANTIC_OPS_READS.has(`${capability}:${action}`)) return null;
+  const nested = input.args && typeof input.args === 'object' && !Array.isArray(input.args)
+    ? input.args
+    : {};
+  if (input.refresh === true || input.dedupeReads === false || input.full === true || input.budget === 'full'
+    || nested.refresh === true || nested.dedupeReads === false || nested.full === true || nested.budget === 'full') {
+    return null;
+  }
+  const controls = new Set(['projectRoot', 'capability', 'action', 'args', 'refresh', 'dedupeReads', 'full', 'budget', 'maxChars']);
+  const body = {};
+  for (const [key, value] of Object.entries({ ...input, ...nested })) {
+    if (!controls.has(key)) body[key] = value;
+  }
+  const canonical = JSON.stringify(canonicalize(body));
+  const key = crypto.createHash('sha256')
+    .update(`${capability}:${action}:${canonical}`)
+    .digest('hex');
+  return { key: `${capability}:${action}:${key}`, capability, action };
+}
+
+function semanticOpsReuse(spec, receipt) {
+  const artifact = receipt?.artifactId ? ` artifact=${receipt.artifactId}` : '';
+  const hash = receipt?.hash || 'unchanged';
+  const chars = Number(receipt?.fullChars) || 0;
+  return [
+    `# ContextOS ${spec.capability}.${spec.action} (reused)`,
+    `- unchanged result hash=${hash} chars=${chars}${artifact}`,
+    '- Prior diagnostic replay suppressed; use refresh:true or dedupeReads:false for fresh state.',
+  ].join('\n');
+}
+
+function compactPipelineArtifactPreview(projectRoot, artifact, maxChars = 1400) {
+  if (!artifact || artifact.kind !== 'response:pipeline') return null;
+  try {
+    const full = readArtifact(projectRoot, artifact.id, { maxChars: Infinity, lineNumbers: false });
+    const payload = full && !full.truncated ? JSON.parse(full.text) : null;
+    if (!payload || !Array.isArray(payload.steps)) return null;
+    const lines = [`status=${payload.status || 'UNKNOWN'} actions=${payload.totalActions || 0}`];
+    for (const step of payload.steps) {
+      const items = Array.isArray(step?.items) ? step.items : [step];
+      for (const item of items) {
+        const body = String(item?.output ?? item?.error ?? '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const label = `step=${step?.step ?? '?'}${item?.index ? `.${item.index}` : ''} tool=${item?.tool || step?.tool || 'action'} ${item?.ok === false ? 'FAIL' : 'OK'}`;
+        lines.push(`- ${label}${body ? `: ${body.slice(0, 240)}` : ''}`);
+      }
+    }
+    const preview = lines.join('\n');
+    if (!preview || preview.length > maxChars + 1) {
+      const limit = Math.max(200, maxChars);
+      return `${preview.slice(0, Math.max(0, limit - 68))}\n[preview clipped; use full:true for the artifact]`;
+    }
+    return preview;
+  } catch (_) {
+    return null;
+  }
+}
+
+function applyDottedProfileValues(target, values) {
+  if (!values || typeof values !== 'object' || Array.isArray(values)) return target;
+  for (const [key, value] of Object.entries(values)) {
+    const parts = String(key).split('.').filter(Boolean);
+    if (parts.length < 2) {
+      target[key] = value;
+      continue;
+    }
+    let cursor = target;
+    for (const part of parts.slice(0, -1)) {
+      if (!cursor[part] || typeof cursor[part] !== 'object' || Array.isArray(cursor[part])) cursor[part] = {};
+      cursor = cursor[part];
+    }
+    cursor[parts.at(-1)] = value;
+  }
+  return target;
+}
+
+function microPreloadSpec(args = {}) {
+  if (args.preload !== undefined && args.preload !== null) return args.preload;
+  if (args.invocation?.evidence?.pipeline !== undefined) {
+    return {
+      invocation: { evidence: args.invocation.evidence },
+      ...(args.maxChars !== undefined ? { maxChars: args.maxChars } : {}),
+      ...(args.onFailure !== undefined ? { onFailure: args.onFailure } : {}),
+    };
+  }
+  if (args.pipeline !== undefined) {
+    return {
+      pipeline: args.pipeline,
+      ...(args.maxChars !== undefined ? { maxChars: args.maxChars } : {}),
+      ...(args.onFailure !== undefined ? { onFailure: args.onFailure } : {}),
+    };
+  }
+  return null;
+}
+
+function microPreloadFailure(preload, requestedDelivery = null) {
+  return {
+    ok: false,
+    error: preload?.error || `Micro preload ended with ${preload?.status || 'ERROR'}.`,
+    budgetExceeded: preload?.status === 'TRUNCATED',
+    requestedDelivery,
+    preload,
+  };
+}
+
+function shouldSkipLateMicroEvidence(store, args = {}) {
+  if (!microPreloadSpec(args)
+    || args.allowLate === true
+    || args.refresh === true
+    || args.full === true
+    || args.withOS === true) {
+    return false;
+  }
+  const session = store?.current;
+  if (!session) return false;
+  const receipts = Array.isArray(session.receipts) ? session.receipts : [];
+  const hasMutation = Array.isArray(session.touchedFiles)
+    && session.touchedFiles.some((entry) => entry?.source === 'edit' || entry?.source === 'change');
+  const hasSuccessfulVerification = receipts.some((receipt) => (
+    Number(receipt?.exitCode) === 0
+    && typeof receipt?.command === 'string'
+    && receipt.command.trim()
+  ));
+  const hasUnresolvedFailure = receipts.some((receipt) => (
+    Number(receipt?.exitCode) !== 0 && receipt?.status !== 'superseded'
+  ));
+  return hasMutation && hasSuccessfulVerification && !hasUnresolvedFailure;
+}
+
+function attachMicroDeliveryData(result, claims = [], warning = null) {
+  const microRecovered = claims.map(({ deliveryId, receiptId, artifactId, content }) => ({
+    deliveryId,
+    receiptId,
+    artifactId,
+    content,
+  }));
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return {
+      ...result,
+      ...(microRecovered.length ? { microRecovered } : {}),
+      ...(warning ? { microRecoveryWarning: warning } : {}),
+    };
+  }
+  if (typeof result === 'string') {
+    try {
+      const parsed = JSON.parse(result);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return compactJson({
+          ...parsed,
+          ...(microRecovered.length ? { microRecovered } : {}),
+          ...(warning ? { microRecoveryWarning: warning } : {}),
+        });
+      }
+      if (microRecovered.length || warning) {
+        return compactJson({
+          result: parsed,
+          ...(microRecovered.length ? { microRecovered } : {}),
+          ...(warning ? { microRecoveryWarning: warning } : {}),
+        });
+      }
+    } catch (_) {}
+    const recovered = renderMicroDeliveries(claims);
+    const notice = warning ? `## Deferred Micro recovery notice\n${warning}` : '';
+    return [recovered, notice, result].filter(Boolean).join('\n\n');
+  }
+  if (microRecovered.length || warning) {
+    return {
+      result,
+      ...(microRecovered.length ? { microRecovered } : {}),
+      ...(warning ? { microRecoveryWarning: warning } : {}),
+    };
+  }
+  return result;
+}
+
+function attachRoutingHint(result, hint = null) {
+  if (!hint) return result;
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    return { ...result, routingHint: hint };
+  }
+  if (typeof result === 'string') {
+    try {
+      const parsed = JSON.parse(result);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return compactJson({ ...parsed, routingHint: hint });
+      }
+      if (parsed !== null) return result;
+    } catch (_) {}
+    return result;
+  }
+  return result;
+}
+
+async function runMicroSessionTurn(ctx, args, session) {
+  const task = args.firstTask ?? args.task ?? args.prompt;
+  if (!String(task || '').trim()) {
+    throw new Error('Micro session runFirst requires a non-empty task, firstTask, or prompt.');
+  }
+  const startedSession = startMicroTurn(ctx.projectRoot, session.id, task);
+  if (startedSession.turnCount === 0 && startedSession.preload && startedSession.preload.ok === false) {
+    const failedSession = failMicroTurn(ctx.projectRoot, startedSession.id);
+    const projected = projectMicroResult(microPreloadFailure(startedSession.preload, args.delivery), {
+      projectRoot: ctx.projectRoot,
+      hostSessionId: ctx.sessionId,
+      full: args.full === true,
+      maxChars: args.maxChars,
+    });
+    return {
+      ...projected,
+      preload: microPreloadReceipt(startedSession.preload),
+      session: failedSession,
+    };
+  }
+
+  const preset = MICRO_PRESETS[startedSession.preset] || null;
+  const sessionWithOS = Boolean(args.withOS || startedSession.withOS);
+  const history = buildMicroHistory(startedSession, {
+    systemPrompt: preset?.system || '',
+    // Preload is a one-time evidence handoff. Repeating the same raw slice on
+    // every persistent turn pays provider tokens again and defeats the point
+    // of keeping it in the Micro session.
+    includePreload: startedSession.turnCount === 0,
+  });
+  try {
+    const result = await runMicroTask(ctx.profile?.micro || {}, {
+      ...args,
+      prompt: '',
+      input: undefined,
+      inputRef: undefined,
+      inputReceipt: undefined,
+      inputArtifact: undefined,
+      history,
+      preload: undefined,
+      sessionId: startedSession.id,
+      sessionMode: 'persistent',
+      withOS: sessionWithOS,
+      outputMode: args.full ? 'full' : 'answer',
+      caps: sessionWithOS ? ctx.caps : null,
+      orchestrator: ctx.orchestrator,
+      projectRoot: ctx.projectRoot,
+    });
+    const projected = projectMicroResult(result, {
+      projectRoot: ctx.projectRoot,
+      hostSessionId: ctx.sessionId,
+      full: args.full === true,
+      maxChars: args.maxChars,
+    });
+    const nextSession = result.ok
+      ? completeMicroTurn(ctx.projectRoot, startedSession.id, { result, receiptId: projected.receiptId })
+      : failMicroTurn(ctx.projectRoot, startedSession.id);
+    return { ...projected, session: nextSession };
+  } catch (error) {
+    failMicroTurn(ctx.projectRoot, startedSession.id);
+    throw error;
+  }
+}
+
+function isJsonValueString(value) {
+  if (typeof value !== 'string') return false;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed !== null;
+  } catch (_) {
+    return false;
+  }
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]));
+}
+
+function repositoryRelativePath(projectRoot, value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const root = path.resolve(projectRoot);
+  const fullPath = path.resolve(root, value);
+  const relativePath = path.relative(root, fullPath).split(path.sep).join('/');
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) return null;
+  return { relativePath, fullPath };
+}
+
+function codeReadMemoSpec(projectRoot, args = {}) {
+  const resolved = repositoryRelativePath(projectRoot, args.path);
+  if (!resolved) return null;
+  const selector = args.selector && typeof args.selector === 'object' && !Array.isArray(args.selector)
+    ? args.selector
+    : {};
+  const ranges = Array.isArray(args.ranges)
+    ? args.ranges.map((range) => ({
+        startLine: range?.startLine ?? null,
+        endLine: range?.endLine ?? null,
+      }))
+    : (Array.isArray(selector.ranges)
+        ? selector.ranges.map((range) => ({
+            startLine: range?.startLine ?? null,
+            endLine: range?.endLine ?? null,
+          }))
+        : null);
+  const symbol = args.symbol || selector.symbol || selector.method || null;
+  const range = ranges
+    ? JSON.stringify(ranges)
+    : (args.startLine !== undefined || args.endLine !== undefined || selector.startLine !== undefined || selector.endLine !== undefined)
+        ? `${args.startLine ?? selector.startLine ?? ''}:${args.endLine ?? selector.endLine ?? ''}`
+        : (args.fullFile === true || selector.fullFile === true ? 'full' : ':');
+  let stat = null;
+  try {
+    const fileStat = fs.statSync(resolved.fullPath);
+    if (fileStat.isFile()) stat = { mtimeMs: fileStat.mtimeMs, size: fileStat.size };
+  } catch (_) {}
+  return {
+    ...resolved,
+    range,
+    symbol: symbol ? String(symbol) : null,
+    stat,
+  };
+}
+
+function codeReadOutputMeta(value, spec) {
+  const object = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  const text = typeof value === 'string' ? value : JSON.stringify(value ?? '');
+  const header = text.match(/\/\/\s+[^\n]+\s+\[L(\d+)-L(\d+)\]\s+\(hash:\s*([0-9a-f]+)\)/i);
+  const hash = object?.hash || object?.data?.hash || header?.[3]
+    || crypto.createHash('sha256').update(text).digest('hex');
+  return {
+    hash: String(hash),
+    startLine: Number(object?.startLine ?? object?.data?.startLine ?? header?.[1]) || null,
+    endLine: Number(object?.endLine ?? object?.data?.endLine ?? header?.[2]) || null,
+    symbol: object?.symbol || object?.data?.symbol || spec.symbol || null,
+  };
+}
+
+function isExplicitReadReplay(args = {}) {
+  return args.dedupeReads === false
+    || args.full === true
+    || args.budget === 'full'
+    || args.maxChars !== undefined
+    || args.fullFile === true;
+}
+
+function readMemoStillValid(spec, receipt) {
+  if (!spec?.stat || !receipt) return false;
+  return Number(receipt.mtimeMs) === Number(spec.stat.mtimeMs)
+    && Number(receipt.size) === Number(spec.stat.size);
+}
+
+function renderReadReuse(spec, receipt, format = 'markdown') {
+  const data = {
+    ok: true,
+    reused: true,
+    filePath: spec.relativePath,
+    range: spec.range,
+    symbol: spec.symbol,
+    hash: receipt.hash || null,
+    artifactId: receipt.artifactId || receipt.receiptId || null,
+    message: 'This unchanged source slice was already returned earlier in the session; no source was replayed.',
+  };
+  if (format === 'json') return data;
+  const artifact = receipt.artifactId || receipt.receiptId;
+  return `# ContextOS code read (reused)\n- ${spec.relativePath} range=${spec.range} hash=${receipt.hash || 'unchanged'}${artifact ? ` artifact=${artifact}` : ''}\n- Source replay suppressed; use dedupeReads:false for a fresh slice.`;
+}
+
+function recordCodeReadMemo(projectRoot, store, args, value, spec) {
+  const meta = codeReadOutputMeta(value, spec);
+  let artifact = null;
+  try {
+    artifact = storeArtifact(projectRoot, value, {
+      kind: 'code-read',
+      metadata: {
+        path: spec.relativePath,
+        range: spec.range,
+        symbol: spec.symbol,
+        hash: meta.hash,
+      },
+    });
+  } catch (_) {}
+  store.recordReadReceipt({
+    path: spec.relativePath,
+    hash: meta.hash,
+    range: spec.range,
+    symbol: meta.symbol,
+    receiptId: artifact?.id || null,
+    artifactId: artifact?.id || null,
+    mtimeMs: spec.stat?.mtimeMs,
+    size: spec.stat?.size,
+  });
+  return value;
+}
+
+function searchMemoKey(args = {}) {
+  return JSON.stringify(canonicalize({
+    query: args.query || '',
+    root: args.root || null,
+    limit: args.limit ?? null,
+    maxResults: args.maxResults ?? null,
+    format: args.format || 'markdown',
+  }));
+}
+
+function renderSearchReuse(receipt, format = 'markdown') {
+  const data = {
+    ok: true,
+    reused: true,
+    artifactId: receipt.artifactId || receipt.receiptId || null,
+    message: 'This unchanged search was already executed in the session; its result was not replayed.',
+  };
+  if (format === 'json') return data;
+  const artifact = receipt.artifactId || receipt.receiptId;
+  return `# ContextOS code search (reused)\n- reused${artifact ? ` artifact=${artifact}` : ''}\n- Search replay suppressed; change the query/root or use dedupeReads:false.`;
+}
+
+function recordSearchMemo(projectRoot, store, args, value, revision) {
+  let artifact = null;
+  try {
+    artifact = storeArtifact(projectRoot, value, {
+      kind: 'code-search',
+      metadata: { query: args.query || '', root: args.root || null, revision },
+    });
+  } catch (_) {}
+  store.recordSearchReceipt({
+    key: searchMemoKey(args),
+    revision,
+    receiptId: artifact?.id || null,
+    artifactId: artifact?.id || null,
+  });
+  return value;
+}
+
+function exploreMemoKey(args = {}) {
+  return JSON.stringify(canonicalize({
+    intent: args.intent || '',
+    paths: args.paths || null,
+    depth: args.depth || null,
+    maxChars: args.maxChars ?? null,
+    full: args.full === true,
+  }));
+}
+
+function isExplicitExploreReplay(args = {}) {
+  return args.dedupeReads === false
+    || args.refresh === true
+    || args.full === true
+    || args.budget === 'full';
+}
+
+function renderExploreReuse(receipt, format = 'markdown') {
+  const data = {
+    ok: true,
+    reused: true,
+    artifactId: receipt.artifactId || receipt.receiptId || null,
+    message: 'This unchanged discovery was already returned earlier in the session; its summary was not replayed.',
+  };
+  if (format === 'json') return data;
+  const artifact = receipt.artifactId || receipt.receiptId;
+  return `# ContextOS explore (reused)\n- reused${artifact ? ` artifact=${artifact}` : ''}\n- Discovery replay suppressed; use dedupeReads:false or refresh:true for a fresh summary.`;
+}
+
+function recordExploreMemo(projectRoot, store, args, value, revision) {
+  let artifact = null;
+  try {
+    artifact = storeArtifact(projectRoot, value, {
+      kind: 'explore-discovery',
+      metadata: { intent: args.intent || '', paths: args.paths || null, revision },
+    });
+  } catch (_) {}
+  store.recordExploreReceipt({
+    key: exploreMemoKey(args),
+    revision,
+    receiptId: artifact?.id || null,
+    artifactId: artifact?.id || null,
+  });
+  return value;
 }
 
 /**
@@ -45,6 +666,7 @@ export class Orchestrator {
     this.system = system;
     this.store = new SessionStore({ projectRoot: this.projectRoot, projectId: this.projectId });
     this.healed = null;
+    this.healCompleted = false;
   }
 
   /**
@@ -56,18 +678,21 @@ export class Orchestrator {
     const { service } = this;
     if (!service || typeof service.osContext !== 'function') return;
     try {
+      const graphDirty = typeof service.db?.isGraphDirty === 'function'
+        ? service.db.isGraphDirty(this.projectId)
+        : true;
+      if (this.healCompleted && !graphDirty) return;
       await service.osContext({ action: 'reconcile' });
-    } catch (_) {}
-    if (typeof service.healStateConflict === 'function') {
-      try {
+      if (typeof service.healStateConflict === 'function') {
         this.healed = service.healStateConflict();
-      } catch (_) {
-        this.healed = null;
       }
+      this.healCompleted = true;
+    } catch (_) {
+      this.healed = null;
     }
   }
 
-  _context(tracer) {
+  _context(tracer, { turnMemo = new Map() } = {}) {
     return {
       service: this.service,
       caps: createCapabilities({ service: this.service, projectRoot: this.projectRoot, projectId: this.projectId }),
@@ -76,46 +701,228 @@ export class Orchestrator {
       profile: loadProfile(this.projectRoot),
       projectRoot: this.projectRoot,
       projectId: this.projectId,
-      orchestrator: this,
+      sessionId: tracer?.sessionId || null,
+      turnMemo,
+      // Pipeline children are internal work. Only the top-level host request
+      // restores deferred Micro results, once, after its own action completes.
+      orchestrator: {
+        dispatch: (tool, input = {}) => this._dispatch(tool, input, {
+          recoverMicroDeliveries: false,
+          internal: true,
+          turnMemo,
+        }),
+      },
     };
   }
 
   async dispatch(tool, input = {}) {
+    return this._dispatch(tool, input, {
+      recoverMicroDeliveries: true,
+      internal: false,
+    });
+  }
+
+  async _dispatch(tool, input = {}, { recoverMicroDeliveries = false, internal = false, turnMemo = null } = {}) {
     await this._selfHeal();
     const seed = this.store.current || this.store.ensureSession(input.intent || input.summary || '');
+    const route = routeKind(tool, input);
+    // A command or source mutation may have changed a previously memoized
+    // slice even when the caller did not go through the high-level `change`.
+    // Invalidate durable read/search receipts before the operation so a failed
+    // mutation cannot accidentally make a stale source look reusable.
+    if (route === 'mutation'
+      || (tool === 'ops' && ['run_command', 'process'].includes(input.capability))) {
+      this.store.invalidateReadReceipts();
+      this.store.invalidateSearchReceipts();
+      this.store.invalidateSemanticReceipts();
+      if (turnMemo instanceof Map) turnMemo.clear();
+    }
     const tracer = new Tracer({ projectRoot: this.projectRoot, sessionId: seed.id });
-    const ctx = this._context(tracer);
+    const ctx = this._context(tracer, { turnMemo: turnMemo || new Map() });
     if (this.healed) tracer.step('heal', this.healed);
+    const startedAt = Date.now();
+    const routingHint = internal ? null : this._routingHint(seed.id, tool, input);
+    const exploreRevision = tool === 'explore' && !isExplicitExploreReplay(input)
+      ? workspaceFingerprint(this.projectRoot)
+      : null;
+    const exploreKey = exploreRevision ? exploreMemoKey(input) : null;
+    const exploreReceipt = exploreKey
+      ? this.store.findExploreReceipt({ key: exploreKey, revision: exploreRevision })
+      : null;
+    let deliveryClaims = [];
+    let deliveryWarning = null;
+    let deliveryClaimsCompleted = false;
+    const semanticMemo = tool === 'ops' ? semanticOpsMemoSpec(input) : null;
+    const semanticReceipt = semanticMemo
+      ? this.store.findSemanticReceipt({ key: semanticMemo.key })
+      : null;
+    const convergence = convergenceGate(this.projectRoot, seed.id, tool, input, semanticReceipt);
+    const publishGraph = input.exportGraph === true
+      || (tool === 'ship' && ctx.profile?.shipExportsGraph === true);
     try {
-      switch (tool) {
-        case 'explore':
-          return await explorePipeline(ctx, input);
-        case 'inspect':
-          return await inspectPipeline(ctx, input);
-        case 'change':
-          return await changePipeline(ctx, input);
-        case 'verify':
-          return await verifyPipeline(ctx, input);
-        case 'ship':
-          return await shipPipeline(ctx, input);
-        case 'ops':
-          return await this._ops(ctx, input);
-        case 'pipeline':
-          return await pipelinePipeline(ctx, input);
-        default:
-          throw new Error(`Unknown orchestrator tool '${tool}'`);
+      if (recoverMicroDeliveries) {
+        try {
+          deliveryClaims = claimMicroDeliveries(this.projectRoot);
+        } catch (error) {
+          deliveryWarning = `Deferred Micro result recovery will retry on a later OS call: ${error.message}`;
+        }
       }
+      let result;
+      if (convergence) {
+        result = convergence;
+      } else if (semanticReceipt) {
+        result = semanticOpsReuse(semanticMemo, semanticReceipt);
+      } else {
+        switch (tool) {
+          case 'explore':
+            result = exploreReceipt
+              ? renderExploreReuse(exploreReceipt, input.format)
+              : await explorePipeline(ctx, input);
+            break;
+          case 'inspect':
+            result = await inspectPipeline(ctx, input);
+            break;
+          case 'change':
+            result = await changePipeline(ctx, input);
+            break;
+          case 'verify':
+            result = await verifyPipeline(ctx, input);
+            break;
+          case 'ship':
+            result = await shipPipeline(ctx, input);
+            break;
+          case 'ops':
+            result = await this._ops(ctx, input);
+            break;
+          case 'pipeline':
+            result = await pipelinePipeline(ctx, input);
+            break;
+          case 'work':
+            result = await workPipeline(ctx, input);
+            break;
+          default:
+            throw new Error(`Unknown orchestrator tool '${tool}'`);
+        }
+        if (!convergence && semanticMemo && !semanticReceipt && typeof result === 'string') {
+          const rawHash = crypto.createHash('sha256').update(result).digest('hex');
+          const artifactId = result.match(/artifact=([A-Za-z0-9._-]+)/)?.[1] || null;
+          this.store.recordSemanticReceipt({
+            key: semanticMemo.key,
+            capability: semanticMemo.capability,
+            action: semanticMemo.action,
+            hash: rawHash,
+            fullChars: result.length,
+            artifactId,
+          });
+        }
+      }
+      if (tool === 'explore' && exploreRevision && !exploreReceipt && typeof result === 'string') {
+        recordExploreMemo(this.projectRoot, this.store, input, result, exploreRevision);
+      }
+      if (typeof result !== 'string') {
+        const combined = attachRoutingHint(
+          attachMicroDeliveryData(result, deliveryClaims, deliveryWarning),
+          routingHint
+        );
+        recordTelemetry(this.projectRoot, {
+          sessionId: seed.id,
+          tool,
+          input,
+          output: combined,
+          internal,
+          routeKind: route,
+          durationMs: Date.now() - startedAt,
+        });
+        if (deliveryClaims.length) {
+          completeMicroDeliveryClaims(this.projectRoot, deliveryClaims.map((item) => item.deliveryId));
+          deliveryClaimsCompleted = true;
+        }
+        return combined;
+      }
+      const response = attachRoutingHint(
+        attachMicroDeliveryData(result, deliveryClaims, deliveryWarning),
+        routingHint
+      );
+      const responseArgs = input.args && typeof input.args === 'object' && !Array.isArray(input.args)
+        ? input.args
+        : {};
+      const responseMaxChars = typeof input.maxChars === 'number'
+        ? input.maxChars
+        : (typeof responseArgs.maxChars === 'number' ? responseArgs.maxChars : undefined);
+      const full = input.full === true || input.budget === 'full' || input.mode === 'full'
+        || responseArgs.full === true || responseArgs.budget === 'full';
+      const finalized = finalizeResponse(response, {
+        projectRoot: this.projectRoot,
+        tool,
+        maxChars: responseMaxChars,
+        full,
+        routingHint: isJsonValueString(response) ? null : routingHint,
+      });
+      recordTelemetry(this.projectRoot, {
+        sessionId: seed.id,
+        tool,
+        input,
+        output: finalized.text,
+        internal,
+        routeKind: route,
+        artifactId: finalized.meta.artifactId,
+        truncated: finalized.meta.truncated,
+        durationMs: Date.now() - startedAt,
+      });
+      if (deliveryClaims.length) {
+        completeMicroDeliveryClaims(this.projectRoot, deliveryClaims.map((item) => item.deliveryId));
+        deliveryClaimsCompleted = true;
+      }
+      return finalized.text;
+    } catch (error) {
+      if (deliveryClaims.length && !deliveryClaimsCompleted) {
+        try {
+          releaseMicroDeliveryClaims(this.projectRoot, deliveryClaims.map((item) => item.deliveryId));
+        } catch (_) {}
+      }
+      throw error;
     } finally {
       // graph.json is a derived projection: publish once, at the boundary.
       try {
-        this.service?.syncEngine?.publishIfDirty(this.projectId, this.projectRoot);
+        if (publishGraph) {
+          this.service?.syncEngine?.publishIfDirty(this.projectId, this.projectRoot);
+        }
       } catch (_) {}
       tracer.flush();
     }
   }
 
+  _routingHint(sessionId, tool, input = {}) {
+    if (tool === 'ops' && input.capability === 'telemetry') return null;
+    const host = summarizeTelemetry(this.projectRoot, {
+      sessionId,
+      scope: 'external',
+      limit: 500,
+    });
+    const internal = summarizeTelemetry(this.projectRoot, {
+      sessionId,
+      scope: 'internal',
+      limit: 500,
+    });
+    const counts = host.routeCounts || {};
+    const discovery = Number(counts.discovery) || 0;
+    const mutation = Number(counts.mutation) || 0;
+    const verification = Number(counts.verification) || 0;
+    if ([5, 9].includes(host.calls) && discovery >= 4 && mutation === 0 && verification === 0) {
+      return 'Batch known reads in one bounded work/Pipeline call, then mutate or verify.';
+    }
+    if (host.calls >= 5 && internal.calls > Math.max(3, host.calls * 4)) {
+      return 'Narrow Pipeline steps and reuse the existing artifact; do not repeat reads.';
+    }
+    return null;
+  }
+
   async _ops(ctx, input = {}) {
-    const { capability, action, args = {} } = input;
+    const { capability, action, args: nestedArgs = {}, projectRoot: _projectRoot, ...directArgs } = input;
+    const args = {
+      ...directArgs,
+      ...(nestedArgs && typeof nestedArgs === 'object' && !Array.isArray(nestedArgs) ? nestedArgs : {}),
+    };
     const { service, store, tracer } = ctx;
     tracer.step('ops', { capability, action });
 
@@ -131,7 +938,37 @@ export class Orchestrator {
       case 'chain':
         return render(await service.chain({ ...args, action }));
       case 'code':
-        return render(await service.code({ ...args, action }));
+        if (action === 'read' && args.dedupeReads !== false && !isExplicitReadReplay(args)) {
+          const spec = codeReadMemoSpec(this.projectRoot, args);
+          if (spec) {
+            const prior = store.findLatestReadReceipt({
+              path: spec.relativePath,
+              range: spec.range,
+              symbol: spec.symbol,
+            });
+            if (prior && readMemoStillValid(spec, prior)) {
+              return render(renderReadReuse(spec, prior, args.format));
+            }
+          }
+        }
+        if (action === 'search' && args.dedupeReads !== false && !isExplicitReadReplay(args)) {
+          const revision = workspaceFingerprint(this.projectRoot);
+          if (revision) {
+            const prior = store.findSearchReceipt({ key: searchMemoKey(args), revision });
+            if (prior) return render(renderSearchReuse(prior, args.format));
+          }
+          const data = await service.code({ ...args, action });
+          if (revision) recordSearchMemo(this.projectRoot, store, args, data, revision);
+          return render(data);
+        }
+        {
+          const data = await service.code({ ...args, action });
+          if (action === 'read' && args.dedupeReads !== false && !isExplicitReadReplay(args)) {
+            const spec = codeReadMemoSpec(this.projectRoot, args);
+            if (spec?.stat) recordCodeReadMemo(this.projectRoot, store, args, data, spec);
+          }
+          return render(data);
+        }
       case 'run_command':
         return render(await service.runCommand(args));
       case 'process':
@@ -141,12 +978,322 @@ export class Orchestrator {
       case 'session': {
         if (action === 'note') return render(store.note(args.text, args.kind || 'note'));
         if (action === 'close') return render(store.close(args.summary || ''));
-        if (action === 'history') return render(store.recentHistory(args.limit || 5));
+        if (action === 'history') {
+          return render(store.recentHistory(args.limit, {
+            sessionId: args.sessionId,
+            full: args.full === true,
+          }));
+        }
+        if (action === 'resume') {
+          const session = store.current;
+          if (!session) return render({ status: 'no-open-session' });
+          return render({
+            id: session.id,
+            status: session.status,
+            intent: session.intent || null,
+            files: (session.touchedFiles || []).slice(-8).map((entry) => entry.path),
+            receipts: (session.receipts || []).slice(-3).map((receipt) => ({
+              command: receipt.command,
+              exitCode: receipt.exitCode,
+              status: receipt.status,
+            })),
+            notes: (session.notes || []).slice(-3).map((entry) => entry.text),
+          });
+        }
+        if (action === 'status' || args.full !== true) return render(store.summary());
         return render(store.current || { status: 'no-open-session' });
       }
       case 'profile': {
-        if (action === 'set') return render(saveProfile(this.projectRoot, args));
+        if (action === 'set') {
+          const { scope, values, ...patch } = args;
+          return render(saveProfile(this.projectRoot, applyDottedProfileValues(patch, values), { scope }));
+        }
         return render(loadProfile(this.projectRoot));
+      }
+      case 'artifact': {
+        if (action === 'read') {
+          // A diagnostic artifact can itself contain a Pipeline or prior
+          // response artifact. Keep nested replay tiny by default; the model
+          // can request `full:true` for a deliberate source/log slice.
+          const fullArtifact = args.full === true || args.budget === 'full';
+          const requestedArtifactChars = Number(args.maxChars);
+          const artifactReadArgs = {
+            ...args,
+            maxChars: fullArtifact
+              ? Infinity
+              : (Number.isFinite(requestedArtifactChars) && requestedArtifactChars > 0
+                  ? Math.min(Math.floor(requestedArtifactChars), 1400)
+                  : 1400),
+          };
+          const artifact = readArtifact(this.projectRoot, args.id, artifactReadArgs);
+          if (!artifact) return `# ContextOS artifact\n- Not found: \`${args.id || '(missing)'}\``;
+          const artifactStat = statArtifact(this.projectRoot, args.id);
+          const canPreviewPipeline = !fullArtifact
+            && !args.grep
+            && args.startLine === undefined
+            && args.endLine === undefined
+            && artifactStat?.kind === 'response:pipeline';
+          if (canPreviewPipeline) {
+            const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 1400);
+            if (preview) {
+              return [
+                `# ContextOS artifact ${artifact.id}`,
+                `- Pipeline preview; fullChars=${artifactStat.contentChars}; use \`full:true\` for the raw artifact.`,
+                '',
+                '```text',
+                preview,
+                '```',
+              ].join('\n');
+            }
+          }
+          return [
+            `# ContextOS artifact ${artifact.id}`,
+            `- Range: L${artifact.range.startLine}-L${artifact.range.endLine} (${artifact.returnedLines}/${artifact.totalLines} lines)`,
+            `- Truncated: ${artifact.truncated}`,
+            '',
+            '```text',
+            artifact.text,
+            '```',
+          ].join('\n');
+        }
+        if (action === 'stat') return render(statArtifact(this.projectRoot, args.id) || { ok: false, id: args.id, error: 'not-found' });
+        if (action === 'list') return render(listArtifacts(this.projectRoot, { limit: args.limit || 20 }));
+        if (action === 'evict') {
+          // Accept both the documented flat policy and a nested `policy`
+          // object. Unknown nesting used to be silently ignored, producing a
+          // successful-looking no-op when an agent tried to apply retention.
+          const nestedPolicy = args.policy && typeof args.policy === 'object' ? args.policy : {};
+          const result = evictArtifacts(this.projectRoot, { ...nestedPolicy, ...args });
+          return render({
+            ok: true,
+            requested: result.requested || [],
+            evicted: result.evicted || [],
+            notFound: result.notFound || [],
+            remainingCount: Array.isArray(result.entries) ? result.entries.length : 0,
+            totalBytes: result.totalBytes || 0,
+          });
+        }
+        throw new Error(`Unknown artifact action '${action}'. Available: read, stat, list, evict`);
+      }
+      case 'telemetry': {
+        if (action === 'audit') {
+          return render(auditRouting(this.projectRoot, {
+            sessionId: args.sessionId,
+            baselineSessionId: args.baselineSessionId,
+            limit: args.limit,
+          }));
+        }
+        if (action === 'compare') {
+          return render(compareTelemetry(this.projectRoot, {
+            leftSessionId: args.leftSessionId,
+            rightSessionId: args.rightSessionId,
+            limit: args.limit,
+            scope: args.scope || 'external',
+          }));
+        }
+        if (action === 'summary' || action === undefined) {
+          const telemetrySessionId = args.sessionId || store.current?.id || null;
+          return render({
+            ...summarizeTelemetry(this.projectRoot, {
+              sessionId: telemetrySessionId,
+              limit: args.limit,
+              scope: args.scope || 'external',
+            }),
+            microProvider: summarizeMicroUsage(this.projectRoot, {
+              limit: args.limit,
+              hostSessionId: telemetrySessionId,
+            }),
+          });
+        }
+        if (action === 'list') {
+          const telemetrySessionId = args.sessionId || null;
+          return render({
+            ...summarizeTelemetry(this.projectRoot, {
+              sessionId: telemetrySessionId,
+              limit: args.limit,
+              scope: args.scope || 'external',
+            }),
+            microProvider: summarizeMicroUsage(this.projectRoot, {
+              limit: args.limit,
+              hostSessionId: telemetrySessionId,
+            }),
+          });
+        }
+        throw new Error(`Unknown telemetry action '${action}'. Available: summary, list, compare, audit`);
+      }
+      case 'micro': {
+        const microConfig = ctx.profile?.micro || {};
+        if (action === 'doctor') {
+          const checks = [
+            { name: 'url', ok: Boolean(microConfig.url), value: microConfig.url || null },
+            { name: 'model', ok: Boolean(microConfig.model), value: microConfig.model || null },
+            { name: 'key', ok: Boolean(microConfig.key), value: microConfig.key ? 'configured' : 'missing' },
+          ];
+          return render({
+            ok: checks.every((check) => check.ok),
+            checks,
+            globalProfile: globalProfilePath(),
+            projectProfile: `${this.projectRoot}/.contextos/profile.json`,
+          });
+        }
+        const microWithOS = Boolean(input.withOS || args.withOS);
+        const caps = microWithOS ? ctx.caps : null;
+
+        // A read-only evidence preload after a successful mutation/verification
+        // is almost always an agent replaying discovery too late. Avoid another
+        // Pipeline/provider round and make the escape hatch explicit for audits.
+        if (!args.sessionAction && shouldSkipLateMicroEvidence(store, args)) {
+          return render({
+            ok: true,
+            skipped: true,
+            reason: 'late-read-only-evidence',
+            hint: 'Reuse the successful receipt and existing artifacts; set allowLate:true only for an intentional post-verify audit.',
+          });
+        }
+
+        if (args.sessionAction) {
+          const sessionAction = String(args.sessionAction);
+          const sessionId = args.sessionId;
+          if (sessionAction === 'create') {
+            let existing = null;
+            if (sessionId) {
+              try {
+                existing = readMicroSession(this.projectRoot, sessionId);
+              } catch (error) {
+                if (!/not found/i.test(error.message)) throw error;
+              }
+            }
+            if (existing) return render({ ok: true, existing: true, session: microSessionSnapshot(existing) });
+            if (args.runFirst === true && !String(args.firstTask ?? args.task ?? args.prompt ?? '').trim()) {
+              throw new Error('Micro session runFirst requires a non-empty task, firstTask, or prompt.');
+            }
+            const preloadSpec = microPreloadSpec(args);
+            const preload = preloadSpec ? await runMicroPreload(ctx, preloadSpec) : null;
+            // Do not persist a poisoned session. A failed or truncated preload
+            // is a complete create-turn failure; making the host call `send`
+            // just to rediscover the same error creates a dirty extra round.
+            if (preload && preload.ok === false) {
+              const projected = projectMicroResult(microPreloadFailure(preload, args.delivery), {
+                projectRoot: this.projectRoot,
+                hostSessionId: ctx.sessionId,
+                full: args.full === true,
+                maxChars: args.maxChars,
+              });
+              return render({
+                ...projected,
+                preload: microPreloadReceipt(preload),
+                hint: 'Narrow the attached Pipeline steps or maxChars, then create the session again.',
+              });
+            }
+            const session = createMicroSession(this.projectRoot, {
+              ...args,
+              withOS: microWithOS,
+              preload,
+            });
+            if (args.runFirst === true) {
+              const firstTurn = await runMicroSessionTurn(ctx, args, session);
+              return render({
+                ...firstTurn,
+                created: true,
+                ...(preload ? { preload: microPreloadReceipt(preload) } : {}),
+              });
+            }
+            return render({
+              ok: true,
+              session: microSessionSnapshot(session),
+              ...(preload ? { preload: microPreloadReceipt(preload) } : {}),
+            });
+          }
+          if (sessionAction === 'list') {
+            return render({
+              ok: true,
+              sessions: listMicroSessions(this.projectRoot, {
+                limit: args.limit,
+                offset: args.offset,
+              }),
+            });
+          }
+          if (sessionAction === 'get') {
+            return render({ ok: true, session: microSessionSnapshot(readMicroSession(this.projectRoot, sessionId)) });
+          }
+          if (sessionAction === 'close') {
+            return render({ ok: true, session: closeMicroSession(this.projectRoot, sessionId) });
+          }
+          if (sessionAction === 'delete') {
+            return render({ ok: true, deleted: deleteMicroSession(this.projectRoot, sessionId), sessionId: String(sessionId || '') });
+          }
+          if (sessionAction === 'send') {
+            const session = readMicroSession(this.projectRoot, sessionId);
+            const result = await runMicroSessionTurn(ctx, args, session);
+            return render(result);
+          }
+          throw new Error(`Unknown micro sessionAction '${sessionAction}'. Available: create, send, get, list, close, delete`);
+        }
+
+        if (action === 'batch') {
+          const taskInputs = Array.isArray(args.tasks) ? args.tasks : [];
+          const batchConcurrency = normalizeMicroBatchConcurrency(args.maxConcurrency);
+          // Preloads are OS work too. Use the same bounded scheduler as the
+          // provider phase so a large batch cannot fan out Pipeline reads all
+          // at once before Micro even receives a request.
+          const tasks = await mapWithConcurrency(taskInputs, batchConcurrency, async (task, index) => {
+            const preloadSpec = microPreloadSpec(task);
+            return {
+              ...task,
+              id: task.id || `task-${index + 1}`,
+              preload: preloadSpec ? await runMicroPreload(ctx, preloadSpec) : undefined,
+            };
+          });
+          const batchNeedsCaps = microWithOS || tasks.some((task) => Boolean(task.withOS));
+          const runnableTasks = tasks.filter((task) => !task.preload || task.preload.ok !== false);
+          const { tasks: _taskInputs, maxConcurrency: _requestedConcurrency, ...batchDefaults } = args;
+          const result = await runMicroTasksParallel(microConfig, runnableTasks, { ...batchDefaults, batch: true, maxConcurrency: batchConcurrency, withOS: microWithOS, outputMode: args.full ? 'full' : 'answer', caps: batchNeedsCaps ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });
+          const resultById = new Map((result.tasks || []).map((task, index) => [String(task.id || `task-${index + 1}`), task]));
+          return render({
+            ok: tasks.every((task) => task.preload?.ok === false ? false : resultById.get(String(task.id))?.ok !== false),
+            totalDurationMs: result.totalDurationMs,
+            tasks: tasks.map((task, index) => {
+              const id = String(task.id);
+              const rawResult = task.preload?.ok === false
+                ? microPreloadFailure(task.preload, task.delivery)
+                : (resultById.get(id) || { ok: false, error: `Micro batch task '${id}' did not return a result.` });
+              return {
+                id,
+                ...projectMicroResult(rawResult, {
+                  projectRoot: this.projectRoot,
+                  hostSessionId: ctx.sessionId,
+                  full: args.full === true,
+                  maxChars: args.maxChars,
+                }),
+                ...(task.preload ? { preload: microPreloadReceipt(task.preload) } : {}),
+              };
+            }),
+          });
+        }
+        const preloadSpec = microPreloadSpec(args);
+        const preload = preloadSpec ? await runMicroPreload(ctx, preloadSpec) : null;
+        if (preload && preload.ok === false) {
+          return render({
+            ...projectMicroResult(microPreloadFailure(preload, args.delivery), {
+              projectRoot: this.projectRoot,
+              hostSessionId: ctx.sessionId,
+              full: args.full === true,
+              maxChars: args.maxChars,
+            }),
+            preload: microPreloadReceipt(preload),
+          });
+        }
+        const effectiveWithOS = microWithOS;
+        const result = await runMicroTask(microConfig, { ...args, preload, action, withOS: effectiveWithOS, outputMode: args.full ? 'full' : 'answer', caps: effectiveWithOS ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });
+        return render({
+          ...projectMicroResult(result, {
+            projectRoot: this.projectRoot,
+            hostSessionId: ctx.sessionId,
+            full: args.full === true,
+            maxChars: args.maxChars,
+          }),
+          ...(preload ? { preload: microPreloadReceipt(preload) } : {}),
+        });
       }
       case 'system': {
         const fn = this.system[action];

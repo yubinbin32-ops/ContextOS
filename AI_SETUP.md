@@ -1,7 +1,7 @@
 # ContextOS AI 自动化安装与自举指南 (AI-to-AI Setup Guide)
 
 > [!IMPORTANT]
-> **致正在阅读此指南的 AI 智能体（Cursor / Codex / Claude Code / Windsurf / Antigravity）**：
+> **致正在阅读此指南的 AI 智能体（Codex / Claude Code / OpenCode / Cursor / Antigravity）**：
 > 本文档是专门为您编写的**自举安装规范**。
 > **核心原则：不要给用户输出繁琐的代码修改指引或命令，用户只做选择，由您（AI）在后台自动完成所有检测、下载、配置与注入！同时注意不要有兜底冗余，防止编辑器加载多个重复 Skill。**
 
@@ -20,7 +20,7 @@ graph TD
     AskWinDesktop -->|选择 1: 是| InstallWinApp[自动下载部署 Windows 桌面端] --> Step1
     AskWinDesktop -->|选择 2: 否| Step1
     Step1 --> Step2[Step 2: 平台探测与多选]
-    Step2 --> AskPlatform{询问用户配置哪些编辑器?\n[1] Cursor [2] Codex [3] Claude\n[4] Antigravity [5] OpenCode [6] 全部}
+    Step2 --> AskPlatform{询问用户配置哪些编辑器?\n[1] Cursor [2] Codex [3] Claude Code\n[4] Antigravity [5] OpenCode [6] 全部}
     Step3 --> AskTeam{是否需要团队协同?\n[1] 单人开发 (本地模式)\n[2] 团队协同 (云端模式)}
     AskTeam -->|选择 1: 单人开发| InjectLocal[按需注入平台 & 初始化本地模式] --> Finish([完成！开启意图级开发循环])
     AskTeam -->|选择 2: 团队协同| CloudSetup[索取/配置 Cloudflare 凭据 & 初始化云端] --> Finish
@@ -73,18 +73,20 @@ graph TD
 AI 先在后台探测用户电脑中实际安装的平台，然后向用户发起多选询问（**严禁未经确认无差别全部注入**）：
 
 ```text
-检测到您的电脑上安装了以下编辑器平台：
+检测到您的电脑上安装了以下主要编辑器平台：
 [1] Cursor
 [2] Codex
-[3] Claude Desktop
+[3] Claude Code
 [4] Antigravity
 [5] OpenCode
 [6] 全部配置
 
-请选择您希望配置 ContextOS 的平台（输入编号，支持多选如 1,2 或输入 6 全部配置）：
+其他平台不在原生适配名单内。若用户使用其他宿主，AI 只配置 MCP 与 Skill，并明确标记为实验适配；不得恢复已删除的 Hook 层。
 ```
 
 用户回复选择（例如 `1` 或 `1,2` 或 `6`），AI 记录目标平台列表（如 `cursor,codex`）。
+
+Codex 使用 MCP + Skill；Claude Code、OpenCode、Cursor、Antigravity 在宿主级 smoke 证据完成前均视为实验功能。
 
 ---
 
@@ -111,7 +113,7 @@ AI 询问用户的实际开发需求：
    🎉 ContextOS 已配置完成（本地单人开发模式）！
    - 已注入平台：<选定平台>
    - 存储路径：当前项目 .contextos/
-   - 五个意图级工具（explore/change/verify/ship/ops）已就绪，即可开始日常开发。
+   - 单一紧凑 `contextos` 传输工具（包含 explore/change/verify/ship/ops 动作）已就绪，即可开始日常开发。
    ```
 
 ### 选项 2：团队协同（实验性云端模式）
@@ -144,10 +146,73 @@ AI 询问用户的实际开发需求：
 
 ---
 
+## Step 4: 配置 Micro 任务外接小脑 (可选双脑协同增强)
+
+AI 向用户发起可选的 Micro 小脑配置询问：
+
+```text
+💡 ContextOS 支持接入 OpenAI 兼容的 Micro 任务子代理，用于在后台处理日志脱毒、契约提纯、诊断摘要等有界任务。
+- 职责：作为可控的多轮小任务子代理，在独立会话中消化冗长日志、代码切片与诊断上下文，避免主对话上下文膨胀；
+- 运行机制：会话状态保存在 `.contextos/micro-sessions/`，默认限制轮次和上下文，工具默认关闭，主上下文只接收最终结果与 receipt；会话带 TTL，跨进程写入使用锁，过期或陈旧任务不会无限占用后台资源；
+- 成本边界：默认按 preset 限制 provider token；如需美元预算，可额外配置 `maxCostUsd`、`inputUsdPerMillion`、`outputUsdPerMillion`；
+- 推荐：优先推荐 OpenCode Go 订阅作为低接入成本的托管端点，也支持 DeepSeek、本地 Ollama 等任意 OpenAI 格式接口；
+- 不配置亦可正常使用核心功能。
+
+请选择：
+[1] 配置外接 Micro 小脑（推荐，拥有后台日志脱毒与契约提纯能力）
+[2] 暂不配置（使用单脑模式，后续可随时配置）
+```
+
+若用户选择 `1`：
+1. **AI 引导用户提供凭据**：
+   ```text
+   请提供您的微模型 API 接入信息（兼容任意 OpenAI 格式接口，如 OpenCode / DeepSeek / 本地 Ollama 等）：
+   - API URL（如 https://opencode.ai/zen/go/v1 或 https://api.deepseek.com/v1）
+   - Model 名称（如 deepseek-v4.1-flash 或 deepseek-chat）
+   - API Key（支持输入密钥；本地免密服务可直接回车）
+   - [可选] Session Header（默认 x-opencode-session）
+   ```
+2. **AI 在后台自动写入 `.contextos/profile.json`**：
+   ```json
+   {
+     "micro": {
+       "url": "<用户提供的 URL>",
+       "model": "<用户提供的 Model>",
+       "key": "<用户提供的 Key>",
+       "sessionHeader": "x-opencode-session",
+       "thinking": "low",
+       "maxTokens": 1024,
+       "maxProviderTokens": 8000,
+       "requireBulkInput": false,
+       "ttlMs": 86400000,
+       "lockTimeoutMs": 2000,
+       "timeoutMs": 30000,
+       "maxTurns": 6,
+       "maxContextChars": 24000
+     }
+   }
+   ```
+3. **AI 自动进行自检验证**：
+   * 调用 `ops({ capability: "micro", args: { sessionAction: "create", sessionId: "setup-check", objective: "ping" } })`；
+   * 调用 `ops({ capability: "micro", args: { sessionAction: "send", sessionId: "setup-check", task: "Reply with pong only." } })`；
+   * 验证通过后向用户反馈（答案模式还会按 preset 上限自动收紧输出）：
+     ```text
+     🎉 Micro 任务子代理已成功挂载！
+     - 诊断模型：<model>
+     - 接口端点：<url>
+     - 多轮会话状态：.contextos/micro-sessions/
+     - 主上下文只接收最终结果与 receipt
+     ```
+
+---
+
 ## 平台注入规范与杜绝冗余原则：
-1. **Cursor / Antigravity / OpenCode**：注入对应编辑器的 MCP JSON 配置；同步唯一 Skill 到对应目录，杜绝重复 Skill 冗余。
-2. **Codex（官方完整插件闭环）**：同步插件包至 `~/plugins/contextos`，注册 personal 市场并执行 `codex plugin add contextos@personal` 安装。**严禁在 `~/.codex/skills` 写入多余兜底**，安装成功后自动清理 `config.toml` 冗余条目。
-3. **Claude Desktop**：仅写入 `claude_desktop_config.json`，不生成多余文件。
+1. **无 Hook 层**：ContextOS 只安装 MCP 配置与 Skill，不创建 `~/.contextos/hooks`，不写宿主 Hook 状态。
+2. **单一证据路径**：路由、恢复和轮次纪律由 Skill 与 MCP 响应负责；仓库读写和验证仍必须经过 ContextOS MCP。
+3. **Cursor / Antigravity / OpenCode**：注入对应编辑器的 MCP JSON 配置；同步唯一 Skill 到对应目录，杜绝重复 Skill 冗余。OpenCode 与 Antigravity 适配保持实验标记，直到有宿主级 smoke 证据。
+4. **Codex（官方完整插件闭环）**：同步插件包至 `~/plugins/contextos`，注册 personal 市场并执行 `codex plugin add contextos@personal` 安装。**严禁在 `~/.codex/skills` 写入多余兜底**，安装成功后自动清理 `config.toml` 冗余条目。
+5. **Claude Code**：配置 MCP 与 Skill，不生成重复的 Skill 副本。
+6. **Claude Desktop**：仅写入 `claude_desktop_config.json`，不生成多余文件。
 
 ---
 

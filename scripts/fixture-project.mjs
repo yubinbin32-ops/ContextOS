@@ -59,6 +59,11 @@ export function createFixtureProject({ prefix = "ctxos-fixture", withTests = tru
   try {
     execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
     execFileSync("git", ["add", "."], { cwd: root, stdio: "ignore" });
+    execFileSync("git", [
+      "-c", "user.name=ContextOS",
+      "-c", "user.email=contextos@example.test",
+      "commit", "-m", "fixture baseline",
+    ], { cwd: root, stdio: "ignore" });
   } catch (_) {}
 
   return {

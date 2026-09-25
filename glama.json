@@ -1,7 +1,7 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
   "name": "ContextOS",
-  "description": "High-precision AI coding context OS via MCP. Reduces context window waste by 90%+ through surgical AST reads, out-of-context command receipts, and Metro Map architecture graph. Works with Cursor, Claude Desktop, Codex, Windsurf, Antigravity.",
+  "description": "High-precision AI coding context OS via MCP. Reduces context replay through surgical AST reads, out-of-context receipts, and a Metro Map architecture graph. Supports Codex, Claude Code, OpenCode, Cursor, and Antigravity, with an AI adaptation path for other MCP hosts.",
   "maintainers": [
     "yubinbin32-ops"
   ],
