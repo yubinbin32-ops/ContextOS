@@ -22,6 +22,7 @@ const transport = new StdioClientTransport({
   args: [bundlePath],
   cwd: repoRoot,
   stderr: 'inherit',
+  env: { ...process.env, CONTEXTOS_LEAN_SURFACE: '0' },
 });
 const client = new Client({ name: 'contextos-p7-acceptance', version: packageVersion });
 
@@ -120,7 +121,7 @@ try {
     args: { chainData: { id: 'chain-p7', title: 'P7 acceptance chain', memberIds: ['block-p7-strings'] } },
   });
   const chainValidation = await call('ops', { capability: 'chain', action: 'validate', args: {} });
-  assert.match(chainValidation, /"valid": true/);
+  assert.match(chainValidation, /"valid":\s*true/);
 
   await call('ops', {
     capability: 'plan',
@@ -204,6 +205,7 @@ try {
     args: [bundlePath],
     cwd: repoRoot,
     stderr: 'inherit',
+    env: { ...process.env, CONTEXTOS_LEAN_SURFACE: '0' },
   });
   legacyClient = new Client({ name: 'contextos-p9-legacy-adoption', version: packageVersion });
   await legacyClient.connect(legacyTransport);
@@ -224,7 +226,7 @@ try {
   await legacyTransport.close();
   legacyTransport = null;
 
-  const shipped = await call('ship', { summary: 'P7 real MCP acceptance changed greet() and verified the fixture suite.' });
+  const shipped = await call('ship', { summary: 'P7 real MCP acceptance changed greet() and verified the fixture suite.', exportGraph: true });
   assert.match(shipped, /Closure/);
   assert.match(shipped, /Superseded failures: 1/);
   const graphPath = path.join(fixture.root, '.contextos', 'graph.json');

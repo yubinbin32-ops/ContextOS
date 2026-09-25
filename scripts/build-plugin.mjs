@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { repoRoot, syncPluginVersion, syncServerJsonVersion } from './version.mjs';
 
@@ -14,3 +15,12 @@ execSync(`npx esbuild "${entrypoint}" --bundle --platform=node --format=esm --ta
   cwd: repoRoot,
   stdio: 'inherit',
 });
+
+// Keep the generated bundle clean for git diff checks; bundled dependencies can
+// contain trailing whitespace that is not part of the ContextOS source.
+const bundled = fs.readFileSync(outfile, 'utf8');
+const normalized = bundled
+  .split('\n')
+  .map((line) => line.replace(/[ \t]+$/, ''))
+  .join('\n');
+if (normalized !== bundled) fs.writeFileSync(outfile, normalized, 'utf8');

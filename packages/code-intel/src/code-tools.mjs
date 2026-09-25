@@ -13,6 +13,35 @@ function buildLocators(filePath, symbols = []) {
   }));
 }
 
+function createSearchMatcher(query) {
+  const raw = String(query || '').trim();
+  if (!raw) return null;
+  const delimited = raw.match(/^\/([\s\S]+)\/([a-z]*)$/i);
+  if (delimited) {
+    try {
+      const flags = [...new Set(delimited[2].replace(/[gy]/g, '').split('').filter((flag) => 'imsu'.includes(flag)).concat('i'))].join('');
+      return new RegExp(delimited[1], flags);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (!raw.includes('|')) return null;
+  try {
+    return new RegExp(raw, 'i');
+  } catch (_) {
+    return null;
+  }
+}
+
+function matchesSearchQuery(value, query, matcher) {
+  const text = String(value || '');
+  if (matcher) {
+    matcher.lastIndex = 0;
+    return matcher.test(text);
+  }
+  return text.toLowerCase().includes(String(query || '').trim().toLowerCase());
+}
+
 export class CodeTools {
   /**
    * 1. Outline: Progressive L1 structure view
@@ -238,7 +267,7 @@ export class CodeTools {
 
     if (!targetContent) {
       if (!hasRange || effectiveStart === null || effectiveEnd === null) {
-        throw new Error('CodeTools.edit requires targetContent or a complete startLine/endLine (or symbol) range');
+        throw new Error('CodeTools.edit requires one locator form: targetContent for exact text, path+symbol+replacementContent, or path+startLine+endLine+replacementContent');
       }
       if (!Number.isInteger(effectiveStart) || !Number.isInteger(effectiveEnd)) {
         throw new Error('CodeTools.edit startLine and endLine must be integers');
@@ -334,14 +363,11 @@ export class CodeTools {
    */
   static search(filePath, content, query) {
     const structure = LanguageRegistry.parseStructure(filePath, content);
-    const queryLower = query.toLowerCase();
+    const matcher = createSearchMatcher(query);
 
     const matchingSymbols = structure.symbols
-      .filter((s) => {
-        const nameMatch = s.name.toLowerCase().includes(queryLower);
-        const shortMatch = s.shortName && s.shortName.toLowerCase().includes(queryLower);
-        return nameMatch || shortMatch;
-      })
+      .filter((s) => matchesSearchQuery(s.name, query, matcher)
+        || (s.shortName && matchesSearchQuery(s.shortName, query, matcher)))
       .map((s) => ({
         symbol: s.name,
         shortName: s.shortName || s.name,
@@ -356,12 +382,11 @@ export class CodeTools {
     const lines = content.split(/\r?\n/);
     const matchingLines = [];
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].toLowerCase().includes(queryLower)) {
-        matchingLines.push({
-          line: i + 1,
-          content: lines[i].trim(),
-        });
-      }
+      if (!matchesSearchQuery(lines[i], query, matcher)) continue;
+      matchingLines.push({
+        line: i + 1,
+        content: lines[i].trim(),
+      });
     }
 
     return {
@@ -377,8 +402,9 @@ export class CodeTools {
    * agents to reach for a native `rg`; this covers "where is X mentioned".
    */
   static searchText(repoRoot, query, { limit = 8, maxFiles = 1500, root = null, contextChars = 120, perFileLimit = 3 } = {}) {
-    const needle = String(query || '').trim().toLowerCase();
-    if (!needle) return { hits: [], scanned: 0, truncated: false };
+    const rawQuery = String(query || '').trim();
+    if (!rawQuery) return { hits: [], scanned: 0, truncated: false };
+    const matcher = createSearchMatcher(rawQuery);
 
     const skipDirs = new Set([
       'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', 'coverage', '.contextos',
@@ -442,7 +468,7 @@ export class CodeTools {
       const lines = content.split('\n');
       for (let i = 0; i < lines.length; i += 1) {
         if (hits.length >= limit) break;
-        if (!lines[i].toLowerCase().includes(needle)) continue;
+        if (!matchesSearchQuery(lines[i], rawQuery, matcher)) continue;
         const used = perFile.get(relative) || 0;
         if (used >= perFileLimit) break;
         perFile.set(relative, used + 1);
@@ -456,7 +482,7 @@ export class CodeTools {
    * 5. Workspace Search: find symbols/methods across project files (VS Code Cmd+T).
    */
   static searchWorkspace(repoRoot, query, candidateFiles = []) {
-    const queryLower = query.toLowerCase();
+    const matcher = createSearchMatcher(query);
     const results = [];
     for (const relPath of candidateFiles) {
       const fullPath = path.resolve(repoRoot, relPath);
@@ -465,8 +491,8 @@ export class CodeTools {
         const content = fs.readFileSync(fullPath, 'utf8');
         const structure = LanguageRegistry.parseStructure(relPath, content);
         for (const s of structure.symbols) {
-          const nameMatch = s.name.toLowerCase().includes(queryLower);
-          const shortMatch = s.shortName && s.shortName.toLowerCase().includes(queryLower);
+          const nameMatch = matchesSearchQuery(s.name, query, matcher);
+          const shortMatch = s.shortName && matchesSearchQuery(s.shortName, query, matcher);
           if (nameMatch || shortMatch) {
             results.push({
               path: relPath,

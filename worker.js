@@ -779,7 +779,7 @@ export default {
     <h1>☁️ ContextOS Cloud Hub</h1>
     <p>Your serverless spatial architecture and context hub is active on Cloudflare Workers + D1.</p>
     
-    <h3>1. Connect Remote MCP via HTTP / SSE (Cursor / Windsurf / Claude)</h3>
+    <h3>1. Connect Remote MCP via HTTP / SSE (generic MCP host)</h3>
     <p>In Cursor <b>Settings -> Features -> MCP</b>, add a new server with Type <code>SSE</code>:</p>
     <pre>{
   "mcpServers": {

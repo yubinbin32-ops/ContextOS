@@ -214,7 +214,13 @@ export class MarkdownRenderer {
     const lines = [];
     lines.push(`# Plan: [${plan.id}] ${plan.title}`);
     lines.push(`- Status: **${plan.status}** | Priority: **${plan.priority}**`);
-    if (plan.summary) lines.push(`- Summary: ${plan.summary}`);
+    if (plan.summary) {
+      if (plan.summary.includes('\n')) {
+        lines.push(`\n## Specification / Summary:\n${plan.summary.trim()}\n`);
+      } else {
+        lines.push(`- Summary: ${plan.summary}`);
+      }
+    }
     if (plan.completedSummary) lines.push(`- Completed Summary: ${plan.completedSummary}`);
 
     if (plan.ruleRefs?.length > 0) {

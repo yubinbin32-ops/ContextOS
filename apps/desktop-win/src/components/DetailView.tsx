@@ -15,6 +15,7 @@ import {
   SourceReference,
 } from '../models';
 import { ContextOSTheme } from '../theme';
+import { MarkdownPage } from '../markdownPage';
 
 interface DetailViewProps {
   store: GraphStore;
@@ -122,10 +123,14 @@ const SectionHeader: React.FC<{ title: string }> = ({ title }) => (
 
 const DetailSection: React.FC<{ title: string; text?: string }> = ({ title, text }) => {
   if (!text || text.trim() === '') return null;
+  const html = MarkdownPage.renderSnippet(text);
   return (
     <div className="flex flex-col gap-1.5">
       <SectionHeader title={title} />
-      <div className="text-[12px] text-slate-800 leading-relaxed whitespace-pre-wrap">{text}</div>
+      <div
+        className="text-[12px] text-slate-800 leading-relaxed markdown-content"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </div>
   );
 };

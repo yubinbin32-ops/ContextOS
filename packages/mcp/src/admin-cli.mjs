@@ -42,6 +42,7 @@ export async function runAdminCli(argv = process.argv.slice(2)) {
         'Usage: contextos-mcp.mjs <command> [options]',
         '  sync',
         '  context',
+        '  micro [--prompt <text>]',
       ].join('\n') + '\n'
     );
     return 0;
@@ -68,6 +69,16 @@ export async function runAdminCli(argv = process.argv.slice(2)) {
       const result = await service.osContext({ action: 'reconcile', format: 'json' });
       writeJson({ ok: true, command: 'sync', result });
       return 0;
+    }
+
+    if (command === 'micro') {
+      const { loadProfile } = await import('../../orchestrator/src/profile.mjs');
+      const { runMicroTask } = await import('../../orchestrator/src/micro-client.mjs');
+      const profile = loadProfile(projectRoot);
+      const microConfig = profile.micro || {};
+      const testRes = await runMicroTask(microConfig, { prompt: options.prompt || 'ping' });
+      writeJson({ ok: testRes.ok, command: 'micro', result: testRes });
+      return testRes.ok ? 0 : 1;
     }
 
     throw new Error(`Unknown admin command: ${command}`);

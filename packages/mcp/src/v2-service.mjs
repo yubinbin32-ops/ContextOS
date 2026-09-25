@@ -26,6 +26,8 @@ import { MarkdownRenderer } from '../../context/src/index.mjs';
  * graph.json that lags behind SQLite must not stop the agent from reading code.
  */
 const READ_ONLY_ACTIONS = {
+  plan: new Set(['list', 'get', 'open']),
+  task: new Set(['list', 'open']),
   code: new Set(['outline', 'read', 'search']),
   block: new Set(['list', 'open', 'search']),
   chain: new Set(['list', 'open', 'links', 'validate', 'validate_layout']),
@@ -392,7 +394,22 @@ export class ContextOSV2Service {
 
   // ================= 2. plan =================
   async plan(input) {
+    if (this._isReadOnly('plan', input.action)) return this._plan(input);
     return this._withWriteLock('plan', () => this._plan(input));
+  }
+
+  _resolveActivePlanId() {
+    const activePlans = this.db
+      .listPlans(this.projectId)
+      .filter((plan) => plan.status === 'active')
+      .sort((left, right) => Date.parse(right.updatedAt || 0) - Date.parse(left.updatedAt || 0));
+    if (activePlans.length === 0) throw new Error('No active plan found');
+    if (activePlans.length > 1) {
+      throw new Error(
+        `Multiple active plans found: ${activePlans.map((plan) => plan.id).join(', ')}; pass id explicitly`
+      );
+    }
+    return activePlans[0].id;
   }
 
   async _plan({ action, id, planId, planData = {}, checkpointId, passed, evidenceRef, reason, format = 'markdown' }) {
@@ -415,25 +432,29 @@ export class ContextOSV2Service {
         return format === 'json' ? created : MarkdownRenderer.renderPlan(created);
       }
       case 'update': {
+        const resolvedId = targetId || this._resolveActivePlanId();
         const updates = { ...planData };
         if (updates.ruleRefs !== undefined || updates.rule_refs !== undefined) {
           updates.ruleRefs = this._validateRuleRefs(updates.ruleRefs ?? updates.rule_refs);
         }
-        const updated = this.planService.updatePlan(targetId, updates);
+        const updated = this.planService.updatePlan(resolvedId, updates);
         return format === 'json' ? updated : MarkdownRenderer.renderPlan(updated);
       }
       case 'upsert': {
         if (!this.db.getPlan(targetId)) return this._plan({ action: 'create', id: targetId, planData: { ...planData, id: targetId }, format });
         return this._plan({ action: 'update', id: targetId, planData, format });
       }
+      case 'get':
       case 'open': {
-        const plan = this.db.getPlan(targetId);
-        if (!plan) throw new Error(`Plan '${targetId}' not found`);
+        const resolvedId = targetId || this._resolveActivePlanId();
+        const plan = this.db.getPlan(resolvedId);
+        if (!plan) throw new Error(`Plan '${resolvedId}' not found`);
         return format === 'json' ? plan : MarkdownRenderer.renderPlan(plan);
       }
       case 'check': {
-        const cp = this.planService.checkCheckpoint(targetId, targetCpId, { passed, evidenceRef, reason });
-        return `Checkpoint '${targetCpId}' in Plan '${targetId}' marked as ${cp.status}.`;
+        const resolvedId = targetId || this._resolveActivePlanId();
+        const cp = this.planService.checkCheckpoint(resolvedId, targetCpId, { passed, evidenceRef, reason });
+        return `Checkpoint '${targetCpId}' in Plan '${resolvedId}' marked as ${cp.status}.`;
       }
       case 'complete': {
         const completed = this.planService.completePlan(targetId, planData);
@@ -450,6 +471,7 @@ export class ContextOSV2Service {
 
   // ================= 3. task =================
   async task(input) {
+    if (this._isReadOnly('task', input.action)) return this._task(input);
     return this._withWriteLock('task', () => this._task(input));
   }
 
@@ -1172,6 +1194,15 @@ export class ContextOSV2Service {
       this.taskService.addFileToWorkingSet(activeTask.id, file.path);
       try {
         const fullPath = this._resolveProjectPath(file.path, 'changed file').fullPath;
+        if (file.deleted === true) {
+          activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
+          activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
+          activeTask.baseline.fileSnapshots[file.path] = {
+            deleted: true,
+            lastReconciledAt: new Date().toISOString(),
+          };
+          continue;
+        }
         const stat = fs.statSync(fullPath);
         activeTask.baseline = activeTask.baseline || { fileSnapshots: {} };
         activeTask.baseline.fileSnapshots = activeTask.baseline.fileSnapshots || {};
@@ -1194,7 +1225,7 @@ export class ContextOSV2Service {
       return [
         '# ContextOS changeset',
         '',
-        ...result.files.map((file) => `- ${file.created ? 'created' : 'edited'} \`${file.path}\` (hash ${file.newHash || 'n/a'})`),
+        ...result.files.map((file) => `- ${file.deleted ? 'deleted' : (file.created ? 'created' : 'edited')} \`${file.path}\` (hash ${file.newHash || 'n/a'})`),
       ].join('\n');
     }
     if (action === 'search' && !relPath) {

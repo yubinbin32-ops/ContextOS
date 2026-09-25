@@ -41,14 +41,17 @@ function fakeService({ exitCode = 0, exitCodes = null } = {}) {
           } else if (change.kind === 'create') {
             fs.mkdirSync(path.dirname(fullPath), { recursive: true });
             fs.writeFileSync(fullPath, change.content || '', 'utf8');
+          } else if (change.kind === 'delete') {
+            fs.rmSync(fullPath, { force: true });
           }
         }
         return {
           files: (args.changes || []).map((change, index) => ({
             path: change.path,
-            newHash: `hash-${index + 1}`,
-            locators: [1],
+            newHash: change.kind === 'delete' ? null : `hash-${index + 1}`,
+            locators: change.kind === 'delete' ? [] : [1],
             created: change.kind === 'create',
+            ...(change.kind === 'delete' ? { deleted: true } : {}),
           })),
           results: [],
         };
@@ -113,6 +116,39 @@ test('SessionStore persists and updates .contextos/blackboard.md', () => {
   }
 });
 
+test('inspect returns an unchanged receipt for a repeated identical read', async () => {
+  const dir = makeTempProject();
+  const service = fakeService();
+  service.projectRoot = dir;
+  const orch = new Orchestrator({ projectRoot: dir, service });
+
+  try {
+    const first = await orch.dispatch('inspect', {
+      path: 'src/math.mjs',
+      startLine: 1,
+      endLine: 3,
+    });
+    const second = await orch.dispatch('inspect', {
+      path: 'src/math.mjs',
+      startLine: 1,
+      endLine: 3,
+    });
+    const forced = await orch.dispatch('inspect', {
+      path: 'src/math.mjs',
+      startLine: 1,
+      endLine: 3,
+      full: true,
+    });
+
+    assert.match(first, /export function add/);
+    assert.match(second, /unchanged/);
+    assert.doesNotMatch(second, /export function add/);
+    assert.match(forced, /export function add/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('changePipeline executes atomic verify in a single round trip (Verify: PASS)', async () => {
   const dir = makeTempProject();
   const service = fakeService({ exitCode: 0 });
@@ -134,7 +170,7 @@ test('changePipeline executes atomic verify in a single round trip (Verify: PASS
 
     assert.ok(res.includes('Verify: PASS'), 'must include Verify: PASS in output');
     assert.ok(res.includes('node --test'), 'must mention verification command');
-    assert.ok(res.includes('👉 ship'), 'next step should directly recommend ship');
+    assert.ok(res.includes('do not rerun'), 'next step should forbid duplicate verification');
     
     // Verify receipt was attached to session
     const session = orch.store.current;
@@ -173,6 +209,44 @@ test('changePipeline auto-reverts changes on verification failure when autoRever
     // Check disk content was restored
     const currentMath = fs.readFileSync(path.join(dir, 'src', 'math.mjs'), 'utf8');
     assert.equal(currentMath, initialMath, 'file on disk must be restored to initial content');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('changePipeline deletes files, previews them, and auto-reverts failed deletion', async () => {
+  const dir = makeTempProject();
+  const legacyPath = path.join(dir, 'src', 'legacy.mjs');
+  const legacyContent = 'export const legacy = true;\n';
+  fs.writeFileSync(legacyPath, legacyContent);
+  const service = fakeService({ exitCodes: [1, 0] });
+  service.projectRoot = dir;
+  const orch = new Orchestrator({ projectRoot: dir, service });
+
+  try {
+    const dryRun = await orch.dispatch('change', {
+      delete: [{ path: 'src/legacy.mjs' }],
+      dryRun: true,
+    });
+    assert.ok(dryRun.includes('Delete 1'), 'dry-run must preview the deletion');
+    assert.equal(fs.readFileSync(legacyPath, 'utf8'), legacyContent);
+
+    const failed = await orch.dispatch('change', {
+      delete: [{ path: 'src/legacy.mjs' }],
+      verify: 'node --test',
+      autoRevert: true,
+    });
+    assert.ok(failed.includes('Verify: FAIL'));
+    assert.ok(failed.includes('autoReverted disk changes'));
+    assert.equal(fs.readFileSync(legacyPath, 'utf8'), legacyContent, 'failed deletion must be restored');
+
+    const passed = await orch.dispatch('change', {
+      delete: [{ path: 'src/legacy.mjs' }],
+      verify: 'node --test',
+    });
+    assert.ok(passed.includes('Verify: PASS'));
+    assert.equal(fs.existsSync(legacyPath), false, 'successful deletion must remove the file');
+    assert.equal(orch.store.current.touchedFiles.find((entry) => entry.path === 'src/legacy.mjs')?.deleted, true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -241,7 +315,7 @@ test('inspectPipeline reads file slices and changePipeline supports slots and ap
       verify: 'npm test',
     });
     assert.ok(changeRes.includes('Verify: PASS'), 'change with verify must pass in 1 turn');
-    assert.ok(changeRes.includes('Milestone Reached'), 'must indicate milestone reached');
+    assert.ok(changeRes.includes('verify: PASS'), 'must mark the passing receipt without replaying it');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -134,6 +134,20 @@ export function syncDesktopVersion({ checkOnly = false, version = readPackageVer
   return changes;
 }
 
+export function syncReadmeVersion({ checkOnly = false, version = readPackageVersion(), changes = [] } = {}) {
+  for (const relPath of ['README.md', 'README_zh.md']) {
+    const content = read(relPath);
+    const updated = replaceRequired(
+      content,
+      /(<span id="contextos-version">)[^<]*(<\/span>)/,
+      `$1${version}$2`,
+      relPath
+    );
+    writeIfChanged(relPath, updated, { checkOnly, changes });
+  }
+  return changes;
+}
+
 export function syncAllVersions({ checkOnly = false } = {}) {
   const version = readPackageVersion();
   const changes = [];
@@ -144,6 +158,7 @@ export function syncAllVersions({ checkOnly = false } = {}) {
   syncPackageLockVersion(opts);
   syncWindowsVersion(opts);
   syncDesktopVersion(opts);
+  syncReadmeVersion(opts);
 
   return { version, changes };
 }

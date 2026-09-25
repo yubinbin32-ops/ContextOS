@@ -1,25 +1,87 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fitSections, resolveBudget } from './context-budget.mjs';
+import { RESPONSE_BUDGETS, estimateTokens, finalizeResponse, summarizeActionResult } from './response-budget.mjs';
 import { observe } from './observer.mjs';
 import { ModuleIndex } from './module-index.mjs';
+import { workspaceFingerprint } from './session-store.mjs';
 import { extractIdentifiers, extractPaths, tokenize } from './intent-router.mjs';
 import { redactSecrets } from '../../process-host/src/sanitizer.mjs';
 import { CodeTools } from '../../code-intel/src/code-tools.mjs';
 
 const OUTLINE_CLIP = 1200;
 const SEARCH_CLIP = 360;
-const PIPELINE_DEFAULT_OUTPUT_CLIP = 1200;
-const PIPELINE_MAX_OUTPUT_CLIP = 60000;
+const PIPELINE_DEFAULT_OUTPUT_CLIP = 400;
+const PIPELINE_MAX_OUTPUT_CLIP = 4000;
+const PIPELINE_RECEIPT_OUTPUT_CLIP = 180;
+const PIPELINE_RECEIPT_RESPONSE_BUDGET = 900;
 
-function resolveActionOutputLimit(action) {
-  if (!action || typeof action !== 'object') return PIPELINE_DEFAULT_OUTPUT_CLIP;
+function isReceiptMode(mode) {
+  return mode === 'receipt' || mode === 'receipt-first';
+}
+
+function requestsFullOutput(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (value.budget === 'full' || value.full === true) return true;
+  if (Array.isArray(value)) return value.some(requestsFullOutput);
+  return Object.values(value).some(requestsFullOutput);
+}
+
+function outputLength(value) {
+  if (typeof value === 'string') return value.length;
+  if (value == null) return 0;
+  try {
+    return JSON.stringify(value).length;
+  } catch (_) {
+    return String(value).length;
+  }
+}
+
+function verifyCommandsFromInput(verify, profile = {}) {
+  if (verify === true) return Array.isArray(profile.verify) ? profile.verify.filter(Boolean) : [];
+  if (typeof verify === 'string') return verify ? [verify] : [];
+  if (Array.isArray(verify)) return verify.filter((command) => typeof command === 'string' && command.trim());
+  if (verify && typeof verify === 'object') {
+    if (Array.isArray(verify.commands)) return verify.commands.filter((command) => typeof command === 'string' && command.trim());
+    if (typeof verify.command === 'string' && verify.command.trim()) return [verify.command];
+  }
+  return [];
+}
+
+function actionFailed(result) {
+  if (typeof result !== 'string') return false;
+  return result.includes('Verdict: FAIL')
+    || result.includes('Verify: FAIL')
+    || result.includes('BLOCKED')
+    || /\bpipeline=HALTED\b/i.test(result)
+    || /["']?ok["']?\s*:\s*false\b/i.test(result)
+    || /\bexit\s+[1-9]\d*\b/i.test(result);
+}
+
+function resolveActionOutputLimit(action, { mode = 'summary', aggregateBudget } = {}) {
+  if (!action || typeof action !== 'object') {
+    return mode === 'full' && !Number.isFinite(aggregateBudget)
+      ? PIPELINE_MAX_OUTPUT_CLIP
+      : PIPELINE_DEFAULT_OUTPUT_CLIP;
+  }
 
   const nested = [action.inspect, action.verify, action.change, action.ship]
     .find((value) => value && typeof value === 'object');
+  if (isReceiptMode(mode)) return PIPELINE_RECEIPT_OUTPUT_CLIP;
   const requested = typeof action.maxChars === 'number'
     ? action.maxChars
     : (typeof nested?.maxChars === 'number' ? nested.maxChars : null);
+
+  if (mode === 'full') {
+    const aggregateLimit = Number.isFinite(aggregateBudget)
+      ? Math.max(1, Math.floor(aggregateBudget))
+      : Infinity;
+    if (Number.isFinite(requested) && requested > 0) {
+      return Math.min(Math.floor(requested), aggregateLimit);
+    }
+    return aggregateLimit;
+  }
 
   if (Number.isFinite(requested) && requested > 0) {
     return Math.min(Math.floor(requested), PIPELINE_MAX_OUTPUT_CLIP);
@@ -48,7 +110,7 @@ function compactOutlineData(text) {
 }
 
 function clip(text, max, { withHint = false } = {}) {
-  const value = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+  const value = typeof text === 'string' ? text : JSON.stringify(text ?? '', null, 2);
   if (max === Infinity || value.length <= max) return value;
   const hint = withHint
     ? '\n[TRUNCATED: budget exceeded. Action required: specify \'ranges: [{startLine, endLine}]\' or pass \'budget: "full"\' to receive the entire content]'
@@ -70,6 +132,15 @@ function countOccurrences(content, target) {
     offset += target.length;
   }
   return count;
+}
+
+function stripInspectMetadata(target) {
+  if (typeof target !== 'string') return target;
+  const lines = target.split(/\r?\n/);
+  if (lines.length > 1 && /^\/\/ .+ \[L\d+-L\d+\] \(hash: [0-9a-f]+\)$/.test(lines[0].trim())) {
+    return lines.slice(1).join('\n');
+  }
+  return target;
 }
 
 function resolvePreviewPath(projectRoot, inputPath) {
@@ -98,7 +169,7 @@ function previewEdit(projectRoot, spec = {}, store = null) {
   const fallback = {
     filePath: resolved.relativePath || specPath || '(missing)',
     before: typeof spec.target === 'string' ? spec.target : '',
-    after: typeof spec.replacement === 'string' ? spec.replacement : (spec.append || ''),
+    after: typeof spec.replacement === 'string' ? spec.replacement : (spec.fullFile && typeof spec.content === 'string' ? spec.content : (spec.append || '')),
     matches: 0,
     unique: false,
   };
@@ -110,7 +181,7 @@ function previewEdit(projectRoot, spec = {}, store = null) {
     return {
       filePath: resolved.relativePath,
       before: content,
-      after: spec.replacement ?? '',
+      after: typeof spec.replacement === 'string' ? spec.replacement : (spec.content ?? ''),
       matches: 1,
       unique: true,
       scope: 'fullFile',
@@ -130,7 +201,7 @@ function previewEdit(projectRoot, spec = {}, store = null) {
 
   try {
     const content = fs.readFileSync(resolved.fullPath, 'utf8');
-    const target = typeof spec.target === 'string' ? spec.target : '';
+    const target = stripInspectMetadata(typeof spec.target === 'string' ? spec.target : '');
     let before = target;
     let scopeLabel = null;
     if (spec.startLine !== undefined || spec.endLine !== undefined) {
@@ -239,7 +310,7 @@ function computeNext({ session, changedCount, profile, stage, intent = '' }) {
       ? `verify(${JSON.stringify({ commands: [command] })})`
       : 'verify({"commands":["<your command>"]}) — set `verify` in .contextos/profile.json to auto-infer';
   }
-  if (green) return `ship(${JSON.stringify({ summary: '<what changed and why>' })})`;
+  if (green) return 'done: verified; do not rerun the command. Keep the session open unless this is the final closure.';
   if (changedCount > 0) {
     const command = suggestVerify(profile);
     return command
@@ -263,22 +334,40 @@ export async function explorePipeline(ctx, input = {}) {
   const tokens = tokenize(`${intent} ${paths.join(' ')} ${identifiers.join(' ')}`);
 
   const dirty = [...obs.untracked, ...obs.changed];
-  const systemChanged = (obs.systemChanged || []).filter(
-    (p) => !p.endsWith('.sqlite') && !p.endsWith('.sqlite-shm') && !p.endsWith('.sqlite-wal')
-  );
-  const nowLines = [
+
+  let activePlan = null;
+  try {
+    const plansRes = await caps.plan({ action: 'list', format: 'json' });
+    if (plansRes.ok && Array.isArray(plansRes.data)) {
+      activePlan = plansRes.data
+        .filter((p) => p.status === 'active')
+        .sort((a, b) => String(a.updatedAt || '').localeCompare(String(b.updatedAt || '')))
+        .at(-1) || null;
+    }
+  } catch (_) {}
+
+  const nowLines = [];
+  if (activePlan) {
+    const passedCps = (activePlan.checkpoints || []).filter((cp) => cp.status === 'passed').length;
+    const totalCps = (activePlan.checkpoints || []).length;
+    const currentPhase = activePlan.phases?.find((p) => p.status === 'in_progress' || p.status === 'active')?.id || activePlan.phases?.[0]?.id || 'P1';
+    const totalPhases = activePlan.phases?.length || 1;
+    nowLines.push(
+      `- Active Plan: \`${activePlan.id}\` "${activePlan.title}" (Phase: ${currentPhase}/${totalPhases}, Checkpoints: ${passedCps}/${totalCps} passed)`
+    );
+  }
+  nowLines.push(
     `- Session: \`${session.id}\` (${session.status})`,
     `- Intent: ${intent || '(none yet)'}`,
-    `- Code git dirty: ${dirty.length ? dirty.slice(0, 8).map((p) => `\`${p}\``).join(', ') : 'clean'}${dirty.length > 8 ? ` (+${dirty.length - 8})` : ''}`,
-    `- OS state dirty: ${systemChanged.length ? systemChanged.slice(0, 8).map((p) => `\`${p}\``).join(', ') : 'clean'}${systemChanged.length > 8 ? ` (+${systemChanged.length - 8})` : ''}`,
-  ];
+    `- Code dirty: ${dirty.length ? dirty.slice(0, 6).map((p) => `\`${p}\``).join(', ') : 'clean'}${dirty.length > 6 ? ` (+${dirty.length - 6})` : ''}`
+  );
   if (session.touchedFiles.length) {
     const recentTouches = [...session.touchedFiles]
       .filter((entry) => entry.lastTouchedAt || entry.firstSeenAt)
       .sort((a, b) => Date.parse(b.lastTouchedAt || b.firstSeenAt) - Date.parse(a.lastTouchedAt || a.firstSeenAt))
       .slice(0, 6);
     if (recentTouches.length) {
-      nowLines.push(`- Session touch history: ${recentTouches.map((entry) => `\`${entry.path}\` (${entry.source}, ${(entry.lastTouchedAt || entry.firstSeenAt).slice(11, 19)}Z)`).join(', ')}`);
+      nowLines.push(`- Session touch history: ${recentTouches.map((entry) => `\`${entry.path}\``).join(', ')}`);
     }
   }
   if (session.receipts.length) {
@@ -287,10 +376,6 @@ export async function explorePipeline(ctx, input = {}) {
     const maskInfo = olderFailed.length > 0 ? ` (${olderFailed.length} older failed receipt${olderFailed.length > 1 ? 's' : ''} masked)` : '';
     nowLines.push(`- Last receipt: \`${last.command}\` exit ${last.exitCode} (${last.id || 'n/a'}, ${receiptStatus(last)})${maskInfo}`);
   }
-  if (session.touchedFiles.length >= 6 || session.receipts.length >= 5) {
-    nowLines.push(`💡 [Context Health] State safely saved in OS blackboard (.contextos/blackboard.md). You can /clear anytime; call explore() to resume in ~150 tokens.`);
-  }
-
   const whereLines = [];
 
   // Derived modules come first: they are computed from the AST, so they exist
@@ -318,7 +403,7 @@ export async function explorePipeline(ctx, input = {}) {
 
   const modules = index.lookup(`${intent} ${paths.join(' ')}`);
   for (const module of modules) {
-    const files = module.files.slice(0, 3).map((file) => `\`${file}\``).join(', ');
+    const files = module.files.slice(0, 2).map((file) => `\`${file}\``).join(', ');
     whereLines.push(`- **${module.id}** (${module.directory}) — ${files}${module.files.length > 3 ? ` (+${module.files.length - 3})` : ''}`);
     if (resolvedPaths.length < 6) {
       for (const f of module.files) {
@@ -337,7 +422,7 @@ export async function explorePipeline(ctx, input = {}) {
     }
   }
 
-  const filePaths = Array.from(new Set(resolvedPaths)).slice(0, 6);
+  const filePaths = Array.from(new Set(resolvedPaths)).slice(0, 4);
 
   if (filePaths.length) {
     for (const target of filePaths) {
@@ -364,13 +449,15 @@ export async function explorePipeline(ctx, input = {}) {
   let slotIdx = 1;
 
   if (!isQuery) {
-    for (const target of filePaths.slice(0, 2)) {
+    for (const target of filePaths.slice(0, 1)) {
       const read = await caps.code({ action: 'read', path: target, startLine: 1, endLine: 40 });
       if (read.ok && read.data) {
-        sliceLines.push(`### \`${target}\`\n\`\`\`text\n${clip(read.data, 400)}\n\`\`\``);
-        const slotId = `S${slotIdx++}`;
-        slots[slotId] = { path: target, action: 'edit' };
+        sliceLines.push(`### \`${target}\`\n\`\`\`text\n${clip(read.data, 240)}\n\`\`\``);
       }
+    }
+    for (const target of filePaths.slice(0, 3)) {
+      const slotId = `S${slotIdx++}`;
+      slots[slotId] = { path: target, action: 'edit' };
     }
   }
 
@@ -396,19 +483,21 @@ export async function explorePipeline(ctx, input = {}) {
       }))
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 2);
+      .slice(0, 1);
     for (const { block } of scored) {
-      const refs = Array.from(new Set((block.artifactRefs || []).map((ref) => ref.path))).slice(0, 3);
+      const refs = Array.from(new Set((block.artifactRefs || []).map((ref) => ref.path))).slice(0, 2);
       whereLines.push(`- curated [${block.id}] **${block.title}** — ${refs.length ? refs.map((p) => `\`${p}\``).join(', ') : 'no refs'}`);
     }
     tracer.step('blocks', { candidates: scored.length, total: blocks.data.length });
   }
 
-  const searchQueries = Array.from(new Set([...identifiers, ...latinQueries(intent, paths.join(" "))]));
-  for (const query of searchQueries.slice(0, 3)) {
-    const search = await caps.code({ action: 'search', query });
-    if (!search.ok) continue;
-    whereLines.push(`- symbols \`${query}\`:\n${clip(search.data, SEARCH_CLIP)}`);
+  if (isQuery) {
+    const searchQueries = Array.from(new Set([...identifiers, ...latinQueries(intent, paths.join(" "))]));
+    for (const query of searchQueries.slice(0, 2)) {
+      const search = await caps.code({ action: 'search', query });
+      if (!search.ok || /No symbol or text match/i.test(search.data)) continue;
+      whereLines.push(`- symbols \`${query}\`: ${clip(search.data, SEARCH_CLIP)}`);
+    }
   }
 
   if (!whereLines.length) {
@@ -421,35 +510,33 @@ export async function explorePipeline(ctx, input = {}) {
     const scored = rules.data
       .map((rule) => ({ rule, score: overlapScore(tokens, `${rule.title} ${rule.category} ${rule.summary || ''}`) }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
+      .slice(0, 2);
     for (const { rule } of scored) {
       rulesLines.push(`- \`${rule.id}\` **${rule.title}** (${rule.category}) — ${clip(rule.summary || '', 120)}`);
     }
-    rulesLines.push('> Full text on demand: `ops({ capability: "knowledge", action: "rule_open", args: { ruleId: "..." } })`');
   }
 
   const memoryLines = [];
-  for (const note of (session.notes || []).slice(-3)) {
+  for (const note of (session.notes || []).slice(-1)) {
     memoryLines.push(`- (${note.kind}) ${clip(note.text, 160)}`);
   }
-  for (const past of store.recentHistory(2)) {
-    memoryLines.push(`- last session \`${past.id}\`: ${clip(past.summary || past.intent || '', 160)}`);
+  if (!memoryLines.length) {
+    const headings = decisionHeadings(projectRoot);
+    if (headings.length) memoryLines.push(headings[0]);
   }
-  const headings = decisionHeadings(projectRoot);
-  if (headings.length) memoryLines.push(...headings);
 
   const nextLines = [`👉 ${computeNext({ session, changedCount: dirty.length, profile, stage: 'explore', intent })}`];
 
   const budget = resolveBudget(input.depth, ctx.profile?.budget);
   const sections = [
     { key: 'next', title: 'Next', priority: 0, lines: nextLines },
+    { key: 'now', title: 'Now', priority: 1, lines: nowLines },
   ];
   if (slotLines.length) {
-    sections.push({ key: 'slots', title: 'Available Action Slots (Pick a slot or pass directly)', priority: 1, lines: slotLines });
+    sections.push({ key: 'slots', title: 'Available Action Slots (Pick a slot or pass directly)', priority: 2, lines: slotLines });
   }
   sections.push(
-    { key: 'where', title: 'Where to look', priority: 2, lines: whereLines },
-    { key: 'now', title: 'Now', priority: 3, lines: nowLines }
+    { key: 'where', title: 'Where to look', priority: 3, lines: whereLines }
   );
   if (sliceLines.length) {
     sections.push({ key: 'slices', title: 'Code Slices (Direct Preview)', priority: 4, lines: sliceLines });
@@ -469,8 +556,12 @@ export async function changePipeline(ctx, input = {}) {
   const { caps, store, tracer, profile } = ctx;
   const creates = Array.isArray(input.create) ? [...input.create] : [];
   const rawEdits = Array.isArray(input.edits) ? [...input.edits] : [];
+  const rawDeletes = Array.isArray(input.delete)
+    ? [...input.delete]
+    : (Array.isArray(input.deletes) ? [...input.deletes] : []);
+  const deletes = rawDeletes.map((spec) => (typeof spec === 'string' ? { path: spec } : spec));
 
-  if (input.path && typeof input.content === 'string') {
+  if (input.path && typeof input.content === 'string' && input.fullFile !== true) {
     creates.push({
       path: input.path,
       content: input.content,
@@ -484,7 +575,7 @@ export async function changePipeline(ctx, input = {}) {
         slot: input.slot,
         path: input.path,
         target: input.target,
-        replacement: input.replacement,
+        replacement: input.replacement ?? (input.fullFile ? input.content : undefined),
         symbol: input.symbol,
         append: input.append,
         startLine: input.startLine,
@@ -544,12 +635,38 @@ export async function changePipeline(ctx, input = {}) {
       );
     });
 
+    deletes.forEach((spec, index) => {
+      const resolved = resolvePreviewPath(ctx.projectRoot, spec?.path);
+      if (resolved.error) {
+        previewLines.push(`### Delete ${index + 1}\n- File: \`${spec?.path || '(missing)'}\`\n- Error: ${resolved.error}`);
+        return;
+      }
+      const exists = fs.existsSync(resolved.fullPath);
+      const isFile = exists && fs.statSync(resolved.fullPath).isFile();
+      const before = isFile ? fs.readFileSync(resolved.fullPath, 'utf8') : '';
+      previewLines.push(
+        [
+          `### Delete ${index + 1}`,
+          `- File: \`${resolved.relativePath}\``,
+          `- Would delete: ${isFile ? 'true' : 'false (missing or non-file)'}`,
+          '- Before:',
+          '```text',
+          before,
+          '```',
+          '- After:',
+          '```text',
+          '(deleted)',
+          '```',
+        ].join('\n')
+      );
+    });
+
     edits.forEach((spec, index) => {
       previewLines.push(renderEditPreview(previewEdit(ctx.projectRoot, spec, store), index));
     });
 
     if (!previewLines.length) {
-      previewLines.push('No edits or creates supplied.');
+      previewLines.push('No edits, creates, or deletes supplied.');
     }
 
     const { text } = fitSections(
@@ -559,7 +676,7 @@ export async function changePipeline(ctx, input = {}) {
     return `# ContextOS change (dry run)\n\n${text}`;
   }
 
-  if (!creates.length && !edits.length) {
+  if (!creates.length && !edits.length && !deletes.length) {
     const targets = (Array.isArray(input.paths) && input.paths.length ? input.paths : extractPaths(input.intent || '')).slice(0, 2);
     const previewLines = [];
     for (const target of targets) {
@@ -567,11 +684,11 @@ export async function changePipeline(ctx, input = {}) {
       previewLines.push(read.ok ? `- \`${target}\`\n${clip(read.data, OUTLINE_CLIP)}` : `- \`${target}\`: ${read.error}`);
     }
     if (!previewLines.length) {
-      previewLines.push('Pass `edits: [{ path, target, replacement }]` or `create: [{ path, content }]`, or call `explore` first to locate the target.');
+      previewLines.push('Pass `edits: [{ path, target, replacement }]`, `create: [{ path, content }]`, or `delete: [{ path }]`, or call `explore` first to locate the target.');
     }
     const { text } = fitSections(
       [
-        { key: 'next', title: 'Next', priority: 0, lines: ['👉 change({ edits: [{ path, target, replacement }] })'] },
+        { key: 'next', title: 'Next', priority: 0, lines: ['👉 change({ edits: [{ path, target, replacement }] }) or change({ delete: [{ path }] })'] },
         { key: 'preview', title: 'Preview', priority: 1, lines: previewLines },
       ],
       { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
@@ -589,25 +706,38 @@ export async function changePipeline(ctx, input = {}) {
     ...edits.map((spec) => ({
       kind: 'edit',
       path: spec?.path,
-      target: spec?.target,
-      replacement: spec?.replacement ?? '',
+      target: stripInspectMetadata(spec?.target ?? spec?.targetContent),
+      replacement: spec?.replacement ?? spec?.replacementContent ?? (spec?.fullFile ? spec?.content : ''),
       startLine: spec?.startLine,
       endLine: spec?.endLine,
       symbol: spec?.symbol,
       append: spec?.append,
       fullFile: Boolean(spec?.fullFile),
     })),
+    ...deletes.map((spec) => ({
+      kind: 'delete',
+      path: spec?.path,
+    })),
   ];
 
   const backups = new Map();
+  const originallyMissing = new Set();
   if (input.autoRevert === true && input.verify) {
-    for (const edit of edits) {
-      if (!edit?.path) continue;
-      const fullPath = path.resolve(ctx.projectRoot, edit.path);
-      if (fs.existsSync(fullPath) && !backups.has(fullPath)) {
-        try {
-          backups.set(fullPath, fs.readFileSync(fullPath, 'utf8'));
-        } catch (_) {}
+    const mutationPaths = [...creates, ...edits, ...deletes]
+      .map((spec) => spec?.path)
+      .filter(Boolean);
+    for (const filePath of mutationPaths) {
+      const fullPath = path.resolve(ctx.projectRoot, filePath);
+      const relative = path.relative(ctx.projectRoot, fullPath);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+      if (backups.has(fullPath) || originallyMissing.has(fullPath)) continue;
+      if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+        backups.set(fullPath, {
+          content: fs.readFileSync(fullPath, 'utf8'),
+          mode: fs.statSync(fullPath).mode,
+        });
+      } else {
+        originallyMissing.add(fullPath);
       }
     }
   }
@@ -615,7 +745,10 @@ export async function changePipeline(ctx, input = {}) {
   const changeset = await caps.code({ action: 'changeset', changes, format: 'json' });
   if (!changeset.ok) {
     tracer.step('changeset', { ok: false, error: changeset.error });
-    resultLines.push(`- ✗ changeset rejected: ${changeset.error}`);
+    const hint = /TargetContent not found/i.test(changeset.error || '')
+      ? ' Use exact source text without the `// path [Lx-Ly] (hash: ...)` metadata line, or set `fullFile:true` for a whole-file replacement.'
+      : '';
+    resultLines.push(`- ✗ changeset rejected: ${changeset.error}${hint}`);
     const { text } = fitSections(
       [
         { key: 'next', title: 'Next', priority: 0, lines: ['Fix the changeset error, then retry `change`; no files were modified.'] },
@@ -628,23 +761,29 @@ export async function changePipeline(ctx, input = {}) {
 
   const changedFiles = Array.isArray(changeset.data?.files) ? changeset.data.files : [];
   for (const file of changedFiles) {
-    const action = file.created ? 'created' : 'edited';
+    const action = file.deleted ? 'deleted' : (file.created ? 'created' : 'edited');
     resultLines.push(`- ${action} \`${file.path}\` (hash ${file.newHash || 'n/a'}, ${(file.locators || []).length} locators re-anchored)`);
     touched.push(file.path);
   }
   tracer.step('changeset', { ok: true, files: touched });
 
-  let session = store.touch(touched, 'edit');
+  let session = store.touch(
+    changedFiles.map((file) => ({
+      path: file.path,
+      source: file.deleted ? 'delete' : 'edit',
+      ...(file.deleted ? { deleted: true } : {}),
+    })),
+    'edit'
+  );
   const verifyLines = [];
   const failureLines = [];
   let verifyPassed = true;
 
-  if (input.verify) {
-    const verifyCommands = input.verify === true
-      ? profile.verify
-      : (Array.isArray(input.verify) ? input.verify : [input.verify]);
+  const verifyCommands = verifyCommandsFromInput(input.verify, profile);
 
+  if (verifyCommands.length) {
     if (verifyCommands && verifyCommands.length) {
+      const fingerprint = workspaceFingerprint(ctx.projectRoot);
       for (const cmd of verifyCommands) {
         const res = await caps.run({
           command: cmd,
@@ -657,6 +796,7 @@ export async function changePipeline(ctx, input = {}) {
           continue;
         }
         const receipt = res.data;
+        receipt.stateHash = fingerprint;
         store.attachReceipt(receipt);
         session = store.current;
         const label = redactSecrets(cmd);
@@ -672,30 +812,28 @@ export async function changePipeline(ctx, input = {}) {
       }
 
       if (!verifyPassed && input.autoRevert === true) {
-        for (const spec of creates) {
-          if (!spec?.path) continue;
-          const fullPath = path.resolve(ctx.projectRoot, spec.path);
-          if (fs.existsSync(fullPath)) {
-            try { fs.rmSync(fullPath, { force: true }); } catch (_) {}
-          }
+        for (const fullPath of originallyMissing) {
+          try {
+            if (fs.existsSync(fullPath)) fs.rmSync(fullPath, { force: true });
+          } catch (_) {}
         }
-        for (const [fullPath, originalContent] of backups) {
-          try { fs.writeFileSync(fullPath, originalContent, 'utf8'); } catch (_) {}
+        for (const [fullPath, backup] of backups) {
+          try { fs.writeFileSync(fullPath, backup.content, { encoding: 'utf8', mode: backup.mode }); } catch (_) {}
         }
         resultLines.push(`- ↺ autoReverted disk changes due to verify failure`);
       } else if (verifyPassed) {
-        resultLines.push('💡 [Milestone Reached] Verification passed. State saved to blackboard (.contextos/blackboard.md). You may /clear anytime; explore() will resume in ~150 tokens.');
+        resultLines.push('- verify: PASS (receipt attached; do not rerun this command)');
       }
     }
   }
 
-  const nextLines = input.verify
+  const nextLines = verifyCommands.length
     ? (verifyPassed
-        ? [`👉 ship(${JSON.stringify({ summary: input.intent || '<what changed and why>' })})`]
+        ? ['done: verified; report the result and keep the session open unless this is final closure']
         : [`👉 change(${JSON.stringify({ intent: input.intent || '<fix the failure>' })}) to repair and verify again`])
     : [`👉 ${computeNext({ session, changedCount: touched.length, profile, stage: 'change', intent: input.intent })}`];
 
-  const touchedLines = session.touchedFiles.slice(-8).map((entry) => `- \`${entry.path}\` (${entry.source})`);
+  const touchedLines = touched.slice(-8).map((filePath) => `- \`${filePath}\` (edit)`);
 
   const sections = [
     { key: 'next', title: 'Next', priority: 0, lines: nextLines },
@@ -718,7 +856,71 @@ export async function changePipeline(ctx, input = {}) {
   return `# ContextOS change\n\n${text}`;
 }
 
+const INSPECT_SKIP_DIRS = new Set(['.git', '.contextos', 'node_modules', 'dist', 'build', 'coverage', 'tmp']);
+
+function expandInspectTargets(projectRoot, target) {
+  const raw = String(target || '');
+  const normalized = raw.replace(/\\/g, '/');
+  const base = normalized.replace(/\/\*\*?$/, '');
+  const fullPath = path.resolve(projectRoot, base || '.');
+  const relative = path.relative(path.resolve(projectRoot), fullPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return [raw];
+  let stat;
+  try {
+    stat = fs.statSync(fullPath);
+  } catch (_) {
+    return [raw];
+  }
+  if (!stat.isDirectory()) return [raw];
+
+  const files = [];
+  const walk = (directory, depth = 0) => {
+    if (files.length >= 30 || depth > 4) return;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(directory, { withFileTypes: true });
+    } catch (_) {
+      return;
+    }
+    for (const entry of entries) {
+      if (files.length >= 30) break;
+      if (entry.name.startsWith('.') || INSPECT_SKIP_DIRS.has(entry.name)) continue;
+      const child = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(child, depth + 1);
+      else if (entry.isFile()) files.push(path.relative(projectRoot, child).split(path.sep).join('/'));
+    }
+  };
+  walk(fullPath);
+  return files.length ? files : [`${base}/`];
+}
+
+function expandInspectGlobs(projectRoot, globs = []) {
+  const matches = [];
+  for (const pattern of Array.isArray(globs) ? globs : []) {
+    if (typeof pattern !== 'string' || !pattern.trim()) continue;
+    let found = [];
+    try {
+      found = fs.globSync(pattern.trim(), { cwd: projectRoot });
+    } catch (_) {
+      continue;
+    }
+    for (const candidate of found) {
+      const relative = String(candidate).split(path.sep).join('/');
+      if (!relative || relative.startsWith('.contextos/') || relative.startsWith('node_modules/') || relative.startsWith('.git/')) continue;
+      const absolute = path.resolve(projectRoot, relative);
+      if (!absolute.startsWith(`${path.resolve(projectRoot)}${path.sep}`)) continue;
+      try {
+        if (fs.statSync(absolute).isFile()) matches.push(relative);
+      } catch (_) {}
+    }
+  }
+  return [...new Set(matches)].sort().slice(0, 30);
+}
+
 export async function inspectPipeline(ctx, input = {}) {
+  if (input.inspect && typeof input.inspect === 'object' && !Array.isArray(input.inspect)) {
+    input = { ...input.inspect, ...input };
+  }
   const { caps, store } = ctx;
   let targetPath = input.path;
   let symbol = input.symbol;
@@ -734,19 +936,25 @@ export async function inspectPipeline(ctx, input = {}) {
   const requestedBudget = input.budget || input.depth;
   const isFull = requestedBudget === 'full';
   const explicitMaxChars = typeof input.maxChars === 'number' && input.maxChars > 0 ? input.maxChars : null;
-  const contentMaxChars = isFull ? Infinity : (explicitMaxChars ?? 2500);
+  const contentMaxChars = isFull ? Infinity : (explicitMaxChars ?? 8000);
 
   const paths = Array.isArray(input.paths) && input.paths.length
     ? input.paths
     : (targetPath ? [targetPath] : []);
+  const globPaths = expandInspectGlobs(ctx.projectRoot, input.globs);
+  const requestedPaths = [...paths, ...globPaths];
 
-  if (!paths.length) {
-    return '# ContextOS inspect\n\nNo target path provided. Pass `path`, `paths`, or `slot` (e.g. `slot: "S1"`).';
+  if (!requestedPaths.length) {
+    const globHint = Array.isArray(input.globs) && input.globs.length
+      ? `No files matched globs: ${input.globs.join(', ')}.`
+      : 'No target path provided. Pass `path`, `paths`, `globs`, or `slot` (e.g. `slot: "S1"`).';
+    return `# ContextOS inspect\n\n${globHint}`;
   }
 
   const isOutline = input.mode === 'outline' || Boolean(input.outline);
   const outLines = [];
-  for (let p of paths) {
+  const inspectPaths = requestedPaths.flatMap((target) => expandInspectTargets(ctx.projectRoot, target));
+  for (let p of inspectPaths) {
     const fullP = path.join(ctx.projectRoot, p);
     if (!fs.existsSync(fullP) && fs.existsSync(`${fullP}.log`)) {
       p = `${p}.log`;
@@ -757,7 +965,7 @@ export async function inspectPipeline(ctx, input = {}) {
         path: p,
       });
       if (outline.ok) {
-        outLines.push(`### \`${p}\` (AST Outline)\n\`\`\`markdown\n${clip(outline.data, contentMaxChars, { withHint: true })}\n\`\`\``);
+        outLines.push(`### \`${p}\` (AST Outline)\n${clip(outline.data, contentMaxChars, { withHint: true })}`);
       } else {
         outLines.push(`### \`${p}\`: ✗ ${outline.error}`);
       }
@@ -774,7 +982,20 @@ export async function inspectPipeline(ctx, input = {}) {
         fullFile: isFull || input.fullFile || false,
       });
       if (read.ok) {
-        outLines.push(`### \`${p}\`${symbol ? ` (${symbol})` : ''}\n\`\`\`text\n${clip(read.data, contentMaxChars, { withHint: true })}\n\`\`\``);
+        const hash = crypto.createHash('sha256').update(String(read.data ?? '')).digest('hex');
+        const range = input.ranges ? JSON.stringify(input.ranges) : { startLine: input.startLine, endLine: input.endLine };
+        const explicitReadBudget = Boolean(input.budget || input.depth || input.maxChars || input.fullFile);
+        const prior = input.dedupeReads !== false && !requestsFullOutput(input) && !explicitReadBudget && typeof store?.findReadReceipt === 'function'
+          ? store.findReadReceipt({ path: p, hash, range, symbol })
+          : null;
+        if (prior) {
+          outLines.push(`### \`${p}\` unchanged (hash: ${hash.slice(0, 12)}; reuse prior result${prior.receiptId ? ` from ${prior.receiptId}` : ''})`);
+        } else {
+          outLines.push(`### \`${p}\`${symbol ? ` (${symbol})` : ''}\n${clip(read.data, contentMaxChars, { withHint: true })}`);
+          if (typeof store?.recordReadReceipt === 'function') {
+            store.recordReadReceipt({ path: p, hash, range, symbol, receiptId: read.receiptId || null });
+          }
+        }
       } else {
         outLines.push(`### \`${p}\`: ✗ ${read.error}`);
       }
@@ -824,16 +1045,29 @@ export async function verifyPipeline(ctx, input = {}) {
   const explicit = Array.isArray(input.commands) && input.commands.length
     ? input.commands
     : (input.command ? [input.command] : null);
-  const commands = explicit || profile.verify;
+  const rawCommands = explicit || profile.verify || [];
+  const commands = Array.isArray(rawCommands) ? rawCommands : (typeof rawCommands === 'string' ? [rawCommands] : []);
+  if ((!Array.isArray(rawCommands) && typeof rawCommands !== 'string')
+    || commands.some((command) => typeof command !== 'string' || !command.trim())) {
+    return '# ContextOS verify\n\n## Verdict: FAIL\n- Invalid verification command: `commands` must be an array of non-empty strings and `command` must be a non-empty string.';
+  }
   if (!commands.length) {
     return '# ContextOS verify\n\nNo verification command available. Pass `command: "npm test"` (or `commands: [...]`) or set `verify` in `.contextos/profile.json`.';
   }
 
   const commandLines = [];
   const failureLines = [];
+  const fingerprint = workspaceFingerprint(ctx.projectRoot);
   let passed = true;
 
   for (const command of commands) {
+    const cached = store.currentPassingReceipt(command, input.cwd || null, fingerprint);
+    if (cached) {
+      const label = redactSecrets(command);
+      commandLines.push(`- \`${label}\` -> cached PASS (${cached.id || 'receipt'})`);
+      tracer.step('run.cached', { command, receiptId: cached.id || null });
+      continue;
+    }
     const res = await caps.run({
       command,
       cwd: input.cwd,
@@ -846,6 +1080,7 @@ export async function verifyPipeline(ctx, input = {}) {
       continue;
     }
     const receipt = res.data;
+    receipt.stateHash = fingerprint;
     store.attachReceipt(receipt);
     const label = redactSecrets(command);
     commandLines.push(`- \`${label}\` → exit ${receipt.exitCode} (${receipt.durationMs}ms, receipt ${receipt.id})`);
@@ -859,19 +1094,45 @@ export async function verifyPipeline(ctx, input = {}) {
     tracer.step('run', { command, exitCode: receipt.exitCode });
   }
 
+  const triageLines = [];
+  const autoTriage = input.autoTriage === false
+    ? false
+    : (input.autoTriage === true || profile?.autoTriage === true);
+  if (autoTriage && !passed && failureLines.length && profile?.micro?.url && profile?.micro?.model && typeof caps?.micro === 'function') {
+    try {
+      const triageRes = await caps.micro(
+        {
+          preset: 'triage',
+          prompt: '分析以下测试/构建失败日志，给出最简诊断与修复建议：',
+          input: failureLines.join('\n\n'),
+        },
+        profile.micro
+      );
+      if (triageRes.ok && triageRes.data?.ok && triageRes.data?.content) {
+        triageLines.push(triageRes.data.content.trim());
+        tracer.step('micro.triage', { durationMs: triageRes.data.durationMs });
+      }
+    } catch (_) {}
+  }
+
   const session = store.current;
   const nextLines = [
     passed
-      ? `👉 ship(${JSON.stringify({ summary: '<what changed and why>' })})`
+      ? 'done: verified; do not rerun this command, and keep the session open unless this is final closure'
       : `👉 change(${JSON.stringify({ intent: input.intent || '<fix the failure>' })}) to fix, then verify again`,
   ];
 
+  const verifySections = [
+    { key: 'next', title: 'Next', priority: 0, lines: nextLines },
+    { key: 'verdict', title: passed ? 'Verdict: PASS' : 'Verdict: FAIL', priority: 1, lines: commandLines },
+  ];
+  if (triageLines.length) {
+    verifySections.push({ key: 'triage', title: '👉 Micro-Triage (工程诊断小脑)', priority: 1.5, lines: triageLines });
+  }
+  verifySections.push({ key: 'failures', title: 'Failures', priority: 2, lines: failureLines });
+
   const { text } = fitSections(
-    [
-      { key: 'next', title: 'Next', priority: 0, lines: nextLines },
-      { key: 'verdict', title: passed ? 'Verdict: PASS' : 'Verdict: FAIL', priority: 1, lines: commandLines },
-      { key: 'failures', title: 'Failures', priority: 2, lines: failureLines },
-    ],
+    verifySections,
     { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
   );
   return `# ContextOS verify\n\n${text}${session ? `\n\n<!-- session ${session.id}, ${session.receipts.length} receipts -->` : ''}`;
@@ -879,6 +1140,9 @@ export async function verifyPipeline(ctx, input = {}) {
 
 export async function shipPipeline(ctx, input = {}) {
   const { caps, store, tracer, projectRoot, profile } = ctx;
+  if (!store.current && input.dryRun !== true) {
+    return '# ContextOS ship\n\n- No open session. Nothing to close.';
+  }
   const obs = await observe({ projectRoot, store });
   let session = store.current || store.ensureSession(input.summary || 'session');
   tracer.step('observe', { gitAvailable: obs.gitAvailable, reconciled: obs.reconciled });
@@ -909,13 +1173,15 @@ export async function shipPipeline(ctx, input = {}) {
     return `# ContextOS ship (dry run)\n\n${text}`;
   }
 
-  const wantsVerify = input.verify === true || (Array.isArray(input.verify) && input.verify.length > 0);
+  const shipVerifyCommands = verifyCommandsFromInput(input.verify, profile);
+  const wantsVerify = shipVerifyCommands.length > 0;
   const extraLines = [];
   if (wantsVerify && !session.receipts.some((receipt) => receipt.exitCode === 0)) {
-    const commands = Array.isArray(input.verify) && input.verify.length ? input.verify : profile.verify;
+    const commands = shipVerifyCommands;
     for (const command of commands) {
       const res = await caps.run({ command, maxChars: profile.maxChars, timeoutMs: profile.timeoutMs });
       if (res.ok) {
+        res.data.stateHash = workspaceFingerprint(ctx.projectRoot);
         store.attachReceipt(res.data);
         extraLines.push(`- \`${redactSecrets(command)}\` → exit ${res.data.exitCode} (receipt ${res.data.id})`);
       } else {
@@ -1015,7 +1281,9 @@ export async function shipPipeline(ctx, input = {}) {
   }
   tracer.step('attribute', { touched: (session.touchedFiles || []).length, unclassified: unclassified.length });
 
-  const graph = await caps.exportGraph();
+  const graph = input.exportGraph === true || profile.shipExportsGraph === true
+    ? await caps.exportGraph()
+    : { ok: true, data: { skipped: true } };
   tracer.step('graph', { ok: graph.ok });
 
   if (input.decision?.id) {
@@ -1031,32 +1299,29 @@ export async function shipPipeline(ctx, input = {}) {
   const closed = store.close(input.summary || session.intent || 'session closed');
 
   const summaryLines = [
-    `- Session \`${closed.id}\` closed at ${closed.closedAt}`,
-    `- Touched files: ${closed.touchedFiles.length}`,
-    `- Passing receipts: ${green.length}${unverified ? ' (unverified — advisory mode)' : ''}`,
-    `- Superseded failures: ${superseded.length}`,
-    `- Unresolved failures: ${unresolved.length}`,
-    `- Derived attribution: ${unclassified.length} file(s) filed under derived modules${unclassified.length ? '' : ' (all already owned by curated Blocks)'}`,
+    `- Session: \`${closed.id}\` closed`,
+    `- Touched: ${closed.touchedFiles.length} | Passing receipts: ${green.length}${unverified ? ' (unverified, advisory mode)' : ''}`,
+    `- Superseded failures: ${superseded.length} | Unresolved failures: ${unresolved.length}`,
+    `- Derived attribution: ${unclassified.length ? `${unclassified.length} auto-bound` : 'none'}`,
   ];
-  const touchedLines = closed.touchedFiles.slice(-10).map((entry) => `- \`${entry.path}\` (${entry.source})`);
+  const touchedLines = closed.touchedFiles.slice(-5).map((entry) => `- \`${entry.path}\` (${entry.source})`);
   const evidenceLines = (closed.receipts || [])
-    .slice(-5)
+    .slice(-3)
     .map((receipt) => `- [${receiptStatus(receipt).toUpperCase()}] \`${redactSecrets(receipt.command || '')}\` exit ${receipt.exitCode} (${receipt.id})`);
-  const graphLines = [
-    graph.ok
+  const graphLines = [];
+  if (!graph.data?.skipped) {
+    graphLines.push(graph.ok
       ? `- graph.json exported${graph.data?.graphRevision ? ` (rev ${graph.data.graphRevision})` : ''}`
-      : `- graph export pending: ${graph.error}`,
-  ];
-  const nextLines = [`👉 explore(${JSON.stringify({ intent: '<next goal>' })}) to start the next loop`];
+      : `- graph export pending: ${graph.error}`);
+  }
 
   const { text } = fitSections(
     [
-      { key: 'next', title: 'Next', priority: 0, lines: nextLines },
-      { key: 'summary', title: 'Closure', priority: 1, lines: summaryLines },
-      { key: 'evidence', title: 'Evidence', priority: 2, lines: evidenceLines },
-      { key: 'touched', title: 'Touched', priority: 3, lines: touchedLines },
-      { key: 'attribution', title: 'Attribution (derived)', priority: 4, lines: attributionLines },
-      { key: 'graph', title: 'Graph', priority: 5, lines: graphLines },
+      { key: 'summary', title: 'Closure', priority: 0, lines: summaryLines },
+      { key: 'evidence', title: 'Evidence', priority: 1, lines: evidenceLines },
+      { key: 'touched', title: 'Touched', priority: 2, lines: touchedLines },
+      { key: 'attribution', title: 'Attribution (derived)', priority: 3, lines: attributionLines },
+      { key: 'graph', title: 'Graph', priority: 4, lines: graphLines },
     ],
     { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
   );
@@ -1067,15 +1332,37 @@ function normalizeAction(action, projectRoot) {
   if (!action || typeof action !== 'object') {
     throw new Error(`Invalid action in pipeline: expected object, got ${typeof action}`);
   }
-  let tool = action.tool;
-  let args = { ...action };
-  delete args.tool;
+  let tool = typeof action.tool === 'string' ? action.tool : (typeof action.action === 'string' ? action.action : null);
+  let args;
+
+  if (tool) {
+    const suppliedArgs = action.args;
+    if (suppliedArgs === undefined) {
+      args = { ...action };
+      delete args.tool;
+      delete args.action;
+      delete args.args;
+    } else if (suppliedArgs && typeof suppliedArgs === 'object') {
+      args = { ...suppliedArgs };
+    } else if (typeof suppliedArgs === 'string') {
+      args = tool === 'verify' ? { command: suppliedArgs } : { path: suppliedArgs, intent: suppliedArgs };
+    } else {
+      args = {};
+    }
+    if (action.maxChars !== undefined && args.maxChars === undefined) args.maxChars = action.maxChars;
+    if (action.raw !== undefined && args.raw === undefined) args.raw = action.raw;
+    if (action.mode !== undefined && args.mode === undefined) args.mode = action.mode;
+  } else {
+    args = { ...action };
+  }
 
   // Shorthand keys:
   if (!tool) {
     if ('inspect' in action) {
       tool = 'inspect';
-      args = typeof action.inspect === 'string' ? { path: action.inspect } : { ...action.inspect };
+      args = typeof action.inspect === 'string'
+        ? { path: action.inspect }
+        : (Array.isArray(action.inspect) ? { paths: action.inspect } : { ...action.inspect });
       if (action.maxChars !== undefined && args.maxChars === undefined) args.maxChars = action.maxChars;
       if (action.raw !== undefined && args.raw === undefined) args.raw = action.raw;
     } else if ('change' in action) {
@@ -1087,7 +1374,7 @@ function normalizeAction(action, projectRoot) {
       tool = 'verify';
       args = typeof action.verify === 'string'
         ? { command: action.verify }
-        : (action.verify === true ? {} : { ...action.verify });
+        : (action.verify === true ? {} : (Array.isArray(action.verify) ? { commands: action.verify } : { ...action.verify }));
       if (action.maxChars !== undefined && args.maxChars === undefined) args.maxChars = action.maxChars;
       if (action.raw !== undefined && args.raw === undefined) args.raw = action.raw;
     } else if ('ship' in action) {
@@ -1106,6 +1393,18 @@ function normalizeAction(action, projectRoot) {
         capability: 'run_command',
         args: cmdArgs,
       };
+    } else if ('search' in action) {
+      tool = 'ops';
+      const searchSpec = action.search && typeof action.search === 'object' && !Array.isArray(action.search)
+        ? action.search
+        : { query: action.search };
+      args = {
+        capability: 'code',
+        action: 'search',
+        args: { ...searchSpec },
+      };
+      if (action.maxChars !== undefined && args.args.maxChars === undefined) args.args.maxChars = action.maxChars;
+      if (action.raw !== undefined && args.args.raw === undefined) args.args.raw = action.raw;
     } else if ('block' in action) {
       tool = 'ops';
       args = {
@@ -1139,8 +1438,15 @@ function normalizeAction(action, projectRoot) {
     }
   }
 
+  if (tool === 'run' || tool === 'run_command') {
+    const commandArgs = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+    tool = 'ops';
+    args = { capability: 'run_command', ...commandArgs };
+  }
+
   if (!tool) {
-    throw new Error(`Could not determine tool for action: ${JSON.stringify(action)}`);
+    const keys = Object.keys(action).slice(0, 8).join(',') || 'none';
+    throw new Error(`Could not determine tool. Use {action:"inspect",args:{...}} or {tool:"ops",args:{capability,...}}. Supported shorthand keys: inspect, change, verify, ship, run, search, block, chain, plan, task, ops, explore. Got keys: ${keys}`);
   }
 
   return {
@@ -1150,6 +1456,72 @@ function normalizeAction(action, projectRoot) {
       projectRoot: args.projectRoot || projectRoot,
     },
   };
+}
+
+export async function workPipeline(ctx, input = {}) {
+  const steps = [];
+  const probes = input.inspect ?? input.read;
+  const nestedFull = input.full === true;
+  const nestedMaxChars = Number.isFinite(input.maxChars) && input.maxChars > 0 ? Math.floor(input.maxChars) : null;
+  if (probes !== undefined) {
+    const rawProbes = Array.isArray(probes) ? probes : [probes];
+    const actions = rawProbes.map((probe) => {
+      if (typeof probe === 'string') {
+        return {
+          action: 'inspect',
+          args: {
+            path: probe,
+            ...(nestedFull ? { full: true } : {}),
+            ...(nestedMaxChars ? { maxChars: nestedMaxChars } : {}),
+          },
+        };
+      }
+      if (!probe || typeof probe !== 'object' || Array.isArray(probe)) {
+        throw new Error('work.inspect entries must be paths or inspect argument objects');
+      }
+      return {
+        action: 'inspect',
+        args: {
+          ...probe,
+          ...(nestedFull && probe.full === undefined ? { full: true } : {}),
+          ...(nestedMaxChars && probe.maxChars === undefined ? { maxChars: nestedMaxChars } : {}),
+        },
+      };
+    });
+    if (actions.length) steps.push({ parallel: actions });
+  }
+
+  const mutation = { ...input };
+  delete mutation.inspect;
+  delete mutation.read;
+  const mutationKeys = ['create', 'edits', 'delete', 'deletes', 'path', 'slot', 'append', 'symbol', 'replacement', 'replacementContent', 'target', 'targetContent', 'content', 'overwrite', 'fullFile'];
+  const hasMutation = mutationKeys.some((key) => mutation[key] !== undefined);
+  if (hasMutation) {
+    steps.push({ action: 'change', args: mutation });
+  } else {
+    const commands = input.commands
+      || verifyCommandsFromInput(input.verify, ctx.profile)
+      || (input.command ? [input.command] : null);
+    if (commands?.length) {
+      steps.push({ action: 'verify', args: { commands, command: input.command, depth: input.depth, full: input.full, maxChars: input.maxChars } });
+    }
+  }
+
+  if (!steps.length) {
+    return '# ContextOS work\n- No work supplied. Pass inspect, create/edits, and/or verify in one call.';
+  }
+
+  const responseBudget = Number.isFinite(input.maxChars) && input.maxChars > 0
+    ? Math.floor(input.maxChars)
+    : (RESPONSE_BUDGETS.work || RESPONSE_BUDGETS.inspect);
+  const result = await pipelinePipeline(ctx, {
+    steps,
+    mode: input.mode || (input.full || probes !== undefined ? 'full' : 'summary'),
+    maxChars: responseBudget,
+  });
+  return result
+    .replace(/^# ContextOS pipeline/, '# ContextOS work')
+    .replace(/^pipeline=/m, 'work=');
 }
 
 export async function pipelinePipeline(ctx, input = {}) {
@@ -1163,9 +1535,25 @@ export async function pipelinePipeline(ctx, input = {}) {
     return '# ContextOS pipeline\n- No steps provided in pipeline. Pass `steps: [...]`, `chain: [...]`, or `parallel: [...]`.';
   }
 
+  const explicitlyFull = input.full === true || input.budget === 'full' || input.mode === 'full';
+  const nestedFull = requestsFullOutput(steps);
+  const mode = input.mode || (explicitlyFull ? 'full' : 'summary');
+  const receiptMode = isReceiptMode(mode);
+  const renderFull = !receiptMode && (mode === 'full' || nestedFull);
+  const responseBudget = input.maxChars ?? (mode === 'full'
+    ? Infinity
+    : (receiptMode ? PIPELINE_RECEIPT_RESPONSE_BUDGET : RESPONSE_BUDGETS.pipeline));
+  const actionBudgetOptions = {
+    mode: renderFull ? 'full' : mode,
+    aggregateBudget: renderFull && mode !== 'full'
+      ? Math.max(1, responseBudget - 256)
+      : responseBudget,
+  };
   const results = [];
   let halted = false;
   let haltReason = null;
+  let failureCount = 0;
+  const continueOnFailure = input.continueOnFailure === true;
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
@@ -1179,24 +1567,34 @@ export async function pipelinePipeline(ctx, input = {}) {
           try {
             const normalized = normalizeAction(action, ctx.projectRoot);
             const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
+            const isFail = actionFailed(res);
             return {
               index: idx + 1,
               tool: normalized.tool,
-              ok: true,
+              ok: !isFail,
               output: res,
-              maxChars: resolveActionOutputLimit(action),
+              maxChars: resolveActionOutputLimit(action, actionBudgetOptions),
             };
           } catch (err) {
             return { index: idx + 1, tool: action.tool || 'unknown', ok: false, error: err.message };
           }
         })
       );
+      const parallelOk = subResults.every((r) => r.ok);
       results.push({
         step: stepNum,
         kind: 'parallel',
         items: subResults,
-        ok: subResults.every((r) => r.ok),
+        ok: parallelOk,
       });
+      if (!parallelOk) {
+        failureCount += subResults.filter((item) => !item.ok).length;
+        if (!continueOnFailure) {
+          halted = true;
+          haltReason = `Parallel step ${stepNum} contains failed action(s)`;
+          break;
+        }
+      }
       continue;
     }
 
@@ -1211,24 +1609,26 @@ export async function pipelinePipeline(ctx, input = {}) {
         try {
           const normalized = normalizeAction(action, ctx.projectRoot);
           const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
-          const isFail = typeof res === 'string' && (res.includes('Verdict: FAIL') || res.includes('BLOCKED'));
+          const isFail = actionFailed(res);
           subResults.push({
             index: j + 1,
             tool: normalized.tool,
             ok: !isFail,
             output: res,
-            maxChars: resolveActionOutputLimit(action),
+            maxChars: resolveActionOutputLimit(action, actionBudgetOptions),
           });
           if (isFail) {
             chainFailed = true;
+            failureCount += 1;
             haltReason = `Chain step ${j + 1} (${normalized.tool}) failed verification/gate`;
-            break;
+            if (!continueOnFailure) break;
           }
         } catch (err) {
           subResults.push({ index: j + 1, tool: action.tool || 'unknown', ok: false, error: err.message });
           chainFailed = true;
+          failureCount += 1;
           haltReason = `Chain step ${j + 1} (${action.tool || 'action'}) threw error: ${err.message}`;
-          break;
+          if (!continueOnFailure) break;
         }
       }
 
@@ -1239,7 +1639,7 @@ export async function pipelinePipeline(ctx, input = {}) {
         ok: !chainFailed,
       });
 
-      if (chainFailed) {
+      if (chainFailed && !continueOnFailure) {
         halted = true;
         break;
       }
@@ -1250,19 +1650,22 @@ export async function pipelinePipeline(ctx, input = {}) {
     try {
       const normalized = normalizeAction(step, ctx.projectRoot);
       const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
-      const isFail = typeof res === 'string' && (res.includes('Verdict: FAIL') || res.includes('BLOCKED'));
+      const isFail = actionFailed(res);
       results.push({
         step: stepNum,
         kind: 'single',
         tool: normalized.tool,
         ok: !isFail,
         output: res,
-        maxChars: resolveActionOutputLimit(step),
+        maxChars: resolveActionOutputLimit(step, actionBudgetOptions),
       });
       if (isFail) {
-        halted = true;
-        haltReason = `Step ${stepNum} (${normalized.tool}) failed verification/gate`;
-        break;
+        failureCount += 1;
+        if (!continueOnFailure) {
+          halted = true;
+          haltReason = `Step ${stepNum} (${normalized.tool}) failed verification/gate`;
+          break;
+        }
       }
     } catch (err) {
       results.push({
@@ -1272,56 +1675,128 @@ export async function pipelinePipeline(ctx, input = {}) {
         ok: false,
         error: err.message,
       });
-      halted = true;
-      haltReason = `Step ${stepNum} threw error: ${err.message}`;
-      break;
+      failureCount += 1;
+      if (!continueOnFailure) {
+        halted = true;
+        haltReason = `Step ${stepNum} threw error: ${err.message}`;
+        break;
+      }
     }
   }
 
-  const lines = [
-    `# ContextOS pipeline — ${halted ? 'HALTED ⚠️' : 'COMPLETED ✅'}`,
-    `- Total steps executed: ${results.length} / ${steps.length}`,
-    `- Status: ${halted ? `Stopped early: ${haltReason}` : 'All pipeline steps executed successfully'}`,
-    '',
-    '## Step Breakdown:',
-  ];
+  const totalActions = results.reduce((sum, result) => {
+    if (result.kind === 'parallel' || result.kind === 'chain') return sum + result.items.length;
+    return sum + 1;
+  }, 0);
+  const summaryActionBudget = Number.isFinite(responseBudget)
+    ? Math.max(140, Math.min(260, Math.floor(responseBudget / Math.max(2, totalActions + 1))))
+    : PIPELINE_DEFAULT_OUTPUT_CLIP;
 
-  function formatPipelineOutput(output, budget = 1200) {
+  function artifactRef(output) {
+    const match = String(output || '').match(/(?:artifact=|os-response[^\n]*artifact=)([A-Za-z0-9._-]+)/);
+    return match ? ` artifact=${match[1]}` : '';
+  }
+
+  function formatReceiptOutput(output) {
+    const text = typeof output === 'string'
+      ? output
+      : (typeof output === 'object' && output !== null
+          ? (output.text || output.summary || JSON.stringify(output))
+          : String(output ?? ''));
+    const receipt = text.match(/\breceipt[ =:-]+([A-Za-z0-9._-]+)/i);
+    const artifact = text.match(/\bartifact[ =:-]+([A-Za-z0-9._-]+)/i);
+    const verdict = text.match(/Verdict:\s*(PASS|FAIL)/i);
+    const exitCode = text.match(/\bexit\s+(-?\d+)/i);
+    const parts = [];
+    if (receipt) parts.push(`receipt=${receipt[1]}`);
+    if (artifact) parts.push(`artifact=${artifact[1]}`);
+    if (verdict) parts.push(`verdict=${verdict[1].toUpperCase()}`);
+    if (exitCode) parts.push(`exit=${exitCode[1]}`);
+    return parts.length ? parts.join(' ') : 'ok';
+  }
+
+  function formatPipelineOutput(output, budget = summaryActionBudget) {
     if (!output) return '';
-    if (typeof output === 'string') return clip(output, budget);
-    if (typeof output === 'object') {
-      if (output.text) return clip(output.text, budget);
-      if (output.summary) return clip(output.summary, budget);
-      return clip(JSON.stringify(output, null, 2), budget);
+    if (receiptMode) return formatReceiptOutput(output);
+    if (renderFull) {
+      if (typeof output === 'string') return clip(output, budget);
+      if (typeof output === 'object') {
+        if (output.text) return clip(output.text, budget);
+        if (output.summary) return clip(output.summary, budget);
+        return clip(JSON.stringify(output, null, 2), budget);
+      }
+      return clip(String(output), budget);
     }
-    return clip(String(output), budget);
+    const summary = summarizeActionResult(output, {
+      maxChars: Math.min(budget, summaryActionBudget),
+      includeDiagnostics: true,
+    });
+    return `${artifactRef(output)}${summary}`.trim();
   }
+
+  function formatPipelineFailure(item) {
+    const output = typeof item?.output === 'string' ? item.output : '';
+    const source = item?.error || output || 'verification/gate';
+    const lines = String(source)
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const header = lines.find((value) => /(?:Verdict|Verify):\s*FAIL/i.test(value));
+    const detail = lines.find((value) => /AssertionError|(?:Error|Expected):|Expected\s+/i.test(value))
+      || lines.find((value) => /not ok|exit\s+[1-9]/i.test(value));
+    return clip([header, detail].filter(Boolean).join(' | ') || source, 500);
+  }
+
+  const pipelineStatus = halted ? 'HALTED' : (failureCount ? 'FAIL' : 'OK');
+  const lines = [`pipeline=${pipelineStatus} actions=${totalActions}/${steps.length}${receiptMode ? ' mode=receipt' : ''}`];
+  if (halted && haltReason) lines.push(`stop=${haltReason}`);
 
   for (const r of results) {
     if (r.kind === 'parallel') {
-      lines.push(`### Step ${r.step} [Parallel Concurrency: ${r.items.length} actions] (${r.ok ? 'PASS' : 'FAIL'})`);
-      for (const item of r.items) {
-        lines.push(`- **Action ${item.index} (${item.tool})**: ${item.ok ? 'OK' : `FAIL: ${item.error}`}`);
-        if (item.output) {
-          lines.push('```text', formatPipelineOutput(item.output, item.maxChars), '```');
-        }
-      }
+      const body = r.items.map((item) => {
+        const detail = item.ok
+          ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, ' | ')
+          : `FAIL: ${formatPipelineFailure(item)}`;
+        return `${item.tool}=${item.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`;
+      }).join(' ; ');
+      lines.push(`parallel#${r.step} ${r.ok ? 'OK' : 'FAIL'} :: ${body}`);
     } else if (r.kind === 'chain') {
-      lines.push(`### Step ${r.step} [Sequential Chain: ${r.items.length} actions] (${r.ok ? 'PASS' : 'HALTED'})`);
-      for (const item of r.items) {
-        lines.push(`- **Chain Action ${item.index} (${item.tool})**: ${item.ok ? 'OK' : `FAILED: ${item.error || 'Verification/gate failed'}`}`);
-        if (item.output) {
-          lines.push('```text', formatPipelineOutput(item.output, item.maxChars), '```');
-        }
-      }
+      const body = r.items.map((item) => {
+        const detail = item.ok
+          ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, ' | ')
+          : `FAIL: ${formatPipelineFailure(item)}`;
+        return `${item.tool}=${item.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`;
+      }).join(' -> ');
+      lines.push(`chain#${r.step} ${r.ok ? 'OK' : (halted ? 'HALTED' : 'FAIL')} :: ${body}`);
     } else {
-      lines.push(`### Step ${r.step} [Single Action: ${r.tool}] (${r.ok ? 'PASS' : 'FAIL'})`);
-      if (r.error) lines.push(`- Error: ${r.error}`);
-      if (r.output) {
-        lines.push('```text', formatPipelineOutput(r.output, r.maxChars), '```');
-      }
+      const detail = r.ok
+        ? (halted ? '' : formatPipelineOutput(r.output, r.maxChars).replace(/\r?\n/g, ' | '))
+        : `FAIL: ${formatPipelineFailure(r)}`;
+      lines.push(`step#${r.step} ${r.tool}=${r.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`);
     }
   }
 
-  return lines.join('\n');
+  const raw = lines.join('\n');
+  const summaryTruncated = !renderFull && results.some((result) => {
+    const items = result.items || [result];
+    return items.some((item) => {
+      if (!item?.ok) return false;
+      const limit = Math.min(item.maxChars ?? Infinity, summaryActionBudget);
+      return outputLength(item.output) > limit;
+    });
+  });
+  const artifactContent = {
+    status: pipelineStatus,
+    totalActions,
+    steps: results,
+  };
+  const { text, meta } = finalizeResponse(raw, {
+    projectRoot: ctx.projectRoot,
+    tool: 'pipeline',
+    maxChars: responseBudget,
+    full: mode === 'full' && !Number.isFinite(responseBudget),
+    forceArtifact: input.forceArtifact === true || summaryTruncated,
+    artifactContent,
+  });
+  return `${text}\n\n<!-- os-budget ${meta.chars} chars ~${meta.estimatedTokens} tokens${meta.truncated ? ' truncated' : ''}${receiptMode ? ' mode=receipt' : ''} -->`;
 }

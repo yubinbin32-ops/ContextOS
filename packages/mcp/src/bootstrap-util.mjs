@@ -246,6 +246,22 @@ export function configureJsonMcp({ configPath, serverScript, nodePath, env = nul
   return true;
 }
 
+export function configureOpenCodeMcp({ configPath, serverScript, nodePath, env = null, version = null }) {
+  const json = readJsonObject(configPath, 'OpenCode config');
+  json.$schema = json.$schema || 'https://opencode.ai/config.json';
+  json.mcp = json.mcp && typeof json.mcp === 'object' && !Array.isArray(json.mcp) ? json.mcp : {};
+  const entry = {
+    type: 'local',
+    command: [nodePath, '--no-warnings=ExperimentalWarning', serverScript],
+    enabled: true,
+  };
+  if (version) entry._version = version;
+  if (env && Object.keys(env).length > 0) entry.environment = env;
+  json.mcp.contextos = entry;
+  writeFileAtomic(configPath, JSON.stringify(json, null, 2) + '\n');
+  return true;
+}
+
 function tomlString(value) {
   return JSON.stringify(String(value));
 }
@@ -281,11 +297,12 @@ export function configureTomlCodex({ configPath, serverScript, nodePath, env = n
   fs.renameSync(`${configPath}.contextos.tmp`, configPath);
 }
 
-function cleanTomlCodex({ configPath }) {
+export function cleanTomlCodex({ configPath }) {
   if (!fs.existsSync(configPath)) return;
   let content = fs.readFileSync(configPath, 'utf8');
-  const regex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
-  content = content.replace(regex, '');
+  const mcpRegex = /\[mcp_servers\.contextos(?:\.[^\]]+)?\][\s\S]*?(?=\n\[|\n*$)/g;
+  const hookRegex = /\[hooks\.state\."contextos@personal:[^"]+"\][\s\S]*?(?=\n\[|\n*$)/g;
+  content = content.replace(mcpRegex, '').replace(hookRegex, '').replace(/\n{3,}/g, '\n\n');
   writeFileAtomic(configPath, content.trim() + '\n');
 }
 
@@ -379,6 +396,19 @@ export function detectInstalledPlatforms() {
     type: 'json',
   });
 
+  // 2. Claude Code
+  const claudeCodeDir = path.join(HOME, '.claude');
+  const claudeCodeConfigPath = path.join(HOME, '.claude.json');
+  const claudeCodeAppExists = fs.existsSync(claudeCodeDir) || fs.existsSync(claudeCodeConfigPath)
+    || fs.existsSync('/usr/bin/claude') || fs.existsSync('/usr/local/bin/claude');
+  platforms.push({
+    id: 'claude-code',
+    name: 'Claude Code',
+    isInstalled: claudeCodeAppExists,
+    configPath: claudeCodeConfigPath,
+    type: 'claude-code',
+  });
+
   // 2. Cursor
   const cursorDir = path.join(HOME, '.cursor');
   let cursorAppExists = false;
@@ -404,7 +434,7 @@ export function detectInstalledPlatforms() {
     isInstalled: cursorAppExists,
     configPath: path.join(cursorDir, 'mcp.json'),
     skillPath: path.join(cursorDir, 'skills', 'contextos'),
-    type: 'json',
+    type: 'cursor',
   });
 
   // 3. Antigravity
@@ -456,9 +486,9 @@ export function detectInstalledPlatforms() {
     id: 'opencode',
     name: 'OpenCode',
     isInstalled: opencodeAppExists,
-    configPath: path.join(opencodeDir, 'mcp.json'),
+    configPath: path.join(opencodeDir, 'opencode.json'),
     skillPath: path.join(opencodeDir, 'skills', 'contextos'),
-    type: 'json',
+    type: 'opencode',
   });
 
   // 5. Codex
@@ -490,6 +520,16 @@ export function detectInstalledPlatforms() {
     type: 'codex-plugin',
   });
 
+  // 6. Generic MCP host
+  platforms.push({
+    id: 'generic',
+    name: 'Generic MCP Host',
+    isInstalled: true,
+    configPath: path.join(HOME, '.contextos', 'mcp.json'),
+    skillPath: path.join(HOME, '.contextos', 'skills', 'contextos'),
+    type: 'json',
+  });
+
   return platforms;
 }
 
@@ -516,23 +556,15 @@ export function syncAllPlatforms({
     }
   }
   const modified = [];
-
-  const platforms =
-    requestedPlatforms
-      ? allPlatforms.filter((p) => requestedPlatforms.includes(p.id))
-      : allPlatforms;
+  const platforms = requestedPlatforms
+    ? allPlatforms.filter((platform) => requestedPlatforms.includes(platform.id))
+    : allPlatforms;
 
   for (const platform of platforms) {
     if (!platform.isInstalled && !forceAll) continue;
 
     if (platform.id === 'codex') {
-      const resultName = installCodexPlugin({
-        serverScript,
-        nodePath,
-        env,
-        pluginSource,
-      });
-      modified.push(resultName);
+      modified.push(installCodexPlugin({ serverScript, nodePath, env, pluginSource }));
       continue;
     }
 
@@ -540,14 +572,26 @@ export function syncAllPlatforms({
       copyDirectoryRecursive(skillSource, platform.skillPath);
     }
 
+    if (platform.id === 'claude-code') {
+      configureJsonMcp({ configPath: platform.configPath, serverScript, nodePath, env, version });
+      modified.push(platform.name);
+      continue;
+    }
+
+    if (platform.id === 'cursor') {
+      configureJsonMcp({ configPath: platform.configPath, serverScript, nodePath, env, version });
+      modified.push(platform.name);
+      continue;
+    }
+
+    if (platform.id === 'opencode') {
+      configureOpenCodeMcp({ configPath: platform.configPath, serverScript, nodePath, env, version });
+      modified.push(platform.name);
+      continue;
+    }
+
     if (platform.type === 'json') {
-      configureJsonMcp({
-        configPath: platform.configPath,
-        serverScript,
-        nodePath,
-        env,
-        version,
-      });
+      configureJsonMcp({ configPath: platform.configPath, serverScript, nodePath, env, version });
       modified.push(platform.name);
     }
   }
@@ -558,43 +602,36 @@ export function syncAllPlatforms({
     const shouldSyncOpencode = !selectedPlatforms || selectedPlatforms.includes('opencode');
 
     if (shouldSyncCursor) {
-      const wsCursor = path.join(targetRoot, '.cursor');
-      if (fs.existsSync(wsCursor)) {
-        configureJsonMcp({
-          configPath: path.join(wsCursor, 'mcp.json'),
-          serverScript,
-          nodePath,
-          env,
-          version,
-        });
-        modified.push('Workspace .cursor/mcp.json');
-      }
+      configureJsonMcp({
+        configPath: path.join(targetRoot, '.cursor', 'mcp.json'),
+        serverScript,
+        nodePath,
+        env,
+        version,
+      });
+      modified.push('Workspace .cursor configuration');
     }
+
     if (shouldSyncAntigravity) {
-      const wsAgents = path.join(targetRoot, '.agents');
-      if (fs.existsSync(wsAgents)) {
-        configureJsonMcp({
-          configPath: path.join(wsAgents, 'mcp_config.json'),
-          serverScript,
-          nodePath,
-          env,
-          version,
-        });
-        modified.push('Workspace .agents/mcp_config.json');
-      }
+      configureJsonMcp({
+        configPath: path.join(targetRoot, '.agents', 'mcp_config.json'),
+        serverScript,
+        nodePath,
+        env,
+        version,
+      });
+      modified.push('Workspace .agents/mcp_config.json');
     }
+
     if (shouldSyncOpencode) {
-      const wsOpencode = path.join(targetRoot, '.opencode');
-      if (fs.existsSync(wsOpencode)) {
-        configureJsonMcp({
-          configPath: path.join(wsOpencode, 'mcp.json'),
-          serverScript,
-          nodePath,
-          env,
-          version,
-        });
-        modified.push('Workspace .opencode/mcp.json');
-      }
+      configureOpenCodeMcp({
+        configPath: path.join(targetRoot, 'opencode.json'),
+        serverScript,
+        nodePath,
+        env,
+        version,
+      });
+      modified.push('Workspace OpenCode configuration');
     }
   }
 
@@ -633,12 +670,12 @@ export function initProjectWorkspace({
   token: _token = '',
   projectId = null,
 }) {
-  const resolvedProjectId = projectId || deriveProjectId(projectRoot);
   const dotContextos = path.join(projectRoot, '.contextos');
   fs.mkdirSync(dotContextos, { recursive: true });
 
   const projectJsonPath = path.join(dotContextos, 'project.json');
   const existing = readJsonObject(projectJsonPath, 'project metadata');
+  const resolvedProjectId = projectId || existing.id || deriveProjectId(projectRoot);
 
   const isCloud = mode === 'cloud';
   if (isCloud && !cloudUrl) {

@@ -825,11 +825,19 @@ struct DetailView: View {
         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 sectionLabel(title)
-                Text(text)
-                    .font(.system(size: 12, weight: .regular, design: .rounded))
-                    .foregroundStyle(ContextOSTheme.ink.opacity(0.86))
-                    .lineSpacing(2)
-                    .textSelection(.enabled)
+                if let attr = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .full)) {
+                    Text(attr)
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundStyle(ContextOSTheme.ink.opacity(0.86))
+                        .lineSpacing(2)
+                        .textSelection(.enabled)
+                } else {
+                    Text(text)
+                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .foregroundStyle(ContextOSTheme.ink.opacity(0.86))
+                        .lineSpacing(2)
+                        .textSelection(.enabled)
+                }
             }
         }
     }

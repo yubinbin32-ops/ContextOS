@@ -10,6 +10,7 @@ import { observe } from '../src/observer.mjs';
 import { classifyIntent, extractPaths } from '../src/intent-router.mjs';
 import { fitSections } from '../src/context-budget.mjs';
 import { ModuleIndex } from '../src/module-index.mjs';
+import { workspaceFingerprint } from '../src/session-store.mjs';
 import { ContextOSV2Service } from '../../mcp/src/v2-service.mjs';
 
 function makeTempProject() {
@@ -129,6 +130,7 @@ test('orchestrator runs explore -> change -> verify -> ship in one round trip ea
 
   const shipped = await orchestrator.dispatch('ship', { summary: 'add() no-op tweak' });
   assert.match(shipped, /closed/);
+  assert.equal(service.graphExports, 0, 'ship must not publish a tracked graph by default');
 
   const sessionFile = path.join(projectRoot, '.contextos', 'session.json');
   const session = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
@@ -136,6 +138,13 @@ test('orchestrator runs explore -> change -> verify -> ship in one round trip ea
   assert.ok(session.touchedFiles.some((entry) => entry.path === 'src/math.mjs'));
   assert.equal(session.receipts.length, 1);
   assert.ok(fs.existsSync(path.join(projectRoot, '.contextos', 'logs', 'sessions', 'history.jsonl')));
+
+  const shippedWithGraph = await orchestrator.dispatch('ship', {
+    summary: 'explicit graph export',
+    exportGraph: true,
+  });
+  assert.match(shippedWithGraph, /graph\.json exported/);
+  assert.equal(service.graphExports, 1);
 });
 
 test('change dry run previews edits without writing, touching the session, or verifying', async () => {
@@ -189,6 +198,30 @@ test('failed receipts are superseded only by the same command and remain explici
   assert.match(shipped, /Unresolved failures: 1/);
   assert.match(shipped, /\[SUPERSEDED\]/);
   assert.match(shipped, /\[UNRESOLVED\]/);
+});
+
+test('verify reuses a passing receipt until a tracked file changes', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  orchestrator.store.ensureSession('verify cache');
+  orchestrator.store.attachReceipt({
+    id: 'receipt-cached',
+    command: 'node --test',
+    cwd: projectRoot,
+    exitCode: 0,
+    durationMs: 3,
+    stateHash: workspaceFingerprint(projectRoot),
+  });
+
+  const cached = await orchestrator.dispatch('verify', { command: 'node --test' });
+  assert.match(cached, /cached PASS/);
+  assert.equal(service.calls.some((call) => call.capability === 'run'), false);
+
+  orchestrator.store.touch(['src/math.mjs'], 'edit');
+  await orchestrator.dispatch('verify', { command: 'node --test' });
+  assert.equal(service.calls.some((call) => call.capability === 'run'), true);
 });
 
 test('ship dry run previews the archive without closing the session or exporting the graph', async () => {
@@ -426,6 +459,22 @@ test('inspect supports ranges, budget: full, and truncation hints', async () => 
   service.close();
 });
 
+test('inspect expands directory and glob targets without EISDIR failures', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const directory = await orchestrator.dispatch('inspect', { path: 'src' });
+  assert.match(directory, /src\/math\.mjs/);
+  assert.doesNotMatch(directory, /EISDIR/);
+
+  const glob = await orchestrator.dispatch('inspect', { path: 'src/**' });
+  assert.match(glob, /src\/math\.mjs/);
+  assert.doesNotMatch(glob, /EISDIR/);
+
+  service.close();
+});
+
 test('change supports top-level path, content, and overwrite: true', async () => {
   const projectRoot = makeTempProject();
   const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
@@ -508,28 +557,111 @@ test('pipeline executes parallel and sequential chains with any tool', async () 
     steps: [
       {
         parallel: [
+          { action: 'inspect', args: { path: 'src/math.mjs' } },
+          { action: 'ops', args: { capability: 'run_command', args: { command: 'git status' } } },
           { tool: 'inspect', path: 'src/math.mjs' },
-          { run: 'git status' },
         ],
       },
     ],
   });
-  assert.match(parallelRes, /COMPLETED/);
-  assert.match(parallelRes, /Parallel Concurrency: 2 actions/);
+  assert.match(parallelRes, /pipeline=OK/);
+  assert.match(parallelRes, /parallel#1 OK/);
 
   // 2. Sequential chain: change -> verify
   const chainRes = await orchestrator.dispatch('pipeline', {
     steps: [
       {
         chain: [
-          { change: { path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 1;' } },
+          { action: 'change', args: { edits: [{ path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 1;' }] } },
+          { action: 'verify', args: { command: 'npm test' } },
+          { change: { path: 'src/math.mjs', target: 'return a + b + 1;', replacement: 'return a + b + 2;' } },
           { verify: 'npm test' },
         ],
       },
     ],
   });
-  assert.match(chainRes, /COMPLETED/);
-  assert.match(chainRes, /Sequential Chain: 2 actions/);
+  assert.match(chainRes, /pipeline=OK/);
+  assert.match(chainRes, /chain#1 OK/);
+});
+
+test('pipeline preserves artifacts and honors nested full output requests', async () => {
+  const dir = makeTempProject();
+  fs.writeFileSync(path.join(dir, 'src', 'large.mjs'), `export const payload = '${'x'.repeat(6000)}';\n`);
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  const truncated = await orchestrator.dispatch('pipeline', {
+    parallel: [{ inspect: { path: 'src/large.mjs' } }],
+    maxChars: 500,
+  });
+  assert.match(truncated, /artifact=/);
+  assert.match(truncated, /os-response tool=pipeline artifact=/);
+
+  const full = await orchestrator.dispatch('pipeline', {
+    parallel: [{ inspect: { path: 'src/large.mjs', budget: 'full' } }],
+  });
+  assert.ok(full.includes('x'.repeat(1000)));
+  assert.doesNotMatch(full, /artifact=/);
+
+  service.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('work batches inspect, create, and verify into one host transaction', async () => {
+  const dir = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('work', {
+    inspect: { path: 'src/math.mjs' },
+    create: [{ path: 'src/work.mjs', content: 'export const value = 1;\n' }],
+    verify: ['node --check src/work.mjs'],
+  });
+
+  assert.match(result, /work=OK/);
+  assert.match(result, /parallel#1 OK/);
+  assert.match(result, /change=OK/);
+  assert.ok(fs.existsSync(path.join(dir, 'src', 'work.mjs')));
+  service.close();
+});
+
+test('work and pipeline preserve explicit verification failures', async () => {
+  const dir = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+  const command = 'node -e "process.exit(3)"';
+
+  const workResult = await orchestrator.dispatch('work', { verify: [command] });
+  assert.match(workResult, /Verdict: FAIL/);
+  assert.doesNotMatch(workResult, /Cannot read properties of undefined/);
+
+  const pipelineResult = await orchestrator.dispatch('pipeline', {
+    steps: [{ verify: [command] }],
+  });
+  assert.match(pipelineResult, /Verdict: FAIL/);
+  assert.doesNotMatch(pipelineResult, /Cannot read properties of undefined/);
+
+  service.close();
+});
+
+test('change strips ContextOS inspect metadata headers from edit targets', async () => {
+  const dir = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+  const target = [
+    '// src/math.mjs [L1-L4] (hash: a1b2c3)',
+    'export function add(a, b) {',
+    '  return a + b;',
+    '}',
+    '',
+  ].join('\n');
+
+  const result = await orchestrator.dispatch('change', {
+    edits: [{ path: 'src/math.mjs', target, replacement: 'export const add = (a, b) => a + b;\n' }],
+  });
+  assert.match(result, /edited `src\/math\.mjs`/);
+  assert.match(fs.readFileSync(path.join(dir, 'src', 'math.mjs'), 'utf8'), /export const add/);
+  service.close();
 });
 
 test('pipeline preserves nested action output budgets', async () => {
@@ -541,6 +673,8 @@ test('pipeline preserves nested action output budgets', async () => {
   const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
 
   const result = await orchestrator.dispatch('pipeline', {
+    mode: 'full',
+    maxChars: 8000,
     steps: [
       {
         parallel: [
@@ -560,6 +694,40 @@ test('pipeline preserves nested action output budgets', async () => {
   service.close();
 });
 
+test('pipeline enforces an aggregate response budget by default', async () => {
+  const dir = makeTempProject();
+  fs.writeFileSync(path.join(dir, 'src', 'large.txt'), `BEGIN\n${'y'.repeat(12000)}\nEND_MARKER\n`);
+
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+  const result = await orchestrator.dispatch('pipeline', {
+    steps: [{ inspect: { path: 'src/large.txt', budget: 'full' } }],
+  });
+
+  assert.match(result, /os-budget/);
+  assert.ok(result.length <= 4300, `pipeline output should be bounded, got ${result.length}`);
+  assert.ok(!result.includes('END_MARKER'));
+  service.close();
+});
+
+test('pipeline receipt mode returns only status references and stays bounded', async () => {
+  const dir = makeTempProject();
+  fs.writeFileSync(path.join(dir, 'src', 'large.txt'), `BEGIN\n${'z'.repeat(12000)}\nEND_MARKER\n`);
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    mode: 'receipt',
+    steps: [{ inspect: { path: 'src/large.txt', budget: 'full' } }],
+  });
+
+  assert.match(result, /mode=receipt/);
+  assert.match(result, /inspect=OK ok/);
+  assert.ok(!result.includes('END_MARKER'));
+  assert.ok(result.length < 1000, `receipt mode should stay compact, got ${result.length}`);
+  service.close();
+});
+
 test('ModuleIndex indexes manifests and config files, extracting structural properties', () => {
   const dir = makeTempProject();
   fs.writeFileSync(path.join(dir, 'Cargo.toml'), '[package]\nname = "desktop"\nversion = "2.5.5"\n');
@@ -575,3 +743,235 @@ test('ModuleIndex indexes manifests and config files, extracting structural prop
   assert.ok(matches.length > 0, 'lookup version should return modules containing version configs');
 });
 
+test('explore automatically highlights active plan in Now section', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  // Create an active plan with phases and checkpoints
+  await orchestrator.dispatch('ops', {
+    capability: 'plan',
+    action: 'create',
+    args: {
+      planData: {
+        id: 'plan-test-active',
+        title: 'Active Plan Test',
+        summary: 'Test summary',
+        status: 'active',
+        phases: [{ id: 'P1', order: 1, objective: 'Phase 1', status: 'active', acceptance: ['Criteria 1'] }],
+      },
+    },
+  });
+
+  const explored = await orchestrator.dispatch('explore', { intent: 'check status' });
+  assert.match(explored, /## Now/);
+  assert.match(explored, /- Active Plan: `plan-test-active` "Active Plan Test"/);
+
+  service.close();
+});
+
+test('ops plan get returns native markdown for multi-line summary', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  await orchestrator.dispatch('ops', {
+    capability: 'plan',
+    action: 'create',
+    args: {
+      planData: {
+        id: 'plan-doc-test',
+        title: 'Doc Test',
+        summary: '### Specification Header\nDetailed paragraph here.\n- List item 1\n- List item 2',
+        status: 'active',
+        phases: [{ id: 'P1', order: 1, objective: 'Doc Phase', status: 'active', acceptance: ['Doc criteria'] }],
+      },
+    },
+  });
+
+  const planMarkdown = await orchestrator.dispatch('ops', {
+    capability: 'plan',
+    action: 'get',
+    args: { id: 'plan-doc-test' },
+  });
+
+  assert.match(planMarkdown, /# Plan: \[plan-doc-test\] Doc Test/);
+  assert.match(planMarkdown, /## Specification \/ Summary:/);
+  assert.match(planMarkdown, /### Specification Header/);
+  assert.ok(!planMarkdown.includes('\\n'), 'Markdown should not be JSON stringified with escaped newlines');
+
+  service.close();
+});
+
+test('ops supports micro capability and verify triggers micro triage on failure', async () => {
+  const http = await import('node:http');
+  const mockServer = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => {
+      const parsed = JSON.parse(body || '{}');
+      const isTriage = parsed.messages?.some((m) => m.content?.includes('分析以下测试'));
+      const isWithOS = parsed.messages?.some((m) => m.content?.includes('inspect codebase'));
+      if (isWithOS && (!Array.isArray(parsed.tools) || parsed.tools.length === 0)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Expected tools when withOS=true' }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: isTriage ? '出错文件: test.mjs，修复建议: 修正返回值' : 'micro inference ok',
+              },
+            },
+          ],
+        })
+      );
+    });
+  });
+
+  const { port } = await new Promise((resolve) => {
+    mockServer.listen(0, '127.0.0.1', () => resolve({ port: mockServer.address().port }));
+  });
+
+  try {
+    const projectRoot = makeTempProject();
+    fs.mkdirSync(path.join(projectRoot, '.contextos'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.contextos', 'profile.json'),
+      JSON.stringify(
+        {
+          micro: {
+            url: `http://127.0.0.1:${port}`,
+            model: 'mock-micro-model',
+          },
+        },
+        null,
+        2
+      )
+    );
+
+    const service = fakeService({ exitCode: 1 });
+    const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+    // 1. Direct ops micro
+    const microDirect = await orchestrator.dispatch('ops', {
+      capability: 'micro',
+      args: { prompt: 'ping' },
+    });
+    assert.match(microDirect, /micro inference ok/);
+
+    // 2. Direct ops micro batch
+    const microBatch = await orchestrator.dispatch('ops', {
+      capability: 'micro',
+      action: 'batch',
+      args: { tasks: [{ id: 'b1', prompt: 'ping' }] },
+    });
+    assert.match(microBatch, /micro inference ok/);
+
+    // 3. Micro remains composable through pipeline/chain orchestration
+    const microPipeline = await orchestrator.dispatch('pipeline', {
+      chain: [
+        { tool: 'ops', args: { capability: 'micro', action: 'run', args: { prompt: 'ping' } } },
+      ],
+    });
+    assert.match(microPipeline, /pipeline=OK/);
+    assert.match(microPipeline, /micro inference ok/);
+
+    // 4. verify failure triggers micro triage
+    const verifyFail = await orchestrator.dispatch('verify', {
+      commands: ['node -e "process.exit(1)"'],
+      autoTriage: true,
+    });
+    assert.match(verifyFail, /Verdict: FAIL/);
+    assert.match(verifyFail, /👉 Micro-Triage \(工程诊断小脑\)/);
+    assert.match(verifyFail, /出错文件: test\.mjs/);
+
+    // 5. Direct ops micro withOS: true attaches tools and caps
+    const microWithOS = await orchestrator.dispatch('ops', {
+      capability: 'micro',
+      args: { prompt: 'inspect codebase', withOS: true },
+    });
+    assert.match(microWithOS, /micro inference ok/);
+
+    // 6. Native inspect capability is exposed on caps
+    const ctx = orchestrator._context();
+    assert.equal(typeof ctx.caps.inspect, 'function');
+  } finally {
+    await new Promise((resolve) => mockServer.close(resolve));
+  }
+});
+
+test('self-heal reconciles once and only reruns when graph state becomes dirty', async () => {
+  const projectRoot = makeTempProject();
+  let reconcileCalls = 0;
+  let graphDirty = false;
+  const service = {
+    projectId: 'fixture',
+    osContext: async () => { reconcileCalls += 1; },
+    healStateConflict: () => null,
+    db: { isGraphDirty: () => graphDirty },
+  };
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  await orchestrator._selfHeal();
+  await orchestrator._selfHeal();
+  assert.equal(reconcileCalls, 1);
+  graphDirty = true;
+  await orchestrator._selfHeal();
+  assert.equal(reconcileCalls, 2);
+});
+
+test('work keeps full small inspect output alongside mutation receipts', async () => {
+  const dir = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('work', {
+    inspect: { path: 'src/math.mjs' },
+    create: [{ path: 'src/work.mjs', content: 'export const value = 1;\n' }],
+    verify: ['node --check src/work.mjs'],
+  });
+
+  assert.match(result, /work=OK/);
+  assert.match(result, /return a \+ b/);
+  assert.match(result, /change=OK/);
+  service.close();
+});
+
+test('verify rejects malformed command payloads instead of reporting empty PASS', async () => {
+  const dir = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('verify', {
+    commands: [{ command: 'npm test' }],
+  });
+
+  assert.match(result, /Verdict: FAIL/);
+  assert.match(result, /Invalid verification command/);
+  service.close();
+});
+
+test('inspect accepts nested payloads and change accepts targetContent aliases', async () => {
+  const dir = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  const inspectResult = await orchestrator.dispatch('inspect', {
+    inspect: { path: 'src/math.mjs', budget: 'full' },
+  });
+  assert.match(inspectResult, /return a \+ b/);
+
+  const changeResult = await orchestrator.dispatch('change', {
+    edits: [{
+      path: 'src/math.mjs',
+      targetContent: 'export function add(a, b) {',
+      replacementContent: 'export function add(a, b) {',
+    }],
+    verify: ['node --check src/math.mjs'],
+  });
+  assert.match(changeResult, /edited `src\/math\.mjs`/);
+  service.close();
+});

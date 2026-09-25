@@ -1,177 +1,226 @@
 ---
 name: contextos
-description: Required execution layer for repository code development (任何代码开发任务必须使用). Use ContextOS for every task that locates, understands, changes, debugs, verifies, or delivers code; skipping it causes blind reads, repeated requests, weak evidence, and lazy execution. The skill establishes the stateful model for exploration, evidence, mutation, proof, governance, and closure.
+description: Required execution layer for repository code work. Use ContextOS for locating, reading, changing, verifying, and closing code tasks. Defaults to bounded summaries and artifact references; rich output is explicit.
 ---
 
-# ContextOS · 意图级开发入口与编码执行外骨骼
+# ContextOS
 
-ContextOS 不是工具箱里的一个插件，而是编码任务的执行底座。它把一次开发过程看成连续的状态迁移：不确定的意图逐步变成可验证的证据，证据变成受控修改，修改经过证明后形成可交付结果。
+Use ContextOS as the default repository execution layer. It must reduce replayed
+context and host turns, not merely wrap shell commands. This skill is the routing contract; there is no hook process.
 
-这个 skill 的目的不是让 Agent 机械地多调用或少调用 OS，而是帮助 Agent 判断：
+## Execution Rule
 
-- 当前缺的是什么：位置、证据、修改、证明，还是闭环？
-- 哪些动作彼此独立，可以并行？
-- 哪些动作依赖前一步结果，需要串联？
-- 哪些输出值得进入上下文，哪些只需要留在 receipt 中？
+For repository code work, do not start with `pwd`, `ls`, `find`, `cat`, `rg`, `sed`, `git status`, `git diff`, or a native editor. `apply_patch`, shell heredocs, and other native writes are not
+allowed while ContextOS can express the mutation. Use this call budget:
 
-ContextOS 的价值来自更少的信息熵、更完整的会话状态和更少的无效往返。请求数只是结果，不是目标。
+1. Unknown target: use one bounded `explore`, `inspect`, or `pipeline` call.
+2. Known target: use one `work` call containing optional bounded `inspect`, all
+   `create`/`edits`/`delete`, and `verify`. Do not split `inspect`, `change`, and `verify`
+   into separate calls merely because Micro or another analysis step ran first.
+3. If `work` cannot express the transaction, use one `inspect`, then one `change`
+   with all creates/edits/deletes and `verify`.
+4. After a successful `work`, `change`, or `verify`, stop probing. Do not rerun
+   the same command after PASS or repeat `git diff`/`git status`.
+5. Use `ship` only when the whole multi-turn task is finished or the user asks to close it.
 
----
+If ContextOS cannot express an operation, use the narrowest shell fallback and
+say why. Shell is never allowed for routine reads, edits, or project discovery.
 
-## 一、心智模型
+## Route And Turn Budget
 
-### 1. ContextOS 维护三层状态
+Enforce these bounds yourself:
 
-```text
-工程状态：projectRoot / session / receipts / slots / graph
-执行形状：direct / parallel / chain / change + verify
-证据预算：足够做下一步判断，而不是尽量多读
+- Turn 1 is `inspect-only`: at most two ContextOS calls, no mutation.
+- Turns 2-5 are `mutate-first`: allow at most one inspection-only call, then
+  mutate with verification in the same `work` or `change` call; at most three
+  ContextOS calls total.
+- After a failure, inspect at most once, then repair and verify in one call.
+  Schema retries do not consume the turn budget.
+- The final turn uses `work`, `change`, or `verify` and repairs any failure in
+  the same turn.
+
+Keep `.contextos/recovery.json` and the objective contract stable. If
+`.contextos/targets.json` exists, mutations must stay inside its allowed paths.
+`create` may not replace an existing file without `overwrite:true`.
+
+## Calls
+
+All actions use one transport:
+
+```js
+contextos({ action: "<name>", args: { ... }, projectRoot })
 ```
 
-每次调用 OS 前，先判断这次调用要回答什么问题或推进什么状态：
+Do not nest an action inside `args`. The wire shape for the two most common
+Micro routes is:
 
-- 不知道入口、所有权或影响范围：先减少位置不确定性。
-- 知道位置但缺实现细节：收集精确证据。
-- 证据已足够：进入修改，并尽量让修改和验证属于同一个闭环。
-- 修改完成：用可观察结果证明行为，而不是靠阅读代码猜测。
-- 当前目标完成：归档会话和证据，形成 closure。
-
-如果一次调用既不回答问题，也不推进状态，它大概率只是上下文噪声。
-
-### 2. 请求成本来自上下文重放
-
-一次模型请求的成本不只是新增工具输出，还包括重新发送当前活跃上下文。因此请求经济性通常来自：
-
-- 把彼此独立的未知项放进同一个 `pipeline.parallel`。
-- 把有依赖关系的步骤放进 `pipeline.chain` 或 `verify.commands`。
-- 把修改和它需要的验证放进同一个 `change` 调用。
-- 复用当前 session、receipt、slot 和已有切片，避免重新发现同一事实。
-- 根据依赖图决定调用次数，而不是套用固定步骤。
-
-一次直接调用如果正好回答当前唯一问题，它是合理的；两个独立问题如果都要答案，合并到一个 pipeline 通常更划算。不要为了“少调用”牺牲判断，也不要因为 OS 提供了 pipeline 就把无关动作硬塞在一起。
-
-### 3. 上下文要有预算
-
-读取的目标是获得足以决策的最小高信号切片：
-
-- 已知文件和区间时，用精确 ranges。
-- 需要完整内容时，明确使用 `budget: "full"` 和足够的 `maxChars`。
-- 检索类命令使用 `raw: true` 和合适的 `maxChars`；pipeline 中每个 action 的预算独立生效。
-- 输出被截断且下一步依赖缺失内容时，扩大该 action 的预算或缩小目标范围，而不是盲目重复读取。
-
----
-
-## 二、工具选择
-
-| 工具 | 它擅长的状态迁移 | 选择信号 | 常见形状 |
-| :--- | :--- | :--- | :--- |
-| `explore` | 降低位置与结构不确定性 | 入口未知、模块所有权不清、刚进入新子系统 | `explore({ intent, depth })` |
-| `inspect` | 获得精确代码证据 | 已知路径，需要实现、类型、测试或调用关系 | 通常嵌入 `pipeline`；单一问题时也可直接使用 |
-| `pipeline` | 按依赖图组织多个动作 | 多个独立读取、搜索、验证，或前后依赖的阶段 | `parallel`、`chain`、嵌套 steps |
-| `change` | 将证据变成受控修改 | 改动范围和替换锚点已明确 | `change({ edits, verify })`、`dryRun`、`autoRevert` |
-| `verify` | 把实现变成可观察证明 | 需要测试、构建、类型检查、运行时检查 | 独立验证用 `parallel`，有依赖用 `commands` |
-| `ship` | 关闭当前目标并固化证据 | 当前目标已完成且有验证证据 | `ship({ summary })`；需要预览时用 `dryRun` |
-| `ops` | 访问持久治理与底层能力 | 需要决策、规则、计划、任务、架构或运行时状态 | 精确调用 capability/action |
-
-### 冷启动
-
-如果当前工具集里还没有 `mcp__contextos__*`，先用 `tool_search` 加载 ContextOS MCP 工具，再继续任务。这样可以让 OS 接管后续状态，而不是退化成逐文件 shell 试探。
-
-### 能力全景
-
-意图级工具覆盖大多数开发闭环；当任务需要跨轮记忆、显式约束、长期计划或架构关系时，不要只靠对话描述，先读 [references/capabilities.md](references/capabilities.md) 选择底层能力。
-
-- `knowledge`：`decision_*` 固化“为什么这样选”，`rule_*` 固化“以后必须怎样做”。
-- `plan` / `task`：把多阶段目标、检查点、当前工作单元、规则绑定和证据串成可恢复状态；`task.finish` 能把检查与完成闭环。
-- `block` / `chain`：Block 是绑定真实代码边界的架构单元，Chain 对成员分类，Link 表达跨单元关系；派生模块自动生成，只有需要稳定语义时才人工策展。
-- `code` / `run_command` / `process`：需要底层文件操作、一次性命令 receipt 或长驻进程时使用；普通读写、验证优先走意图级工具。
-- `session` / `profile` / `system`：恢复或关闭会话、配置项目验证与严格度、初始化/诊断/切换存储模式。
-
-### pipeline 的选择方式
-
-```text
-动作之间没有数据依赖，只是都需要完成？
-└─ pipeline.parallel
-
-后一个动作必须读取前一个结果，或资源不能并发？
-└─ pipeline.chain / verify.commands
-
-修改完成后需要立即证明行为？
-└─ change({ ..., verify })
-
-只有一个原子问题或状态迁移？
-└─ 直接调用对应工具
+```js
+contextos({ action: "micro", args: { preset: "triage", inputRef: "diagnostic.log", task: "..." }, projectRoot })
+contextos({ action: "ops", args: { capability: "micro", action: "batch", withOS: true, args: { tasks: [...] } }, projectRoot })
 ```
 
-`pipeline` 不是为了把所有东西塞进一次调用，而是为了把同一决策所需的动作组织成一个执行单元。过大、职责混杂的 pipeline 会增加诊断难度，这时按依赖边界拆分更清楚。
+- `explore`: only when entry points are unknown.
+- `work`: preferred known-target transaction; batch `inspect`, `create`/`edits`/`delete`, `verify`.
+- `inspect`: known path, glob, symbol, slot, or line range. Use `globs` for file
+  discovery, not a fabricated field. For text or regex search use
+  `ops({ capability: "code", action: "search", args: { query, globs } })`.
+- `change`: batch creates/edits/deletes with `verify` in the same call. Edit targets must
+  be exact source text; the `// path [Lx-Ly] (hash: ...)` line is read metadata and
+  is never part of the file. For a whole-file replacement, pass `fullFile:true`.
+  Delete is a first-class mutation: use `delete: [{ path }]`; do not fall back to
+  shell `rm` when ContextOS is available.
+- `verify`: one command set; use `mode` only for processes or receipt logs.
+- `pipeline`: only for genuinely parallel probes or dependent chains. Pass
+  `parallel`, `chain`, or `steps` as arrays of structured action objects.
+- `ops`: artifacts, plans, profiles, processes, and lower-level capabilities.
+- `micro`: isolated bounded analysis; see below.
+- `ship`: final closure only.
 
----
+Mutation payloads are explicit; do not infer schema by inspecting the plugin.
 
-## 三、生命周期与执行形状
-
-```text
-不确定性 -> 证据 -> 修改 -> 证明 -> 闭环
-   ↑                         |
-   └──── 新信息或失败恢复 ───┘
+```js
+contextos({
+  action: "change",
+  args: {
+    create: [{ path: "test/new.test.mjs", content: "..." }],
+    edits: [{ path: "src/a.mjs", target: "old", replacement: "new" }],
+    delete: [{ path: "src/legacy.mjs" }],
+    verify: { commands: ["npm test"] }
+  },
+  projectRoot
+})
 ```
 
-这是状态迁移方向，不是固定步骤。真实任务可以回退：验证失败会重新产生证据需求，需求变化会重新产生位置不确定性。
+Pass pipeline actions as structured objects. Use `{ run: "command" }` or
+`{ tool: "ops", args: { capability: "run_command", ... } }`; do not write
+`{ action: "run" }`.
 
-**进入任务时**：首次进入仓库或新子系统，用 `explore` 获取候选模块、切片和 slots；同一连续任务优先复用已有 session、receipt、slot 和路径，只有目标进入全新范围时才重新探索。
+Prefer one MCP call per turn; batch independent paths, globs, and ranges.
+Stop probing after a PASS and never issue one read per file.
 
-**收集证据时**：把“还需要知道什么”写成问题。独立问题用一次 `pipeline.parallel`，有依赖的问题用 `pipeline.chain`，单一精确问题可直接 `inspect`。判断新读取是否会改变下一步决策；不会改变就进入行动。
+## Context Contract
 
-**修改时**：确认目标、唯一锚点和可证明本次改动的验证。`change` 可以携带验证，让写入、重锚和证明形成一个闭环；互相独立的验证可并行，存在安装、构建、端口或产物依赖时保持顺序。高风险改动可用 `dryRun`，验证失败且不应保留时用 `autoRevert`。
+Responses are hard-bounded. Use `full` only for an immediate decision. Never
+create probe scripts or use `verify` to read files; run only commands approved by
+`contract.json`. Fetch an artifact only when its exact slice is needed:
 
-**证明时**：优先观察真实结果，例如测试、类型检查、构建、lint、运行时请求或 CLI 输出。diff 和 receipt 证明修改与执行历史。代码未变化时重复同一命令通常没有新增信息。
-
-**闭环时**：目标已有足够证据后，用 `ship` 固化 session、receipt 和图谱状态；重要设计取舍可在同一次 ship 写入 decision。目标会继续追问时，保留 session 通常比提前关闭更有价值。
-
-### 多轮协作
-
-用户追问代表任务在原有状态上继续演化。相关文件已知时直接从证据缺口继续；未知时只探索新范围。保留当前目标、关键决策、已修改文件、验证结果、未解决风险和下一步，避免为同一事实建立多个版本。
-
-### 调整信号与失败恢复
-
-以下信号表示执行形状需要调整，不表示某个工具“被禁止”：
-
-| 信号 | 更可能的原因 | 调整方式 |
-| :--- | :--- | :--- |
-| 同一文件反复读取 | 输出预算不足、range 过宽或缺少明确问题 | 扩大单次预算，或改成更精确的 ranges |
-| 同一命令反复验证 | 代码已变化、验证未形成闭环或命令职责重叠 | 让修改携带验证；把相关命令合并为一个验证计划 |
-| 反复探索同一模块 | session 状态没有被复用，或探索问题过宽 | 使用已有 receipts/slots，收窄到具体入口 |
-| pipeline 输出难以判断 | 动作过多或结果缺少结构 | 按依赖边界拆分，并提高关键 action 的输出预算 |
-
-失败是新的状态输入：保留 receipt 和原始诊断，判断缺的是依赖、路径、权限、行为预期还是实现，把新问题合并成下一次高信号动作，再修改和验证。
-
-### 原生工具与逃生口
-
-原生 shell、文件工具和浏览器仍然是重要能力，适合 OS 没有覆盖的交互式操作、一次性外部命令或特殊环境诊断。使用它们时，尽量把结果带回 ContextOS 状态：需要长期保留的输出进入 receipt、verify 或 change 闭环，临时噪声留在会话之外。
-
-当外部构建、跨语言工具链或不可复现问题需要长时间探索时，可以把隔离排查交给子代理。给子代理明确目标、验证标准和隔离工作区；主上下文接收诊断结论、补丁和证据，而不是整段调试噪声。
-
-ContextOS 的目标是成为默认执行底座，不是封住其他工具。正确的心智是：先判断什么状态需要推进，再选择最合适的工具组合。
-
----
-
-## 四、快速参考
-
-```text
-探索：explore({ intent, depth })
-读取：pipeline({ parallel: [{ inspect: { path, ranges, budget, maxChars } }] })
-搜索：pipeline({ parallel: [{ run: "rg ...", raw: true, maxChars }] })
-修改：change({ edits: [...], verify: [...] })
-独立验证：pipeline({ parallel: [{ verify: "..." }, { verify: "..." }] })
-顺序验证：verify({ commands: ["npm ci", "npm test"] })
-混合流程：pipeline({ steps: [{ inspect: ... }, { parallel: [...] }, { chain: [...] }] })
-底层能力：ops({ capability, action, args })
-闭环：ship({ summary })
-能力详解：references/capabilities.md
+```js
+ops({ capability: "artifact", action: "read", args: { id, startLine, endLine, grep, contextLines, maxChars } })
 ```
 
-核心不变量：
+`grep` is a case-insensitive regular expression. Invalid regular expressions fall
+back to literal matching. Never replay full logs, diffs, or files when a receipt, range, or artifact is
+enough. After a verified change, report the result and evidence; do not inspect
+the same code again.
 
-- 使用一致的 `projectRoot` 和 session 状态。
-- 修改必须由可观察证据支持，不能只靠代码阅读推断。
-- 交付结论必须能追溯到 receipt、验证结果或明确的运行时证据。
-- 不把 secret、完整日志或无关大块输出带进上下文。
+## Micro
+
+Micro is an out-of-context worker, not a second conversation. Its value is
+economic: move large inputs and intermediate reasoning out of the persistent host
+transcript, then return only a bounded answer and receipt. The host should not
+carry raw logs, whole-file context, relationship exploration, or rejected patch
+candidates into later turns.
+
+Use Micro when the persistent-context cost exceeds provider overhead plus the
+bounded answer; keep a single exact read, edit, or verification in OS. Prefer
+`batch` for independent work and `session` for dependent follow-ups. Route
+multi-file or raw-log analysis through Micro, and batch independent simple edits
+into one `work` call. See `references/capabilities.md` for detailed heuristics.
+
+### Work Boundary
+
+Treat Micro as a low-cost worker for bounded grunt work: file relationships,
+bounded pipelines, routine incidents, website lookup, or a simple one-off update.
+Do not delegate complex or long-lived edits that would need rereading or rework.
+
+### Route Matrix
+
+| Need | Preferred call | Why |
+|---|---|---|
+| Triage a large log or receipt | `micro` with `inputRef` / `inputReceipt` | The raw source never enters the main transcript |
+| Preload known expensive context | `micro` with `preload` | OS runs a bounded pipeline once; raw output stays in an artifact and Micro context, while the host receives only a receipt |
+| Extract API contracts or invariants | `micro` preset `contract` | Returns only the contract surface |
+| Understand file/module/test relationships | `micro` preset `graph` with `withOS:true` | Bounded OS reads stay inside the Micro artifact |
+| Inspect structure without replaying files | `micro` preset `custom` with `withOS:true` | The main context receives only the bounded answer |
+| Propose a focused patch | `micro` preset `patch` | Keeps candidate code out of the main context until selected |
+| Run independent analyses together | `ops` + `capability:"micro"`, `action:"batch"`, `withOS:true` | One host turn, isolated parallel provider work |
+| Narrow a decision across turns | `ops` + `micro` `sessionAction:create/send` | Persistent Micro state with TTL and locking |
+
+Use `withOS:true` when the input cannot be narrowed before dispatch. Bounded OS
+tool output remains in the Micro artifact; `requireBulkInput` still rejects
+unbounded inline input, but it does not block a bounded OS-backed Micro task.
+
+Use `preload` when the main agent already knows the bounded OS steps that should
+produce the evidence. OS executes the pipeline before the Micro provider call;
+raw output stays in an artifact, only a bounded summary enters Micro, and the
+host receives only a receipt. Preload is read-only unless `allowCommands:true`;
+use `onFailure:"collect"` for test failures and see `references/capabilities.md`
+for the schema.
+
+```js
+// One-shot or batch: keep bulk inputs outside the host transcript.
+micro({ preset: "triage", inputRef: "diagnostic.log", task: "Root cause and repair direction." })
+ops({ capability: "micro", action: "batch", withOS: true, args: { tasks: [...] } })
+// Multi-turn: create once, then send dependent follow-ups.
+ops({ capability: "micro", args: { sessionAction: "create", sessionId: "analysis" } })
+ops({ capability: "micro", args: { sessionAction: "send", sessionId: "analysis", task: "Reconcile findings." } })
+```
+
+Micro can also be a bounded step in a chain or pipeline; use the structured
+`pipeline` examples in `references/capabilities.md`.
+
+Rules:
+
+- Once Micro consumes an `inputRef`, never read, search, or inspect that original
+  input again. Treat the Micro answer and receipt as the replacement.
+- Prefer `preload` over loading context in the host and passing it inline. OS
+  executes the preload; raw output stays in artifacts and Micro context.
+- Preload is read-only unless `allowCommands:true` is explicit. Never let Micro
+  choose arbitrary shell commands.
+- Use `withOS` only with bounded `inspect`, `search`, or context actions.
+- Micro `inspect` supports `path`, `paths`, `globs`, `ranges`; `search`
+  supports `query`, `globs`. Batch related files into one task.
+- Start with preset budgets (`graph` 16000, `custom` 20000). On a budget,
+  empty-response, or max-step failure, narrow the task or fall back to OS;
+  do not repeat the same call.
+- Do not send full-diff audits, broad refactors, or long-lived edits to Micro.
+- Preload read-only steps may use `inspect`, `search`, `verify`, and approved
+  `run`.
+- Provider usage is local-only; report that gap when comparing cost.
+
+## Cold Start And Recovery
+
+If ContextOS tools are not loaded, read the installed `SKILL.md` once using the
+exact host path and one complete command, then use `tool_search` once for
+`ContextOS`. Never probe with `pwd`, `ls`, `find`, `rg`, `command -v`, or
+`git status`. If `tool_search` fails, report the blocker and stop; do not
+fall back to shell. Recover state with `ops({ capability: "os_context", action: "brief" })` or
+`ops({ capability: "plan", action: "get" })`.
+
+## Plans And Decisions
+
+Keep an active Plan for cross-session work; its summary is the design contract.
+Read `references/capabilities.md` only when a lower-level lifecycle action is
+actually needed.
+
+## Completion Bar
+
+A task is complete only when:
+
+- the requested behavior is implemented;
+- the relevant test, build, or runtime check passed;
+- unresolved failures are explicit;
+- the final response points to evidence instead of restating raw output.
+
+## Tool Behavior Guarantees
+
+- `inspect` accepts `path`, `paths`, `globs`, `symbol`, `slot`, and `ranges`.
+  Default output is bounded; use `budget: "full"` only when the decision requires it.
+- `work({ inspect, create/edits/delete, verify })` keeps inspection, mutation, and proof
+  in one response. Delete operations are atomic, reject missing/out-of-root paths,
+  and participate in verification rollback when `autoRevert:true`.
+- If a response contains `artifact=<id>`, fetch only the needed slice with
+  `ops` + `capability: "artifact"` + `action: "read"`.
+- `verify` accepts `command: "npm test"` or `commands: ["npm test"]`.
+  Non-string or empty entries are rejected as `Verdict: FAIL`; never treat an
+  empty command list as a passing check.

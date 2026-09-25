@@ -15,6 +15,7 @@ const pluginDir = path.join(repoRoot, "plugins", "contextos");
 const bundle = path.join(pluginDir, "server", "contextos-mcp.mjs");
 const skillDir = path.join(pluginDir, "skills", "contextos");
 const manifestDir = path.join(pluginDir, ".codex-plugin");
+const mcpConfig = path.join(pluginDir, ".mcp.json");
 
 if (!fs.existsSync(bundle)) {
   console.error("Missing bundle. Run `npm run plugin:build` first.");
@@ -29,6 +30,20 @@ function copyDir(from, to) {
     if (entry.isDirectory()) copyDir(source, target);
     else fs.copyFileSync(source, target);
   }
+}
+
+function stripLegacyHookState(configPath) {
+  if (!fs.existsSync(configPath)) return;
+  const original = fs.readFileSync(configPath, "utf8");
+  const cleaned = original
+    .replace(/\[hooks\.state\."contextos@personal:[^"]+"\][\s\S]*?(?=\n\[|\n*$)/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd() + "\n";
+  if (cleaned === original) return;
+  fs.copyFileSync(configPath, `${configPath}.contextos.bak`);
+  fs.writeFileSync(`${configPath}.contextos.tmp`, cleaned, "utf8");
+  fs.renameSync(`${configPath}.contextos.tmp`, configPath);
+  console.log("✓ 已清除 Codex 中遗留的 ContextOS hook 状态。");
 }
 
 function findPluginInstalls() {
@@ -69,8 +84,17 @@ for (const target of targets) {
     fs.rmSync(staleReferences, { recursive: true, force: true });
   }
   copyDir(manifestDir, path.join(target, ".codex-plugin"));
+  if (fs.existsSync(mcpConfig)) {
+    fs.copyFileSync(mcpConfig, path.join(target, ".mcp.json"));
+  }
+  // Remove hook assets and experimental adapters from older installs.
+  for (const stale of ["hooks.json", "scripts", "adapters"]) {
+    fs.rmSync(path.join(target, stale), { recursive: true, force: true });
+  }
   const assets = path.join(pluginDir, "assets");
   if (fs.existsSync(assets)) copyDir(assets, path.join(target, "assets"));
+  const adapters = path.join(pluginDir, "adapters");
+  if (fs.existsSync(adapters)) copyDir(adapters, path.join(target, "adapters"));
   console.log(`✓ 已同步插件缓存：${target}`);
 }
 
@@ -79,4 +103,12 @@ fs.mkdirSync(canonicalDir, { recursive: true });
 fs.copyFileSync(bundle, path.join(canonicalDir, "contextos-mcp.mjs"));
 fs.chmodSync(path.join(canonicalDir, "contextos-mcp.mjs"), 0o755);
 console.log(`✓ 已同步权威服务端：${path.join(canonicalDir, "contextos-mcp.mjs")}`);
+stripLegacyHookState(path.join(os.homedir(), ".codex", "config.toml"));
+const legacyHooksDir = path.join(os.homedir(), ".contextos", "hooks");
+for (const stale of ["contextos-hook.mjs", "contextos-hook-launcher.mjs", "runtime-policy.mjs", "host-adapters.mjs", "opencode-plugin.mjs", "HOST_ADAPTER_GUIDE.md", ".contextos-hook-manifest.json"]) {
+  fs.rmSync(path.join(legacyHooksDir, stale), { force: true });
+}
+try {
+  if (fs.existsSync(legacyHooksDir) && fs.readdirSync(legacyHooksDir).length === 0) fs.rmdirSync(legacyHooksDir);
+} catch (_) {}
 console.log("  MCP server 在会话启动时加载，需新开会话才生效。");

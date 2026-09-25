@@ -1,3 +1,5 @@
+import { runMicroTask, runMicroTasksParallel } from './micro-client.mjs';
+
 /**
  * Internal capability registry.
  *
@@ -19,6 +21,7 @@ export function createCapabilities({ service, projectRoot, projectId }) {
   return {
     code: (args = {}) => safe('code', () => service.code({ format: 'markdown', ...args })),
     codeJson: (args = {}) => safe('code', () => service.code({ format: 'json', ...args })),
+    inspect: (args = {}) => safe('inspect', () => service.code({ format: 'markdown', action: 'read', ...args })),
     run: (args = {}) => safe('run_command', () => service.runCommand(args)),
     process: (args = {}) => safe('process', () => service.process(args)),
     knowledge: (args = {}) => safe('knowledge', () => service.knowledge(args)),
@@ -35,6 +38,8 @@ export function createCapabilities({ service, projectRoot, projectId }) {
       const result = await service.knowledge({ action: 'rule_list', format: 'json' });
       return Array.isArray(result) ? result : [];
     }),
+    micro: (args = {}, config = {}) => safe('micro', () => runMicroTask(config, args)),
+    microBatch: (tasks = [], config = {}, options = {}) => safe('micro', () => runMicroTasksParallel(config, tasks, options)),
     exportGraph: () => safe('graph', () => service.syncEngine.exportGraphToJson(projectId, projectRoot)),
   };
 }

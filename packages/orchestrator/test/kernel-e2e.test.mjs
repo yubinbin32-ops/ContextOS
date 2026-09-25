@@ -138,6 +138,33 @@ test('kernel e2e: change with { edits: [{ path, replacement, fullFile: true }] }
   service.close();
 });
 
+test('kernel e2e: change accepts content alias for fullFile edits', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const nestedPath = 'src/content-alias.mjs';
+  const topLevelPath = 'src/top-level-alias.mjs';
+  fs.writeFileSync(path.join(projectRoot, nestedPath), 'export const old = true;\n');
+  fs.writeFileSync(path.join(projectRoot, topLevelPath), 'export const old = true;\n');
+
+  const nestedReplacement = 'export const nested = "updated";\n';
+  const topLevelReplacement = 'export const topLevel = "updated";\n';
+  await orchestrator.dispatch('change', {
+    edits: [{ path: nestedPath, content: nestedReplacement, fullFile: true }],
+  });
+  await orchestrator.dispatch('change', {
+    path: topLevelPath,
+    content: topLevelReplacement,
+    fullFile: true,
+  });
+
+  assert.equal(fs.readFileSync(path.join(projectRoot, nestedPath), 'utf8'), nestedReplacement);
+  assert.equal(fs.readFileSync(path.join(projectRoot, topLevelPath), 'utf8'), topLevelReplacement);
+
+  service.close();
+});
+
 test('kernel e2e: ship architecture gate blocks unbound new apps/packages in strict mode and passes once curated and linked', async () => {
   const projectRoot = makeTempProject();
   // Enable strict mode in profile.json
