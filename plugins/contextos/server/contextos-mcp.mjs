@@ -51636,7 +51636,6 @@ function closeMicroSession(projectRoot, sessionId, options = {}) {
     session.status = "closed";
     session.pending = null;
     session.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    discardMicroDeliveriesForSession(projectRoot, session.id);
     writeAtomic(sessionPath(projectRoot, session.id), session);
     return microSessionSnapshot(session);
   }, { timeoutMs: options.lockTimeoutMs, staleMs: options.lockStaleMs });

@@ -822,7 +822,7 @@ B 的 exec_command 从 21 次降到 7 次，但没有换来 token 优势，原�
 
 ### 29.2 无尾 Micro 变成真异步
 
-`delivery:"defer", background:true` 现在立即创建持久化 job 并返回，provider 在后台完成；结果进入原有 delivery queue，由后续顶层 OS 调用领取。真实 provider 实测主调用 26ms 返回 `running`，随后领取到完整答案。
+`delivery:"defer", background:true` 现在立即创建持久化 job 并返回，provider 在后台完成；结果进入原有 delivery queue，由后续顶层 OS 调用领取。真实 provider 实测主调用 26ms 返回 `running`，随后领取到完整答案。关闭 Micro session 不再丢弃未领取结果，只有显式删除 session 才会清理它自己的 pending delivery。
 
 ### 29.3 MCP 固定协议成本
 

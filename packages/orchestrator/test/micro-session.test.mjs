@@ -75,6 +75,36 @@ test('micro sessions persist multi-turn state and keep the main context result-o
   }
 });
 
+test('closing a Micro session preserves queued answers while deleting discards them', () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-micro-session-delivery-'));
+  try {
+    createMicroSession(projectRoot, { sessionId: 'closing-worker' });
+    enqueueMicroDelivery(projectRoot, {
+      deliveryId: 'micro-close-1',
+      receiptId: 'micro-close-1',
+      sessionId: 'closing-worker',
+      content: 'answer remains claimable after close',
+    });
+    closeMicroSession(projectRoot, 'closing-worker');
+    const claims = claimMicroDeliveries(projectRoot);
+    assert.equal(claims.length, 1);
+    assert.equal(claims[0].content, 'answer remains claimable after close');
+    completeMicroDeliveryClaims(projectRoot, claims.map((item) => item.deliveryId));
+
+    createMicroSession(projectRoot, { sessionId: 'deleted-worker' });
+    enqueueMicroDelivery(projectRoot, {
+      deliveryId: 'micro-delete-1',
+      receiptId: 'micro-delete-1',
+      sessionId: 'deleted-worker',
+      content: 'answer is discarded with the session',
+    });
+    deleteMicroSession(projectRoot, 'deleted-worker');
+    assert.deepEqual(claimMicroDeliveries(projectRoot), []);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test('micro session listing is paginated instead of returning an unbounded catalog', () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-micro-session-list-'));
   try {
@@ -139,7 +169,7 @@ test('micro sessions do not resume a session copied from another workspace root'
   }
 });
 
-test('closing or deleting one Micro session removes only its deferred deliveries', () => {
+test('closing preserves one session deliveries while deleting removes only its own', () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-micro-session-delivery-scope-'));
   try {
     createMicroSession(projectRoot, { sessionId: 'alpha' });
@@ -166,8 +196,11 @@ test('closing or deleting one Micro session removes only its deferred deliveries
 
     assert.equal(closeMicroSession(projectRoot, 'alpha').status, 'closed');
     const afterClose = claimMicroDeliveries(projectRoot);
-    assert.deepEqual(afterClose.map((item) => item.deliveryId), ['delivery-beta', 'delivery-one-shot']);
-    completeMicroDeliveryClaims(projectRoot, ['delivery-beta', 'delivery-one-shot']);
+    assert.deepEqual(
+      afterClose.map((item) => item.deliveryId),
+      ['delivery-alpha', 'delivery-beta', 'delivery-one-shot'],
+    );
+    completeMicroDeliveryClaims(projectRoot, afterClose.map((item) => item.deliveryId));
 
     // A consumed answer must not poison a freshly recreated session with the
     // same id and receipt namespace after explicit close/delete.

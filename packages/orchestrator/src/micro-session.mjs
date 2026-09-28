@@ -350,10 +350,8 @@ export function closeMicroSession(projectRoot, sessionId, options = {}) {
     session.status = 'closed';
     session.pending = null;
     session.updatedAt = new Date().toISOString();
-    // Drop queued answers before publishing the closed state. If queue
-    // cleanup cannot acquire its lock, the session remains open and the
-    // deferred answer is not silently orphaned.
-    discardMicroDeliveriesForSession(projectRoot, session.id);
+    // Closing stops new turns but must not orphan a background answer that the
+    // host has not claimed yet. The delivery queue is the durable handoff.
     writeAtomic(sessionPath(projectRoot, session.id), session);
     return microSessionSnapshot(session);
   }, { timeoutMs: options.lockTimeoutMs, staleMs: options.lockStaleMs });
