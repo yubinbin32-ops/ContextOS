@@ -38,6 +38,14 @@ surface, and resource discovery is not an availability check.
 - 默认返回 receipts 与 diagnostic 摘要；只有明确需要原始正文时才设置 `raw: true` 或 `mode: "full"`。
 - 探索型 Pipeline 允许单个搜索无匹配或路径缺失时继续收集其余证据，使用 `continueOnFailure: true`；不要把“无匹配”当成整批读取失败。
 
+### 3. 决策对齐批处理 (Decision-Aligned Batching)
+一次宿主决策 = 一次 OS 调用。R6 实测：C 组 21 轮中 11 轮是机械轮，native 只有 4 轮，多出的往返占总 token 惩罚的 73%。
+
+- 首个决策合并成一次调用：`pipeline({ parallel: [{ tool: "explore", args: { intent: "..." } }, { inspect: { paths: [...], budget: "shallow" } }] })`，不要先 `explore` 再单独 `pipeline`。
+- 编辑与验证同一轮：`change({ edits, verify: "npm test" })` 或 `work({ inspect, edits, commands })`；禁止先 apply_patch 再单独 verify。
+- 不要在 OS 调用之间穿插原生 `sed`/`cat`/`rg`/`npm test`，那会把已并入 OS 的机械轮重新拆开。
+- 大文件只读一次：默认返回 AST Outline + locator，再用 `symbol`/`ranges` 取正文，不要 `budget: "full"` 通读。
+
 ### 3. Micro 舱外双脑子代理 (何时调用 Micro?)
 - **定位**：Micro 是独立于主对话的后台轻量级任务子代理，用于执行“重日志脱毒、契约提取、诊断分析”。
 - **触发阈值与原则**：
