@@ -2214,6 +2214,9 @@ export async function workPipeline(ctx, input = {}) {
   delete mutation.commands;
   delete mutation.command;
   delete mutation.depth;
+  delete mutation.branches;
+  delete mutation.budget;
+  delete mutation.continueOnFailure;
   const mutationKeys = ['create', 'edits', 'delete', 'deletes', 'path', 'slot', 'append', 'symbol', 'replacement', 'replacementContent', 'target', 'targetContent', 'content', 'overwrite', 'fullFile', 'architecture'];
   const hasMutation = mutationKeys.some((key) => mutation[key] !== undefined);
   if (hasMutation) {
@@ -2234,6 +2237,9 @@ export async function workPipeline(ctx, input = {}) {
     steps,
     mode: input.mode || (input.full === true ? 'full' : 'summary'),
     maxChars: responseBudget,
+    branches: input.branches,
+    budget: input.budget,
+    continueOnFailure: input.continueOnFailure,
   });
   return result
     .replace(/^# ContextOS pipeline/, '# ContextOS work')
@@ -2271,9 +2277,43 @@ export async function pipelinePipeline(ctx, input = {}) {
   let halted = false;
   let haltReason = null;
   let failureCount = 0;
+  let executedActions = 0;
+  const batchStartedAt = Date.now();
   const continueOnFailure = input.continueOnFailure === true;
+  const branches = Array.isArray(input.branches) ? input.branches : [];
+  const batchBudget = input.budget && typeof input.budget === 'object' && !Array.isArray(input.budget)
+    ? input.budget
+    : {};
+  const maxActions = Number.isFinite(Number(batchBudget.maxActions))
+    ? Math.max(1, Math.floor(Number(batchBudget.maxActions)))
+    : null;
+  const maxFailures = Number.isFinite(Number(batchBudget.maxFailures))
+    ? Math.max(1, Math.floor(Number(batchBudget.maxFailures)))
+    : null;
+  const maxDurationMs = Number.isFinite(Number(batchBudget.maxDurationMs))
+    ? Math.max(1, Math.floor(Number(batchBudget.maxDurationMs)))
+    : null;
+
+  function budgetStop() {
+    if (maxDurationMs && Date.now() - batchStartedAt > maxDurationMs) {
+      return `budget exceeded: maxDurationMs=${maxDurationMs}`;
+    }
+    if (maxActions && executedActions >= maxActions) {
+      return `budget exceeded: maxActions=${maxActions}`;
+    }
+    if (maxFailures && failureCount >= maxFailures) {
+      return `budget exceeded: maxFailures=${maxFailures}`;
+    }
+    return null;
+  }
 
   for (let i = 0; i < steps.length; i++) {
+    const stopReason = budgetStop();
+    if (stopReason) {
+      halted = true;
+      haltReason = stopReason;
+      break;
+    }
     const step = steps[i];
     const stepNum = i + 1;
 
@@ -2300,6 +2340,7 @@ export async function pipelinePipeline(ctx, input = {}) {
           return { index: idx + 1, tool: action?.tool || 'unknown', ok: false, error: err.message };
         }
       });
+      executedActions += items.length;
       const parallelOk = subResults.every((r) => r.ok);
       results.push({
         step: stepNum,
@@ -2325,10 +2366,17 @@ export async function pipelinePipeline(ctx, input = {}) {
       let chainFailed = false;
 
       for (let j = 0; j < items.length; j++) {
+        const stopReason = budgetStop();
+        if (stopReason) {
+          halted = true;
+          haltReason = stopReason;
+          break;
+        }
         const action = items[j];
         try {
           const normalized = normalizeAction(action, ctx.projectRoot);
           const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
+          executedActions += 1;
           const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
           subResults.push({
             index: j + 1,
@@ -2371,6 +2419,7 @@ export async function pipelinePipeline(ctx, input = {}) {
     try {
       const normalized = normalizeAction(step, ctx.projectRoot);
       const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
+      executedActions += 1;
       const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
       results.push({
         step: stepNum,
@@ -2406,10 +2455,95 @@ export async function pipelinePipeline(ctx, input = {}) {
     }
   }
 
+  function failedActionEntries() {
+    const entries = [];
+    for (const result of results) {
+      if (result.kind === 'parallel' || result.kind === 'chain') {
+        for (const item of result.items) {
+          if (!item.ok) entries.push({ step: result.step, ...item });
+        }
+      } else if (!result.ok) {
+        entries.push({ step: result.step, ...result });
+      }
+    }
+    return entries;
+  }
+
+  function branchMatches(when = {}) {
+    if (!when || typeof when !== 'object' || Array.isArray(when)) return false;
+    const failedEntries = failedActionEntries();
+    if (when.failed === true && failureCount === 0) return false;
+    if (when.status === 'failed' && failureCount === 0) return false;
+    if (when.status === 'passed' && failureCount > 0) return false;
+    if (when.step !== undefined && !failedEntries.some((entry) => Number(entry.step) === Number(when.step))) {
+      return false;
+    }
+    if (when.tool !== undefined && !failedEntries.some((entry) => String(entry.tool) === String(when.tool))) {
+      return false;
+    }
+    return true;
+  }
+
+  const branchResults = [];
+  for (const branch of branches) {
+    if (!branch || typeof branch !== 'object' || Array.isArray(branch)) continue;
+    if (!branchMatches(branch.when)) continue;
+    const actions = Array.isArray(branch.then) ? branch.then : (branch.then ? [branch.then] : []);
+    if (!actions.length) continue;
+    const subResults = [];
+    for (const action of actions) {
+      const stopReason = budgetStop();
+      if (stopReason) {
+        halted = true;
+        haltReason = stopReason;
+        break;
+      }
+      try {
+        const normalized = normalizeAction(action, ctx.projectRoot);
+        const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
+        executedActions += 1;
+        const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
+        subResults.push({
+          index: subResults.length + 1,
+          tool: normalized.tool,
+          ok: !isFail,
+          output: res,
+          maxChars: resolveActionOutputLimit(action, actionBudgetOptions),
+          requestedMaxChars: explicitActionMaxChars(action),
+        });
+        if (isFail) {
+          failureCount += 1;
+          haltReason = `Branch action ${subResults.length} (${normalized.tool}) failed verification/gate`;
+        }
+      } catch (err) {
+        subResults.push({
+          index: subResults.length + 1,
+          tool: action?.tool || 'unknown',
+          ok: false,
+          error: err.message,
+        });
+        failureCount += 1;
+        haltReason = `Branch action ${subResults.length} threw error: ${err.message}`;
+      }
+    }
+    branchResults.push({
+      index: branchResults.length + 1,
+      kind: 'branch',
+      when: branch.when || null,
+      items: subResults,
+      ok: subResults.length > 0 && subResults.every((item) => item.ok),
+    });
+  }
+  if (branchResults.some((branch) => branch.ok)) {
+    halted = false;
+    haltReason = null;
+  }
+
   const totalActions = results.reduce((sum, result) => {
     if (result.kind === 'parallel' || result.kind === 'chain') return sum + result.items.length;
     return sum + 1;
-  }, 0);
+  }, 0) + branchResults.reduce((sum, result) => sum + result.items.length, 0);
+  const totalSteps = steps.length + branchResults.reduce((sum, result) => sum + result.items.length, 0);
   const summaryActionBudget = Number.isFinite(responseBudget)
     ? Math.max(140, Math.min(260, Math.floor(responseBudget / Math.max(2, totalActions + 1))))
     : PIPELINE_DEFAULT_OUTPUT_CLIP;
@@ -2499,8 +2633,9 @@ export async function pipelinePipeline(ctx, input = {}) {
     return clip([header, body, ...references].filter(Boolean).join(' | ') || source, triage ? 900 : 500);
   }
 
-  const pipelineStatus = halted ? 'HALTED' : (failureCount ? 'FAIL' : 'OK');
-  const lines = [`pipeline=${pipelineStatus} actions=${totalActions}/${steps.length}${receiptMode ? ' mode=receipt' : ''}`];
+  const recovered = branchResults.some((branch) => branch.ok);
+  const pipelineStatus = halted ? 'HALTED' : (failureCount ? (recovered ? 'RECOVERED' : 'FAIL') : 'OK');
+  const lines = [`pipeline=${pipelineStatus} actions=${totalActions}/${totalSteps}${receiptMode ? ' mode=receipt' : ''}`];
   if (halted && haltReason) lines.push(`stop=${haltReason}`);
 
   for (const r of results) {
@@ -2527,6 +2662,15 @@ export async function pipelinePipeline(ctx, input = {}) {
       lines.push(`step#${r.step} ${r.tool}=${r.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`);
     }
   }
+  for (const r of branchResults) {
+    const body = r.items.map((item) => {
+      const detail = item.ok
+        ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, ' | ')
+        : `FAIL: ${formatPipelineFailure(item)}`;
+      return `${item.tool}=${item.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`;
+    }).join(' -> ');
+    lines.push(`branch#${r.index} ${r.ok ? 'OK' : 'FAIL'} :: ${body}`);
+  }
 
   const raw = lines.join('\n');
   const summaryTruncated = !renderFull && results.some((result) => {
@@ -2541,6 +2685,7 @@ export async function pipelinePipeline(ctx, input = {}) {
     status: pipelineStatus,
     totalActions,
     steps: results,
+    branches: branchResults,
   };
   const { text, meta } = finalizeResponse(raw, {
     projectRoot: ctx.projectRoot,

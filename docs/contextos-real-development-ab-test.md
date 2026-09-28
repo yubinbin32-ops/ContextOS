@@ -839,3 +839,14 @@ B 的 exec_command 从 21 次降到 7 次，但没有换来 token 优势，原�
 ### 29.4 计划状态缺陷
 
 计划阶段把 Task 写成了 phase 使用的 `pending`，但 Task 生命周期只接受 `draft`。这会让任务无法 activate、note 或 finish。Task 构造器现在把旧 `pending` 迁移为 `draft`，并在迁移后继续执行正常生命周期校验。
+
+### 29.5 宿主预声明条件分支
+
+`pipeline` / `work` 现在接受：
+
+```js
+branches: [{ when: { failed: true, tool: "verify" }, then: [...] }]
+budget: { maxActions, maxFailures, maxDurationMs }
+```
+
+OS 只匹配宿主写下的条件并执行对应分支，不自行判断修法。分支成功时状态为 `RECOVERED`；预算耗尽时熔断为 `HALTED` 并返回具体预算字段。这样“验证失败则 triage”可以发生在同一次宿主决策里，而不是等宿主看到失败后再发起一轮。

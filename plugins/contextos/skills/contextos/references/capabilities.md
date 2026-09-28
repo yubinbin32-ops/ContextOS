@@ -146,6 +146,20 @@ pipeline({
   ]
 })
 
+// Host-declared conditional recovery with a hard budget
+pipeline({
+  steps: [{ verify: "npm test" }],
+  branches: [{
+    when: { failed: true, tool: "verify" },
+    then: [{
+      tool: "ops",
+      // Replace with the failed verify receipt returned by the step.
+      args: { capability: "micro", action: "run", args: { preset: "triage", inputReceipt: "receipt-123" } }
+    }]
+  }],
+  budget: { maxActions: 3, maxFailures: 2, maxDurationMs: 120000 }
+})
+
 // Atomic deletion is a first-class mutation
 change({
   delete: [{ path: "src/legacy.mjs" }],

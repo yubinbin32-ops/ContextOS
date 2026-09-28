@@ -34,26 +34,27 @@ surface, and resource discovery is not an availability check.
 
 ### 2. 批量与流水线 (Pipeline)
 - 多个只读查询合并为：`pipeline({ parallel: [{ inspect: "..." }, { run: "rg 'target' src", raw: true }] })`。
-- 多个测试命令：独立无冲突用 `parallel: [{ verify: "..." }]`；有顺序依赖用 `verify({ commands: ["cmd1", "cmd2"] })`。
+- 多个测试命令：无冲突用 `parallel`，有顺序依赖用 `verify({ commands: [...] })`。
 - 默认返回 receipts 与 diagnostic 摘要；只有明确需要原始正文时才设置 `raw: true` 或 `mode: "full"`。
-- 探索型 Pipeline 允许单个搜索无匹配或路径缺失时继续收集其余证据，使用 `continueOnFailure: true`；不要把“无匹配”当成整批读取失败。
+- 探索型 Pipeline 用 `continueOnFailure: true` 收集其余证据，不要把“无匹配”当成整批失败。
 
 ### 3. 决策对齐批处理 (Decision-Aligned Batching)
 一次宿主决策 = 一次 OS 调用。R6 实测：C 组 21 轮中 11 轮是机械轮，native 只有 4 轮，多出的往返占总 token 惩罚的 73%。
 
 - 首个决策合并成一次调用：`pipeline({ parallel: [{ tool: "explore", args: { intent: "..." } }, { inspect: { paths: [...], budget: "shallow" } }] })`，不要先 `explore` 再单独 `pipeline`。
 - 编辑与验证同一轮：`change({ edits, verify: "npm test" })` 或 `work({ inspect, edits, commands })`；禁止先 apply_patch 再单独 verify。
+- 失败分支预声明：`pipeline({ steps: [...], branches: [{ when: { failed: true }, then: [...] }], budget: { maxActions, maxFailures, maxDurationMs } })`；OS 只执行宿主写下的条件树。
 - 不要在 OS 调用之间穿插原生 `sed`/`cat`/`rg`/`npm test`，那会把已并入 OS 的机械轮重新拆开。
 - 大文件只读一次：默认返回 AST Outline + locator，再用 `symbol`/`ranges` 取正文，不要 `budget: "full"` 通读。
 
 ### 4. Micro 舱外执行器 (执行 vs 摘要)
 - **定位**：Micro 是宿主显式指派的舱外执行器。无 preload 的 OS 调用默认启用只读执行器；纯摘要或附 preload 时默认 `withOS:false`，需继续执行时开启。
-- **执行器契约**：`withOS:true` 时必须给足 `provider.maxRequests >= maxSteps + 1`，否则工具轮没有最终回答预算。需要自行跑命令时设置 `invocation.tools.allowCommands:true`，Micro 才可使用受限 `run`。
-- **调用方式**：把重证据流水线直接附着在第一次调用中：
-  `contextos({ action: "micro", args: { pipeline: { steps: [{ run: "npm test", allowCommands: true }] }, invocation: { evidence: { maxChars: 2400 }, tools: { enabled: true, maxSteps: 2, allowCommands: true }, provider: { maxRequests: 3 } } } })`
+- **执行器契约**：`withOS:true` 时保证 `provider.maxRequests >= maxSteps + 1`；跑命令需显式 `invocation.tools.allowCommands:true`。
+- **调用方式**：把重证据流水线直接附着在第一次调用：
+  `contextos({ action: "micro", args: { pipeline: { steps: [{ run: "npm test", allowCommands: true }] }, invocation: { tools: { enabled: true, maxSteps: 2, allowCommands: true }, provider: { maxRequests: 3 } } } })`
 - **触发阈值**：测试错误、堆栈或日志超过 2,000 字符时使用。不要用于简单单行编辑。
 - **无尾投递**：不需要立即消费时用 `delivery:"defer",background:true` 立即返回 job，结果在后续 OS 调用恢复；不要为摘要额外开启宿主轮次。
-- `verify` 的 `mode:"full"` 只控制输出，不是进程模式；失败证据超过阈值且 Micro 已配置时会自动 triage，只有显式 `autoTriage:false` 才关闭。
+- `verify.mode:"full"` 只控制输出；大失败证据会自动 triage，`autoTriage:false` 可关闭。
 
 ### 5. 系统自检与环境运维 (Doctor & Ops)
 - 检查 ContextOS 运行状态、Node 版本、存储模式与已连接编辑器：

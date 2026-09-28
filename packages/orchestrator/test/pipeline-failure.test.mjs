@@ -119,3 +119,71 @@ test('pipeline failure projection keeps the Micro triage that the host paid for'
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
+
+test('pipeline runs a predeclared failure branch without deciding on its own', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-branch-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        if (tool === 'verify') {
+          return '# ContextOS verify\n\n## Verdict: FAIL\n- `npm test` -> exit 1';
+        }
+        return JSON.stringify({ ok: true, content: 'triaged failure' });
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      steps: [{ verify: { commands: ['npm test'] } }],
+      branches: [{
+        when: { failed: true, tool: 'verify' },
+        then: [{
+          tool: 'ops',
+          args: { capability: 'micro', action: 'run', args: { prompt: 'triage the failure' } },
+        }],
+      }],
+      budget: { maxActions: 3 },
+    });
+
+    assert.deepEqual(calls.map((call) => call.tool), ['verify', 'ops']);
+    assert.match(output, /pipeline=RECOVERED/);
+    assert.match(output, /branch#1 OK/);
+    assert.match(output, /triaged failure/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline stops at the predeclared maxActions budget', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-budget-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool) => {
+        calls.push(tool);
+        return '# ContextOS inspect\n\nok';
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      steps: [
+        { inspect: { path: 'a.mjs' } },
+        { inspect: { path: 'b.mjs' } },
+      ],
+      budget: { maxActions: 1 },
+    });
+
+    assert.deepEqual(calls, ['inspect']);
+    assert.match(output, /pipeline=HALTED/);
+    assert.match(output, /budget exceeded: maxActions=1/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
