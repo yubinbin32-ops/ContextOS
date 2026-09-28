@@ -32207,18 +32207,33 @@ ${globHint}`;
     if (!fs11.existsSync(fullP) && fs11.existsSync(`${fullP}.log`)) {
       p = `${p}.log`;
     }
-    if (isOutline) {
+    const hasExplicitTarget = Boolean(symbol) || input.startLine !== void 0 || input.endLine !== void 0 || Array.isArray(input.ranges) && input.ranges.length > 0;
+    let fileChars = 0;
+    try {
+      const stat = fs11.statSync(fullP);
+      if (stat.isFile()) fileChars = stat.size;
+    } catch (_) {
+    }
+    const preferOutline = !isOutline && !hasExplicitTarget && !isFull && !explicitMaxChars && !input.fullFile && fileChars > INSPECT_INLINE_MAX_CHARS;
+    let outlineHandled = false;
+    if (isOutline || preferOutline) {
       const outline = await caps.code({
         action: "outline",
         path: p
       });
       if (outline.ok) {
+        const outlineCap = preferOutline ? Math.min(contentMaxChars, OUTLINE_CLIP) : contentMaxChars;
+        const locator = preferOutline ? `
+[body not inlined (${fileChars} chars); pass symbol, ranges, or full:true to read it]` : "";
         outLines.push(`### \`${p}\` (AST Outline)
-${clip3(outline.data, contentMaxChars, { withHint: true })}`);
-      } else {
+${clip3(outline.data, outlineCap, { withHint: true })}${locator}`);
+        outlineHandled = true;
+      } else if (isOutline) {
         outLines.push(`### \`${p}\`: \u2717 ${outline.error}`);
+        outlineHandled = true;
       }
-    } else {
+    }
+    if (!outlineHandled) {
       const explicitReadBudget = Boolean(
         input.budget || input.maxChars || input.fullFile || input.depth && input.depth !== "normal"
       );
@@ -33115,7 +33130,7 @@ async function pipelinePipeline(ctx, input = {}) {
 
 <!-- os-budget ${meta2.chars} chars ~${meta2.estimatedTokens} tokens${meta2.truncated ? " truncated" : ""}${receiptMode ? " mode=receipt" : ""} -->`;
 }
-var OUTLINE_CLIP, SEARCH_CLIP, PIPELINE_DEFAULT_OUTPUT_CLIP, PIPELINE_MAX_OUTPUT_CLIP, PIPELINE_RECEIPT_OUTPUT_CLIP, PIPELINE_RECEIPT_RESPONSE_BUDGET, PIPELINE_DEFAULT_PARALLEL_CONCURRENCY, PIPELINE_MAX_PARALLEL_CONCURRENCY, MICRO_TRIAGE_MIN_CHARS, PROCESS_VERIFY_MODES, NON_ARCHITECTURE_PREFIXES, NON_ARCHITECTURE_EXTENSIONS, INSPECT_SKIP_DIRS;
+var OUTLINE_CLIP, INSPECT_INLINE_MAX_CHARS, SEARCH_CLIP, PIPELINE_DEFAULT_OUTPUT_CLIP, PIPELINE_MAX_OUTPUT_CLIP, PIPELINE_RECEIPT_OUTPUT_CLIP, PIPELINE_RECEIPT_RESPONSE_BUDGET, PIPELINE_DEFAULT_PARALLEL_CONCURRENCY, PIPELINE_MAX_PARALLEL_CONCURRENCY, MICRO_TRIAGE_MIN_CHARS, PROCESS_VERIFY_MODES, NON_ARCHITECTURE_PREFIXES, NON_ARCHITECTURE_EXTENSIONS, INSPECT_SKIP_DIRS;
 var init_pipelines = __esm({
   async "packages/orchestrator/src/pipelines.mjs"() {
     init_context_budget();
@@ -33127,6 +33142,7 @@ var init_pipelines = __esm({
     init_sanitizer();
     await init_code_tools();
     OUTLINE_CLIP = 1200;
+    INSPECT_INLINE_MAX_CHARS = 2500;
     SEARCH_CLIP = 360;
     PIPELINE_DEFAULT_OUTPUT_CLIP = 400;
     PIPELINE_MAX_OUTPUT_CLIP = 4e3;

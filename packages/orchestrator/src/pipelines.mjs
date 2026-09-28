@@ -11,6 +11,9 @@ import { redactSecrets } from '../../process-host/src/sanitizer.mjs';
 import { CodeTools } from '../../code-intel/src/code-tools.mjs';
 
 const OUTLINE_CLIP = 1200;
+// Files at or below this size are cheap to inline whole; above it, a
+// path-only inspect returns an outline instead of a truncated head.
+const INSPECT_INLINE_MAX_CHARS = 2500;
 const SEARCH_CLIP = 360;
 const PIPELINE_DEFAULT_OUTPUT_CLIP = 400;
 const PIPELINE_MAX_OUTPUT_CLIP = 4000;
@@ -1437,17 +1440,46 @@ export async function inspectPipeline(ctx, input = {}) {
     if (!fs.existsSync(fullP) && fs.existsSync(`${fullP}.log`)) {
       p = `${p}.log`;
     }
-    if (isOutline) {
+    // A path-only read of a large file would otherwise inline a truncated
+    // head: expensive and useless for deciding what to change. Small files are
+    // returned whole; large files default to an outline plus a locator, and
+    // the caller asks for the exact symbol or range it needs.
+    const hasExplicitTarget = Boolean(symbol)
+      || input.startLine !== undefined
+      || input.endLine !== undefined
+      || (Array.isArray(input.ranges) && input.ranges.length > 0);
+    let fileChars = 0;
+    try {
+      const stat = fs.statSync(fullP);
+      if (stat.isFile()) fileChars = stat.size;
+    } catch (_) {}
+    const preferOutline = !isOutline
+      && !hasExplicitTarget
+      && !isFull
+      && !explicitMaxChars
+      && !input.fullFile
+      && fileChars > INSPECT_INLINE_MAX_CHARS;
+    let outlineHandled = false;
+    if (isOutline || preferOutline) {
       const outline = await caps.code({
         action: 'outline',
         path: p,
       });
       if (outline.ok) {
-        outLines.push(`### \`${p}\` (AST Outline)\n${clip(outline.data, contentMaxChars, { withHint: true })}`);
-      } else {
+        // The implicit outline is a map, not a transcript: keep it near the
+        // 300-token target. Explicit outline/full requests keep the larger cap.
+        const outlineCap = preferOutline ? Math.min(contentMaxChars, OUTLINE_CLIP) : contentMaxChars;
+        const locator = preferOutline
+          ? `\n[body not inlined (${fileChars} chars); pass symbol, ranges, or full:true to read it]`
+          : '';
+        outLines.push(`### \`${p}\` (AST Outline)\n${clip(outline.data, outlineCap, { withHint: true })}${locator}`);
+        outlineHandled = true;
+      } else if (isOutline) {
         outLines.push(`### \`${p}\`: ✗ ${outline.error}`);
+        outlineHandled = true;
       }
-    } else {
+    }
+    if (!outlineHandled) {
       const explicitReadBudget = Boolean(
         input.budget
         || input.maxChars

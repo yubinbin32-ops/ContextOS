@@ -989,7 +989,7 @@ test('pipeline preserves artifacts and honors nested full output requests', asyn
   const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
 
   const truncated = await orchestrator.dispatch('pipeline', {
-    parallel: [{ inspect: { path: 'src/large.mjs' } }],
+    parallel: [{ inspect: { path: 'src/large.mjs', maxChars: 300 } }],
     maxChars: 500,
   });
   assert.match(truncated, /artifact=/);
@@ -1000,6 +1000,35 @@ test('pipeline preserves artifacts and honors nested full output requests', asyn
   });
   assert.ok(full.includes('x'.repeat(1000)));
   assert.doesNotMatch(full, /artifact=/);
+
+  service.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('path-only inspect returns whole small files and outlines large ones', async () => {
+  const dir = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+
+  const small = await orchestrator.dispatch('inspect', { path: 'src/math.mjs' });
+  assert.match(small, /export function add/);
+  assert.doesNotMatch(small, /body not inlined/);
+
+  fs.writeFileSync(
+    path.join(dir, 'src', 'large.mjs'),
+    `export const payload = '${'x'.repeat(6000)}';\nexport function helper() { return 1; }\n`
+  );
+  const large = await orchestrator.dispatch('inspect', { path: 'src/large.mjs' });
+  assert.match(large, /AST Outline/);
+  assert.match(large, /body not inlined/);
+  assert.doesNotMatch(large, /x{200}/);
+
+  const targeted = await orchestrator.dispatch('inspect', { path: 'src/large.mjs', symbol: 'helper' });
+  assert.match(targeted, /helper/);
+  assert.doesNotMatch(targeted, /body not inlined/);
+
+  const full = await orchestrator.dispatch('inspect', { path: 'src/large.mjs', budget: 'full' });
+  assert.match(full, /x{200}/);
 
   service.close();
   fs.rmSync(dir, { recursive: true, force: true });

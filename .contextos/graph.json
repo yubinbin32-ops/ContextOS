@@ -397,7 +397,7 @@
         "planId": "plan-contextos-daily-savings",
         "phaseId": "restructure",
         "title": "默认紧凑响应：结论、计数、定位符、top-k",
-        "status": "pending",
+        "status": "active",
         "contextSlice": {
           "objective": "把 OS 的默认返回从内容改为结论与引用，使 95% 响应小于 300 token，内容必须显式展开。",
           "constraints": [
@@ -430,6 +430,18 @@
             "kind": "diagnosis",
             "text": "R6 证据：B7 单次 inspect 返回 10,322 字符，等于把源码换通道塞进主上下文；C8 的 pipeline 输出 2,800 字符被预算截断却丢掉 Micro-Triage。紧凑契约必须结构化而不是截断。",
             "createdAt": "2026-09-28T17:05:00.000Z"
+          },
+          {
+            "id": "note-compact-1790615300000-slice1",
+            "kind": "repair",
+            "text": "紧凑默认第一片：verify 失败且已有 Micro 诊断时，失败体压缩到 400 字符 + receipt 定位符，full:true 仍可展开原始日志；修复了定位符被 clip 一并截掉的缺陷。",
+            "createdAt": "2026-09-28T17:15:00.000Z"
+          },
+          {
+            "id": "note-compact-1790615300001-slice2",
+            "kind": "validation",
+            "text": "紧凑默认第二片：path-only inspect 对大于 2500 字符的文件默认返回 AST Outline（含 imports、符号、行号、调用关系）+ body locator，小文件仍整份返回。真实测量 pipelines.mjs（103KB/2552 行）：默认 1385 字符（约 350 token），显式 outline 8000 字符，symbol 切片 923 字符，full 106404 字符。默认大文件读取下降约 83%，且从截断头部变为可决策的结构地图。",
+            "createdAt": "2026-09-28T17:15:00.000Z"
           }
         ],
         "checks": [],
