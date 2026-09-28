@@ -108,6 +108,17 @@ function normalizeMicroBatchConcurrency(value) {
   return Math.min(MICRO_BATCH_MAX_CONCURRENCY, Math.max(1, Math.floor(requested)));
 }
 
+function shouldEnableMicroOS(args = {}) {
+  const explicit = args.withOS;
+  const toolsEnabled = args.invocation?.tools?.enabled;
+  if (explicit === false || toolsEnabled === false) return false;
+  if (explicit === true || toolsEnabled === true) return true;
+  const hasAttachedEvidence = args.pipeline != null || args.preload != null;
+  if (hasAttachedEvidence) return false;
+  const maxRequests = args.invocation?.provider?.maxRequests ?? args.maxRequests;
+  return maxRequests == null || Number(maxRequests) >= 2;
+}
+
 async function mapWithConcurrency(items, concurrency, mapper) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -395,7 +406,7 @@ async function runMicroSessionTurn(ctx, args, session) {
   }
 
   const preset = MICRO_PRESETS[startedSession.preset] || null;
-  const sessionWithOS = Boolean(args.withOS || startedSession.withOS);
+  const sessionWithOS = startedSession.withOS === false ? false : shouldEnableMicroOS(args);
   const history = buildMicroHistory(startedSession, {
     systemPrompt: preset?.system || '',
     // Preload is a one-time evidence handoff. Repeating the same raw slice on
@@ -1170,7 +1181,7 @@ export class Orchestrator {
             projectProfile: `${this.projectRoot}/.contextos/profile.json`,
           });
         }
-        const microWithOS = Boolean(input.withOS || args.withOS);
+        const microWithOS = shouldEnableMicroOS(args);
         const caps = microWithOS ? ctx.caps : null;
 
         // A read-only evidence preload after a successful mutation/verification
@@ -1275,10 +1286,11 @@ export class Orchestrator {
             return {
               ...task,
               id: task.id || `task-${index + 1}`,
+              withOS: shouldEnableMicroOS({ ...args, ...task }),
               preload: preloadSpec ? await runMicroPreload(ctx, preloadSpec) : undefined,
             };
           });
-          const batchNeedsCaps = microWithOS || tasks.some((task) => Boolean(task.withOS));
+          const batchNeedsCaps = tasks.some((task) => Boolean(task.withOS));
           const runnableTasks = tasks.filter((task) => !task.preload || task.preload.ok !== false);
           const { tasks: _taskInputs, maxConcurrency: _requestedConcurrency, ...batchDefaults } = args;
           const result = await runMicroTasksParallel(microConfig, runnableTasks, { ...batchDefaults, batch: true, maxConcurrency: batchConcurrency, withOS: microWithOS, outputMode: args.full ? 'full' : 'answer', caps: batchNeedsCaps ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });

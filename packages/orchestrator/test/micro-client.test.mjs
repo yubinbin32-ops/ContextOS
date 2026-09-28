@@ -780,10 +780,89 @@ test('normalizeMicroInvocation keeps flat fields compatible with the bounded con
       maxInputTokens: null,
       maxOutputTokens: null,
       toolsEnabled: false,
+      allowCommands: false,
       maxSteps: null,
       shortCircuited: false,
     },
   );
+});
+
+test('Micro exposes run only when command execution is explicitly allowed', async () => {
+  const denied = await executeMicroTool('run', { command: 'npm test' }, {
+    allowCommands: false,
+    dispatch: async () => 'should-not-run',
+  });
+  assert.match(denied, /allowCommands:true/);
+
+  const calls = [];
+  const allowed = await executeMicroTool('run', { command: 'npm test', maxChars: 800 }, {
+    allowCommands: true,
+    dispatch: async (tool, input) => {
+      calls.push({ tool, input });
+      return JSON.stringify({ ok: true, summary: '1 test failed' });
+    },
+  });
+  assert.match(allowed, /1 test failed/);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].tool, 'ops');
+  assert.equal(calls[0].input.capability, 'run_command');
+  assert.equal(calls[0].input.args.command, 'npm test');
+  assert.equal(calls[0].input.args.mode, 'summary');
+});
+
+test('runMicroTask withOS=true exposes run when allowCommands is enabled', async () => {
+  const mock = createMockServer();
+  const { url } = await mock.listen();
+  let requestCount = 0;
+  mock.setHandler((req, res, body) => {
+    requestCount += 1;
+    if (requestCount === 1) {
+      assert.ok(body.tools.some((tool) => tool.function?.name === 'run'));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{
+              id: 'run-1',
+              type: 'function',
+              function: { name: 'run', arguments: JSON.stringify({ command: 'npm test' }) },
+            }],
+          },
+        }],
+        usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+      }));
+      return;
+    }
+    assert.equal(body.messages.at(-1).role, 'tool');
+    assert.match(body.messages.at(-1).content, /1 test failed/);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      choices: [{ message: { role: 'assistant', content: 'failure isolated' } }],
+      usage: { prompt_tokens: 18, completion_tokens: 5, total_tokens: 23 },
+    }));
+  });
+
+  try {
+    const result = await runMicroTask(
+      { url, model: 'test-model' },
+      {
+        prompt: 'Run the focused test and summarize the failure.',
+        withOS: true,
+        caps: {
+          run: async () => ({ ok: true, data: JSON.stringify({ ok: false, summary: '1 test failed' }) }),
+        },
+        invocation: { tools: { enabled: true, allowCommands: true } },
+      },
+    );
+    assert.equal(result.ok, true);
+    assert.equal(result.executionMode, 'executor');
+    assert.equal(result.toolCalls[0].name, 'run');
+    assert.equal(result.hostTurnsSaved, 1);
+  } finally {
+    await mock.close();
+  }
 });
 
 test('runMicroTask rejects unsupported provider protocols', async () => {
@@ -1053,9 +1132,9 @@ test('runMicroTasksParallel executes tasks concurrently with error isolation', a
   }
 });
 
-test('Micro OS tools expose bounded reads plus curated Block and Chain chores', () => {
+test('Micro OS tools expose bounded reads, optional run, and curated Block/Chain chores', () => {
   const toolNames = MICRO_OS_TOOLS.map((t) => t.function.name);
-  assert.deepEqual(toolNames, ['os', 'block', 'chain']);
+  assert.deepEqual(toolNames, ['os', 'run', 'block', 'chain']);
   assert.deepEqual(
     MICRO_OS_TOOLS[0].function.parameters.properties.action.enum,
     ['inspect', 'search', 'context', 'artifact']
@@ -1068,12 +1147,13 @@ test('Micro OS tools expose bounded reads plus curated Block and Chain chores', 
   assert.equal(properties.startLine.type, 'number');
   assert.equal(properties.endLine.type, 'number');
   assert.match(MICRO_OS_TOOLS[0].function.description, /Batch independent files/);
+  assert.equal(MICRO_OS_TOOLS[1].function.parameters.properties.command.type, 'string');
   assert.deepEqual(
-    MICRO_OS_TOOLS[1].function.parameters.properties.action.enum,
+    MICRO_OS_TOOLS[2].function.parameters.properties.action.enum,
     ['list', 'open', 'search', 'bind_auto']
   );
   assert.deepEqual(
-    MICRO_OS_TOOLS[2].function.parameters.properties.action.enum,
+    MICRO_OS_TOOLS[3].function.parameters.properties.action.enum,
     ['list', 'open', 'compose']
   );
 });

@@ -105,6 +105,23 @@ export const MICRO_OS_TOOLS = Object.freeze([
   {
     type: 'function',
     function: {
+      name: 'run',
+      description: 'Run one bounded repository command when command execution was explicitly allowed. Prefer a focused test, lint, build, git diff, or diagnostic command.',
+      parameters: {
+        type: 'object',
+        properties: {
+          command: { type: 'string', description: 'Command to run inside the repository root' },
+          cwd: { type: 'string', description: 'Optional repository-relative working directory' },
+          maxChars: { type: 'number', description: 'Maximum returned characters (default 2500, hard cap 4000)' },
+          timeoutMs: { type: 'number', description: 'Optional timeout in milliseconds' },
+        },
+        required: ['command'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'block',
       description: 'Read curated semantic Blocks or bind supplied code paths to a curated Block. Never create mod-* or module Blocks. No file edits or deletes are available.',
       parameters: {
@@ -220,6 +237,7 @@ export function normalizeMicroInvocation(config = {}, options = {}, presetKey = 
     : {};
   const requestedWithOS = options.withOS === true;
   const toolsEnabled = tools.enabled === undefined ? requestedWithOS : tools.enabled === true;
+  const allowCommands = tools.allowCommands === true || invocation.allowCommands === true;
   const explicitMaxRequests = provider.maxRequests
     ?? invocation.maxRequests
     ?? options.maxRequests
@@ -251,6 +269,7 @@ export function normalizeMicroInvocation(config = {}, options = {}, presetKey = 
     maxInputTokens,
     maxOutputTokens,
     toolsEnabled,
+    allowCommands,
     maxSteps,
     shortCircuited: false,
   };
@@ -403,7 +422,7 @@ function expandMicroInspectGlobs(projectRoot, globs = []) {
 /**
  * Safely execute an OS tool called by the micro model.
  */
-export async function executeMicroTool(name, rawArgs, { caps, projectRoot, dispatch } = {}) {
+export async function executeMicroTool(name, rawArgs, { caps, projectRoot, dispatch, allowCommands = false } = {}) {
   let args = {};
   if (typeof rawArgs === 'string') {
     try {
@@ -416,6 +435,34 @@ export async function executeMicroTool(name, rawArgs, { caps, projectRoot, dispa
   }
 
   try {
+    if (name === 'run') {
+      if (!allowCommands) {
+        return JSON.stringify({ error: 'Micro run tool requires invocation.tools.allowCommands:true.' });
+      }
+      const command = String(args.command || '').trim();
+      if (!command) return JSON.stringify({ error: 'Micro run tool requires a non-empty command.' });
+      const runArgs = {
+        command,
+        ...(args.cwd ? { cwd: args.cwd } : {}),
+        maxChars: Number.isFinite(Number(args.maxChars)) ? Number(args.maxChars) : 2500,
+        timeoutMs: Number.isFinite(Number(args.timeoutMs)) ? Number(args.timeoutMs) : 60000,
+        mode: 'summary',
+      };
+      if (dispatch) {
+        const result = await dispatch('ops', {
+          capability: 'run_command',
+          action: 'run',
+          args: runArgs,
+        });
+        return typeof result === 'string' ? result : JSON.stringify(result);
+      }
+      if (typeof caps?.run === 'function') {
+        const res = await caps.run(runArgs);
+        if (res?.ok) return typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+        return JSON.stringify({ error: res?.error || 'Micro run command failed.' });
+      }
+      return JSON.stringify({ error: 'Run capability not available' });
+    }
     if (dispatch && MICRO_READ_ONLY_TOOLS.has(name)) {
       const route = microDispatchRoute(name, args);
       if (route) {
@@ -1009,7 +1056,11 @@ export async function runMicroTask(config = {}, options = {}) {
         : DEFAULT_MAX_STEPS)
     : 1;
 
-  const tools = withOS ? (options.tools || MICRO_OS_TOOLS) : undefined;
+  const tools = withOS
+    ? (options.tools || MICRO_OS_TOOLS.filter((tool) => (
+        tool.function?.name !== 'run' || invocation.allowCommands
+      )))
+    : undefined;
   const toolExecutionTrace = [];
   let step = 0;
   let aggregatedUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -1296,6 +1347,7 @@ export async function runMicroTask(config = {}, options = {}) {
             caps: options.caps,
             projectRoot: options.projectRoot,
             dispatch: options.orchestrator?.dispatch,
+            allowCommands: invocation.allowCommands,
           });
           if (memoKey) readToolResults.set(memoKey, resultStr);
         }
@@ -1508,6 +1560,9 @@ export async function runMicroTask(config = {}, options = {}) {
     preset: presetKey || null,
     delivery: ['immediate', 'defer', 'errors-only', 'auto'].includes(options.delivery) ? options.delivery : 'immediate',
     withOS,
+    executionMode: withOS ? (toolExecutionTrace.length > 0 ? 'executor' : 'executor-idle') : 'summarizer-only',
+    summarizerOnly: !withOS,
+    hostTurnsSaved: step,
     sessionId,
     sessionMode: options.sessionMode || 'isolated',
     batch: options.batch === true,

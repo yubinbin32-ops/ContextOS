@@ -8591,6 +8591,9 @@ function recordMicroUsage(projectRoot, result, receiptId, {
   const budget = result.budget || {};
   const preload = result.preload && typeof result.preload === "object" && !Array.isArray(result.preload) ? result.preload : null;
   const invocation = result.invocation && typeof result.invocation === "object" ? result.invocation : {};
+  const toolCallCount = Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
+  const toolRounds = Number(invocation.toolRounds ?? result.steps) || 0;
+  const executionMode = result.executionMode || (!result.withOS ? "summarizer-only" : toolCallCount > 0 ? "executor" : "executor-idle");
   const entry = {
     at: (/* @__PURE__ */ new Date()).toISOString(),
     receiptId: receiptId || result.receiptId || null,
@@ -8615,7 +8618,10 @@ function recordMicroUsage(projectRoot, result, receiptId, {
     sessionMode: result.sessionMode || null,
     batch: Boolean(result.batch),
     steps: Number(result.steps) || 0,
-    toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
+    executionMode,
+    summarizerOnly: executionMode === "summarizer-only",
+    hostTurnsSaved: Number(result.hostTurnsSaved ?? toolRounds) || 0,
+    toolCallCount,
     toolNames: Array.isArray(result.toolCalls) ? result.toolCalls.map((call) => call.name).filter(Boolean) : [],
     durationMs: Number(result.durationMs) || 0,
     usageSource: result.usageSource || (result.providerUsage ? "provider" : "unavailable"),
@@ -8623,7 +8629,7 @@ function recordMicroUsage(projectRoot, result, receiptId, {
     estimatedUsageCalls: Number(result.estimatedUsageCalls) || 0,
     deduplicatedToolCallCount: Number(result.deduplicatedToolCallCount) || 0,
     providerRequests: Number(result.providerRequests ?? invocation.providerRequests) || (Number(result.providerUsageCalls) || 0) + (Number(result.estimatedUsageCalls) || 0),
-    toolRounds: Number(invocation.toolRounds ?? result.steps) || 0,
+    toolRounds,
     shortCircuited: Boolean(invocation.shortCircuited),
     shortCircuitReason: invocation.shortCircuitReason || null,
     promptTokens: result.providerUsage ? Number(usage.prompt_tokens) || 0 : null,
@@ -8675,6 +8681,10 @@ function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = null } 
     ok: 0,
     failed: 0,
     withOSCalls: 0,
+    executorCalls: 0,
+    executorIdleCalls: 0,
+    summarizerOnlyCalls: 0,
+    hostTurnsSaved: 0,
     preloadCalls: 0,
     preloadChars: 0,
     preloadCacheHits: 0,
@@ -8708,6 +8718,10 @@ function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = null } 
     if (entry.ok) totals.ok += 1;
     else totals.failed += 1;
     if (entry.withOS) totals.withOSCalls += 1;
+    if (entry.executionMode === "executor") totals.executorCalls += 1;
+    else if (entry.executionMode === "executor-idle") totals.executorIdleCalls += 1;
+    else if (entry.executionMode === "summarizer-only" || entry.summarizerOnly) totals.summarizerOnlyCalls += 1;
+    totals.hostTurnsSaved += Number(entry.hostTurnsSaved) || 0;
     if (entry.preloadAttached ?? entry.preload) totals.preloadCalls += 1;
     totals.preloadChars += Number(entry.preloadChars) || 0;
     if (entry.preloadCacheHit) totals.preloadCacheHits += 1;
@@ -8804,6 +8818,8 @@ function projectProviderUsage(result) {
       evidenceMode: invocation.evidenceMode || (result?.preload ? "pipeline" : "none"),
       evidenceCacheHit: Boolean(invocation.evidenceCacheHit || result?.preload?.cacheHit),
       pipelineRuns: Number(invocation.pipelineRuns ?? result?.preload?.pipelineRuns) || 0,
+      executionMode: result?.executionMode || invocation.executionMode || null,
+      allowCommands: Boolean(invocation.allowCommands),
       providerRequests: Number(invocation.providerRequests ?? result?.providerRequests) || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0),
       toolRounds: Number(invocation.toolRounds ?? result?.steps) || 0,
       shortCircuited: Boolean(invocation.shortCircuited),
@@ -33594,6 +33610,7 @@ function normalizeMicroInvocation(config2 = {}, options = {}, presetKey = "custo
   const tools = invocation.tools && typeof invocation.tools === "object" ? invocation.tools : {};
   const requestedWithOS = options.withOS === true;
   const toolsEnabled = tools.enabled === void 0 ? requestedWithOS : tools.enabled === true;
+  const allowCommands = tools.allowCommands === true || invocation.allowCommands === true;
   const explicitMaxRequests = provider.maxRequests ?? invocation.maxRequests ?? options.maxRequests ?? config2.maxRequests;
   const maxRequests = positiveInteger(
     explicitMaxRequests,
@@ -33618,6 +33635,7 @@ function normalizeMicroInvocation(config2 = {}, options = {}, presetKey = "custo
     maxInputTokens,
     maxOutputTokens,
     toolsEnabled,
+    allowCommands,
     maxSteps,
     shortCircuited: false
   };
@@ -33746,7 +33764,7 @@ function expandMicroInspectGlobs(projectRoot, globs = []) {
   }
   return [...new Set(matches)].sort().slice(0, 30);
 }
-async function executeMicroTool(name2, rawArgs, { caps, projectRoot, dispatch } = {}) {
+async function executeMicroTool(name2, rawArgs, { caps, projectRoot, dispatch, allowCommands = false } = {}) {
   let args2 = {};
   if (typeof rawArgs === "string") {
     try {
@@ -33758,6 +33776,34 @@ async function executeMicroTool(name2, rawArgs, { caps, projectRoot, dispatch } 
     args2 = rawArgs;
   }
   try {
+    if (name2 === "run") {
+      if (!allowCommands) {
+        return JSON.stringify({ error: "Micro run tool requires invocation.tools.allowCommands:true." });
+      }
+      const command = String(args2.command || "").trim();
+      if (!command) return JSON.stringify({ error: "Micro run tool requires a non-empty command." });
+      const runArgs = {
+        command,
+        ...args2.cwd ? { cwd: args2.cwd } : {},
+        maxChars: Number.isFinite(Number(args2.maxChars)) ? Number(args2.maxChars) : 2500,
+        timeoutMs: Number.isFinite(Number(args2.timeoutMs)) ? Number(args2.timeoutMs) : 6e4,
+        mode: "summary"
+      };
+      if (dispatch) {
+        const result = await dispatch("ops", {
+          capability: "run_command",
+          action: "run",
+          args: runArgs
+        });
+        return typeof result === "string" ? result : JSON.stringify(result);
+      }
+      if (typeof caps?.run === "function") {
+        const res = await caps.run(runArgs);
+        if (res?.ok) return typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+        return JSON.stringify({ error: res?.error || "Micro run command failed." });
+      }
+      return JSON.stringify({ error: "Run capability not available" });
+    }
     if (dispatch && MICRO_READ_ONLY_TOOLS.has(name2)) {
       const route = microDispatchRoute(name2, args2);
       if (route) {
@@ -34272,7 +34318,7 @@ ${resolvedInput.input}
   const DEFAULT_MAX_STEPS = 2;
   const SAFETY_MAX_STEPS = 4;
   const maxSteps = withOS ? Number.isFinite(rawMaxSteps) && rawMaxSteps > 0 ? Math.min(Math.floor(rawMaxSteps), SAFETY_MAX_STEPS) : DEFAULT_MAX_STEPS : 1;
-  const tools = withOS ? options.tools || MICRO_OS_TOOLS : void 0;
+  const tools = withOS ? options.tools || MICRO_OS_TOOLS.filter((tool) => tool.function?.name !== "run" || invocation.allowCommands) : void 0;
   const toolExecutionTrace = [];
   let step = 0;
   let aggregatedUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
@@ -34508,7 +34554,8 @@ ${resolvedInput.input}
           resultStr = await executeMicroTool(toolName, toolArgs, {
             caps: options.caps,
             projectRoot: options.projectRoot,
-            dispatch: options.orchestrator?.dispatch
+            dispatch: options.orchestrator?.dispatch,
+            allowCommands: invocation.allowCommands
           });
           if (memoKey) readToolResults.set(memoKey, resultStr);
         }
@@ -34695,6 +34742,9 @@ ${resolvedInput.input}
     preset: presetKey || null,
     delivery: ["immediate", "defer", "errors-only", "auto"].includes(options.delivery) ? options.delivery : "immediate",
     withOS,
+    executionMode: withOS ? toolExecutionTrace.length > 0 ? "executor" : "executor-idle" : "summarizer-only",
+    summarizerOnly: !withOS,
+    hostTurnsSaved: step,
     sessionId,
     sessionMode: options.sessionMode || "isolated",
     batch: options.batch === true,
@@ -34864,6 +34914,23 @@ var init_micro_client = __esm({
               }
             },
             required: ["action"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "run",
+          description: "Run one bounded repository command when command execution was explicitly allowed. Prefer a focused test, lint, build, git diff, or diagnostic command.",
+          parameters: {
+            type: "object",
+            properties: {
+              command: { type: "string", description: "Command to run inside the repository root" },
+              cwd: { type: "string", description: "Optional repository-relative working directory" },
+              maxChars: { type: "number", description: "Maximum returned characters (default 2500, hard cap 4000)" },
+              timeoutMs: { type: "number", description: "Optional timeout in milliseconds" }
+            },
+            required: ["command"]
           }
         }
       },
@@ -52410,6 +52477,16 @@ function normalizeMicroBatchConcurrency(value) {
   if (!Number.isFinite(requested) || requested <= 0) return MICRO_BATCH_DEFAULT_CONCURRENCY2;
   return Math.min(MICRO_BATCH_MAX_CONCURRENCY2, Math.max(1, Math.floor(requested)));
 }
+function shouldEnableMicroOS(args2 = {}) {
+  const explicit = args2.withOS;
+  const toolsEnabled = args2.invocation?.tools?.enabled;
+  if (explicit === false || toolsEnabled === false) return false;
+  if (explicit === true || toolsEnabled === true) return true;
+  const hasAttachedEvidence = args2.pipeline != null || args2.preload != null;
+  if (hasAttachedEvidence) return false;
+  const maxRequests = args2.invocation?.provider?.maxRequests ?? args2.maxRequests;
+  return maxRequests == null || Number(maxRequests) >= 2;
+}
 async function mapWithConcurrency2(items, concurrency, mapper) {
   const results = new Array(items.length);
   let nextIndex = 0;
@@ -52667,7 +52744,7 @@ async function runMicroSessionTurn(ctx, args2, session) {
     };
   }
   const preset = MICRO_PRESETS[startedSession.preset] || null;
-  const sessionWithOS = Boolean(args2.withOS || startedSession.withOS);
+  const sessionWithOS = startedSession.withOS === false ? false : shouldEnableMicroOS(args2);
   const history = buildMicroHistory(startedSession, {
     systemPrompt: preset?.system || "",
     // Preload is a one-time evidence handoff. Repeating the same raw slice on
@@ -53365,7 +53442,7 @@ var Orchestrator = class {
             projectProfile: `${this.projectRoot}/.contextos/profile.json`
           });
         }
-        const microWithOS = Boolean(input.withOS || args2.withOS);
+        const microWithOS = shouldEnableMicroOS(args2);
         const caps = microWithOS ? ctx.caps : null;
         if (!args2.sessionAction && shouldSkipLateMicroEvidence(store, args2)) {
           return render({
@@ -53458,10 +53535,11 @@ var Orchestrator = class {
             return {
               ...task,
               id: task.id || `task-${index + 1}`,
+              withOS: shouldEnableMicroOS({ ...args2, ...task }),
               preload: preloadSpec2 ? await runMicroPreload(ctx, preloadSpec2) : void 0
             };
           });
-          const batchNeedsCaps = microWithOS || tasks.some((task) => Boolean(task.withOS));
+          const batchNeedsCaps = tasks.some((task) => Boolean(task.withOS));
           const runnableTasks = tasks.filter((task) => !task.preload || task.preload.ok !== false);
           const { tasks: _taskInputs, maxConcurrency: _requestedConcurrency, ...batchDefaults } = args2;
           const result2 = await runMicroTasksParallel(microConfig, runnableTasks, { ...batchDefaults, batch: true, maxConcurrency: batchConcurrency, withOS: microWithOS, outputMode: args2.full ? "full" : "answer", caps: batchNeedsCaps ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });
@@ -55403,14 +55481,15 @@ var Task = class {
     if (!planId || typeof planId !== "string") throw new Error("Task requires planId");
     if (!phaseId || typeof phaseId !== "string") throw new Error("Task requires phaseId");
     if (!title || typeof title !== "string") throw new Error("Task requires title");
-    if (!TASK_STATUSES.includes(status)) {
-      throw new Error(`Invalid task status: ${status}. Must be one of ${TASK_STATUSES.join(", ")}`);
+    const normalizedStatus = status === "pending" ? "draft" : status;
+    if (!TASK_STATUSES.includes(normalizedStatus)) {
+      throw new Error(`Invalid task status: ${normalizedStatus}. Must be one of ${TASK_STATUSES.join(", ")}`);
     }
     this.id = id;
     this.planId = planId;
     this.phaseId = phaseId;
     this.title = title;
-    this.status = status;
+    this.status = normalizedStatus;
     this.contextSlice = {
       objective: contextSlice.objective || "",
       constraints: Array.isArray(contextSlice.constraints) ? [...contextSlice.constraints] : [],

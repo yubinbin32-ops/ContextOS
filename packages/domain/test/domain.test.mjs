@@ -100,6 +100,19 @@ test('Task C-D-C-S state machine and context slice', () => {
   assert.ok(task.syncResult.completedAt);
 });
 
+test('Task migrates the legacy pending status to draft before lifecycle validation', () => {
+  const task = new Task({
+    id: 'task-legacy-pending',
+    planId: 'plan-legacy',
+    phaseId: 'restructure',
+    title: 'Legacy pending task',
+    status: 'pending',
+  });
+  assert.equal(task.status, 'draft');
+  task.activate();
+  assert.equal(task.status, 'active');
+});
+
 test('Plan structure and lifecycle invariants reject ambiguous or incomplete state', () => {
   const basePlan = new Plan({
     id: 'plan-lifecycle',

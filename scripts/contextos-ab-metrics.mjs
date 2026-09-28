@@ -210,7 +210,12 @@ function collectMicroUsage(filePath) {
     completionTokens: records.reduce((sum, record) => sum + (record.completionTokens || 0), 0),
     totalTokens: records.reduce((sum, record) => sum + (record.totalTokens || 0), 0),
     estimatedUsageCalls: records.filter((record) => record.usageSource !== 'provider').length,
+    toolRounds: records.reduce((sum, record) => sum + (record.toolRounds || 0), 0),
     toolCallCount: records.reduce((sum, record) => sum + (record.toolCallCount || 0), 0),
+    hostTurnsSaved: records.reduce((sum, record) => sum + (record.hostTurnsSaved || 0), 0),
+    executorCalls: records.filter((record) => record.executionMode === 'executor').length,
+    executorIdleCalls: records.filter((record) => record.executionMode === 'executor-idle').length,
+    summarizerOnlyCalls: records.filter((record) => record.executionMode === 'summarizer-only' || record.summarizerOnly).length,
     byDelivery: records.reduce((accumulator, record) => {
       increment(accumulator, record.deliveryOutcome || record.requestedDelivery);
       return accumulator;
@@ -321,7 +326,12 @@ function summarize(rollouts, microUsage) {
       completionTokens: 0,
       totalTokens: 0,
       estimatedUsageCalls: 0,
+      toolRounds: 0,
       toolCallCount: 0,
+      hostTurnsSaved: 0,
+      executorCalls: 0,
+      executorIdleCalls: 0,
+      summarizerOnlyCalls: 0,
       byDelivery: {},
     }
   );
@@ -356,7 +366,10 @@ function formatSummary(label, summary, rollouts, microUsage) {
   lines.push(`turnKinds=${JSON.stringify(turns.byKind)}`);
   if (summary.micro.calls) {
     lines.push(
-      `microTokens prompt=${summary.micro.promptTokens} completion=${summary.micro.completionTokens} total=${summary.micro.totalTokens} providerRequests=${summary.micro.providerRequests}`
+      `microTokens prompt=${summary.micro.promptTokens} completion=${summary.micro.completionTokens} total=${summary.micro.totalTokens} providerRequests=${summary.micro.providerRequests} toolRounds=${summary.micro.toolRounds} toolCalls=${summary.micro.toolCallCount} hostTurnsSaved=${summary.micro.hostTurnsSaved}`
+    );
+    lines.push(
+      `microModes executor=${summary.micro.executorCalls} executorIdle=${summary.micro.executorIdleCalls} summarizerOnly=${summary.micro.summarizerOnlyCalls}`
     );
   }
   lines.push(`toolsByName=${JSON.stringify(summary.toolCalls.byName)}`);

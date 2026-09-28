@@ -37,15 +37,16 @@ export class Task {
     if (!planId || typeof planId !== 'string') throw new Error('Task requires planId');
     if (!phaseId || typeof phaseId !== 'string') throw new Error('Task requires phaseId');
     if (!title || typeof title !== 'string') throw new Error('Task requires title');
-    if (!TASK_STATUSES.includes(status)) {
-      throw new Error(`Invalid task status: ${status}. Must be one of ${TASK_STATUSES.join(', ')}`);
+    const normalizedStatus = status === 'pending' ? 'draft' : status;
+    if (!TASK_STATUSES.includes(normalizedStatus)) {
+      throw new Error(`Invalid task status: ${normalizedStatus}. Must be one of ${TASK_STATUSES.join(', ')}`);
     }
 
     this.id = id;
     this.planId = planId;
     this.phaseId = phaseId;
     this.title = title;
-    this.status = status;
+    this.status = normalizedStatus;
 
     this.contextSlice = {
       objective: contextSlice.objective || '',

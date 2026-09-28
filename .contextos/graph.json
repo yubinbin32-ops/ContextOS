@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1249,
-  "exportedAt": "2026-09-28T17:05:00.000Z",
+  "graphRevision": 1251,
+  "exportedAt": "2026-09-28T17:34:43.536Z",
   "data": {
     "plans": [
       {
@@ -122,6 +122,325 @@
     ],
     "tasks": [
       {
+        "id": "task-contextos-compact-by-default",
+        "planId": "plan-contextos-daily-savings",
+        "phaseId": "restructure",
+        "title": "默认紧凑响应：结论、计数、定位符、top-k",
+        "status": "blocked",
+        "contextSlice": {
+          "objective": "把 OS 的默认返回从内容改为结论与引用，使 95% 响应小于 300 token，内容必须显式展开。",
+          "constraints": [
+            "当前决策所需的精确代码仍必须返回，不得为了省 token 让宿主无法判断。",
+            "不得用截断代替结构化，最高价值段落必须优先保留。"
+          ],
+          "references": {},
+          "nextSteps": [
+            "定义紧凑契约：verdict、counts、locators、top-k、artifactRef。",
+            "把 inspect/verify/pipeline 的默认输出切到该契约。",
+            "为全量内容提供显式 expand 路径。"
+          ],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "packages/orchestrator/src/response-budget.mjs",
+            "packages/orchestrator/src/pipelines.mjs",
+            "packages/orchestrator/src/index.mjs"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [],
+        "notes": [
+          {
+            "id": "note-compact-1790615100000-evidence",
+            "kind": "diagnosis",
+            "text": "R6 证据：B7 单次 inspect 返回 10,322 字符，等于把源码换通道塞进主上下文；C8 的 pipeline 输出 2,800 字符被预算截断却丢掉 Micro-Triage。紧凑契约必须结构化而不是截断。",
+            "createdAt": "2026-09-28T17:05:00.000Z"
+          },
+          {
+            "id": "note-compact-1790615300000-slice1",
+            "kind": "repair",
+            "text": "紧凑默认第一片：verify 失败且已有 Micro 诊断时，失败体压缩到 400 字符 + receipt 定位符，full:true 仍可展开原始日志；修复了定位符被 clip 一并截掉的缺陷。",
+            "createdAt": "2026-09-28T17:15:00.000Z"
+          },
+          {
+            "id": "note-compact-1790615300001-slice2",
+            "kind": "validation",
+            "text": "紧凑默认第二片：path-only inspect 对大于 2500 字符的文件默认返回 AST Outline（含 imports、符号、行号、调用关系）+ body locator，小文件仍整份返回。真实测量 pipelines.mjs（103KB/2552 行）：默认 1385 字符（约 350 token），显式 outline 8000 字符，symbol 切片 923 字符，full 106404 字符。默认大文件读取下降约 83%，且从截断头部变为可决策的结构地图。",
+            "createdAt": "2026-09-28T17:15:00.000Z"
+          },
+          {
+            "id": "note-1790616143156-omti9",
+            "text": "Task blocked: Superseded by newer active task 'task-contextos-decision-metrics'.",
+            "kind": "blocked",
+            "createdAt": "2026-09-28T17:22:23.156Z"
+          }
+        ],
+        "checks": [],
+        "syncResult": null,
+        "createdAt": "2026-09-28T17:05:00.000Z",
+        "updatedAt": "2026-09-28T17:22:23.156Z"
+      },
+      {
+        "id": "task-contextos-contract-zero-errors",
+        "planId": "plan-contextos-daily-savings",
+        "phaseId": "restructure",
+        "title": "契约零错误：让每次 OS 往返都不浪费",
+        "status": "blocked",
+        "contextSlice": {
+          "objective": "消除会让宿主白付一整轮上下文的契约缺陷，使 OS 调用的期望值稳定为正。",
+          "constraints": [
+            "读取与搜索永不返回策略文本代替数据。",
+            "错误必须可执行，指出确切的修复参数位置。",
+            "不得用提示词掩盖接口缺陷。"
+          ],
+          "references": {},
+          "nextSteps": [
+            "projectRoot 改为可选，默认取服务端 cwd/project。",
+            "统一 ops 的 refresh/dedupeReads/full 顶层与 args 内位置。",
+            "验证 ship 幂等与 receipt 跨会话恢复。",
+            "复验门控不再吞数据。"
+          ],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "plugins/contextos/server/contextos-mcp.mjs",
+            "packages/orchestrator/src/index.mjs",
+            "packages/orchestrator/src/pipelines.mjs",
+            "packages/mcp/src/v3-server.mjs"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [],
+        "notes": [
+          {
+            "id": "note-contract-1790615100000-gate",
+            "kind": "diagnosis",
+            "text": "实测：会话累计 6 次 discovery 后，inspect 与 ops.code.search 返回 329-330 字符门控文本、零数据；逃生口 refresh/full 会关闭去重或返回全量（实测 103,887 字符）。被拦截的调用仍记为 discovery，计数 6→8→10 棘轮。已改为非阻塞 convergenceHint。",
+            "createdAt": "2026-09-28T17:05:00.000Z"
+          },
+          {
+            "id": "note-contract-1790615100001-root",
+            "kind": "diagnosis",
+            "text": "实测：首次 MCP 调用因缺少 projectRoot 被 zod schema 直接拒绝（Invalid input: expected string, received undefined at projectRoot），消耗一次完整往返。projectRoot 应由服务端上下文提供。",
+            "createdAt": "2026-09-28T17:05:00.000Z"
+          },
+          {
+            "id": "note-contract-1790615400000-refresh",
+            "kind": "repair",
+            "text": "修复：ops 工具描述声称可用 refresh:true/full:true，但 schema 未声明这些字段，zod 会静默剥离，导致调用方以为绕过了去重却拿到陈旧 receipt。现已在 ops 与 compact contextos 两个 surface 声明 refresh/dedupeReads/full/budget/maxChars，并新增回归测试：外部改写文件后带顶层 refresh 必须返回新内容。",
+            "createdAt": "2026-09-28T17:25:00.000Z"
+          },
+          {
+            "id": "note-contract-1790615400001-root-decision",
+            "kind": "decision",
+            "text": "projectRoot 保持必填（已评估并回退过一版缺省实现）：单个插件安装服务多个工作区，cwd 或 env 指向的仓库未必是调用方意图，静默推断会把读写送到错误仓库，风险远大于省一个参数。现有 zod 错误已明确指向 projectRoot，且 A/B/C 会话中模型每次都正确传入。",
+            "createdAt": "2026-09-28T17:25:00.000Z"
+          },
+          {
+            "id": "note-1790616143156-58ken",
+            "text": "Task blocked: Superseded by newer active task 'task-contextos-decision-metrics'.",
+            "kind": "blocked",
+            "createdAt": "2026-09-28T17:22:23.156Z"
+          }
+        ],
+        "checks": [],
+        "syncResult": null,
+        "createdAt": "2026-09-28T17:05:00.000Z",
+        "updatedAt": "2026-09-28T17:22:23.156Z"
+      },
+      {
+        "id": "task-contextos-decision-batching",
+        "planId": "plan-contextos-daily-savings",
+        "phaseId": "restructure",
+        "title": "决策对齐批处理：一个决策一次往返",
+        "status": "pending",
+        "contextSlice": {
+          "objective": "让一次 OS 调用携带宿主单个决策所需的全部机械工作，并支持宿主预声明的条件分支。",
+          "constraints": [
+            "OS 不做判断，只执行宿主写下的决策树。",
+            "必须有预算上限（provider tokens、wall time、文件数）与熔断。",
+            "结果默认紧凑，内容需显式展开。"
+          ],
+          "references": {},
+          "nextSteps": [
+            "把 work/pipeline 从单遍执行升级为可组合批次。",
+            "支持 when/then 形式的预声明条件分支（如验证失败则 triage）。",
+            "为批次增加预算参数与超限行为。"
+          ],
+          "openQuestions": [
+            "条件分支的表达力应该停在什么程度，避免把 OS 变成隐式智能体？"
+          ]
+        },
+        "workingSet": {
+          "files": [
+            "packages/orchestrator/src/pipelines.mjs",
+            "packages/orchestrator/src/index.mjs",
+            "plugins/contextos/skills/contextos/SKILL.md",
+            "plugins/contextos/skills/contextos/references/capabilities.md"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [],
+        "notes": [
+          {
+            "id": "note-batching-1790615100000-evidence",
+            "kind": "diagnosis",
+            "text": "R6 证据：A7 14 轮中大部分是机械 IO（21 次 exec_command），C8 的 21 轮里 7 轮来自协议与错误。宿主真实决策点约 5-6 个，因此 N 的下限是决策数而不是工具数。",
+            "createdAt": "2026-09-28T17:05:00.000Z"
+          }
+        ],
+        "checks": [],
+        "syncResult": null,
+        "createdAt": "2026-09-28T17:05:00.000Z",
+        "updatedAt": "2026-09-28T17:05:00.000Z"
+      },
+      {
+        "id": "task-contextos-decision-metrics",
+        "planId": "plan-contextos-daily-savings",
+        "phaseId": "restructure",
+        "title": "决策轮与机械轮度量：把收益口径改成 turns-to-done",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "用决策轮、机械轮、每轮上下文增量与 turns-to-done 替代单一峰值指标，使每阶段重构都可被 A/B/C 验证。",
+          "constraints": [
+            "沿用 rollout 与 provider usage 作为唯一权威来源，缺失时保持 null。",
+            "区分有效样本、无效样本与不可追溯历史汇总。"
+          ],
+          "references": {},
+          "nextSteps": [
+            "扩展 scripts/contextos-ab-metrics.mjs：决策轮/机械轮分类、每轮上下文增量、turns-to-done。",
+            "定义每阶段 A/B/C 复验协议与通过条件。",
+            "为多步骤任务设定 70% 目标，为小修任务设定 0-20% 边界。"
+          ],
+          "openQuestions": []
+        },
+        "workingSet": {
+          "files": [
+            "scripts/contextos-ab-metrics.mjs",
+            "docs/contextos-real-development-ab-test.md",
+            "packages/orchestrator/src/telemetry.mjs"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [],
+        "notes": [
+          {
+            "id": "note-metrics-1790615100000-evidence",
+            "kind": "diagnosis",
+            "text": "R6 分解：C8 多出的 248,786 token 中约 73% 来自多 7 轮往返，27% 来自平均上下文上升。因此核心指标是 N×C，而不是峰值 C。",
+            "createdAt": "2026-09-28T17:05:00.000Z"
+          },
+          {
+            "id": "note-metrics-1790615500000-baseline",
+            "kind": "validation",
+            "text": "基线已建立：metrics 脚本按 token_count 边界还原轮次并分类。A7 native 14 轮/决策 6/机械 4/工具每轮 1.79/最大批宽 4/上下文增长 27828；B7 15/7/7/1.13/2/26282；C8 21/6/11/1.29/4/32735。结论：C8 决策轮与 native 相同，多出的 7 轮全是机械轮；B7 机械轮也比 native 多 3 轮；native 批宽更高。重构目标量化为机械轮 ≤4、批宽 ≥2、决策轮保持 6。",
+            "createdAt": "2026-09-28T17:35:00.000Z"
+          }
+        ],
+        "checks": [
+          {
+            "id": "check-1790616876328-q0eje",
+            "receiptId": null,
+            "description": "决策轮/机械轮分类与 A/B/C 指标脚本",
+            "passed": true,
+            "evidence": "npm test passed; scripts/contextos-ab-metrics.mjs classifies decision/mechanical turns and reports peak input/token/tool totals.",
+            "recordedAt": "2026-09-28T17:34:36.328Z"
+          },
+          {
+            "id": "check-1790616880190-kv5n3",
+            "receiptId": null,
+            "description": "决策轮/机械轮分类与 A/B/C 指标脚本",
+            "passed": true,
+            "evidence": "npm test passed; scripts/contextos-ab-metrics.mjs classifies decision/mechanical turns and reports peak input/token/tool totals.",
+            "recordedAt": "2026-09-28T17:34:40.190Z"
+          },
+          {
+            "id": "check-1790616883472-fkrxj",
+            "receiptId": null,
+            "description": "决策轮/机械轮分类与 A/B/C 指标脚本",
+            "passed": true,
+            "evidence": "npm test passed; scripts/contextos-ab-metrics.mjs classifies decision/mechanical turns and reports peak input/token/tool totals.",
+            "recordedAt": "2026-09-28T17:34:43.472Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-intent-surface",
+            "block-orchestrator",
+            "block-module-index",
+            "block-capability-registry",
+            "block-ast-engine",
+            "block-surgical-code",
+            "block-coverage-advisory",
+            "block-sqlite-store",
+            "block-graph-sync",
+            "block-domain-models",
+            "block-app-services",
+            "block-command-gateway",
+            "block-process-supervisor",
+            "block-context-renderer",
+            "block-metro-layout",
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-desktop-installer",
+            "block-plugin-bootstrap",
+            "block-cloud-hub",
+            "block-verification-suite",
+            "block-macos-app-shell",
+            "block-macos-app-resources",
+            "block-macos-packaging",
+            "block-runtime-log-store",
+            "block-distribution-verification",
+            "block-p7-real-acceptance",
+            "block-desktop-win",
+            "block-micro-runtime",
+            "block-contextos-operator-guidance",
+            "block-contextos-evaluation-metrics"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 3,
+            "coveredFiles": 3,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-28T17:34:43.534Z"
+        },
+        "createdAt": "2026-09-28T17:05:00.000Z",
+        "updatedAt": "2026-09-28T17:34:43.534Z"
+      },
+      {
         "id": "task-contextos-diagnosis",
         "planId": "plan-contextos-daily-savings",
         "phaseId": "diagnosis",
@@ -232,6 +551,60 @@
         "updatedAt": "2026-09-28T16:40:00.000Z"
       },
       {
+        "id": "task-contextos-micro-executor",
+        "planId": "plan-contextos-daily-savings",
+        "phaseId": "restructure",
+        "title": "Micro 执行化：从摘要器变成受指派执行者",
+        "status": "pending",
+        "contextSlice": {
+          "objective": "让 Micro 在数据进入宿主之前完成证据采集与受限判断，并以可保证领取的方式投递结果。",
+          "constraints": [
+            "Micro 不是智能体，只在宿主显式指派的受限任务上执行。",
+            "toolRounds=0 的调用必须标记为 summarizer-only，不计入委派收益。",
+            "投递不得丢失；结果必须能被后续调用领取。"
+          ],
+          "references": {},
+          "nextSteps": [
+            "默认使用 withOS:true 与附带的 pipeline 证据。",
+            "实现真异步：enqueue 后立即返回，provider 调用与宿主工作重叠。",
+            "增加 toolRounds、hostTurnsSaved 遥测字段。",
+            "允许会话关闭或非 OS 步骤后 flush 待领取结果。"
+          ],
+          "openQuestions": [
+            "哪些受限判断可以安全指派给 Micro，哪些必须留在宿主？"
+          ]
+        },
+        "workingSet": {
+          "files": [
+            "packages/orchestrator/src/micro-client.mjs",
+            "packages/orchestrator/src/micro-delivery.mjs",
+            "packages/orchestrator/src/response-budget.mjs",
+            "packages/orchestrator/src/pipelines.mjs"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [],
+        "notes": [
+          {
+            "id": "note-micro-1790615100000-evidence",
+            "kind": "diagnosis",
+            "text": "全部 3 条 Micro 记录 toolRounds=0、toolCallCount=0、withOS=false，证明当前 Micro 是同步摘要器：provider 调用在宿主轮内 await，defer 只推迟投递；它无法减少宿主轮数，只会增加成本。C8 的正确 triage 本可省下约 29K token 的一轮，却因裁剪而净亏。",
+            "createdAt": "2026-09-28T17:05:00.000Z"
+          }
+        ],
+        "checks": [],
+        "syncResult": null,
+        "createdAt": "2026-09-28T17:05:00.000Z",
+        "updatedAt": "2026-09-28T17:05:00.000Z"
+      },
+      {
         "id": "task-contextos-r4-routing-repair",
         "planId": "plan-contextos-daily-savings",
         "phaseId": "repair",
@@ -288,279 +661,6 @@
         "syncResult": null,
         "createdAt": "2026-09-28T16:08:17.686Z",
         "updatedAt": "2026-09-28T16:40:00.000Z"
-      },
-      {
-        "id": "task-contextos-contract-zero-errors",
-        "planId": "plan-contextos-daily-savings",
-        "phaseId": "restructure",
-        "title": "契约零错误：让每次 OS 往返都不浪费",
-        "status": "active",
-        "contextSlice": {
-          "objective": "消除会让宿主白付一整轮上下文的契约缺陷，使 OS 调用的期望值稳定为正。",
-          "constraints": [
-            "读取与搜索永不返回策略文本代替数据。",
-            "错误必须可执行，指出确切的修复参数位置。",
-            "不得用提示词掩盖接口缺陷。"
-          ],
-          "references": {},
-          "nextSteps": [
-            "projectRoot 改为可选，默认取服务端 cwd/project。",
-            "统一 ops 的 refresh/dedupeReads/full 顶层与 args 内位置。",
-            "验证 ship 幂等与 receipt 跨会话恢复。",
-            "复验门控不再吞数据。"
-          ],
-          "openQuestions": []
-        },
-        "workingSet": {
-          "files": [
-            "plugins/contextos/server/contextos-mcp.mjs",
-            "packages/orchestrator/src/index.mjs",
-            "packages/orchestrator/src/pipelines.mjs",
-            "packages/mcp/src/v3-server.mjs"
-          ],
-          "symbols": [],
-          "candidateBlockIds": [],
-          "scopeDirs": []
-        },
-        "references": { "rules": [], "decisionSections": [], "blockIds": [] },
-        "rules": [],
-        "notes": [
-          {
-            "id": "note-contract-1790615100000-gate",
-            "kind": "diagnosis",
-            "text": "实测：会话累计 6 次 discovery 后，inspect 与 ops.code.search 返回 329-330 字符门控文本、零数据；逃生口 refresh/full 会关闭去重或返回全量（实测 103,887 字符）。被拦截的调用仍记为 discovery，计数 6→8→10 棘轮。已改为非阻塞 convergenceHint。",
-            "createdAt": "2026-09-28T17:05:00.000Z"
-          },
-          {
-            "id": "note-contract-1790615100001-root",
-            "kind": "diagnosis",
-            "text": "实测：首次 MCP 调用因缺少 projectRoot 被 zod schema 直接拒绝（Invalid input: expected string, received undefined at projectRoot），消耗一次完整往返。projectRoot 应由服务端上下文提供。",
-            "createdAt": "2026-09-28T17:05:00.000Z"
-          },
-          {
-            "id": "note-contract-1790615400000-refresh",
-            "kind": "repair",
-            "text": "修复：ops 工具描述声称可用 refresh:true/full:true，但 schema 未声明这些字段，zod 会静默剥离，导致调用方以为绕过了去重却拿到陈旧 receipt。现已在 ops 与 compact contextos 两个 surface 声明 refresh/dedupeReads/full/budget/maxChars，并新增回归测试：外部改写文件后带顶层 refresh 必须返回新内容。",
-            "createdAt": "2026-09-28T17:25:00.000Z"
-          },
-          {
-            "id": "note-contract-1790615400001-root-decision",
-            "kind": "decision",
-            "text": "projectRoot 保持必填（已评估并回退过一版缺省实现）：单个插件安装服务多个工作区，cwd 或 env 指向的仓库未必是调用方意图，静默推断会把读写送到错误仓库，风险远大于省一个参数。现有 zod 错误已明确指向 projectRoot，且 A/B/C 会话中模型每次都正确传入。",
-            "createdAt": "2026-09-28T17:25:00.000Z"
-          }
-        ],
-        "checks": [],
-        "syncResult": null,
-        "createdAt": "2026-09-28T17:05:00.000Z",
-        "updatedAt": "2026-09-28T17:05:00.000Z"
-      },
-      {
-        "id": "task-contextos-decision-batching",
-        "planId": "plan-contextos-daily-savings",
-        "phaseId": "restructure",
-        "title": "决策对齐批处理：一个决策一次往返",
-        "status": "pending",
-        "contextSlice": {
-          "objective": "让一次 OS 调用携带宿主单个决策所需的全部机械工作，并支持宿主预声明的条件分支。",
-          "constraints": [
-            "OS 不做判断，只执行宿主写下的决策树。",
-            "必须有预算上限（provider tokens、wall time、文件数）与熔断。",
-            "结果默认紧凑，内容需显式展开。"
-          ],
-          "references": {},
-          "nextSteps": [
-            "把 work/pipeline 从单遍执行升级为可组合批次。",
-            "支持 when/then 形式的预声明条件分支（如验证失败则 triage）。",
-            "为批次增加预算参数与超限行为。"
-          ],
-          "openQuestions": [
-            "条件分支的表达力应该停在什么程度，避免把 OS 变成隐式智能体？"
-          ]
-        },
-        "workingSet": {
-          "files": [
-            "packages/orchestrator/src/pipelines.mjs",
-            "packages/orchestrator/src/index.mjs",
-            "plugins/contextos/skills/contextos/SKILL.md",
-            "plugins/contextos/skills/contextos/references/capabilities.md"
-          ],
-          "symbols": [],
-          "candidateBlockIds": [],
-          "scopeDirs": []
-        },
-        "references": { "rules": [], "decisionSections": [], "blockIds": [] },
-        "rules": [],
-        "notes": [
-          {
-            "id": "note-batching-1790615100000-evidence",
-            "kind": "diagnosis",
-            "text": "R6 证据：A7 14 轮中大部分是机械 IO（21 次 exec_command），C8 的 21 轮里 7 轮来自协议与错误。宿主真实决策点约 5-6 个，因此 N 的下限是决策数而不是工具数。",
-            "createdAt": "2026-09-28T17:05:00.000Z"
-          }
-        ],
-        "checks": [],
-        "syncResult": null,
-        "createdAt": "2026-09-28T17:05:00.000Z",
-        "updatedAt": "2026-09-28T17:05:00.000Z"
-      },
-      {
-        "id": "task-contextos-compact-by-default",
-        "planId": "plan-contextos-daily-savings",
-        "phaseId": "restructure",
-        "title": "默认紧凑响应：结论、计数、定位符、top-k",
-        "status": "active",
-        "contextSlice": {
-          "objective": "把 OS 的默认返回从内容改为结论与引用，使 95% 响应小于 300 token，内容必须显式展开。",
-          "constraints": [
-            "当前决策所需的精确代码仍必须返回，不得为了省 token 让宿主无法判断。",
-            "不得用截断代替结构化，最高价值段落必须优先保留。"
-          ],
-          "references": {},
-          "nextSteps": [
-            "定义紧凑契约：verdict、counts、locators、top-k、artifactRef。",
-            "把 inspect/verify/pipeline 的默认输出切到该契约。",
-            "为全量内容提供显式 expand 路径。"
-          ],
-          "openQuestions": []
-        },
-        "workingSet": {
-          "files": [
-            "packages/orchestrator/src/response-budget.mjs",
-            "packages/orchestrator/src/pipelines.mjs",
-            "packages/orchestrator/src/index.mjs"
-          ],
-          "symbols": [],
-          "candidateBlockIds": [],
-          "scopeDirs": []
-        },
-        "references": { "rules": [], "decisionSections": [], "blockIds": [] },
-        "rules": [],
-        "notes": [
-          {
-            "id": "note-compact-1790615100000-evidence",
-            "kind": "diagnosis",
-            "text": "R6 证据：B7 单次 inspect 返回 10,322 字符，等于把源码换通道塞进主上下文；C8 的 pipeline 输出 2,800 字符被预算截断却丢掉 Micro-Triage。紧凑契约必须结构化而不是截断。",
-            "createdAt": "2026-09-28T17:05:00.000Z"
-          },
-          {
-            "id": "note-compact-1790615300000-slice1",
-            "kind": "repair",
-            "text": "紧凑默认第一片：verify 失败且已有 Micro 诊断时，失败体压缩到 400 字符 + receipt 定位符，full:true 仍可展开原始日志；修复了定位符被 clip 一并截掉的缺陷。",
-            "createdAt": "2026-09-28T17:15:00.000Z"
-          },
-          {
-            "id": "note-compact-1790615300001-slice2",
-            "kind": "validation",
-            "text": "紧凑默认第二片：path-only inspect 对大于 2500 字符的文件默认返回 AST Outline（含 imports、符号、行号、调用关系）+ body locator，小文件仍整份返回。真实测量 pipelines.mjs（103KB/2552 行）：默认 1385 字符（约 350 token），显式 outline 8000 字符，symbol 切片 923 字符，full 106404 字符。默认大文件读取下降约 83%，且从截断头部变为可决策的结构地图。",
-            "createdAt": "2026-09-28T17:15:00.000Z"
-          }
-        ],
-        "checks": [],
-        "syncResult": null,
-        "createdAt": "2026-09-28T17:05:00.000Z",
-        "updatedAt": "2026-09-28T17:05:00.000Z"
-      },
-      {
-        "id": "task-contextos-micro-executor",
-        "planId": "plan-contextos-daily-savings",
-        "phaseId": "restructure",
-        "title": "Micro 执行化：从摘要器变成受指派执行者",
-        "status": "pending",
-        "contextSlice": {
-          "objective": "让 Micro 在数据进入宿主之前完成证据采集与受限判断，并以可保证领取的方式投递结果。",
-          "constraints": [
-            "Micro 不是智能体，只在宿主显式指派的受限任务上执行。",
-            "toolRounds=0 的调用必须标记为 summarizer-only，不计入委派收益。",
-            "投递不得丢失；结果必须能被后续调用领取。"
-          ],
-          "references": {},
-          "nextSteps": [
-            "默认使用 withOS:true 与附带的 pipeline 证据。",
-            "实现真异步：enqueue 后立即返回，provider 调用与宿主工作重叠。",
-            "增加 toolRounds、hostTurnsSaved 遥测字段。",
-            "允许会话关闭或非 OS 步骤后 flush 待领取结果。"
-          ],
-          "openQuestions": [
-            "哪些受限判断可以安全指派给 Micro，哪些必须留在宿主？"
-          ]
-        },
-        "workingSet": {
-          "files": [
-            "packages/orchestrator/src/micro-client.mjs",
-            "packages/orchestrator/src/micro-delivery.mjs",
-            "packages/orchestrator/src/response-budget.mjs",
-            "packages/orchestrator/src/pipelines.mjs"
-          ],
-          "symbols": [],
-          "candidateBlockIds": [],
-          "scopeDirs": []
-        },
-        "references": { "rules": [], "decisionSections": [], "blockIds": [] },
-        "rules": [],
-        "notes": [
-          {
-            "id": "note-micro-1790615100000-evidence",
-            "kind": "diagnosis",
-            "text": "全部 3 条 Micro 记录 toolRounds=0、toolCallCount=0、withOS=false，证明当前 Micro 是同步摘要器：provider 调用在宿主轮内 await，defer 只推迟投递；它无法减少宿主轮数，只会增加成本。C8 的正确 triage 本可省下约 29K token 的一轮，却因裁剪而净亏。",
-            "createdAt": "2026-09-28T17:05:00.000Z"
-          }
-        ],
-        "checks": [],
-        "syncResult": null,
-        "createdAt": "2026-09-28T17:05:00.000Z",
-        "updatedAt": "2026-09-28T17:05:00.000Z"
-      },
-      {
-        "id": "task-contextos-decision-metrics",
-        "planId": "plan-contextos-daily-savings",
-        "phaseId": "restructure",
-        "title": "决策轮与机械轮度量：把收益口径改成 turns-to-done",
-        "status": "active",
-        "contextSlice": {
-          "objective": "用决策轮、机械轮、每轮上下文增量与 turns-to-done 替代单一峰值指标，使每阶段重构都可被 A/B/C 验证。",
-          "constraints": [
-            "沿用 rollout 与 provider usage 作为唯一权威来源，缺失时保持 null。",
-            "区分有效样本、无效样本与不可追溯历史汇总。"
-          ],
-          "references": {},
-          "nextSteps": [
-            "扩展 scripts/contextos-ab-metrics.mjs：决策轮/机械轮分类、每轮上下文增量、turns-to-done。",
-            "定义每阶段 A/B/C 复验协议与通过条件。",
-            "为多步骤任务设定 70% 目标，为小修任务设定 0-20% 边界。"
-          ],
-          "openQuestions": []
-        },
-        "workingSet": {
-          "files": [
-            "scripts/contextos-ab-metrics.mjs",
-            "docs/contextos-real-development-ab-test.md",
-            "packages/orchestrator/src/telemetry.mjs"
-          ],
-          "symbols": [],
-          "candidateBlockIds": [],
-          "scopeDirs": []
-        },
-        "references": { "rules": [], "decisionSections": [], "blockIds": [] },
-        "rules": [],
-        "notes": [
-          {
-            "id": "note-metrics-1790615100000-evidence",
-            "kind": "diagnosis",
-            "text": "R6 分解：C8 多出的 248,786 token 中约 73% 来自多 7 轮往返，27% 来自平均上下文上升。因此核心指标是 N×C，而不是峰值 C。",
-            "createdAt": "2026-09-28T17:05:00.000Z"
-          },
-          {
-            "id": "note-metrics-1790615500000-baseline",
-            "kind": "validation",
-            "text": "基线已建立：metrics 脚本按 token_count 边界还原轮次并分类。A7 native 14 轮/决策 6/机械 4/工具每轮 1.79/最大批宽 4/上下文增长 27828；B7 15/7/7/1.13/2/26282；C8 21/6/11/1.29/4/32735。结论：C8 决策轮与 native 相同，多出的 7 轮全是机械轮；B7 机械轮也比 native 多 3 轮；native 批宽更高。重构目标量化为机械轮 ≤4、批宽 ≥2、决策轮保持 6。",
-            "createdAt": "2026-09-28T17:35:00.000Z"
-          }
-        ],
-        "checks": [],
-        "syncResult": null,
-        "createdAt": "2026-09-28T17:05:00.000Z",
-        "updatedAt": "2026-09-28T17:05:00.000Z"
       }
     ],
     "blocks": [
@@ -1312,6 +1412,151 @@
         "history": [],
         "createdAt": "2026-09-20T08:38:28.094Z",
         "updatedAt": "2026-09-20T08:38:28.094Z"
+      },
+      {
+        "id": "block-contextos-evaluation-metrics",
+        "projectId": "mdflow",
+        "title": "block-contextos-evaluation-metrics",
+        "kind": "service",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "usage",
+            "anchorKind": "symbol",
+            "startLine": 9,
+            "endLine": 19,
+            "hash": "dcc93b6f2166521a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "parseArgs",
+            "anchorKind": "symbol",
+            "startLine": 21,
+            "endLine": 33,
+            "hash": "d6c489077b35d187",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "readJsonl",
+            "anchorKind": "symbol",
+            "startLine": 35,
+            "endLine": 47,
+            "hash": "0f72a64dd6363e6a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "increment",
+            "anchorKind": "symbol",
+            "startLine": 49,
+            "endLine": 52,
+            "hash": "164f4caa0bc0ff95",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "classifyCall",
+            "anchorKind": "symbol",
+            "startLine": 60,
+            "endLine": 85,
+            "hash": "e874a0328d61f822",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "classifyTurn",
+            "anchorKind": "symbol",
+            "startLine": 87,
+            "endLine": 94,
+            "hash": "87604832b58df1a1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "collectRollout",
+            "anchorKind": "symbol",
+            "startLine": 96,
+            "endLine": 200,
+            "hash": "514c382ae4f88904",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "collectMicroUsage",
+            "anchorKind": "symbol",
+            "startLine": 202,
+            "endLine": 225,
+            "hash": "614523dbfc02e06e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "summarize",
+            "anchorKind": "symbol",
+            "startLine": 227,
+            "endLine": 350,
+            "hash": "879f4128d725c619",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "formatSummary",
+            "anchorKind": "symbol",
+            "startLine": 352,
+            "endLine": 385,
+            "hash": "11a8641f15bdffef",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/contextos-ab-metrics.mjs",
+            "symbol": "main",
+            "anchorKind": "symbol",
+            "startLine": 387,
+            "endLine": 403,
+            "hash": "3106c4a4bd57b608",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "docs/contextos-real-development-ab-test.md",
+            "symbol": "contextos-real-development-ab-test.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 804,
+            "hash": "973cd49dc56a8b98",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-28T17:34:40.125Z",
+        "updatedAt": "2026-09-28T17:34:40.125Z"
       },
       {
         "id": "block-contextos-operator-guidance",
@@ -6446,7 +6691,7 @@
             "anchorKind": "tree",
             "startLine": null,
             "endLine": null,
-            "hash": "8037a1bb30a3746c",
+            "hash": "7daf78e8f3556178",
             "role": "resource",
             "hashMode": "content",
             "manifest": null
@@ -6457,7 +6702,7 @@
             "anchorKind": "tree",
             "startLine": null,
             "endLine": null,
-            "hash": "523dfafe88c79ff2",
+            "hash": "1e462c0ebb312b4d",
             "role": "resource",
             "hashMode": "content",
             "manifest": null

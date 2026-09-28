@@ -1331,11 +1331,15 @@ test('ops plan get returns native markdown for multi-line summary', async () => 
 
 test('ops supports micro capability and verify triggers micro triage on failure', async () => {
   const http = await import('node:http');
+  const pingToolAvailability = [];
   const mockServer = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       const parsed = JSON.parse(body || '{}');
+      if (parsed.messages?.some((message) => message.content?.includes('ping'))) {
+        pingToolAvailability.push(Array.isArray(parsed.tools) && parsed.tools.length > 0);
+      }
       const isTriage = parsed.messages?.some((m) => m.content?.includes('分析以下测试'));
       const isWithOS = parsed.messages?.some((m) => m.content?.includes('inspect codebase'));
       if (isWithOS && (!Array.isArray(parsed.tools) || parsed.tools.length === 0)) {
@@ -1388,6 +1392,11 @@ test('ops supports micro capability and verify triggers micro triage on failure'
       args: { prompt: 'ping' },
     });
     assert.match(microDirect, /micro inference ok/);
+    assert.equal(
+      pingToolAvailability.at(-1),
+      true,
+      'OS-dispatched Micro must default to executor mode when the request budget allows a tool round and final answer',
+    );
 
     const doctorProbe = JSON.parse(await orchestrator.dispatch('ops', {
       capability: 'micro',

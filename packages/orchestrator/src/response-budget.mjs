@@ -230,6 +230,12 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
   const invocation = result.invocation && typeof result.invocation === 'object'
     ? result.invocation
     : {};
+  const toolCallCount = Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
+  const toolRounds = Number(invocation.toolRounds ?? result.steps) || 0;
+  const executionMode = result.executionMode
+    || (!result.withOS
+      ? 'summarizer-only'
+      : (toolCallCount > 0 ? 'executor' : 'executor-idle'));
   const entry = {
     at: new Date().toISOString(),
     receiptId: receiptId || result.receiptId || null,
@@ -256,7 +262,10 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     sessionMode: result.sessionMode || null,
     batch: Boolean(result.batch),
     steps: Number(result.steps) || 0,
-    toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
+    executionMode,
+    summarizerOnly: executionMode === 'summarizer-only',
+    hostTurnsSaved: Number(result.hostTurnsSaved ?? toolRounds) || 0,
+    toolCallCount,
     toolNames: Array.isArray(result.toolCalls) ? result.toolCalls.map((call) => call.name).filter(Boolean) : [],
     durationMs: Number(result.durationMs) || 0,
     usageSource: result.usageSource || (result.providerUsage ? 'provider' : 'unavailable'),
@@ -265,7 +274,7 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     deduplicatedToolCallCount: Number(result.deduplicatedToolCallCount) || 0,
     providerRequests: Number(result.providerRequests ?? invocation.providerRequests)
       || (Number(result.providerUsageCalls) || 0) + (Number(result.estimatedUsageCalls) || 0),
-    toolRounds: Number(invocation.toolRounds ?? result.steps) || 0,
+    toolRounds,
     shortCircuited: Boolean(invocation.shortCircuited),
     shortCircuitReason: invocation.shortCircuitReason || null,
     promptTokens: result.providerUsage ? Number(usage.prompt_tokens) || 0 : null,
@@ -320,6 +329,10 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     ok: 0,
     failed: 0,
     withOSCalls: 0,
+    executorCalls: 0,
+    executorIdleCalls: 0,
+    summarizerOnlyCalls: 0,
+    hostTurnsSaved: 0,
     preloadCalls: 0,
     preloadChars: 0,
     preloadCacheHits: 0,
@@ -353,6 +366,10 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     if (entry.ok) totals.ok += 1;
     else totals.failed += 1;
     if (entry.withOS) totals.withOSCalls += 1;
+    if (entry.executionMode === 'executor') totals.executorCalls += 1;
+    else if (entry.executionMode === 'executor-idle') totals.executorIdleCalls += 1;
+    else if (entry.executionMode === 'summarizer-only' || entry.summarizerOnly) totals.summarizerOnlyCalls += 1;
+    totals.hostTurnsSaved += Number(entry.hostTurnsSaved) || 0;
     if (entry.preloadAttached ?? entry.preload) totals.preloadCalls += 1;
     totals.preloadChars += Number(entry.preloadChars) || 0;
     if (entry.preloadCacheHit) totals.preloadCacheHits += 1;
@@ -456,6 +473,8 @@ function projectProviderUsage(result) {
       evidenceMode: invocation.evidenceMode || (result?.preload ? 'pipeline' : 'none'),
       evidenceCacheHit: Boolean(invocation.evidenceCacheHit || result?.preload?.cacheHit),
       pipelineRuns: Number(invocation.pipelineRuns ?? result?.preload?.pipelineRuns) || 0,
+      executionMode: result?.executionMode || invocation.executionMode || null,
+      allowCommands: Boolean(invocation.allowCommands),
       providerRequests: Number(invocation.providerRequests ?? result?.providerRequests)
         || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0),
       toolRounds: Number(invocation.toolRounds ?? result?.steps) || 0,

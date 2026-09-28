@@ -46,17 +46,16 @@ surface, and resource discovery is not an availability check.
 - 不要在 OS 调用之间穿插原生 `sed`/`cat`/`rg`/`npm test`，那会把已并入 OS 的机械轮重新拆开。
 - 大文件只读一次：默认返回 AST Outline + locator，再用 `symbol`/`ranges` 取正文，不要 `budget: "full"` 通读。
 
-### 3. Micro 舱外双脑子代理 (何时调用 Micro?)
-- **定位**：Micro 是独立于主对话的后台轻量级任务子代理，用于执行“重日志脱毒、契约提取、诊断分析”。
-- **触发阈值与原则**：
-  - **不要**将 Micro 用于简单代码编辑或普通单步测试。
-  - **触发时机**：当测试报错、编译器堆栈或日志输出**超过 2,000 字符**，或者排查需要分析数万字冗长追踪时，必须调用 `micro`！
-  - **调用方式**：将证据流水线直接附着在第一次调用中：
-    `contextos({ action: "micro", args: { pipeline: { steps: [{ run: "npm test", allowCommands: true }] }, invocation: { evidence: { maxChars: 2400 }, provider: { maxRequests: 1 } } } })`
-  - Micro 在舱外独立消化海量输出，主上下文只接收结构化失败结论（Receipt），避免主上下文被数万字日志污染冲垮。
-  - `verify` 的 `mode:"full"` 只控制输出，不是进程模式；失败证据超过阈值且 Micro 已配置时会自动 triage，只有显式 `autoTriage:false` 才关闭。
+### 4. Micro 舱外执行器 (执行 vs 摘要)
+- **定位**：Micro 是宿主显式指派的舱外执行器。无 preload 的 OS 调用默认启用只读执行器；纯摘要或附 preload 时默认 `withOS:false`，需继续执行时开启。
+- **执行器契约**：`withOS:true` 时必须给足 `provider.maxRequests >= maxSteps + 1`，否则工具轮没有最终回答预算。需要自行跑命令时设置 `invocation.tools.allowCommands:true`，Micro 才可使用受限 `run`。
+- **调用方式**：把重证据流水线直接附着在第一次调用中：
+  `contextos({ action: "micro", args: { pipeline: { steps: [{ run: "npm test", allowCommands: true }] }, invocation: { evidence: { maxChars: 2400 }, tools: { enabled: true, maxSteps: 2, allowCommands: true }, provider: { maxRequests: 3 } } } })`
+- **触发阈值**：测试错误、堆栈或日志超过 2,000 字符时使用。不要用于简单单行编辑。
+- **无尾投递**：宿主不需要立即消费结果时使用 `delivery:"defer"` 或 `"auto"`；结果在后续顶层 OS 调用中恢复。不要为了等待一个摘要额外开启宿主轮次。
+- `verify` 的 `mode:"full"` 只控制输出，不是进程模式；失败证据超过阈值且 Micro 已配置时会自动 triage，只有显式 `autoTriage:false` 才关闭。
 
-### 4. 系统自检与环境运维 (Doctor & Ops)
+### 5. 系统自检与环境运维 (Doctor & Ops)
 - 检查 ContextOS 运行状态、Node 版本、存储模式与已连接编辑器：
   `ops({ capability: "system", action: "doctor" })`。
 - 检查 Micro 配置只证明字段存在；需要连通性和凭据验证时执行：
