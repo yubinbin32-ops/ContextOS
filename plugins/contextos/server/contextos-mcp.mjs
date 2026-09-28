@@ -60322,6 +60322,12 @@ function syncAllPlatforms({
     }
     if (platform.skillPath && skillSource && fs30.existsSync(skillSource)) {
       copyDirectoryRecursive(skillSource, platform.skillPath);
+      const parentSource = path31.dirname(skillSource);
+      const opsSource = path31.join(parentSource, "contextos-ops");
+      const opsTarget = path31.join(path31.dirname(platform.skillPath), "contextos-ops");
+      if (fs30.existsSync(opsSource)) {
+        copyDirectoryRecursive(opsSource, opsTarget);
+      }
     }
     if (platform.id === "claude-code") {
       configureJsonMcp({ configPath: platform.configPath, serverScript, nodePath, env, version: version2 });

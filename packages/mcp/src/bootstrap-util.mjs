@@ -570,6 +570,12 @@ export function syncAllPlatforms({
 
     if (platform.skillPath && skillSource && fs.existsSync(skillSource)) {
       copyDirectoryRecursive(skillSource, platform.skillPath);
+      const parentSource = path.dirname(skillSource);
+      const opsSource = path.join(parentSource, 'contextos-ops');
+      const opsTarget = path.join(path.dirname(platform.skillPath), 'contextos-ops');
+      if (fs.existsSync(opsSource)) {
+        copyDirectoryRecursive(opsSource, opsTarget);
+      }
     }
 
     if (platform.id === 'claude-code') {
