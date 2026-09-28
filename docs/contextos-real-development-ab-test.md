@@ -590,3 +590,30 @@ node scripts/contextos-ab-metrics.mjs \
 6. **架构簿记是用户目标之外的税。** 用户要的是“修复失败验收”，`ship` 的 Block/Chain 完整性属于系统自身治理。模型会把这类要求排到最后一刻，导致 ship 阶段集中暴露问题、反复往返。
 
 对应到修复方向：OS 若要被自然采用，必须做到“投影不丢关键结论、接口不产生假成功、验证证据跨会话可追溯、协议成本低于它替代的 native 往返”。本轮已修前两项与第三项的提示，第四项仍需下一轮验证。
+
+## 25. 直接原因：convergence gate 会拒绝正常读取
+
+R6 报告完成后，用真实 MCP stdio 会话做了一次对照，发现 OS 被弃用有一个比“心智”更底层的原因：**OS 会在会话累计 6 次 discovery 调用后，拒绝返回数据本身。**
+
+实测序列（同一个 MCP 进程，接入仓库里尚未关闭的旧 session）：
+
+| 调用 | 结果 |
+| --- | --- |
+| `inspect(path, budget:"shallow")` | 329 字符，内容是 `# ContextOS convergence gate`，没有任何文件内容 |
+| `inspect(path, budget:"full")` | 103,887 字符，绕过门控并返回整份文件 |
+| `ops code.search`（顶层 `refresh:true`） | 330 字符，仍是门控文本 |
+| `inspect(path, budget:"shallow", refresh:true)` | 2,022 字符，正常返回 |
+| `ops code.search`（`args.refresh:true`） | 556 字符，正常返回 |
+
+同一时刻 native 对照：`sed -n '1,60p'` 返回 2,391 字符，`rg -n` 返回 172 字符，均无需任何解锁参数。
+
+这段实测暴露四个缺陷：
+
+1. **门控替代了数据，而不是附加提示。** 调用方无法区分“没有命中”与“被策略拦下”，而 native 工具从不拒绝读取。
+2. **唯一的逃生口都在关闭省上下文机制。** `refresh:true`、`dedupeReads:false`、`full:true`、`budget:"full"` 中，后两者直接返回全量内容（实测 103,887 字符）。门控把模型推向最贵的读取模式。
+3. **被拦截的调用仍被记为 discovery telemetry。** 实测计数 6 → 8 → 10，越试越锁死，只有 mutation/verification 才能清零。
+4. **计数是 session 级的，知识是对话级的。** 新对话接入未关闭的旧 session 时，会因为别的对话产生的 discovery 记录而被拦下，即使模型从未读过那些内容。实测第一次调用即被拦。
+
+这四点叠加的结果是：模型只要尝试用 OS 读取或搜索，就有概率拿到一段没有数据的策略文本，并且重试会让情况更糟。任何理性的 agent 都会在此之后回到 native，OS 因此永远没有机会展示节省。
+
+修复：`convergenceGate` 改为 `convergenceHint`，门控不再替换结果，而是把一句不超过 180 字符的收敛提示附加在真实 payload 之后；读取与搜索始终返回数据。修复后真实 MCP 复测：`inspect` 返回 2,212 字符数据 + 提示，`code.search` 返回 746 字符结果 + 提示。

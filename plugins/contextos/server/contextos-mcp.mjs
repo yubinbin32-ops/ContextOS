@@ -52436,19 +52436,14 @@ function isUnproductiveDiscovery(tool, input = {}) {
     "profile"
   ].includes(input.capability) && !["create", "update", "complete", "delete", "archive", "start", "finish", "close", "set", "bind", "bind_auto", "compose", "link", "unlink", "evict", "edit", "changeset"].includes(String(input.action || ""));
 }
-function convergenceGate(projectRoot, sessionId, tool, input, semanticReceipt) {
+function convergenceHint(projectRoot, sessionId, tool, input, semanticReceipt) {
   if (semanticReceipt || !isUnproductiveDiscovery(tool, input)) return null;
   if (input.refresh === true || input.dedupeReads === false || input.full === true || input.budget === "full") return null;
   const nested = input.args && typeof input.args === "object" && !Array.isArray(input.args) ? input.args : {};
   if (nested.refresh === true || nested.dedupeReads === false || nested.full === true || nested.budget === "full") return null;
   const count = recentUnproductiveCalls(projectRoot, sessionId);
   if (count < CONVERGENCE_DISCOVERY_LIMIT) return null;
-  return [
-    "# ContextOS convergence gate",
-    `- ${count} unchanged discovery/diagnostic calls occurred since the last mutation or verification.`,
-    "- Use one bounded `work`/`change`/`verify` or a dependent `pipeline` next; existing receipts and artifacts remain available.",
-    "- Set `refresh:true` only when external state changed and a fresh read is necessary."
-  ].join("\n");
+  return `${count} discovery/diagnostic calls since the last mutation or verification; converge with one bounded work/change/verify or a dependent pipeline. Result returned in full.`;
 }
 function semanticOpsMemoSpec(input = {}) {
   if (input.capability === "telemetry") return null;
@@ -52958,7 +52953,8 @@ var Orchestrator = class {
     let deliveryClaimsCompleted = false;
     const semanticMemo = tool === "ops" ? semanticOpsMemoSpec(input) : null;
     const semanticReceipt = semanticMemo ? this.store.findSemanticReceipt({ key: semanticMemo.key }) : null;
-    const convergence = convergenceGate(this.projectRoot, seed.id, tool, input, semanticReceipt);
+    const convergence = convergenceHint(this.projectRoot, seed.id, tool, input, semanticReceipt);
+    const hostHint = [routingHint, convergence].filter(Boolean).join(" ") || null;
     const publishGraph = input.exportGraph === true || tool === "ship" && ctx.profile?.shipExportsGraph === true;
     try {
       if (recoverMicroDeliveries) {
@@ -52969,9 +52965,7 @@ var Orchestrator = class {
         }
       }
       let result;
-      if (convergence) {
-        result = convergence;
-      } else if (semanticReceipt) {
+      if (semanticReceipt) {
         result = semanticOpsReuse(semanticMemo, semanticReceipt);
       } else {
         switch (tool) {
@@ -53002,7 +52996,7 @@ var Orchestrator = class {
           default:
             throw new Error(`Unknown orchestrator tool '${tool}'`);
         }
-        if (!convergence && semanticMemo && !semanticReceipt && typeof result === "string") {
+        if (semanticMemo && !semanticReceipt && typeof result === "string") {
           const rawHash = crypto10.createHash("sha256").update(result).digest("hex");
           const artifactId = result.match(/artifact=([A-Za-z0-9._-]+)/)?.[1] || null;
           this.store.recordSemanticReceipt({
@@ -53021,7 +53015,7 @@ var Orchestrator = class {
       if (typeof result !== "string") {
         const combined = attachRoutingHint(
           attachMicroDeliveryData(result, deliveryClaims, deliveryWarning),
-          routingHint
+          hostHint
         );
         recordTelemetry(this.projectRoot, {
           sessionId: seed.id,
@@ -53040,7 +53034,7 @@ var Orchestrator = class {
       }
       const response = attachRoutingHint(
         attachMicroDeliveryData(result, deliveryClaims, deliveryWarning),
-        routingHint
+        hostHint
       );
       const responseArgs = input.args && typeof input.args === "object" && !Array.isArray(input.args) ? input.args : {};
       const responseMaxChars = typeof input.maxChars === "number" ? input.maxChars : typeof responseArgs.maxChars === "number" ? responseArgs.maxChars : void 0;
@@ -53050,7 +53044,7 @@ var Orchestrator = class {
         tool,
         maxChars: responseMaxChars,
         full,
-        routingHint: isJsonValueString(response) ? null : routingHint
+        routingHint: isJsonValueString(response) ? null : hostHint
       });
       recordTelemetry(this.projectRoot, {
         sessionId: seed.id,

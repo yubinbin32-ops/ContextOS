@@ -335,7 +335,7 @@ test('repeated semantic capability reads reuse a compact receipt until a mutatio
   assert.equal(planCalls.length, 3, 'mutation and the following read must reach the service');
 });
 
-test('discovery convergence gate stops an unchanged read loop after six host calls', async () => {
+test('discovery convergence hint never replaces the requested payload', async () => {
   const projectRoot = makeTempProject();
   const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
   for (let index = 0; index < 6; index += 1) {
@@ -345,11 +345,14 @@ test('discovery convergence gate stops an unchanged read loop after six host cal
     });
   }
   const gated = await orchestrator.dispatch('inspect', { path: 'src/math.mjs' });
-  assert.match(gated, /convergence gate/);
-  assert.match(gated, /work.*change.*verify/);
+  // The read still returns its own result; the guard only attaches a hint.
+  assert.match(gated, /src\/math\.mjs/);
+  assert.match(gated, /discovery\/diagnostic calls/);
+  assert.match(gated, /converge with one bounded/);
+  assert.doesNotMatch(gated, /^# ContextOS convergence gate$/m);
 });
 
-test('discovery convergence gate also stops read-only work loops', async () => {
+test('discovery convergence hint also applies to read-only work loops without blocking them', async () => {
   const projectRoot = makeTempProject();
   const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
   for (let index = 0; index < 6; index += 1) {
@@ -361,7 +364,8 @@ test('discovery convergence gate also stops read-only work loops', async () => {
   const gated = await orchestrator.dispatch('work', {
     inspect: [{ path: 'src/math.mjs', symbol: 'add' }],
   });
-  assert.match(gated, /convergence gate/);
+  assert.match(gated, /src\/math\.mjs/);
+  assert.match(gated, /discovery\/diagnostic calls/);
 });
 
 test('pipeline artifact reads return a compact preview unless raw output is explicit', async () => {

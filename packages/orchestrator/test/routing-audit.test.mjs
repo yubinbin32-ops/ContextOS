@@ -189,9 +189,11 @@ test('Orchestrator emits one bounded convergence hint at the discovery threshold
       await orchestrator.dispatch('inspect', { path: `src/${index}.mjs`, maxChars: 120 });
     }
     const sixth = await orchestrator.dispatch('inspect', { path: 'src/5.mjs', maxChars: 120 });
-    assert.match(sixth, /ContextOS route hint/);
+    assert.match(sixth, /Batch known reads/);
     const seventh = await orchestrator.dispatch('inspect', { path: 'src/6.mjs', maxChars: 120 });
-    assert.doesNotMatch(seventh, /ContextOS route hint/);
+    // The one-shot routing nudge does not repeat; the separate convergence
+    // hint may still be attached once the session stays in discovery.
+    assert.doesNotMatch(seventh, /Batch known reads/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
