@@ -516,7 +516,7 @@
         "planId": "plan-contextos-daily-savings",
         "phaseId": "restructure",
         "title": "决策轮与机械轮度量：把收益口径改成 turns-to-done",
-        "status": "pending",
+        "status": "active",
         "contextSlice": {
           "objective": "用决策轮、机械轮、每轮上下文增量与 turns-to-done 替代单一峰值指标，使每阶段重构都可被 A/B/C 验证。",
           "constraints": [
@@ -549,6 +549,12 @@
             "kind": "diagnosis",
             "text": "R6 分解：C8 多出的 248,786 token 中约 73% 来自多 7 轮往返，27% 来自平均上下文上升。因此核心指标是 N×C，而不是峰值 C。",
             "createdAt": "2026-09-28T17:05:00.000Z"
+          },
+          {
+            "id": "note-metrics-1790615500000-baseline",
+            "kind": "validation",
+            "text": "基线已建立：metrics 脚本按 token_count 边界还原轮次并分类。A7 native 14 轮/决策 6/机械 4/工具每轮 1.79/最大批宽 4/上下文增长 27828；B7 15/7/7/1.13/2/26282；C8 21/6/11/1.29/4/32735。结论：C8 决策轮与 native 相同，多出的 7 轮全是机械轮；B7 机械轮也比 native 多 3 轮；native 批宽更高。重构目标量化为机械轮 ≤4、批宽 ≥2、决策轮保持 6。",
+            "createdAt": "2026-09-28T17:35:00.000Z"
           }
         ],
         "checks": [],
