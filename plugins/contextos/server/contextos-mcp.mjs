@@ -61408,11 +61408,19 @@ function createV3Server({
         inputSchema: {
           action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops"]),
           args: record(any()).optional(),
-          projectRoot: string2().describe("Absolute repository root.")
+          projectRoot: string2().describe("Absolute repository root."),
+          refresh: boolean2().optional().describe("Force a fresh read instead of reusing a compact receipt."),
+          dedupeReads: boolean2().optional().describe("Set false to bypass read deduplication."),
+          full: boolean2().optional().describe("Request the full, unbounded payload."),
+          budget: string2().optional().describe('Named output budget, e.g. "full".'),
+          maxChars: number2().optional().describe("Explicit output character cap.")
         }
       },
       async (input) => {
-        const args2 = input.args || {};
+        const args2 = { ...input.args || {} };
+        for (const control of ["refresh", "dedupeReads", "full", "budget", "maxChars"]) {
+          if (input[control] !== void 0) args2[control] = input[control];
+        }
         const payload = { ...args2, projectRoot: input.projectRoot };
         if (input.action === "micro") {
           return textResult(await dispatch("ops", {
@@ -61560,7 +61568,12 @@ function createV3Server({
         capability: _enum(OPS_CAPABILITIES),
         action: string2().optional(),
         args: record(any()).optional(),
-        projectRoot: string2().describe("Absolute path of the active workspace.")
+        projectRoot: string2().describe("Absolute path of the active workspace."),
+        refresh: boolean2().optional().describe("Force a fresh read instead of reusing a compact receipt."),
+        dedupeReads: boolean2().optional().describe("Set false to bypass read deduplication."),
+        full: boolean2().optional().describe("Request the full, unbounded payload."),
+        budget: string2().optional().describe('Named output budget, e.g. "full".'),
+        maxChars: number2().optional().describe("Explicit output character cap.")
       }
     },
     async (input) => textResult(await dispatch("ops", input))

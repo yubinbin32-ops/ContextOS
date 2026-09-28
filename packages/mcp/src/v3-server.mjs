@@ -79,10 +79,18 @@ export function createV3Server({
           action: z.enum(['explore', 'inspect', 'change', 'verify', 'ship', 'pipeline', 'work', 'micro', 'resume', 'ops']),
           args: z.record(z.any()).optional(),
           projectRoot: z.string().describe('Absolute repository root.'),
+          refresh: z.boolean().optional().describe('Force a fresh read instead of reusing a compact receipt.'),
+          dedupeReads: z.boolean().optional().describe('Set false to bypass read deduplication.'),
+          full: z.boolean().optional().describe('Request the full, unbounded payload.'),
+          budget: z.string().optional().describe('Named output budget, e.g. "full".'),
+          maxChars: z.number().optional().describe('Explicit output character cap.'),
         },
       },
       async (input) => {
-        const args = input.args || {};
+        const args = { ...(input.args || {}) };
+        for (const control of ['refresh', 'dedupeReads', 'full', 'budget', 'maxChars']) {
+          if (input[control] !== undefined) args[control] = input[control];
+        }
         const payload = { ...args, projectRoot: input.projectRoot };
         if (input.action === 'micro') {
           return textResult(await dispatch('ops', {
@@ -237,6 +245,11 @@ export function createV3Server({
         action: z.string().optional(),
         args: z.record(z.any()).optional(),
         projectRoot: z.string().describe('Absolute path of the active workspace.'),
+        refresh: z.boolean().optional().describe('Force a fresh read instead of reusing a compact receipt.'),
+        dedupeReads: z.boolean().optional().describe('Set false to bypass read deduplication.'),
+        full: z.boolean().optional().describe('Request the full, unbounded payload.'),
+        budget: z.string().optional().describe('Named output budget, e.g. "full".'),
+        maxChars: z.number().optional().describe('Explicit output character cap.'),
       },
     },
     async (input) => textResult(await dispatch('ops', input))

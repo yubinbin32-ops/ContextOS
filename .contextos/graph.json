@@ -336,6 +336,18 @@
             "kind": "diagnosis",
             "text": "实测：首次 MCP 调用因缺少 projectRoot 被 zod schema 直接拒绝（Invalid input: expected string, received undefined at projectRoot），消耗一次完整往返。projectRoot 应由服务端上下文提供。",
             "createdAt": "2026-09-28T17:05:00.000Z"
+          },
+          {
+            "id": "note-contract-1790615400000-refresh",
+            "kind": "repair",
+            "text": "修复：ops 工具描述声称可用 refresh:true/full:true，但 schema 未声明这些字段，zod 会静默剥离，导致调用方以为绕过了去重却拿到陈旧 receipt。现已在 ops 与 compact contextos 两个 surface 声明 refresh/dedupeReads/full/budget/maxChars，并新增回归测试：外部改写文件后带顶层 refresh 必须返回新内容。",
+            "createdAt": "2026-09-28T17:25:00.000Z"
+          },
+          {
+            "id": "note-contract-1790615400001-root-decision",
+            "kind": "decision",
+            "text": "projectRoot 保持必填（已评估并回退过一版缺省实现）：单个插件安装服务多个工作区，cwd 或 env 指向的仓库未必是调用方意图，静默推断会把读写送到错误仓库，风险远大于省一个参数。现有 zod 错误已明确指向 projectRoot，且 A/B/C 会话中模型每次都正确传入。",
+            "createdAt": "2026-09-28T17:25:00.000Z"
           }
         ],
         "checks": [],

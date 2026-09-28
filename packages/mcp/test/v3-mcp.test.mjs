@@ -21,6 +21,41 @@ async function boot() {
   return client;
 }
 
+test("ops honors a top-level refresh instead of silently reusing a stale receipt", async () => {
+  const client = await boot();
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-ops-refresh" });
+  try {
+    const read = async (extra = {}) => {
+      const result = await client.callTool({
+        name: "ops",
+        arguments: {
+          capability: "code",
+          action: "read",
+          args: { path: "src/math.mjs" },
+          projectRoot: fixture.root,
+          ...extra,
+        },
+      });
+      return (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    };
+
+    const first = await read();
+    assert.match(first, /add\(a, b\)/);
+
+    const second = await read();
+    assert.match(second, /unchanged|reuse|receipt/i);
+
+    // An external write is invisible to the session store; the top-level
+    // refresh must therefore bypass the receipt and return the new body.
+    fixture.write("src/math.mjs", "export function add(a, b) {\n  return a + b + 1;\n}\n");
+    const refreshed = await read({ refresh: true });
+    assert.match(refreshed, /a \+ b \+ 1/);
+  } finally {
+    fixture.cleanup();
+    await client.close();
+  }
+});
+
 test("V3 default surface exposes one compact transport tool", async () => {
   const server = createV3Server();
   const client = new Client({ name: "contextos-v3-lean-test", version: packageVersion });
