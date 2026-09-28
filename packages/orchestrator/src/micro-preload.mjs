@@ -116,6 +116,16 @@ function countActions(value) {
   return 1;
 }
 
+function hasAllowCommands(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(hasAllowCommands);
+  if (value.allowCommands === true) return true;
+  for (const v of Object.values(value)) {
+    if (typeof v === 'object' && hasAllowCommands(v)) return true;
+  }
+  return false;
+}
+
 function validatePreloadValue(value, { allowCommands = false } = {}) {
   if (Array.isArray(value)) {
     for (const item of value) validatePreloadValue(item, { allowCommands });
@@ -123,11 +133,13 @@ function validatePreloadValue(value, { allowCommands = false } = {}) {
   }
   if (!value || typeof value !== 'object') return;
 
+  const currentAllowCommands = allowCommands || value.allowCommands === true;
+
   for (const [key, nested] of Object.entries(value)) {
     if (FORBIDDEN_KEYS.has(key)) {
       throw new Error(`Micro preload does not allow mutation or nested Micro action '${key}'.`);
     }
-    if (COMMAND_KEYS.has(key) && !allowCommands) {
+    if (COMMAND_KEYS.has(key) && !currentAllowCommands) {
       throw new Error(`Micro preload command '${key}' requires allowCommands:true.`);
     }
     if (key === 'tool' && FORBIDDEN_TOOLS.has(nested)) {
@@ -136,7 +148,7 @@ function validatePreloadValue(value, { allowCommands = false } = {}) {
     if (key === 'capability' && nested === 'micro') {
       throw new Error('Micro preload does not allow nested Micro capability.');
     }
-    validatePreloadValue(nested, { allowCommands });
+    validatePreloadValue(nested, { allowCommands: currentAllowCommands });
   }
 }
 
@@ -270,7 +282,10 @@ export function normalizeMicroPreloadSpec(raw = {}) {
   if (actionCount > MAX_PRELOAD_ACTIONS) {
     throw new Error(`Micro preload accepts at most ${MAX_PRELOAD_ACTIONS} actions; got ${actionCount}.`);
   }
-  const allowCommands = spec.allowCommands === true || pipelineSpec.allowCommands === true;
+  const allowCommands = spec.allowCommands === true
+    || pipelineSpec.allowCommands === true
+    || hasAllowCommands(steps)
+    || (typeof spec.args === 'object' && spec.args?.allowCommands === true);
   if (spec.allowMutations === true || pipelineSpec.allowMutations === true) {
     throw new Error('Micro preload is read-only; allowMutations is not supported.');
   }

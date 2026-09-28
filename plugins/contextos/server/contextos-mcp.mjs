@@ -31801,7 +31801,7 @@ async function changePipeline(ctx, input = {}) {
     }
   }
   const edits = rawEdits.map((spec) => {
-    let filePath = spec.path;
+    let filePath = spec.path || (typeof input.path === "string" ? input.path : void 0);
     let symbol = spec.symbol;
     if (spec.slot) {
       const slotData = store.getSlot(spec.slot);
@@ -32556,19 +32556,30 @@ ${text2}`;
     multipleBlocks: architectureGaps.filter((gap) => gap.issue === "multiple-blocks").length,
     missingChain: architectureGaps.filter((gap) => gap.issue === "missing-chain").length
   };
+  const isFullDiagnostics = input.full === true || input.diagnostics === true;
+  const renderedGaps = architectureGaps.length ? isFullDiagnostics || architectureGaps.length <= 5 ? architectureGaps.map(formatArchitectureGap) : [
+    ...architectureGaps.slice(0, 5).map(formatArchitectureGap),
+    `- (${architectureGaps.length - 5} additional architecture gap(s) omitted; pass diagnostics:true or full:true)`
+  ] : ["- Every architecture-tracked source path has exactly one curated Block owner and Chain membership."];
   const architectureLines = architectureUnavailable ? ["- Gap counts unavailable: Block/Chain graph could not be read (" + (known.error || chainResult.error || "invalid response") + ")."] : [
     ...architectureUpdate?.error ? ["- Explicit architecture update: " + clip3(architectureUpdate.error, 240)] : [],
     "- Gap counts: missing curated Block " + architectureGapCounts.missingBlock + "; multiple curated Block owners " + architectureGapCounts.multipleBlocks + "; owner without Chain membership " + architectureGapCounts.missingChain + ".",
-    ...architectureGaps.length ? architectureGaps.map(formatArchitectureGap) : ["- Every architecture-tracked source path has exactly one curated Block owner and Chain membership."]
+    ...renderedGaps
   ];
   const missingBlockGaps = architectureGaps.filter((entry) => entry.issue === "missing-block");
-  const moduleIndexHintLines = architectureUnavailable ? [] : missingBlockGaps.slice(0, 8).map((gap) => {
+  const moduleIndexHintLines = architectureUnavailable ? [] : isFullDiagnostics ? missingBlockGaps.map((gap) => {
     const moduleId = attribution.get(gap.path) || "unclassified";
     return "- " + gap.path + " \u2192 module hint " + moduleId + " (navigation only; not ownership; no Block was created)";
-  });
-  if (missingBlockGaps.length > 8) {
-    moduleIndexHintLines.push("- (" + (missingBlockGaps.length - 8) + " additional ModuleIndex navigation hint(s) omitted)");
-  }
+  }) : missingBlockGaps.length <= 3 ? missingBlockGaps.map((gap) => {
+    const moduleId = attribution.get(gap.path) || "unclassified";
+    return "- " + gap.path + " \u2192 module hint " + moduleId + " (navigation only; not ownership; no Block was created)";
+  }) : [
+    ...missingBlockGaps.slice(0, 3).map((gap) => {
+      const moduleId = attribution.get(gap.path) || "unclassified";
+      return "- " + gap.path + " \u2192 module hint " + moduleId + " (navigation only; not ownership; no Block was created)";
+    }),
+    "- (" + (missingBlockGaps.length - 3) + " additional ModuleIndex navigation hint(s) omitted; pass diagnostics:true or full:true)"
+  ];
   tracer.step("architecture", {
     touched: architecturePaths.length,
     complete: architectureGaps.length === 0 && !architectureUnavailable,
@@ -33200,17 +33211,27 @@ function countActions(value) {
   if (Array.isArray(value.chain)) return value.chain.reduce((total, item) => total + countActions(item), 0);
   return 1;
 }
+function hasAllowCommands(value) {
+  if (!value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some(hasAllowCommands);
+  if (value.allowCommands === true) return true;
+  for (const v of Object.values(value)) {
+    if (typeof v === "object" && hasAllowCommands(v)) return true;
+  }
+  return false;
+}
 function validatePreloadValue(value, { allowCommands = false } = {}) {
   if (Array.isArray(value)) {
     for (const item of value) validatePreloadValue(item, { allowCommands });
     return;
   }
   if (!value || typeof value !== "object") return;
+  const currentAllowCommands = allowCommands || value.allowCommands === true;
   for (const [key, nested] of Object.entries(value)) {
     if (FORBIDDEN_KEYS.has(key)) {
       throw new Error(`Micro preload does not allow mutation or nested Micro action '${key}'.`);
     }
-    if (COMMAND_KEYS.has(key) && !allowCommands) {
+    if (COMMAND_KEYS.has(key) && !currentAllowCommands) {
       throw new Error(`Micro preload command '${key}' requires allowCommands:true.`);
     }
     if (key === "tool" && FORBIDDEN_TOOLS.has(nested)) {
@@ -33219,7 +33240,7 @@ function validatePreloadValue(value, { allowCommands = false } = {}) {
     if (key === "capability" && nested === "micro") {
       throw new Error("Micro preload does not allow nested Micro capability.");
     }
-    validatePreloadValue(nested, { allowCommands });
+    validatePreloadValue(nested, { allowCommands: currentAllowCommands });
   }
 }
 function normalizeSteps(spec) {
@@ -33328,7 +33349,7 @@ function normalizeMicroPreloadSpec(raw = {}) {
   if (actionCount > MAX_PRELOAD_ACTIONS) {
     throw new Error(`Micro preload accepts at most ${MAX_PRELOAD_ACTIONS} actions; got ${actionCount}.`);
   }
-  const allowCommands = spec.allowCommands === true || pipelineSpec.allowCommands === true;
+  const allowCommands = spec.allowCommands === true || pipelineSpec.allowCommands === true || hasAllowCommands(steps) || typeof spec.args === "object" && spec.args?.allowCommands === true;
   if (spec.allowMutations === true || pipelineSpec.allowMutations === true) {
     throw new Error("Micro preload is read-only; allowMutations is not supported.");
   }

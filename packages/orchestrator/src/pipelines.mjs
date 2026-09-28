@@ -980,7 +980,7 @@ export async function changePipeline(ctx, input = {}) {
 
   // Resolve slots for each edit
   const edits = rawEdits.map((spec) => {
-    let filePath = spec.path;
+    let filePath = spec.path || (typeof input.path === 'string' ? input.path : undefined);
     let symbol = spec.symbol;
     if (spec.slot) {
       const slotData = store.getSlot(spec.slot);
@@ -1829,6 +1829,16 @@ export async function shipPipeline(ctx, input = {}) {
     multipleBlocks: architectureGaps.filter((gap) => gap.issue === 'multiple-blocks').length,
     missingChain: architectureGaps.filter((gap) => gap.issue === 'missing-chain').length,
   };
+  const isFullDiagnostics = input.full === true || input.diagnostics === true;
+  const renderedGaps = architectureGaps.length
+    ? (isFullDiagnostics || architectureGaps.length <= 5
+        ? architectureGaps.map(formatArchitectureGap)
+        : [
+            ...architectureGaps.slice(0, 5).map(formatArchitectureGap),
+            `- (${architectureGaps.length - 5} additional architecture gap(s) omitted; pass diagnostics:true or full:true)`,
+          ])
+    : ['- Every architecture-tracked source path has exactly one curated Block owner and Chain membership.'];
+
   const architectureLines = architectureUnavailable
     ? ['- Gap counts unavailable: Block/Chain graph could not be read (' + (known.error || chainResult.error || 'invalid response') + ').']
     : [
@@ -1836,20 +1846,28 @@ export async function shipPipeline(ctx, input = {}) {
         '- Gap counts: missing curated Block ' + architectureGapCounts.missingBlock
           + '; multiple curated Block owners ' + architectureGapCounts.multipleBlocks
           + '; owner without Chain membership ' + architectureGapCounts.missingChain + '.',
-        ...(architectureGaps.length
-          ? architectureGaps.map(formatArchitectureGap)
-          : ['- Every architecture-tracked source path has exactly one curated Block owner and Chain membership.']),
+        ...renderedGaps,
       ];
   const missingBlockGaps = architectureGaps.filter((entry) => entry.issue === 'missing-block');
   const moduleIndexHintLines = architectureUnavailable
     ? []
-    : missingBlockGaps.slice(0, 8).map((gap) => {
-        const moduleId = attribution.get(gap.path) || 'unclassified';
-        return '- ' + gap.path + ' → module hint ' + moduleId + ' (navigation only; not ownership; no Block was created)';
-      });
-  if (missingBlockGaps.length > 8) {
-    moduleIndexHintLines.push('- (' + (missingBlockGaps.length - 8) + ' additional ModuleIndex navigation hint(s) omitted)');
-  }
+    : (isFullDiagnostics
+        ? missingBlockGaps.map((gap) => {
+            const moduleId = attribution.get(gap.path) || 'unclassified';
+            return '- ' + gap.path + ' → module hint ' + moduleId + ' (navigation only; not ownership; no Block was created)';
+          })
+        : (missingBlockGaps.length <= 3
+            ? missingBlockGaps.map((gap) => {
+                const moduleId = attribution.get(gap.path) || 'unclassified';
+                return '- ' + gap.path + ' → module hint ' + moduleId + ' (navigation only; not ownership; no Block was created)';
+              })
+            : [
+                ...missingBlockGaps.slice(0, 3).map((gap) => {
+                  const moduleId = attribution.get(gap.path) || 'unclassified';
+                  return '- ' + gap.path + ' → module hint ' + moduleId + ' (navigation only; not ownership; no Block was created)';
+                }),
+                '- (' + (missingBlockGaps.length - 3) + ' additional ModuleIndex navigation hint(s) omitted; pass diagnostics:true or full:true)',
+              ]));
   tracer.step('architecture', {
     touched: architecturePaths.length,
     complete: architectureGaps.length === 0 && !architectureUnavailable,
