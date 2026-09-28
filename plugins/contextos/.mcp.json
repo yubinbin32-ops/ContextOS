@@ -1,20 +1,18 @@
 {
-  "mcpServers": {
-    "contextos": {
-      "command": "node",
-      "args": [
-        "--no-warnings=ExperimentalWarning",
-        "./server/contextos-mcp.mjs"
-      ],
-      "cwd": ".",
-      "env": {
-        "CONTEXTOS_LEAN_SURFACE": "1"
-      },
-      "env_vars": [
-        "CONTEXTOS_PROJECT_ROOT",
-        "CONTEXTOS_DATA_DIR"
-      ],
-      "startup_timeout_sec": 60
-    }
+  "contextos": {
+    "command": "node",
+    "args": [
+      "--no-warnings=ExperimentalWarning",
+      "./server/contextos-mcp.mjs"
+    ],
+    "cwd": ".",
+    "env": {
+      "CONTEXTOS_LEAN_SURFACE": "1"
+    },
+    "env_vars": [
+      "CONTEXTOS_PROJECT_ROOT",
+      "CONTEXTOS_DATA_DIR"
+    ],
+    "startup_timeout_sec": 60
   }
 }

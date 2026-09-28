@@ -69,13 +69,23 @@ test('batch replay preserves idempotency, terminal state, and audit events', asy
 `,
 };
 
-export function createComplexLifecycleFixture(root) {
+export function createComplexLifecycleFixture(root, { noisyFailure = false } = {}) {
   createComplexSystemFixture(root);
   const packagePath = path.join(root, 'package.json');
   const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
   packageJson.scripts.test = 'node --test test/*.test.mjs test/integration/*.test.mjs';
   fs.writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`, 'utf8');
-  for (const [relative, content] of Object.entries(EXTRA_FILES)) {
+  const extraFiles = noisyFailure
+    ? {
+        ...EXTRA_FILES,
+        'src/batch-replay.mjs': `const diagnostic = 'failure evidence '.repeat(120);
+export async function replayBatch() {
+  throw new Error(\`batch replay is not implemented\\n\${diagnostic}\`);
+}
+`,
+      }
+    : EXTRA_FILES;
+  for (const [relative, content] of Object.entries(extraFiles)) {
     const target = path.join(root, relative);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, content, 'utf8');
@@ -90,7 +100,8 @@ export function createComplexLifecycleFixture(root) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const root = path.resolve(process.argv[2] || '.');
-  createComplexLifecycleFixture(root);
+  const args = process.argv.slice(2);
+  const root = path.resolve(args.find((value) => !value.startsWith('--')) || '.');
+  createComplexLifecycleFixture(root, { noisyFailure: args.includes('--noisy-failure') });
   console.log(root);
 }

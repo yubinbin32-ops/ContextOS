@@ -18,6 +18,8 @@ const PIPELINE_RECEIPT_OUTPUT_CLIP = 180;
 const PIPELINE_RECEIPT_RESPONSE_BUDGET = 900;
 const PIPELINE_DEFAULT_PARALLEL_CONCURRENCY = 4;
 const PIPELINE_MAX_PARALLEL_CONCURRENCY = 8;
+const MICRO_TRIAGE_MIN_CHARS = 2000;
+const PROCESS_VERIFY_MODES = new Set(['serve', 'list', 'status', 'logs', 'stop', 'clear', 'query']);
 
 function normalizeParallelConcurrency(value) {
   const requested = Number(value);
@@ -130,6 +132,20 @@ function actionFailed(action, result, receipts = []) {
     }
   }
   return false;
+}
+
+// Micro triage is the most compressed actionable statement about a failure.
+// Summary and failure projections must keep it even when the raw evidence is
+// clipped, otherwise the host pays for a provider call it never gets to read.
+function extractMicroTriage(text) {
+  const match = /^##\s*[^\n]*Micro-Triage[^\n]*\n([\s\S]*?)(?=\n##\s|$)/m.exec(String(text || ''));
+  if (!match) return null;
+  const body = match[1]
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' ');
+  return body ? clip(body, 700) : null;
 }
 
 function resolveActionOutputLimit(action, { mode = 'summary', aggregateBudget } = {}) {
@@ -793,21 +809,27 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
   for (const spec of blockSpecs) {
     const id = String(spec?.id || '').trim();
     const existing = blockById.get(id);
-    const title = String(spec?.title || existing?.title || '').trim();
-    const kind = String(spec?.kind || existing?.kind || '').trim();
-    const paths = Array.isArray(spec?.paths)
-      ? spec.paths.map((value) => String(value || '').trim()).filter(Boolean)
-      : (spec?.path ? [String(spec.path).trim()] : []);
+    const title = String(spec?.title || spec?.name || existing?.title || '').trim();
+    const kind = String(spec?.kind || existing?.kind || 'component').trim();
+    const rawPaths = spec?.paths ?? spec?.path ?? spec?.files ?? spec?.file;
+    const pathValues = Array.isArray(rawPaths) ? rawPaths : rawPaths == null ? [] : [rawPaths];
+    const paths = pathValues
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
     if (!id || !title || !kind || !paths.length) {
-      errors.push('each architecture Block needs id, title, kind, and path(s)');
+      errors.push('each architecture Block needs id, title, paths, and optional kind (kind defaults to component)');
       continue;
     }
     if (id.startsWith('mod-') || kind === 'module' || /^derived module\b/i.test(title)) {
-      errors.push('derived module identity is not a semantic Block: ' + id);
+      errors.push(
+        'derived module identity is not a semantic Block: ' + id
+        + '; use a semantic kind such as component, service, engine, gateway, api, ui, tooling, verification, or testing'
+        + ' ("module" and "mod-*" ids are reserved for AST-derived ModuleIndex entries)'
+      );
       continue;
     }
     const blockData = { title, kind };
-    const summary = spec.summary ?? existing?.summary;
+    const summary = spec.summary ?? spec.responsibility ?? existing?.summary;
     const details = spec.details ?? existing?.details;
     if (summary !== undefined) blockData.summary = summary;
     if (details !== undefined) blockData.details = details;
@@ -816,12 +838,11 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
 
   for (const spec of chainSpecs) {
     const id = String(spec?.id || '').trim();
-    const title = String(spec?.title || '').trim();
-    const memberIds = Array.isArray(spec?.memberIds)
-      ? [...new Set(spec.memberIds.map((value) => String(value || '').trim()).filter(Boolean))]
-      : (Array.isArray(spec?.member_ids)
-          ? [...new Set(spec.member_ids.map((value) => String(value || '').trim()).filter(Boolean))]
-          : []);
+    const title = String(spec?.title || spec?.name || '').trim();
+    const rawMemberIds = spec?.memberIds ?? spec?.member_ids ?? spec?.blocks;
+    const memberIds = Array.isArray(rawMemberIds)
+      ? [...new Set(rawMemberIds.map((value) => String(value || '').trim()).filter(Boolean))]
+      : [];
     if (!id || !title || !memberIds.length) {
       errors.push('each architecture Chain needs id, title, and memberIds');
       continue;
@@ -1078,6 +1099,11 @@ export async function changePipeline(ctx, input = {}) {
     }
     if (!previewLines.length) {
       previewLines.push('Pass `edits: [{ path, target, replacement }]`, `create: [{ path, content }]`, or `delete: [{ path }]`, or call `explore` first to locate the target.');
+    }
+    if (input.architecture && typeof input.architecture === 'object') {
+      // A state-only architecture payload is a common false positive: the
+      // caller believes ownership was bound, but nothing was applied.
+      previewLines.push('NOT applied: `architecture` is only bound together with `edits`, `create`, or `delete`. For a state-only update use `ops({ capability: "block", action: "bind_auto" })` and `ops({ capability: "chain", action: "compose" })`.');
     }
     const { text } = fitSections(
       [
@@ -1495,6 +1521,7 @@ export async function inspectPipeline(ctx, input = {}) {
 export async function verifyPipeline(ctx, input = {}) {
   const { caps, store, tracer, profile } = ctx;
   const mode = input.mode || 'once';
+  const isFull = input.full === true || mode === 'full' || input.budget === 'full';
 
   if (mode === 'logs' && input.id && /^[A-Za-z0-9._-]+$/.test(input.id)) {
     const logPath = path.join(ctx.projectRoot, '.contextos', 'logs', `${input.id}.log`);
@@ -1510,7 +1537,7 @@ export async function verifyPipeline(ctx, input = {}) {
     }
   }
 
-  if (mode !== 'once') {
+  if (PROCESS_VERIFY_MODES.has(mode)) {
     const res = await caps.process({
       action: mode === 'serve' ? 'start' : mode,
       command: input.command || (input.commands || [])[0],
@@ -1577,16 +1604,19 @@ export async function verifyPipeline(ctx, input = {}) {
   }
 
   const triageLines = [];
+  const failureEvidence = failureLines.join('\n\n');
   const autoTriage = input.autoTriage === false
     ? false
-    : (input.autoTriage === true || profile?.autoTriage === true);
+    : (input.autoTriage === true
+        || profile?.autoTriage === true
+        || failureEvidence.length > MICRO_TRIAGE_MIN_CHARS);
   if (autoTriage && !passed && failureLines.length && profile?.micro?.url && profile?.micro?.model && typeof caps?.micro === 'function') {
     try {
       const triageRes = await caps.micro(
         {
           preset: 'triage',
           prompt: '分析以下测试/构建失败日志，给出最简诊断与修复建议：',
-          input: failureLines.join('\n\n'),
+          input: failureEvidence,
         },
         profile.micro
       );
@@ -1599,9 +1629,15 @@ export async function verifyPipeline(ctx, input = {}) {
       }
       if (triageRes.ok && triageRes.data?.ok && triageRes.data?.content) {
         triageLines.push(triageRes.data.content.trim());
-        tracer.step('micro.triage', { durationMs: triageRes.data.durationMs });
+        tracer.step('micro.triage', {
+          durationMs: triageRes.data.durationMs,
+          evidenceChars: failureEvidence.length,
+        });
       }
-    } catch (_) {}
+    } catch (error) {
+      triageLines.push(`Micro triage unavailable: ${error.message}`);
+      tracer.step('micro.triage.error', { error: error.message });
+    }
   }
 
   const session = store.current;
@@ -1622,7 +1658,7 @@ export async function verifyPipeline(ctx, input = {}) {
 
   const { text } = fitSections(
     verifySections,
-    { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
+    { maxChars: isFull ? Infinity : resolveBudget(input.depth, ctx.profile?.budget) }
   );
   return `# ContextOS verify\n\n${text}${session ? `\n\n<!-- session ${session.id}, ${session.receipts.length} receipts -->` : ''}`;
 }
@@ -1898,6 +1934,12 @@ export async function shipPipeline(ctx, input = {}) {
     `- Superseded failures: ${superseded.length} | Unresolved failures: ${unresolved.length}`,
     '- Curated architecture: ' + (architectureUnavailable ? 'Block/Chain graph unavailable' : architectureGaps.length + ' gap(s) across ' + architecturePaths.length + ' changed file(s)'),
   ];
+  // A reopened session starts with no receipts even when the same workspace was
+  // already verified. Point at the existing re-attach path instead of leaving
+  // the caller to close as "unverified".
+  if (green.length === 0 && !input.receiptIds && !input.receiptId) {
+    summaryLines.push('- No passing receipt in this session. If the same workspace passed in a prior session, re-attach it with `ship({ receiptIds: ["<receiptId>"] })`; stale receipts are rejected by state hash.');
+  }
   const touchedLines = closed.touchedFiles.slice(-5).map((entry) => `- \`${entry.path}\` (${entry.source})`);
   const evidenceLines = [
     ...extraLines,
@@ -2379,6 +2421,7 @@ export async function pipelinePipeline(ctx, input = {}) {
     const header = lines.find((value) => /(?:Verdict|Verify):\s*FAIL/i.test(value));
     const detail = lines.find((value) => /AssertionError|(?:Error|Expected):|Expected\s+/i.test(value))
       || lines.find((value) => /not ok|exit\s+[1-9]/i.test(value));
+    const triage = extractMicroTriage(source);
     // A bounded Pipeline failure is still actionable state, not just a status.
     // Preserve the receipt/artifact locator so the next host turn can inspect
     // the existing evidence instead of rerunning the same verification.
@@ -2396,7 +2439,10 @@ export async function pipelinePipeline(ctx, input = {}) {
       artifact ? `artifact=${artifact}` : null,
       ...(receipt ? [] : fallbackReceipts),
     ];
-    return clip([header, detail, ...references].filter(Boolean).join(' | ') || source, 500);
+    // Keep the triage block ahead of raw failure noise: it is the only part of
+    // a large failing log that was already reduced by Micro.
+    const body = triage ? `Micro-Triage: ${triage}` : detail;
+    return clip([header, body, ...references].filter(Boolean).join(' | ') || source, triage ? 900 : 500);
   }
 
   const pipelineStatus = halted ? 'HALTED' : (failureCount ? 'FAIL' : 'OK');

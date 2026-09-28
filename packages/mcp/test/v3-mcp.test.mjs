@@ -51,6 +51,90 @@ test("V3 default surface exposes one compact transport tool", async () => {
   fixture.cleanup();
 });
 
+test("V3 compact ops exposes frozen rollout telemetry and rollout-aware comparison", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-rollout" });
+  const usage = (inputTokens, outputTokens) => ({
+    input_tokens: inputTokens,
+    input_tokens_details: { cached_tokens: 0 },
+    output_tokens: outputTokens,
+    output_tokens_details: { reasoning_tokens: 0 },
+    total_tokens: inputTokens + outputTokens,
+  });
+  const writeRollout = (filePath, entries) => {
+    fs.writeFileSync(filePath, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n", "utf8");
+  };
+  const record = (responseId, inputTokens, outputTokens, contextWindow) => ({
+    type: "token_usage_record",
+    payload: {
+      response_id: responseId,
+      usage: usage(inputTokens, outputTokens),
+      thread_token_usage: usage(inputTokens, outputTokens),
+      model_context_window: contextWindow,
+    },
+  });
+  const leftRolloutPath = path.join(fixture.root, "left-rollout.jsonl");
+  const rightRolloutPath = path.join(fixture.root, "right-rollout.jsonl");
+  writeRollout(leftRolloutPath, [record("left-1", 10, 2, 128000)]);
+  writeRollout(rightRolloutPath, [record("right-1", 8, 1, 256000)]);
+
+  const server = createV3Server();
+  const client = new Client({ name: "contextos-v3-rollout-test", version: packageVersion });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+  try {
+    const rolloutResult = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "ops",
+        args: {
+          capability: "telemetry",
+          action: "rollout",
+          args: { paths: [leftRolloutPath] },
+        },
+        projectRoot: fixture.root,
+      },
+    });
+    const rolloutText = (rolloutResult.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!rolloutResult.isError, rolloutText);
+    const rollout = JSON.parse(rolloutText);
+    assert.equal(rollout.schemaVersion, 1);
+    assert.deepEqual(rollout.files, [leftRolloutPath]);
+    assert.equal(rollout.records, 1);
+    assert.equal(rollout.metrics.requestCount, 1);
+    assert.equal(rollout.metrics.inputTokens, 10);
+    assert.equal(rollout.metrics.outputTokens, 2);
+    assert.equal(rollout.metrics.totalTokens, 12);
+    assert.equal(rollout.metrics.modelContextWindow, 128000);
+
+    const compareResult = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "ops",
+        args: {
+          capability: "telemetry",
+          action: "compare",
+          args: { leftRolloutPath, rightRolloutPath },
+        },
+        projectRoot: fixture.root,
+      },
+    });
+    const compareText = (compareResult.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!compareResult.isError, compareText);
+    const comparison = JSON.parse(compareText);
+    assert.equal(comparison.left, null);
+    assert.equal(comparison.right, null);
+    assert.equal(comparison.delta, null);
+    assert.equal(comparison.rollout.left.metrics.totalTokens, 12);
+    assert.equal(comparison.rollout.right.metrics.totalTokens, 9);
+    assert.equal(comparison.rollout.delta.totalTokens, -3);
+    assert.equal(comparison.rollout.delta.modelContextWindow, 128000);
+  } finally {
+    await client.close();
+    fixture.cleanup();
+  }
+});
+
 test("V3 change preserves the content alias for fullFile edits", async () => {
   const fixture = createFixtureProject({ prefix: "ctxos-v3-fullfile" });
   fs.writeFileSync(path.join(fixture.root, "note.txt"), "old\n");

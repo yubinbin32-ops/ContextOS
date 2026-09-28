@@ -11,6 +11,7 @@ import { microPreloadReceipt, runMicroPreload } from './micro-preload.mjs';
 import { buildMicroHistory, closeMicroSession, completeMicroTurn, createMicroSession, deleteMicroSession, failMicroTurn, listMicroSessions, microSessionSnapshot, readMicroSession, startMicroTurn } from './micro-session.mjs';
 import { evictArtifacts, listArtifacts, readArtifact, statArtifact, storeArtifact } from './artifact-store.mjs';
 import { compactJson, finalizeResponse, projectMicroResult, summarizeMicroUsage } from './response-budget.mjs';
+import { parseRolloutTelemetry } from './rollout-telemetry.mjs';
 import { compareTelemetry, recordTelemetry, summarizeTelemetry } from './telemetry.mjs';
 import { auditRouting } from './routing-audit.mjs';
 import { claimMicroDeliveries, completeMicroDeliveryClaims, releaseMicroDeliveryClaims, renderMicroDeliveries } from './micro-delivery.mjs';
@@ -24,6 +25,7 @@ export * from './micro-session.mjs';
 export * from './module-index.mjs';
 export * from './observer.mjs';
 export * from './profile.mjs';
+export * from './rollout-telemetry.mjs';
 export * from './routing-audit.mjs';
 export * from './session-store.mjs';
 
@@ -1087,9 +1089,17 @@ export class Orchestrator {
           return render(compareTelemetry(this.projectRoot, {
             leftSessionId: args.leftSessionId,
             rightSessionId: args.rightSessionId,
+            leftRolloutPath: args.leftRolloutPath,
+            rightRolloutPath: args.rightRolloutPath,
             limit: args.limit,
             scope: args.scope || 'external',
           }));
+        }
+        if (action === 'rollout') {
+          return render(parseRolloutTelemetry(
+            { paths: args.paths },
+            { projectRoot: this.projectRoot }
+          ));
         }
         if (action === 'summary' || action === undefined) {
           const telemetrySessionId = args.sessionId || store.current?.id || null;
@@ -1119,7 +1129,7 @@ export class Orchestrator {
             }),
           });
         }
-        throw new Error(`Unknown telemetry action '${action}'. Available: summary, list, compare, audit`);
+        throw new Error(`Unknown telemetry action '${action}'. Available: summary, list, compare, audit, rollout`);
       }
       case 'micro': {
         const microConfig = ctx.profile?.micro || {};
@@ -1129,6 +1139,30 @@ export class Orchestrator {
             { name: 'model', ok: Boolean(microConfig.model), value: microConfig.model || null },
             { name: 'key', ok: Boolean(microConfig.key), value: microConfig.key ? 'configured' : 'missing' },
           ];
+          if (args.probe === true && checks.every((check) => check.ok)) {
+            const probe = await runMicroTask(microConfig, {
+              preset: 'custom',
+              prompt: 'Reply with exactly PONG.',
+              invocation: {
+                provider: { maxRequests: 1 },
+                tools: { enabled: false },
+              },
+              outputMode: 'answer',
+            });
+            const projected = projectMicroResult(probe, {
+              projectRoot: this.projectRoot,
+              hostSessionId: ctx.sessionId,
+              maxChars: 200,
+            });
+            checks.push({
+              name: 'provider',
+              ok: projected?.ok === true && Boolean(String(projected.content || '').trim()),
+              value: projected?.ok
+                ? String(projected.content || '').trim().slice(0, 80)
+                : (projected?.error || 'no response'),
+              receiptId: projected?.receiptId || null,
+            });
+          }
           return render({
             ok: checks.every((check) => check.ok),
             checks,

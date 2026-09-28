@@ -18,6 +18,8 @@ import {
   runMicroTasksParallel,
 } from '../src/micro-client.mjs';
 
+const NO_TOOLS_INSTRUCTION = '\nNo tools are available in this run. Do not emit tool calls, function-call syntax, XML tool tags, or a plan to inspect files; answer directly from the provided input.';
+
 function createMockServer() {
   const requests = [];
   let handler = (req, res, body) => {
@@ -329,6 +331,82 @@ test('runMicroTask rejects an empty provider response', async () => {
   }
 });
 
+test('runMicroTask retries pseudo tool-call output when tools are disabled', async () => {
+  const mock = createMockServer();
+  let callIndex = 0;
+  mock.setHandler((_req, res, body) => {
+    callIndex += 1;
+    if (callIndex === 1) {
+      assert.match(body.messages[0].content, /No tools are available/);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'pseudo-tool-call',
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: '<\uFF5C｜DSML｜\uFF5C calls>\n<\uFF5C｜DSML｜\uFF5C invoke name="bash">npm test',
+          },
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      }));
+      return;
+    }
+    assert.equal(body.reasoning_effort, 'none');
+    assert.match(body.messages.at(-1).content, /no tools are available/);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'final-answer',
+      choices: [{ index: 0, message: { role: 'assistant', content: 'Root cause and repair direction.' } }],
+      usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+    }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const result = await runMicroTask(
+      { url, model: 'test-model' },
+      { prompt: 'diagnose', invocation: { provider: { maxRequests: 1 }, tools: { enabled: false } } },
+    );
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.content, 'Root cause and repair direction.');
+    assert.equal(result.providerRequests, 2);
+    assert.equal(mock.requests.length, 2);
+  } finally {
+    await mock.close();
+  }
+});
+
+test('runMicroTask rejects pseudo tool-call output after finalization retry', async () => {
+  const mock = createMockServer();
+  mock.setHandler((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'pseudo-tool-call',
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: '<\uFF5C｜DSML｜\uFF5C calls>\n<\uFF5C｜DSML｜\uFF5C invoke name="bash">npm test',
+        },
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+    }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const result = await runMicroTask(
+      { url, model: 'test-model' },
+      { prompt: 'diagnose', invocation: { provider: { maxRequests: 1 }, tools: { enabled: false } } },
+    );
+    assert.equal(result.ok, false);
+    assert.equal(result.invalidOutput, 'tool_call_syntax');
+    assert.match(result.error, /tool-call syntax while tools were disabled/);
+    assert.equal(mock.requests.length, 2);
+  } finally {
+    await mock.close();
+  }
+});
+
 test('runMicroTask separates provider usage from token fallback estimates', async () => {
   const mock = createMockServer();
   mock.setHandler((_req, res) => {
@@ -386,6 +464,46 @@ test('runMicroTask retries once without reasoning when the provider returns reas
     assert.equal(result.providerUsage.total_tokens, 42);
     assert.equal(result.providerUsageCalls, 2);
     assert.equal(result.estimatedUsage, null);
+  } finally {
+    await mock.close();
+  }
+});
+
+test('runMicroTask still finalizes an empty response when maxRequests is one', async () => {
+  const mock = createMockServer();
+  let callIndex = 0;
+  mock.setHandler((_req, res, body) => {
+    callIndex += 1;
+    if (callIndex === 1) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        id: 'reasoning-only-bounded',
+        choices: [{ index: 0, message: { role: 'assistant', content: '', reasoning_content: 'budget consumed' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 512, total_tokens: 522 },
+      }));
+      return;
+    }
+    assert.equal(body.reasoning_effort, 'none');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'final-answer-bounded',
+      choices: [{ index: 0, message: { role: 'assistant', content: 'bounded final answer' } }],
+      usage: { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12 },
+    }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const result = await runMicroTask(
+      { url, model: 'test-model' },
+      {
+        prompt: 'answer with evidence',
+        invocation: { provider: { maxRequests: 1 }, tools: { enabled: false } },
+      },
+    );
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(result.content, 'bounded final answer');
+    assert.equal(mock.requests.length, 2);
+    assert.equal(result.providerRequests, 2);
   } finally {
     await mock.close();
   }
@@ -465,7 +583,7 @@ test('runMicroTask sends proper payload and headers', async () => {
     assert.equal(payload.reasoning_effort, 'low');
     assert.equal(payload.messages.length, 2);
     assert.equal(payload.messages[0].role, 'system');
-    assert.equal(payload.messages[0].content, MICRO_PRESETS.triage.system);
+    assert.equal(payload.messages[0].content, `${MICRO_PRESETS.triage.system}${NO_TOOLS_INSTRUCTION}`);
     assert.equal(payload.messages[1].role, 'user');
     assert.match(payload.messages[1].content, /Analyze this error/);
     assert.match(payload.messages[1].content, /<INPUT>\nTypeError: undefined is not a function\n<\/INPUT>/);
@@ -615,7 +733,7 @@ test('Micro direct evidence route is bounded to one provider request and reports
   }
 });
 
-test('Micro request and input budgets short-circuit before duplicate/fallback calls', async () => {
+test('Micro input budgets short-circuit before dispatch and empty responses get one finalization call', async () => {
   const mock = createMockServer();
   const { url } = await mock.listen();
   mock.setHandler((_req, res) => {
@@ -633,10 +751,10 @@ test('Micro request and input budgets short-circuit before duplicate/fallback ca
     });
     assert.equal(requestLimited.ok, false);
     assert.equal(requestLimited.budgetExceeded, undefined, 'an empty response is not itself a budget failure');
-    assert.equal(requestLimited.fallbackSkipped, 'maxRequests');
-    assert.match(requestLimited.error, /retry skipped because maxRequests=1 was reached/);
-    assert.equal(requestLimited.delivery, 'defer', 'budget failures must preserve requested delivery');
-    assert.equal(mock.requests.length, 1);
+    assert.match(requestLimited.error, /empty response after final-answer retry/);
+    assert.equal(requestLimited.delivery, 'defer', 'failed deliveries must preserve the requested delivery');
+    assert.equal(requestLimited.providerRequests, 2, 'one empty response may use a terminal finalization call');
+    assert.equal(mock.requests.length, 2);
 
     const inputLimited = await runMicroTask({ url, model: 'test-model' }, {
       prompt: 'x'.repeat(100),
@@ -646,7 +764,7 @@ test('Micro request and input budgets short-circuit before duplicate/fallback ca
     assert.equal(inputLimited.budgetExceeded, 'inputTokens');
     assert.equal(inputLimited.budgetDecision.action, 'narrow_or_raise_input');
     assert.equal(inputLimited.budgetDecision.retrySafe, false);
-    assert.equal(mock.requests.length, 1, 'input admission must happen before network dispatch');
+    assert.equal(mock.requests.length, 2, 'input admission must happen before more network dispatch');
   } finally {
     await mock.close();
   }
@@ -844,7 +962,7 @@ test('runMicroTask preserves conversation history for multi-turn tasks', async (
 
     const messages = mock.requests[0].body.messages;
     assert.equal(messages[0].role, 'system');
-    assert.equal(messages[0].content, MICRO_PRESETS.contract.system);
+    assert.equal(messages[0].content, `${MICRO_PRESETS.contract.system}${NO_TOOLS_INSTRUCTION}`);
     assert.equal(messages[1].content, 'Turn 1 user');
     assert.equal(messages[2].content, 'Turn 1 assistant');
     assert.equal(messages[3].content, 'Turn 2 user');

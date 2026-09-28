@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseRolloutTelemetry, rolloutMetricsDelta } from './rollout-telemetry.mjs';
 
 function telemetryPath(projectRoot) {
   return path.join(projectRoot, '.contextos', 'logs', 'telemetry.jsonl');
@@ -185,27 +186,54 @@ function comparisonMetrics(summary) {
 export function compareTelemetry(projectRoot, {
   leftSessionId,
   rightSessionId,
+  leftRolloutPath,
+  rightRolloutPath,
   limit = 500,
   scope = 'external',
 } = {}) {
   const missing = [];
-  if (typeof leftSessionId !== 'string' || !leftSessionId.trim()) missing.push('leftSessionId');
-  if (typeof rightSessionId !== 'string' || !rightSessionId.trim()) missing.push('rightSessionId');
+  const hasLeftSession = typeof leftSessionId === 'string' && Boolean(leftSessionId.trim());
+  const hasRightSession = typeof rightSessionId === 'string' && Boolean(rightSessionId.trim());
+  const hasLeftRollout = typeof leftRolloutPath === 'string' && Boolean(leftRolloutPath.trim());
+  const hasRightRollout = typeof rightRolloutPath === 'string' && Boolean(rightRolloutPath.trim());
+  if (!hasLeftSession && !hasLeftRollout) missing.push('leftSessionId or leftRolloutPath');
+  if (!hasRightSession && !hasRightRollout) missing.push('rightSessionId or rightRolloutPath');
   if (missing.length) {
     throw new Error(`Telemetry compare requires ${missing.join(' and ')}`);
   }
 
   const normalizedScope = normalizeScope(scope);
-  const left = comparisonMetrics(summarizeTelemetry(projectRoot, {
-    sessionId: leftSessionId,
-    limit,
-    scope: normalizedScope,
-  }));
-  const right = comparisonMetrics(summarizeTelemetry(projectRoot, {
-    sessionId: rightSessionId,
-    limit,
-    scope: normalizedScope,
-  }));
-  const delta = Object.fromEntries(COMPARISON_FIELDS.map((field) => [field, right[field] - left[field]]));
-  return { left, right, delta };
+  const left = hasLeftSession
+    ? comparisonMetrics(summarizeTelemetry(projectRoot, {
+      sessionId: leftSessionId,
+      limit,
+      scope: normalizedScope,
+    }))
+    : null;
+  const right = hasRightSession
+    ? comparisonMetrics(summarizeTelemetry(projectRoot, {
+      sessionId: rightSessionId,
+      limit,
+      scope: normalizedScope,
+    }))
+    : null;
+  const delta = left && right
+    ? Object.fromEntries(COMPARISON_FIELDS.map((field) => [field, right[field] - left[field]]))
+    : null;
+  const result = { left, right, delta };
+
+  if (hasLeftRollout || hasRightRollout) {
+    const leftRollout = hasLeftRollout
+      ? parseRolloutTelemetry({ paths: [leftRolloutPath] }, { projectRoot })
+      : null;
+    const rightRollout = hasRightRollout
+      ? parseRolloutTelemetry({ paths: [rightRolloutPath] }, { projectRoot })
+      : null;
+    result.rollout = {
+      left: leftRollout,
+      right: rightRollout,
+      delta: rolloutMetricsDelta(leftRollout, rightRollout),
+    };
+  }
+  return result;
 }

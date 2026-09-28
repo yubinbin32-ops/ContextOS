@@ -179,6 +179,16 @@ const MICRO_PROVIDER_TOKEN_BUDGETS = Object.freeze({
 
 const MICRO_BATCH_DEFAULT_CONCURRENCY = 4;
 const MICRO_BATCH_MAX_CONCURRENCY = 8;
+const MICRO_UNEXECUTED_TOOL_SYNTAX = Object.freeze([
+  /\uFF5C\s*｜DSML｜\s*\uFF5C/i,
+  /<\/?(?:tool_call|function_call)\b/i,
+  /<\|(?:tool_call|function_call)\|>/i,
+]);
+
+function hasUnexecutedToolSyntax(content) {
+  const text = String(content || '');
+  return MICRO_UNEXECUTED_TOOL_SYNTAX.some((pattern) => pattern.test(text));
+}
 
 function positiveNumber(value, fallback = null) {
   const number = Number(value);
@@ -876,7 +886,10 @@ export async function runMicroTask(config = {}, options = {}) {
         : (options.delivery === 'defer'
             ? '\nYour answer will be restored by ContextOS on a later call. Return only the concise result the host will need then.'
             : ''));
-  const systemPrompt = `${options.system || preset?.system || config.system || ''}${deliveryPrompt}`;
+  const toolAvailabilityPrompt = invocation.toolsEnabled
+    ? ''
+    : '\nNo tools are available in this run. Do not emit tool calls, function-call syntax, XML tool tags, or a plan to inspect files; answer directly from the provided input.';
+  const systemPrompt = `${options.system || preset?.system || config.system || ''}${deliveryPrompt}${toolAvailabilityPrompt}`;
   const resolvedInput = resolveMicroInput(options, {
     projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
     maxInputChars: options.maxInputChars
@@ -1106,18 +1119,18 @@ export async function runMicroTask(config = {}, options = {}) {
           : `Raise maxProviderTokens to at least ${Math.ceil(Number(projected) * 1.2)} or narrow the preload/input before retrying.`,
   });
 
-  const gateRequest = (promptTokens, outputTokens) => {
+  const gateRequest = (promptTokens, outputTokens, { bypassRequestLimit = false } = {}) => {
     if (invocation.maxInputTokens && promptTokens > invocation.maxInputTokens) {
       return budgetFailure('inputTokens', promptTokens, invocation.maxInputTokens);
     }
-    if (invocation.maxRequests && providerRequestCount >= invocation.maxRequests) {
+    if (!bypassRequestLimit && invocation.maxRequests && providerRequestCount >= invocation.maxRequests) {
       return budgetFailure('requests', providerRequestCount + 1, invocation.maxRequests);
     }
     return null;
   };
 
-  const sendRequest = async (payload, promptTokens, outputTokens) => {
-    const rejected = gateRequest(promptTokens, outputTokens);
+  const sendRequest = async (payload, promptTokens, outputTokens, { bypassRequestLimit = false } = {}) => {
+    const rejected = gateRequest(promptTokens, outputTokens, { bypassRequestLimit });
     if (rejected) return { rejected };
     providerRequestCount += 1;
     return { response: await sendMicroRequest(endpoint, payload, headers, timeoutMs, options.maxResponseChars ?? config.maxResponseChars) };
@@ -1310,7 +1323,9 @@ export async function runMicroTask(config = {}, options = {}) {
 
   let content = String(finalChoice?.message?.content ?? '').trim();
   let fallbackError = null;
-  let fallbackSkipped = null;
+  let invalidOutputReason = !content
+    ? 'empty'
+    : (!withOS && hasUnexecutedToolSyntax(content) ? 'tool_call_syntax' : null);
   const providerHost = (() => {
     try {
       return new URL(endpoint).host;
@@ -1319,20 +1334,25 @@ export async function runMicroTask(config = {}, options = {}) {
     }
   })();
 
-  if (!content && invocation.maxRequests && providerRequestCount >= invocation.maxRequests) {
-    fallbackSkipped = 'maxRequests';
-    fallbackError = `Micro provider returned an empty response; final-answer retry skipped because maxRequests=${invocation.maxRequests} was reached.`;
-  } else if (!content) {
+  if (invalidOutputReason) {
+    content = '';
+    const retryInstruction = invalidOutputReason === 'tool_call_syntax'
+      ? 'Your previous response contained tool-call syntax, but no tools are available in this run. Return only the final requested result in plain text. Do not emit tool calls, function-call syntax, XML tool tags, or a plan to inspect files.'
+      : 'Return only the final requested result now. Do not include reasoning, tool calls, or extra prose.';
     const fallbackMessages = [
       ...messages,
       {
         role: 'system',
-        content: `Return only the final requested result now. Do not include reasoning, tool calls, or extra prose.${options.delivery === 'auto' ? deliveryPrompt : ''}`,
+        content: `${retryInstruction}${options.delivery === 'auto' ? deliveryPrompt : ''}`,
       },
     ];
     const fallbackMaxTokens = Math.max(Number(maxTokens) || 0, 4096);
     const fallbackPromptTokens = estimateMicroTokens(fallbackMessages);
-    const fallbackInputRejected = gateRequest(fallbackPromptTokens, fallbackMaxTokens);
+    const fallbackInputRejected = gateRequest(
+      fallbackPromptTokens,
+      fallbackMaxTokens,
+      { bypassRequestLimit: true },
+    );
     if (fallbackInputRejected) return fallbackInputRejected;
     const fallbackProjectedTotal = aggregatedUsage.total_tokens + fallbackPromptTokens + fallbackMaxTokens;
     const fallbackProjectedCost = aggregatedCostUsd + estimateRequestCost(fallbackPromptTokens, fallbackMaxTokens);
@@ -1349,7 +1369,7 @@ export async function runMicroTask(config = {}, options = {}) {
       max_tokens: fallbackMaxTokens,
       temperature,
       reasoning_effort: 'none',
-    }, fallbackPromptTokens, fallbackMaxTokens);
+    }, fallbackPromptTokens, fallbackMaxTokens, { bypassRequestLimit: true });
     if (fallbackRequest.rejected) return fallbackRequest.rejected;
     const fallbackRes = fallbackRequest.response;
 
@@ -1361,7 +1381,14 @@ export async function runMicroTask(config = {}, options = {}) {
       });
       if (finalChoice.message?.reasoning_content) lastReasoning = finalChoice.message.reasoning_content;
       content = String(finalChoice.message?.content ?? '').trim();
-      if (!content) fallbackError = 'Micro provider returned an empty fallback response.';
+      if (!content) {
+        invalidOutputReason = 'empty';
+        fallbackError = 'Micro provider returned an empty fallback response.';
+      } else if (!withOS && hasUnexecutedToolSyntax(content)) {
+        invalidOutputReason = 'tool_call_syntax';
+        fallbackError = 'the fallback response still contained tool-call syntax.';
+        content = '';
+      }
       if (budget.maxProviderTokens && aggregatedUsage.total_tokens > budget.maxProviderTokens) {
         return budgetFailure('providerTokens', aggregatedUsage.total_tokens, budget.maxProviderTokens);
       }
@@ -1377,9 +1404,12 @@ export async function runMicroTask(config = {}, options = {}) {
     return {
       ok: false,
       statusCode: 200,
-      error: fallbackError
-        ? `Micro provider returned an empty response after final-answer retry: ${fallbackError}`
-        : 'Micro provider returned an empty response.',
+      error: invalidOutputReason === 'tool_call_syntax'
+        ? `Micro provider returned tool-call syntax while tools were disabled${fallbackError ? ` after final-answer retry: ${fallbackError}` : ''}.`
+        : fallbackError
+          ? `Micro provider returned an empty response after final-answer retry: ${fallbackError}`
+          : 'Micro provider returned an empty response.',
+      invalidOutput: invalidOutputReason,
       reasoning: lastReasoning,
       ...usageDetails(),
       cost: costSummary(),
@@ -1401,7 +1431,6 @@ export async function runMicroTask(config = {}, options = {}) {
       inputTruncated: resolvedInput.truncated,
       preload: preloadMeta,
       toolCalls: toolExecutionTrace,
-      ...(fallbackSkipped ? { fallbackSkipped } : {}),
     };
   }
 

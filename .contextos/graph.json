@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1246,
-  "exportedAt": "2026-09-28T10:31:54.324Z",
+  "graphRevision": 1248,
+  "exportedAt": "2026-09-28T16:40:00.000Z",
   "data": {
     "plans": [
       {
@@ -11,7 +11,7 @@
         "title": "ContextOS 日常开发上下文降耗与可靠性修复",
         "priority": "high",
         "status": "active",
-        "summary": "在真实、多轮开发中降低主线程峰值上下文、总 token 与成本。保留主线程开发决策；优化 Pipeline 按需取数、Micro 首次调用 preload/按需回传、OS 延迟恢复与错误上报、Block/Chain 归属和工具路由。对照已观察到的 OS 约 60%、OS+Micro 约 75% 场景，先解释本次负收益路径，再修复和实测，目标约 80%。",
+        "summary": "在真实、多轮开发中降低主线程峰值上下文、总 token 与成本。R3/R4/R6 均证明 OS 可正确执行，但默认全流程仍是净叠加：R6 C 组总 token 比 Native 高 68.8%，且 Micro triage 结果被 Pipeline summary 裁掉，provider 成本已付而收益为 0。已修复 triage 保留、change 架构-only no-op 提示、ship receipt 恢复提示与 kind 文案，下一步验证这些修复能否把 OS 从叠加层变为替代层。",
         "completedSummary": null,
         "historyRef": null,
         "ruleRefs": [],
@@ -24,7 +24,7 @@
             "objective": "用源码、历史 usage 记录与真实调用轨迹，对比有效的 OS/Micro 场景和负收益场景，找出信息读取、转交、返回、恢复与状态判定中的成本来源。",
             "scope": "",
             "deliverables": [],
-            "status": "active",
+            "status": "completed",
             "taskIds": [
               "task-contextos-diagnosis"
             ],
@@ -42,8 +42,10 @@
             "objective": "让 OS 低上下文工作流符合实际开发方式，按任务决定结果立即回传、存入 OS 延迟恢复或只在错误时上报。",
             "scope": "",
             "deliverables": [],
-            "status": "pending",
-            "taskIds": [],
+            "status": "completed",
+            "taskIds": [
+              "task-contextos-r4-routing-repair"
+            ],
             "acceptance": [
               "主线程尚未读取目标源码时，可在首次 Micro 调用中传入 Pipeline inspect/search，避免同一内容先进入主线程再转交。",
               "Micro 的即时答复、延迟恢复、成功静默/错误上报由任务需求选择，不强迫所有任务使用 Micro 或统一回传策略；旧调用默认立即回传。",
@@ -52,7 +54,9 @@
               "errors-only 只有在 curated Block/Chain 写入成功时静默成功；工具写入失败或未执行写入时返回错误。",
               "修复 Pipeline 对普通搜索/源码文本的误失败判定，并确保运行时 bundle 与修复源码一致。",
               "Pipeline 的 summary/full 语义和 Skill 指引避免单个子动作无意中放大整批输出。",
-              "Block/Chain 只按语义归属维护，派生 ModuleIndex 不作为语义所有者。"
+              "Block/Chain 只按语义归属维护，派生 ModuleIndex 不作为语义所有者。",
+              "verify mode:full 不得进入 process 控制；大失败证据在 Micro 可用时必须实际进入 Micro 路由或给出显式关闭证据。",
+              "micro doctor 默认检查配置，probe:true 必须验证 provider 连通性。"
             ]
           },
           {
@@ -61,13 +65,15 @@
             "objective": "在流程修复并经过自审后，用一轮真实 C 工作流观察 OS+Micro 的信息传递路径，再运行匹配的多轮 A/B/C 开发任务衡量净收益。",
             "scope": "",
             "deliverables": [],
-            "status": "pending",
+            "status": "active",
             "taskIds": [],
             "acceptance": [
               "C 轮作为流程诊断，不单独宣称效果；任务包含真实的多轮澄清、定位、修改、验证和失败修复。",
               "完整 A/B/C 从相同代码快照、模型和对话起点开始，不续跑中断组，不让组间继承历史不同。",
               "主指标为峰值上下文，以及主线程与所有委派模型合计实际 token 和成本；正确完成是节省数据有效的前提。",
-              "每个请求读取实际 usage/window 记录；无记录则实验无效，不以估算补齐。"
+              "每个请求读取实际 usage/window 记录；无记录则实验无效，不以估算补齐。",
+              "R3/R4 有效样本与无效样本分开报告；Micro 为 0 时不得声称 Micro 收益。",
+              "修复 verify/Micro 路由后至少做一次独立 C 轮，确认 provider usage 和失败日志替代路径。"
             ]
           },
           {
@@ -87,7 +93,7 @@
         ],
         "checkpoints": [],
         "createdAt": "2026-09-27T05:27:08.670Z",
-        "updatedAt": "2026-09-27T12:47:41.232Z"
+        "updatedAt": "2026-09-28T16:40:00.000Z"
       }
     ],
     "tasks": [
@@ -96,7 +102,7 @@
         "planId": "plan-contextos-daily-savings",
         "phaseId": "diagnosis",
         "title": "盘点 ContextOS 工具链与确认根因",
-        "status": "active",
+        "status": "completed",
         "contextSlice": {
           "objective": "审计并修复 ContextOS/Micro 的上下文、生命周期、图谱归属和 bundle 分发缺陷。",
           "constraints": [
@@ -104,7 +110,11 @@
             "主对话、OS 内部 Pipeline、provider usage 分开记账。"
           ],
           "references": {},
-          "nextSteps": [],
+          "nextSteps": [
+            "复验 verify(mode:full) 与 2000 字符以上失败证据的 Micro 自动 triage。",
+            "用 probe:true 验证 Micro provider 连通性，不用 list_mcp_resources 探测。",
+            "修复后的 C 轮只用于路由有效性；完整收益结论继续等待下一轮同任务 A/B/C。"
+          ],
           "openQuestions": []
         },
         "workingSet": {
@@ -160,12 +170,100 @@
             "kind": "hygiene",
             "createdAt": "2026-09-28T09:25:05.102Z",
             "text": "卫生：图谱 31 Block/12 Chain/32 Link，重复 locator、已删除路径、module Block、孤立 Block、悬空成员/link 均为 0；删除合成 benchmark 脚本、孤立旧 Plan，并清理 stale ModuleIndex/artifact/blackboard。"
+          },
+          {
+            "id": "note-validation-1790611697640-xf7ps",
+            "kind": "validation",
+            "text": "R3 有效样本：A3 Native 12 请求/26 工具/峰值 34731/总 274903；B2 ContextOS 23 请求/37 工具/24 次 OS/峰值 57021/总 816847；C4 ContextOS+Micro 25 请求/30 工具/9 次 OS/峰值 48566/总 788697。三组正确完成，Micro 均为 0。C4 暴露 ship 未自动绑定显式 architecture、pipeline 对无匹配搜索整体 HALTED、micro doctor 不验证连通性。",
+            "createdAt": "2026-09-28T16:08:17.640Z"
+          },
+          {
+            "id": "note-validation-1790611697641-5258d",
+            "kind": "validation",
+            "text": "R4 noisy-fixture 有效样本：B 17 请求/24 工具/2 次 OS/峰值 37609/总 411445；C 21 请求/20 工具/8 次 OS/峰值 34498/总 481458。B/C 均通过外部验收。C 的 npm test 失败证据为 3408 字符，但 verify(mode:full) 被误判为 process action，退回 native exec 后 Micro 仍为 0；模型还把 3408 字符误判成约 853。根因是接口契约与强制路由未闭合，不是 provider 不可用。",
+            "createdAt": "2026-09-28T16:08:17.641Z"
+          },
+          {
+            "id": "note-repair-1790611697641-hgcrt",
+            "kind": "repair",
+            "text": "R4 修复：verify 的 full 仅作为输出模式，process 控制只接受 serve/list/status/logs/stop/clear/query；失败证据超过 2000 字符且 Micro 已配置时默认自动 triage，可显式 autoTriage:false 关闭；micro doctor 增加 probe:true 的真实 provider 连通性检查；探索型 Pipeline 文档明确 continueOnFailure:true；显式 ship architecture 别名绑定已有回归测试并已在 R4 B 实测生效。",
+            "createdAt": "2026-09-28T16:08:17.641Z"
+          },
+          {
+            "id": "note-next-1790611697641-j6e95",
+            "kind": "next",
+            "text": "待复验：用全新隔离 C 会话和同一 noisy fixture 确认 verify(mode:full) 不再报 Unknown process action，并实际产生 Micro provider request/token usage；再比较 Micro 结果返回后是否减少 native 失败日志往返。该 C 轮只作为路由修复验证，不替代完整 A/B/C 指标。",
+            "createdAt": "2026-09-28T16:08:17.641Z"
+          },
+          {
+            "id": "note-validation-1790613600000-r6abc",
+            "kind": "validation",
+            "text": "R6 严格 A/B/C 有效样本（fixture 6408896，同任务/模型/xhigh/full-access，三独立 worktree+CODEX_HOME+MCP+.contextos）：A7 14 请求/25 工具/峰值 36589/总 361882；B7 15/17/35897/364244，8 次 OS；C8 21/27/42350/610668，7 次 OS + 1 次 Micro（593+214=807 provider token）。三组外部验收与 npm test 均通过，均未改测试。结论：B 压缩 exec 21→7 但协议开销抵消收益；C 总 token +68.8%、峰值 +15.7%，为明确负收益。C8 的 Micro triage 诊断正确，但 Pipeline summary 的 2800 字符预算把 triage 段落整段裁掉，主模型改用第二次 pipeline 重读 9 源文件+3 测试文件，provider 成本已付而收益为 0。B7 另暴露 change(architecture-only) 静默 no-op、advisory ship 关闭会话后 receipt 丢失；C8 暴露 ship kind=module 报错不够具体导致 3 次 ship 往返。",
+            "createdAt": "2026-09-28T16:40:00.000Z"
           }
         ],
         "checks": [],
         "syncResult": null,
         "createdAt": "2026-09-27T05:27:08.690Z",
-        "updatedAt": "2026-09-28T09:35:20.180Z"
+        "updatedAt": "2026-09-28T16:40:00.000Z"
+      },
+      {
+        "id": "task-contextos-r4-routing-repair",
+        "planId": "plan-contextos-daily-savings",
+        "phaseId": "repair",
+        "title": "修复 R4 暴露的 verify/Micro 路由与工具契约缺陷",
+        "status": "completed",
+        "contextSlice": {
+          "objective": "让大失败证据在 OS 内闭环到 Micro，并消除 verify/Pipeline/doctor 的契约歧义。",
+          "constraints": [
+            "保持简单任务可关闭 Micro；autoTriage:false 必须生效。",
+            "不得把未实际调用的 Micro 计入收益。"
+          ],
+          "references": {},
+          "nextSteps": [
+            "已运行完整单测 318/318、plugin verify 和 Micro 直连验收。",
+            "已用全新 C 会话复验 noisy fixture：auto-triage 实际产生 provider usage。",
+            "下一轮验证 triage 保留后是否减少第二次全量 inspect，以及 change/ship 往返是否收敛。"
+          ],
+          "openQuestions": [
+            "Micro triage 后主线程是否真的减少后续失败日志读取，而非仅增加 provider 成本？"
+          ]
+        },
+        "workingSet": {
+          "files": [
+            "packages/orchestrator/src/pipelines.mjs",
+            "packages/orchestrator/src/index.mjs",
+            "plugins/contextos/skills/contextos/SKILL.md",
+            "plugins/contextos/skills/contextos/references/capabilities.md"
+          ],
+          "symbols": [],
+          "candidateBlockIds": [],
+          "scopeDirs": []
+        },
+        "references": {
+          "rules": [],
+          "decisionSections": [],
+          "blockIds": []
+        },
+        "rules": [],
+        "notes": [
+          {
+            "id": "note-repair-1790613600000-r6fix",
+            "kind": "repair",
+            "text": "R6 修复：Pipeline 失败投影新增 extractMicroTriage 并优先保留 Micro-Triage（上限 900 字符），不再被 2800 字符预算整段裁掉；change 收到 architecture 但无 edits/create/delete 时明确输出 NOT applied 并指向 block.bind_auto/chain.compose；ship 无 passing receipt 时提示 ship({ receiptIds }) 恢复通道；kind=module/mod-* 报错补充可用语义 kind 列表；Skill 与 capabilities 同步 kind 白名单。新增 scripts/contextos-ab-metrics.mjs 统一指标口径。",
+            "createdAt": "2026-09-28T16:40:00.000Z"
+          },
+          {
+            "id": "note-next-1790613600001-r6next",
+            "kind": "next",
+            "text": "待验证：新隔离 C 轮中 (1) 主模型读到 Micro-Triage 后不再第二次全量 inspect；(2) 模型改用 change 承载编辑与架构绑定，使 ship 收敛为一次；(3) ship({receiptIds}) 在重开会话后被采用；(4) work 合并探索与编辑、ops telemetry rollout 替代人工解析的可行性。",
+            "createdAt": "2026-09-28T16:40:00.000Z"
+          }
+        ],
+        "checks": [],
+        "syncResult": null,
+        "createdAt": "2026-09-28T16:08:17.686Z",
+        "updatedAt": "2026-09-28T16:40:00.000Z"
       }
     ],
     "blocks": [

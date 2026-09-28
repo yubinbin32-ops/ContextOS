@@ -351,6 +351,53 @@ test('kernel e2e: ship can close explicit Block and Chain ownership in one round
   service.close();
 });
 
+test('kernel e2e: ship architecture accepts common model aliases without extra rounds', async () => {
+  const projectRoot = makeTempProject();
+  fs.mkdirSync(path.join(projectRoot, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, 'src', 'api.mjs'), 'export const api = () => 1;\n');
+  fs.writeFileSync(path.join(projectRoot, 'src', 'index.mjs'), 'export * from "./api.mjs";\n');
+
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  await orchestrator.dispatch('change', {
+    create: [
+      { path: 'src/api.mjs', content: 'export const api = () => 2;\n', overwrite: true },
+      { path: 'src/index.mjs', content: 'export * from "./api.mjs";\n', overwrite: true },
+    ],
+    verify: { command: 'node -e "0"' },
+  });
+
+  const shipped = await orchestrator.dispatch('ship', {
+    summary: 'Close an API boundary submitted with common aliases.',
+    architecture: {
+      blocks: [{
+        id: 'block-api',
+        name: 'API boundary',
+        files: ['src/api.mjs', 'src/index.mjs'],
+        responsibility: 'Own the public API boundary.',
+      }],
+      chains: [{
+        id: 'chain-api-flow',
+        name: 'API flow',
+        blocks: ['block-api'],
+      }],
+    },
+  });
+  assert.match(shipped, /# ContextOS ship/);
+  assert.doesNotMatch(shipped, /BLOCKED/);
+
+  const block = await service.block({ action: 'open', id: 'block-api', format: 'json' });
+  assert.deepEqual(
+    block.artifactRefs.map((ref) => ref.path).sort(),
+    ['src/api.mjs', 'src/index.mjs'],
+  );
+  assert.equal(block.kind, 'component');
+  const chain = await service.chain({ action: 'open', id: 'chain-api-flow', format: 'json' });
+  assert.deepEqual(chain.memberIds, ['block-api']);
+
+  service.close();
+});
+
 test('kernel e2e: ship requires one curated owner and Chain membership in strict mode', async () => {
   const projectRoot = makeTempProject();
   fs.writeFileSync(

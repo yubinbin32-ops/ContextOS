@@ -459,6 +459,43 @@ test('change dry run previews edits without writing, touching the session, or ve
   );
 });
 
+test('change without edits warns that architecture was not applied', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const preview = await orchestrator.dispatch('change', {
+    architecture: {
+      blocks: [{ id: 'block-api', title: 'API boundary', kind: 'service', paths: ['src/math.mjs'] }],
+      chains: [{ id: 'chain-api', title: 'API flow', memberIds: ['block-api'] }],
+    },
+  });
+
+  assert.match(preview, /# ContextOS change \(propose\)/);
+  assert.match(preview, /NOT applied/);
+  assert.match(preview, /bind_auto/);
+  assert.equal(
+    service.calls.some((call) => call.capability === 'code' && ['create', 'edit'].includes(call.args.action)),
+    false
+  );
+});
+
+test('ship on an unverified reopened session points at receipt re-attachment', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  await orchestrator.dispatch('change', {
+    intent: 'unverified edit',
+    edits: [{ path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 0;' }],
+  });
+  const shipped = await orchestrator.dispatch('ship', { summary: 'close without verify' });
+
+  assert.match(shipped, /Passing receipts: 0/);
+  assert.match(shipped, /No passing receipt in this session/);
+  assert.match(shipped, /receiptIds/);
+});
+
 test('failed receipts are superseded only by the same command and remain explicit in ship output', async () => {
   const projectRoot = makeTempProject();
   const service = fakeService({ exitCodes: [1, 0, 1] });
@@ -1319,6 +1356,17 @@ test('ops supports micro capability and verify triggers micro triage on failure'
     });
     assert.match(microDirect, /micro inference ok/);
 
+    const doctorProbe = JSON.parse(await orchestrator.dispatch('ops', {
+      capability: 'micro',
+      action: 'doctor',
+      args: { probe: true },
+    }));
+    assert.equal(doctorProbe.ok, true);
+    assert.equal(
+      doctorProbe.checks.find((check) => check.name === 'provider')?.ok,
+      true,
+    );
+
     // 2. Direct ops micro batch
     const microBatch = await orchestrator.dispatch('ops', {
       capability: 'micro',
@@ -1348,14 +1396,34 @@ test('ops supports micro capability and verify triggers micro triage on failure'
     const microUsage = fs.readFileSync(microUsagePath, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
     assert.ok(microUsage.some((entry) => entry.preset === 'triage' && entry.hostSessionId === orchestrator.store.current.id));
 
-    // 5. Direct ops micro withOS: true attaches tools and caps
+    // 5. Large failure evidence auto-routes to Micro even without autoTriage:true,
+    // and mode:"full" remains an output mode instead of a process action.
+    service.runCommand = async (args) => ({
+      id: 'receipt-large-failure',
+      command: args.command,
+      cwd: null,
+      exitCode: 1,
+      durationMs: 3,
+      diagnostics: [`AssertionError: ${'failure evidence '.repeat(180)}`],
+      summary: 'failed',
+    });
+    const verifyLarge = await orchestrator.dispatch('verify', {
+      commands: ['node -e "process.exit(1)"'],
+      mode: 'full',
+    });
+    assert.match(verifyLarge, /Verdict: FAIL/);
+    assert.match(verifyLarge, /👉 Micro-Triage \(工程诊断小脑\)/);
+    assert.match(verifyLarge, /出错文件: test\.mjs/);
+    assert.doesNotMatch(verifyLarge, /Unknown process action: full/);
+
+    // 6. Direct ops micro withOS: true attaches tools and caps
     const microWithOS = await orchestrator.dispatch('ops', {
       capability: 'micro',
       args: { prompt: 'inspect codebase', withOS: true },
     });
     assert.match(microWithOS, /micro inference ok/);
 
-    // 6. Native inspect capability is exposed on caps
+    // 7. Native inspect capability is exposed on caps
     const ctx = orchestrator._context();
     assert.equal(typeof ctx.caps.inspect, 'function');
   } finally {
