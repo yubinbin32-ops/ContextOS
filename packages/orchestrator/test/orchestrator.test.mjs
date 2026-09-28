@@ -1418,6 +1418,18 @@ test('ops supports micro capability and verify triggers micro triage on failure'
     assert.match(verifyLarge, /Verdict: FAIL/);
     assert.match(verifyLarge, /👉 Micro-Triage \(工程诊断小脑\)/);
     assert.match(verifyLarge, /出错文件: test\.mjs/);
+
+    // 6. Default (non-full) failure output keeps the diagnosis and a locator
+    // instead of re-sending the raw log Micro already summarized.
+    const verifyCompact = await orchestrator.dispatch('verify', {
+      commands: ['node -e "process.exit(1)"'],
+    });
+    assert.match(verifyCompact, /👉 Micro-Triage \(工程诊断小脑\)/);
+    assert.match(verifyCompact, /raw failure log kept in the verification receipt/);
+    assert.ok(
+      verifyCompact.length < verifyLarge.length,
+      `compact verify (${verifyCompact.length}) must be smaller than full verify (${verifyLarge.length})`
+    );
     assert.doesNotMatch(verifyLarge, /Unknown process action: full/);
 
     // 6. Direct ops micro withOS: true attaches tools and caps

@@ -31106,6 +31106,15 @@ function extractMicroTriage(text) {
   const body2 = match[1].split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join(" ");
   return body2 ? clip3(body2, 700) : null;
 }
+function compactFailureEvidence(text, { maxChars = 400 } = {}) {
+  const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const test = lines.find((line) => /^not ok\b/i.test(line));
+  const error2 = lines.find((line) => /AssertionError|^error:|Expected\b|\bError:/i.test(line));
+  const parts2 = [test, error2].filter(Boolean);
+  const head = parts2.length ? parts2.join("\n") : lines.slice(0, 2).join("\n");
+  return `${clip3(head, maxChars)}
+[raw failure log kept in the verification receipt; pass full:true to expand]`;
+}
 function resolveActionOutputLimit(action, { mode = "summary", aggregateBudget } = {}) {
   if (!action || typeof action !== "object") {
     return mode === "full" && !Number.isFinite(aggregateBudget) ? PIPELINE_MAX_OUTPUT_CLIP : PIPELINE_DEFAULT_OUTPUT_CLIP;
@@ -32412,7 +32421,8 @@ ${diag}`);
   if (triageLines.length) {
     verifySections.push({ key: "triage", title: "\u{1F449} Micro-Triage (\u5DE5\u7A0B\u8BCA\u65AD\u5C0F\u8111)", priority: 1.5, lines: triageLines });
   }
-  verifySections.push({ key: "failures", title: "Failures", priority: 2, lines: failureLines });
+  const projectedFailureLines = triageLines.length && !isFull ? failureLines.map((block) => compactFailureEvidence(block)) : failureLines;
+  verifySections.push({ key: "failures", title: "Failures", priority: 2, lines: projectedFailureLines });
   const { text } = fitSections(
     verifySections,
     { maxChars: isFull ? Infinity : resolveBudget(input.depth, ctx.profile?.budget) }

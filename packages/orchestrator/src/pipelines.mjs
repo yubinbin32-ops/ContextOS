@@ -148,6 +148,23 @@ function extractMicroTriage(text) {
   return body ? clip(body, 700) : null;
 }
 
+// Once Micro has already reduced a failure to a diagnosis, the raw log is
+// redundant in the host window. Keep the identifying lines and a locator so
+// the caller can still open the receipt when it needs the full evidence.
+function compactFailureEvidence(text, { maxChars = 400 } = {}) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const test = lines.find((line) => /^not ok\b/i.test(line));
+  const error = lines.find((line) => /AssertionError|^error:|Expected\b|\bError:/i.test(line));
+  const parts = [test, error].filter(Boolean);
+  const head = parts.length ? parts.join('\n') : lines.slice(0, 2).join('\n');
+  // Clip the evidence first: appending the locator before clipping let a long
+  // assertion line consume the whole budget and drop the locator.
+  return `${clip(head, maxChars)}\n[raw failure log kept in the verification receipt; pass full:true to expand]`;
+}
+
 function resolveActionOutputLimit(action, { mode = 'summary', aggregateBudget } = {}) {
   if (!action || typeof action !== 'object') {
     return mode === 'full' && !Number.isFinite(aggregateBudget)
@@ -1654,7 +1671,12 @@ export async function verifyPipeline(ctx, input = {}) {
   if (triageLines.length) {
     verifySections.push({ key: 'triage', title: '👉 Micro-Triage (工程诊断小脑)', priority: 1.5, lines: triageLines });
   }
-  verifySections.push({ key: 'failures', title: 'Failures', priority: 2, lines: failureLines });
+  // Triage already carries the diagnosis; do not also spend host context on
+  // the raw TAP body it was derived from.
+  const projectedFailureLines = triageLines.length && !isFull
+    ? failureLines.map((block) => compactFailureEvidence(block))
+    : failureLines;
+  verifySections.push({ key: 'failures', title: 'Failures', priority: 2, lines: projectedFailureLines });
 
   const { text } = fitSections(
     verifySections,
