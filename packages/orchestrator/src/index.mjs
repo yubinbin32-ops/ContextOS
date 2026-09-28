@@ -14,7 +14,7 @@ import { compactJson, finalizeResponse, projectMicroResult, summarizeMicroUsage 
 import { parseRolloutTelemetry } from './rollout-telemetry.mjs';
 import { compareTelemetry, recordTelemetry, summarizeTelemetry } from './telemetry.mjs';
 import { auditRouting } from './routing-audit.mjs';
-import { claimMicroDeliveries, completeMicroDeliveryClaims, releaseMicroDeliveryClaims, renderMicroDeliveries } from './micro-delivery.mjs';
+import { claimMicroDeliveries, completeMicroDeliveryClaims, createMicroJob, listMicroJobs, releaseMicroDeliveryClaims, renderMicroDeliveries, updateMicroJob, enqueueMicroDelivery } from './micro-delivery.mjs';
 
 export * from './context-budget.mjs';
 export * from './intent-router.mjs';
@@ -320,17 +320,23 @@ function shouldSkipLateMicroEvidence(store, args = {}) {
   return hasMutation && hasSuccessfulVerification && !hasUnresolvedFailure;
 }
 
-function attachMicroDeliveryData(result, claims = [], warning = null) {
+function attachMicroDeliveryData(result, claims = [], warning = null, pendingJobs = []) {
   const microRecovered = claims.map(({ deliveryId, receiptId, artifactId, content }) => ({
     deliveryId,
     receiptId,
     artifactId,
     content,
   }));
+  const microPending = pendingJobs.map((job) => ({
+    jobId: job.jobId,
+    preset: job.preset || null,
+    startedAt: job.createdAt || null,
+  }));
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     return {
       ...result,
       ...(microRecovered.length ? { microRecovered } : {}),
+      ...(microPending.length ? { microPending } : {}),
       ...(warning ? { microRecoveryWarning: warning } : {}),
     };
   }
@@ -341,13 +347,15 @@ function attachMicroDeliveryData(result, claims = [], warning = null) {
         return compactJson({
           ...parsed,
           ...(microRecovered.length ? { microRecovered } : {}),
+          ...(microPending.length ? { microPending } : {}),
           ...(warning ? { microRecoveryWarning: warning } : {}),
         });
       }
-      if (microRecovered.length || warning) {
+      if (microRecovered.length || microPending.length || warning) {
         return compactJson({
           result: parsed,
           ...(microRecovered.length ? { microRecovered } : {}),
+          ...(microPending.length ? { microPending } : {}),
           ...(warning ? { microRecoveryWarning: warning } : {}),
         });
       }
@@ -356,10 +364,11 @@ function attachMicroDeliveryData(result, claims = [], warning = null) {
     const notice = warning ? `## Deferred Micro recovery notice\n${warning}` : '';
     return [recovered, notice, result].filter(Boolean).join('\n\n');
   }
-  if (microRecovered.length || warning) {
+  if (microRecovered.length || microPending.length || warning) {
     return {
       result,
       ...(microRecovered.length ? { microRecovered } : {}),
+      ...(microPending.length ? { microPending } : {}),
       ...(warning ? { microRecoveryWarning: warning } : {}),
     };
   }
@@ -446,6 +455,87 @@ async function runMicroSessionTurn(ctx, args, session) {
     failMicroTurn(ctx.projectRoot, startedSession.id);
     throw error;
   }
+}
+
+function startBackgroundMicroRun(ctx, { args, microConfig, preload, action, effectiveWithOS }) {
+  const jobId = String(args.jobId || `micro-job-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`);
+  const created = createMicroJob(ctx.projectRoot, {
+    jobId,
+    preset: args.preset || null,
+    hostSessionId: ctx.sessionId,
+    inputSource: preload ? 'preload' : (args.prompt || args.task ? 'task' : 'none'),
+  });
+  if (!created.created) {
+    return {
+      ok: true,
+      delivery: 'running',
+      jobId,
+      duplicate: true,
+      ...(preload ? { preload: microPreloadReceipt(preload) } : {}),
+    };
+  }
+
+  const run = async () => {
+    try {
+      const result = await runMicroTask(microConfig, {
+        ...args,
+        delivery: args.delivery === 'errors-only' ? 'errors-only' : 'defer',
+        preload,
+        action,
+        withOS: effectiveWithOS,
+        outputMode: args.full ? 'full' : 'answer',
+        caps: effectiveWithOS ? ctx.caps : null,
+        orchestrator: ctx.orchestrator,
+        projectRoot: ctx.projectRoot,
+      });
+      const projected = projectMicroResult({ ...result, receiptId: jobId }, {
+        projectRoot: ctx.projectRoot,
+        hostSessionId: ctx.sessionId,
+        full: false,
+        maxChars: args.maxChars,
+      });
+      if (projected.ok) {
+        updateMicroJob(ctx.projectRoot, jobId, {
+          status: 'completed',
+          receiptId: projected.receiptId || jobId,
+          artifactId: projected.artifactId || null,
+          delivery: projected.delivery || null,
+        });
+        return;
+      }
+      const message = projected.error || 'Micro background job failed.';
+      enqueueMicroDelivery(ctx.projectRoot, {
+        deliveryId: jobId,
+        receiptId: projected.receiptId || jobId,
+        artifactId: projected.artifactId || null,
+        content: `Micro background job failed: ${message}`,
+      });
+      updateMicroJob(ctx.projectRoot, jobId, {
+        status: 'failed',
+        receiptId: projected.receiptId || jobId,
+        error: message,
+      });
+    } catch (error) {
+      const message = error?.message || String(error);
+      try {
+        enqueueMicroDelivery(ctx.projectRoot, {
+          deliveryId: jobId,
+          receiptId: jobId,
+          content: `Micro background job failed: ${message}`,
+        });
+      } catch (_) {}
+      updateMicroJob(ctx.projectRoot, jobId, { status: 'failed', error: message });
+    }
+  };
+
+  void run();
+  return {
+    ok: true,
+    delivery: 'running',
+    jobId,
+    receiptId: jobId,
+    ...(preload ? { preload: microPreloadReceipt(preload) } : {}),
+  };
 }
 
 function isJsonValueString(value) {
@@ -764,6 +854,7 @@ export class Orchestrator {
       ? this.store.findExploreReceipt({ key: exploreKey, revision: exploreRevision })
       : null;
     let deliveryClaims = [];
+    let pendingMicroJobs = [];
     let deliveryWarning = null;
     let deliveryClaimsCompleted = false;
     const semanticMemo = tool === 'ops' ? semanticOpsMemoSpec(input) : null;
@@ -778,6 +869,7 @@ export class Orchestrator {
       if (recoverMicroDeliveries) {
         try {
           deliveryClaims = claimMicroDeliveries(this.projectRoot);
+          pendingMicroJobs = listMicroJobs(this.projectRoot, { status: 'running', limit: 3 });
         } catch (error) {
           deliveryWarning = `Deferred Micro result recovery will retry on a later OS call: ${error.message}`;
         }
@@ -834,7 +926,7 @@ export class Orchestrator {
       }
       if (typeof result !== 'string') {
         const combined = attachRoutingHint(
-          attachMicroDeliveryData(result, deliveryClaims, deliveryWarning),
+          attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
           hostHint
         );
         recordTelemetry(this.projectRoot, {
@@ -853,7 +945,7 @@ export class Orchestrator {
         return combined;
       }
       const response = attachRoutingHint(
-        attachMicroDeliveryData(result, deliveryClaims, deliveryWarning),
+        attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
         hostHint
       );
       const responseArgs = input.args && typeof input.args === 'object' && !Array.isArray(input.args)
@@ -1330,6 +1422,15 @@ export class Orchestrator {
           });
         }
         const effectiveWithOS = microWithOS;
+        if (args.background === true) {
+          return render(startBackgroundMicroRun(ctx, {
+            args,
+            microConfig,
+            preload,
+            action,
+            effectiveWithOS,
+          }));
+        }
         const result = await runMicroTask(microConfig, { ...args, preload, action, withOS: effectiveWithOS, outputMode: args.full ? 'full' : 'answer', caps: effectiveWithOS ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });
         return render({
           ...projectMicroResult(result, {

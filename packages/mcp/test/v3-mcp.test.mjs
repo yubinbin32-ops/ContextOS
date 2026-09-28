@@ -66,6 +66,10 @@ test("V3 default surface exposes one compact transport tool", async () => {
   assert.match(JSON.stringify(listing.tools[0].inputSchema), /work/);
   assert.match(listing.tools[0].description, /pipeline.*direct/i);
   assert.match(listing.tools[0].description, /delivery/i);
+  assert.ok(
+    listing.tools[0].description.length < 600,
+    `the per-request compact tool description must stay below 600 chars, got ${listing.tools[0].description.length}`,
+  );
   const fixture = createFixtureProject({ prefix: "ctxos-v3-lean-work" });
   const work = await client.callTool({
     name: "contextos",

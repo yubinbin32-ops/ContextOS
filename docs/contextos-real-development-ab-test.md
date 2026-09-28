@@ -801,3 +801,41 @@ B 的 exec_command 从 21 次降到 7 次，但没有换来 token 优势，原�
 - **ship ×3** 源于架构归属缺失与 `kind:"module"` 误用（已补文案与文档）。
 
 理想形态只需 3 至 4 轮：合并 explore+inspect 的一次调用 → 一次 change+verify → 一次 ship。
+
+## 29. 重构批次 1：执行器化与协议瘦身（R7 前置）
+
+本轮不宣称 A/B/C 收益，只记录进入下一轮严格测试前已经消除的负收益来源。
+
+### 29.1 Micro 从摘要器变成受指派执行器
+
+- OS 层对无 preload 的 Micro 调用默认启用 `withOS`，宿主不再需要记住隐藏开关。
+- 附有 pipeline/preload 的调用仍默认 `summarizer-only`，只有显式 `withOS:true` 才继续发起工具轮，避免把摘要任务意外升级成额外成本。
+- 新增受限 `run` 工具，只有 `invocation.tools.allowCommands:true` 时才会暴露给 Micro。
+- usage 新增 `executionMode`、`summarizerOnly`、`hostTurnsSaved`，并区分 `executor`、`executor-idle`、`summarizer-only`。
+
+真实 provider 验收：
+
+| 场景 | providerRequests | toolRounds | toolCalls | 结果 |
+| --- | ---: | ---: | ---: | --- |
+| 强制 `os inspect` 后回答 | 2 | 1 | 1 | 正确 |
+| 强制 `run` 执行测试后诊断 | 2 | 1 | 1 | 正确 |
+
+### 29.2 无尾 Micro 变成真异步
+
+`delivery:"defer", background:true` 现在立即创建持久化 job 并返回，provider 在后台完成；结果进入原有 delivery queue，由后续顶层 OS 调用领取。真实 provider 实测主调用 26ms 返回 `running`，随后领取到完整答案。
+
+### 29.3 MCP 固定协议成本
+
+同一会话内，MCP server instructions 与 compact tool description 会随每次 provider 请求重新注入，因此它们属于轮数乘数成本：
+
+| 项目 | 重构前字符 | 重构后字符 | 降幅 |
+| --- | ---: | ---: | ---: |
+| Server instructions | 3,096 | 258 | −91.7% |
+| Compact tool description | 1,646 | 342 | −79.2% |
+| 合计 | 4,742 | 600 | −87.3% |
+
+按 C8 的 21 轮计算，仅这一项每任务少注入约 87K 字符，约 21K token。详细操作说明移入只加载一次的 Skill，不再作为每轮工具 schema 重发。
+
+### 29.4 计划状态缺陷
+
+计划阶段把 Task 写成了 phase 使用的 `pending`，但 Task 生命周期只接受 `draft`。这会让任务无法 activate、note 或 finish。Task 构造器现在把旧 `pending` 迁移为 `draft`，并在迁移后继续执行正常生命周期校验。

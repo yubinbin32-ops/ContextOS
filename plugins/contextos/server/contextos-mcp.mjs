@@ -8175,6 +8175,12 @@ function statePath(projectRoot) {
 function lockPath(projectRoot) {
   return path4.join(deliveryDir(projectRoot), "queue.lock");
 }
+function jobsDir(projectRoot) {
+  return path4.join(deliveryDir(projectRoot), "jobs");
+}
+function jobPath(projectRoot, jobId) {
+  return path4.join(jobsDir(projectRoot), `${jobId}.json`);
+}
 function sleepSync(ms) {
   const wait = Math.max(1, Math.min(100, Math.floor(ms)));
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait);
@@ -8325,6 +8331,101 @@ function enqueueMicroDelivery(projectRoot, item) {
     return { queued: true, deliveryId: delivery.deliveryId };
   });
 }
+function readJobFile(filePath) {
+  try {
+    const job = JSON.parse(fs5.readFileSync(filePath, "utf8"));
+    return job && typeof job === "object" ? job : null;
+  } catch (_) {
+    return null;
+  }
+}
+function writeJob(projectRoot, job) {
+  const filePath = jobPath(projectRoot, job.jobId);
+  fs5.mkdirSync(jobsDir(projectRoot), { recursive: true });
+  const temporary = `${filePath}.${process.pid}.${crypto3.randomUUID()}.tmp`;
+  fs5.writeFileSync(temporary, `${JSON.stringify(job, null, 2)}
+`, "utf8");
+  fs5.renameSync(temporary, filePath);
+  return job;
+}
+function normalizeJobStatus(status) {
+  return ["running", "completed", "failed"].includes(status) ? status : "running";
+}
+function normalizeJob(projectRoot, job) {
+  if (!job || typeof job !== "object") return null;
+  const jobId = String(job.jobId || "").trim();
+  if (!jobId) return null;
+  const status = normalizeJobStatus(job.status);
+  const createdAt = job.createdAt || (/* @__PURE__ */ new Date()).toISOString();
+  const updatedAt = job.updatedAt || createdAt;
+  const stale = Date.now() - Date.parse(updatedAt || createdAt) > JOB_TTL_MS;
+  const leaseAlive = status !== "running" || !Number.isInteger(job.leasePid) || processIsAlive(job.leasePid);
+  if (status === "running" && (stale || !leaseAlive)) {
+    return {
+      ...job,
+      jobId,
+      status: "failed",
+      error: stale ? "Micro background job expired before completion." : "Micro background worker exited before completion.",
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+  }
+  return {
+    ...job,
+    jobId,
+    status,
+    createdAt,
+    updatedAt,
+    projectRoot
+  };
+}
+function createMicroJob(projectRoot, job = {}) {
+  if (!projectRoot) throw new Error("Micro job requires a project root.");
+  const jobId = String(job.jobId || "").trim();
+  if (!jobId) throw new Error("Micro job requires a jobId.");
+  const existing = readMicroJob(projectRoot, jobId);
+  if (existing) return { created: false, job: existing };
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const record2 = normalizeJob(projectRoot, {
+    ...job,
+    jobId,
+    status: "running",
+    createdAt: job.createdAt || now,
+    updatedAt: now,
+    leasePid: process.pid
+  });
+  return { created: true, job: writeJob(projectRoot, record2) };
+}
+function updateMicroJob(projectRoot, jobId, patch = {}) {
+  if (!projectRoot || !jobId) return null;
+  const existing = readMicroJob(projectRoot, jobId);
+  if (!existing) return null;
+  const next = normalizeJob(projectRoot, {
+    ...existing,
+    ...patch,
+    jobId,
+    updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  return writeJob(projectRoot, next);
+}
+function readMicroJob(projectRoot, jobId) {
+  if (!projectRoot || !jobId) return null;
+  const filePath = jobPath(projectRoot, String(jobId));
+  const job = readJobFile(filePath);
+  if (!job) return null;
+  const normalized = normalizeJob(projectRoot, job);
+  if (normalized && normalized.status !== job.status) writeJob(projectRoot, normalized);
+  return normalized;
+}
+function listMicroJobs(projectRoot, { status = null, limit = 20 } = {}) {
+  if (!projectRoot) return [];
+  let files = [];
+  try {
+    files = fs5.readdirSync(jobsDir(projectRoot)).filter((name2) => name2.endsWith(".json")).slice(-Math.max(1, Math.min(Number(limit) || 20, 100)));
+  } catch (_) {
+    return [];
+  }
+  return files.map((name2) => readMicroJob(projectRoot, name2.replace(/\.json$/, ""))).filter(Boolean).filter((job) => !status || job.status === status).sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
+}
 function claimMicroDeliveries(projectRoot, options = {}) {
   if (!projectRoot) return [];
   return withQueueLock(projectRoot, () => {
@@ -8417,7 +8518,7 @@ ${item.content}`;
   return `## Micro results recovered from a previous OS call
 ${sections.join("\n\n")}`;
 }
-var DELIVERY_VERSION, DEFAULT_LOCK_TIMEOUT_MS, DEFAULT_LOCK_STALE_MS, MAX_PENDING_DELIVERIES, MAX_STORED_ANSWER_CHARS, DEFAULT_RESTORE_ITEMS, DEFAULT_RESTORE_CHARS, LEASE_STALE_MS, DELIVERY_TTL_MS, MAX_DELIVERED_TOMBSTONES;
+var DELIVERY_VERSION, DEFAULT_LOCK_TIMEOUT_MS, DEFAULT_LOCK_STALE_MS, MAX_PENDING_DELIVERIES, MAX_STORED_ANSWER_CHARS, DEFAULT_RESTORE_ITEMS, DEFAULT_RESTORE_CHARS, LEASE_STALE_MS, DELIVERY_TTL_MS, MAX_DELIVERED_TOMBSTONES, JOB_TTL_MS;
 var init_micro_delivery = __esm({
   "packages/orchestrator/src/micro-delivery.mjs"() {
     DELIVERY_VERSION = 1;
@@ -8430,6 +8531,7 @@ var init_micro_delivery = __esm({
     LEASE_STALE_MS = 10 * 60 * 1e3;
     DELIVERY_TTL_MS = 24 * 60 * 60 * 1e3;
     MAX_DELIVERED_TOMBSTONES = 256;
+    JOB_TTL_MS = 24 * 60 * 60 * 1e3;
   }
 });
 
@@ -52658,17 +52760,23 @@ function shouldSkipLateMicroEvidence(store, args2 = {}) {
   const hasUnresolvedFailure = receipts.some((receipt) => Number(receipt?.exitCode) !== 0 && receipt?.status !== "superseded");
   return hasMutation && hasSuccessfulVerification && !hasUnresolvedFailure;
 }
-function attachMicroDeliveryData(result, claims = [], warning = null) {
+function attachMicroDeliveryData(result, claims = [], warning = null, pendingJobs = []) {
   const microRecovered = claims.map(({ deliveryId, receiptId, artifactId, content }) => ({
     deliveryId,
     receiptId,
     artifactId,
     content
   }));
+  const microPending = pendingJobs.map((job) => ({
+    jobId: job.jobId,
+    preset: job.preset || null,
+    startedAt: job.createdAt || null
+  }));
   if (result && typeof result === "object" && !Array.isArray(result)) {
     return {
       ...result,
       ...microRecovered.length ? { microRecovered } : {},
+      ...microPending.length ? { microPending } : {},
       ...warning ? { microRecoveryWarning: warning } : {}
     };
   }
@@ -52679,13 +52787,15 @@ function attachMicroDeliveryData(result, claims = [], warning = null) {
         return compactJson({
           ...parsed,
           ...microRecovered.length ? { microRecovered } : {},
+          ...microPending.length ? { microPending } : {},
           ...warning ? { microRecoveryWarning: warning } : {}
         });
       }
-      if (microRecovered.length || warning) {
+      if (microRecovered.length || microPending.length || warning) {
         return compactJson({
           result: parsed,
           ...microRecovered.length ? { microRecovered } : {},
+          ...microPending.length ? { microPending } : {},
           ...warning ? { microRecoveryWarning: warning } : {}
         });
       }
@@ -52696,10 +52806,11 @@ function attachMicroDeliveryData(result, claims = [], warning = null) {
 ${warning}` : "";
     return [recovered, notice, result].filter(Boolean).join("\n\n");
   }
-  if (microRecovered.length || warning) {
+  if (microRecovered.length || microPending.length || warning) {
     return {
       result,
       ...microRecovered.length ? { microRecovered } : {},
+      ...microPending.length ? { microPending } : {},
       ...warning ? { microRecoveryWarning: warning } : {}
     };
   }
@@ -52782,6 +52893,85 @@ async function runMicroSessionTurn(ctx, args2, session) {
     failMicroTurn(ctx.projectRoot, startedSession.id);
     throw error2;
   }
+}
+function startBackgroundMicroRun(ctx, { args: args2, microConfig, preload, action, effectiveWithOS }) {
+  const jobId = String(args2.jobId || `micro-job-${Date.now()}-${crypto10.randomUUID().slice(0, 8)}`);
+  const created = createMicroJob(ctx.projectRoot, {
+    jobId,
+    preset: args2.preset || null,
+    hostSessionId: ctx.sessionId,
+    inputSource: preload ? "preload" : args2.prompt || args2.task ? "task" : "none"
+  });
+  if (!created.created) {
+    return {
+      ok: true,
+      delivery: "running",
+      jobId,
+      duplicate: true,
+      ...preload ? { preload: microPreloadReceipt(preload) } : {}
+    };
+  }
+  const run2 = async () => {
+    try {
+      const result = await runMicroTask(microConfig, {
+        ...args2,
+        delivery: args2.delivery === "errors-only" ? "errors-only" : "defer",
+        preload,
+        action,
+        withOS: effectiveWithOS,
+        outputMode: args2.full ? "full" : "answer",
+        caps: effectiveWithOS ? ctx.caps : null,
+        orchestrator: ctx.orchestrator,
+        projectRoot: ctx.projectRoot
+      });
+      const projected = projectMicroResult({ ...result, receiptId: jobId }, {
+        projectRoot: ctx.projectRoot,
+        hostSessionId: ctx.sessionId,
+        full: false,
+        maxChars: args2.maxChars
+      });
+      if (projected.ok) {
+        updateMicroJob(ctx.projectRoot, jobId, {
+          status: "completed",
+          receiptId: projected.receiptId || jobId,
+          artifactId: projected.artifactId || null,
+          delivery: projected.delivery || null
+        });
+        return;
+      }
+      const message = projected.error || "Micro background job failed.";
+      enqueueMicroDelivery(ctx.projectRoot, {
+        deliveryId: jobId,
+        receiptId: projected.receiptId || jobId,
+        artifactId: projected.artifactId || null,
+        content: `Micro background job failed: ${message}`
+      });
+      updateMicroJob(ctx.projectRoot, jobId, {
+        status: "failed",
+        receiptId: projected.receiptId || jobId,
+        error: message
+      });
+    } catch (error2) {
+      const message = error2?.message || String(error2);
+      try {
+        enqueueMicroDelivery(ctx.projectRoot, {
+          deliveryId: jobId,
+          receiptId: jobId,
+          content: `Micro background job failed: ${message}`
+        });
+      } catch (_) {
+      }
+      updateMicroJob(ctx.projectRoot, jobId, { status: "failed", error: message });
+    }
+  };
+  void run2();
+  return {
+    ok: true,
+    delivery: "running",
+    jobId,
+    receiptId: jobId,
+    ...preload ? { preload: microPreloadReceipt(preload) } : {}
+  };
 }
 function isJsonValueString(value) {
   if (typeof value !== "string") return false;
@@ -53052,6 +53242,7 @@ var Orchestrator = class {
     const exploreKey = exploreRevision ? exploreMemoKey(input) : null;
     const exploreReceipt = exploreKey ? this.store.findExploreReceipt({ key: exploreKey, revision: exploreRevision }) : null;
     let deliveryClaims = [];
+    let pendingMicroJobs = [];
     let deliveryWarning = null;
     let deliveryClaimsCompleted = false;
     const semanticMemo = tool === "ops" ? semanticOpsMemoSpec(input) : null;
@@ -53063,6 +53254,7 @@ var Orchestrator = class {
       if (recoverMicroDeliveries) {
         try {
           deliveryClaims = claimMicroDeliveries(this.projectRoot);
+          pendingMicroJobs = listMicroJobs(this.projectRoot, { status: "running", limit: 3 });
         } catch (error2) {
           deliveryWarning = `Deferred Micro result recovery will retry on a later OS call: ${error2.message}`;
         }
@@ -53117,7 +53309,7 @@ var Orchestrator = class {
       }
       if (typeof result !== "string") {
         const combined = attachRoutingHint(
-          attachMicroDeliveryData(result, deliveryClaims, deliveryWarning),
+          attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
           hostHint
         );
         recordTelemetry(this.projectRoot, {
@@ -53136,7 +53328,7 @@ var Orchestrator = class {
         return combined;
       }
       const response = attachRoutingHint(
-        attachMicroDeliveryData(result, deliveryClaims, deliveryWarning),
+        attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
         hostHint
       );
       const responseArgs = input.args && typeof input.args === "object" && !Array.isArray(input.args) ? input.args : {};
@@ -53577,6 +53769,15 @@ var Orchestrator = class {
           });
         }
         const effectiveWithOS = microWithOS;
+        if (args2.background === true) {
+          return render(startBackgroundMicroRun(ctx, {
+            args: args2,
+            microConfig,
+            preload,
+            action,
+            effectiveWithOS
+          }));
+        }
         const result = await runMicroTask(microConfig, { ...args2, preload, action, withOS: effectiveWithOS, outputMode: args2.full ? "full" : "answer", caps: effectiveWithOS ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });
         return render({
           ...projectMicroResult(result, {
@@ -61464,7 +61665,7 @@ function createV3Server({
   const server = new McpServer(
     { name: "contextos", version: VERSION },
     {
-      instructions: 'ContextOS is the default repository execution layer. On the compact `contextos` surface, known tasks use `action:"work"` with search strings/{query}, inspect paths/{path,ranges,budget,symbol}, create [{path,content}], edits [{path,symbol|target|startLine+endLine,replacement}], and verify/commands arrays. On the opt-in legacy surface there is no standalone `work` tool: use `change({ edits, verify })` or `pipeline` instead. The work route reads before mutation and verifies after; when mutation includes verification, trust `done: verified` and do not rerun those commands. Set `budget:"full"` on small bounded inspect ranges when exact code is needed; read a returned artifact once instead of repeating the same inspect. Repeated unchanged `explore`, legacy `ops.code.read/search`, and semantic Plan/Task/Block/Chain/artifact diagnostics reuse compact receipts; session history is compact and can target `sessionId`, while `full:true` is an explicit diagnostic escape hatch. Use `dedupeReads:false` or `refresh:true` only for intentional fresh replay. After repeated unchanged discovery/diagnostics, a convergence hint means the next call must be a known mutation, verification, or dependent Pipeline; do not answer it with another single-file read. Advanced `ops` output is bounded unless `full:true` is explicit. Use one bounded discovery, one mutation, and one closure for a focused task; use Pipeline for known dependent or parallel batches. Micro is a bounded specialist for bulky evidence and synthesis: attach `pipeline:{steps:[...]}` directly to its first call (or session create) so OS runs the evidence once; for a persistent session, add `runFirst:true` and the first `task` to combine creation, preload, provider turn, and delivery in one host round; do not call Pipeline separately and copy its output. Keep attached evidence surgical\u2014one failure receipt plus two or three exact symbols, normally 1,800\u20132,400 chars. Multi-step attached Pipelines automatically partition that budget across child outputs; explicit child caps around 300\u2013600 chars are still preferred, while one oversized step returns `TRUNCATED` instead of silently losing context. For direct evidence, prefer `invocation:{evidence:{mode:"pipeline",maxChars:2400},provider:{maxRequests:1},tools:{enabled:false}}`; request/input admission prevents silent retries and records providerRequests/pipelineRuns/cache hits. With `withOS:true`, Micro read-only calls are internal and duplicate reads in one turn are suppressed. A read-only attached evidence request after successful mutation and verification is skipped as late replay unless `allowLate:true` is explicit. Use `delivery:"immediate"` when the next decision depends on the answer, `"defer"` or `"auto"` when the host can continue, and `"errors-only"` for assigned Block/Chain writes; delivery changes host visibility, not provider cost. Use `telemetry.audit` for A/B/C; it separates host-visible cost from internal Pipeline work and keeps savings null when usage evidence is incomplete. Avoid raw artifact replay, catalog dumps, and per-action turns.'
+      instructions: "ContextOS is the repository execution layer. Prefer one contextos call per host decision: work for read+edit+verify, pipeline for known batches, micro for bulky evidence. Trust verified receipts; expand artifacts only when the next decision needs the body."
     }
   );
   const dispatch = async (tool, input) => {
@@ -61483,7 +61684,7 @@ function createV3Server({
     server.registerTool(
       "contextos",
       {
-        description: 'Default repository interface. `action:"work"` accepts search strings/{query}, inspect paths/{path,ranges,budget,symbol}, create [{path,content}], edits [{path,symbol|target|startLine+endLine,replacement}], and verify/commands arrays. It reads, edits, then verifies in one call; trust `done: verified` rather than repeating checks. Use `budget:"full"` for small bounded slices; read a returned artifact once. Repeated unchanged `explore` and legacy `ops.code.read/search` calls reuse session receipts unless `dedupeReads:false` or `refresh:true` is explicitly set. If a convergence hint appears, move to mutation/verification/Pipeline instead of another discovery call. For Micro, attach `pipeline:{steps:[...]}` directly to the same call and prefer a one-request `invocation` budget; for a persistent session, add `runFirst:true` and the first `task` to combine creation, preload, provider turn, and delivery in one host round. Multi-step evidence is auto-partitioned, but narrow child symbols and pass explicit caps when possible; choose `delivery` deliberately because delivery does not reduce provider cost. Do not issue a separate Pipeline call and copy its output. A read-only attached evidence request after successful mutation and verification is skipped as late replay unless `allowLate:true` is explicit. With `withOS:true`, duplicate Micro reads are suppressed and counted as internal work. Pipeline parallel fan-out is concurrency-bounded at four by default (hard maximum eight); Micro batch uses the same bound. Use Pipeline for batched OS actions and Micro only when keeping bulky evidence out of the host is worth the provider cost.',
+        description: "Repository execution for one decision per call. Use action=work for {search,inspect,create,edits,verify}; use pipeline for known parallel or dependent batches directly; inspect/change/verify cover focused operations; micro handles bulky evidence and delivery. Returns compact receipts and locators; expand with full/maxChars only when needed.",
         inputSchema: {
           action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops"]),
           args: record(any()).optional(),

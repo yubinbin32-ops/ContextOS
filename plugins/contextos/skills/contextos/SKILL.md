@@ -52,7 +52,7 @@ surface, and resource discovery is not an availability check.
 - **调用方式**：把重证据流水线直接附着在第一次调用中：
   `contextos({ action: "micro", args: { pipeline: { steps: [{ run: "npm test", allowCommands: true }] }, invocation: { evidence: { maxChars: 2400 }, tools: { enabled: true, maxSteps: 2, allowCommands: true }, provider: { maxRequests: 3 } } } })`
 - **触发阈值**：测试错误、堆栈或日志超过 2,000 字符时使用。不要用于简单单行编辑。
-- **无尾投递**：宿主不需要立即消费结果时使用 `delivery:"defer"` 或 `"auto"`；结果在后续顶层 OS 调用中恢复。不要为了等待一个摘要额外开启宿主轮次。
+- **无尾投递**：不需要立即消费时用 `delivery:"defer",background:true` 立即返回 job，结果在后续 OS 调用恢复；不要为摘要额外开启宿主轮次。
 - `verify` 的 `mode:"full"` 只控制输出，不是进程模式；失败证据超过阈值且 Micro 已配置时会自动 triage，只有显式 `autoTriage:false` 才关闭。
 
 ### 5. 系统自检与环境运维 (Doctor & Ops)

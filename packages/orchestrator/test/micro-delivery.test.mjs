@@ -7,8 +7,12 @@ import test from 'node:test';
 import {
   claimMicroDeliveries,
   completeMicroDeliveryClaims,
+  createMicroJob,
   enqueueMicroDelivery,
+  listMicroJobs,
+  readMicroJob,
   renderMicroDeliveries,
+  updateMicroJob,
 } from '../src/micro-delivery.mjs';
 import { projectMicroResult } from '../src/response-budget.mjs';
 import { Orchestrator } from '../src/index.mjs';
@@ -48,6 +52,30 @@ test('Micro delivery queues a result once and recovers it on the next OS call', 
     assert.match(renderMicroDeliveries(claims), /micro-deferred-1/);
     completeMicroDeliveryClaims(root, claims.map((item) => item.deliveryId));
     assert.deepEqual(claimMicroDeliveries(root), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Micro background jobs persist running and terminal state', () => {
+  const root = tempProject('contextos-micro-job-');
+  try {
+    const created = createMicroJob(root, { jobId: 'job-1', preset: 'triage' });
+    assert.equal(created.created, true);
+    assert.equal(readMicroJob(root, 'job-1').status, 'running');
+    assert.deepEqual(
+      listMicroJobs(root, { status: 'running' }).map((job) => job.jobId),
+      ['job-1'],
+    );
+
+    const completed = updateMicroJob(root, 'job-1', {
+      status: 'completed',
+      receiptId: 'micro-job-1',
+      delivery: 'deferred',
+    });
+    assert.equal(completed.status, 'completed');
+    assert.equal(completed.receiptId, 'micro-job-1');
+    assert.deepEqual(listMicroJobs(root, { status: 'running' }), []);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

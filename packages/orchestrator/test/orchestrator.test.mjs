@@ -1485,6 +1485,77 @@ test('ops supports micro capability and verify triggers micro triage on failure'
   }
 });
 
+test('background Micro returns a running job and recovers its result later', async () => {
+  const http = await import('node:http');
+  let providerCompleted = false;
+  let resolveProvider;
+  const providerDone = new Promise((resolve) => { resolveProvider = resolve; });
+  const mockServer = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      assert.ok(JSON.parse(body || '{}').messages);
+      setTimeout(() => {
+        providerCompleted = true;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'background answer' } }],
+          usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+        }));
+        resolveProvider();
+      }, 250);
+    });
+  });
+  const { port } = await new Promise((resolve) => {
+    mockServer.listen(0, '127.0.0.1', () => resolve({ port: mockServer.address().port }));
+  });
+  const projectRoot = makeTempProject();
+  fs.mkdirSync(path.join(projectRoot, '.contextos'), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, '.contextos', 'profile.json'),
+    JSON.stringify({ micro: { url: `http://127.0.0.1:${port}`, model: 'mock-background-model' } }, null, 2),
+  );
+  const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
+  try {
+    const started = JSON.parse(await orchestrator.dispatch('ops', {
+      capability: 'micro',
+      action: 'run',
+      args: {
+        prompt: 'summarize in the background',
+        delivery: 'defer',
+        background: true,
+      },
+    }));
+    assert.equal(started.ok, true);
+    assert.equal(started.delivery, 'running');
+    assert.ok(started.jobId);
+    assert.equal(providerCompleted, false, 'background dispatch must not await the provider');
+
+    const pending = JSON.parse(await orchestrator.dispatch('ops', {
+      capability: 'micro',
+      action: 'doctor',
+      args: {},
+    }));
+    assert.equal(pending.microPending?.[0]?.jobId, started.jobId);
+
+    await providerDone;
+    let recovered = null;
+    for (let attempt = 0; attempt < 40 && !recovered; attempt += 1) {
+      const doctor = JSON.parse(await orchestrator.dispatch('ops', {
+        capability: 'micro',
+        action: 'doctor',
+        args: {},
+      }));
+      if (doctor.microRecovered?.length) recovered = doctor;
+      else await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(recovered?.microRecovered?.[0]?.content, 'background answer');
+  } finally {
+    await new Promise((resolve) => mockServer.close(resolve));
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test('late read-only Micro evidence is skipped after successful mutation and verification', async () => {
   const projectRoot = makeTempProject();
   fs.mkdirSync(path.join(projectRoot, '.contextos'), { recursive: true });

@@ -12,6 +12,7 @@ const DEFAULT_RESTORE_CHARS = 3200;
 const LEASE_STALE_MS = 10 * 60 * 1000;
 const DELIVERY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_DELIVERED_TOMBSTONES = 256;
+const JOB_TTL_MS = 24 * 60 * 60 * 1000;
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -34,6 +35,14 @@ function statePath(projectRoot) {
 
 function lockPath(projectRoot) {
   return path.join(deliveryDir(projectRoot), 'queue.lock');
+}
+
+function jobsDir(projectRoot) {
+  return path.join(deliveryDir(projectRoot), 'jobs');
+}
+
+function jobPath(projectRoot, jobId) {
+  return path.join(jobsDir(projectRoot), `${jobId}.json`);
 }
 
 function sleepSync(ms) {
@@ -203,6 +212,116 @@ export function enqueueMicroDelivery(projectRoot, item) {
     writeState(projectRoot, state);
     return { queued: true, deliveryId: delivery.deliveryId };
   });
+}
+
+function readJobFile(filePath) {
+  try {
+    const job = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return job && typeof job === 'object' ? job : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeJob(projectRoot, job) {
+  const filePath = jobPath(projectRoot, job.jobId);
+  fs.mkdirSync(jobsDir(projectRoot), { recursive: true });
+  const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify(job, null, 2)}\n`, 'utf8');
+  fs.renameSync(temporary, filePath);
+  return job;
+}
+
+function normalizeJobStatus(status) {
+  return ['running', 'completed', 'failed'].includes(status) ? status : 'running';
+}
+
+function normalizeJob(projectRoot, job) {
+  if (!job || typeof job !== 'object') return null;
+  const jobId = String(job.jobId || '').trim();
+  if (!jobId) return null;
+  const status = normalizeJobStatus(job.status);
+  const createdAt = job.createdAt || new Date().toISOString();
+  const updatedAt = job.updatedAt || createdAt;
+  const stale = Date.now() - Date.parse(updatedAt || createdAt) > JOB_TTL_MS;
+  const leaseAlive = status !== 'running' || !Number.isInteger(job.leasePid) || processIsAlive(job.leasePid);
+  if (status === 'running' && (stale || !leaseAlive)) {
+    return {
+      ...job,
+      jobId,
+      status: 'failed',
+      error: stale
+        ? 'Micro background job expired before completion.'
+        : 'Micro background worker exited before completion.',
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  return {
+    ...job,
+    jobId,
+    status,
+    createdAt,
+    updatedAt,
+    projectRoot,
+  };
+}
+
+export function createMicroJob(projectRoot, job = {}) {
+  if (!projectRoot) throw new Error('Micro job requires a project root.');
+  const jobId = String(job.jobId || '').trim();
+  if (!jobId) throw new Error('Micro job requires a jobId.');
+  const existing = readMicroJob(projectRoot, jobId);
+  if (existing) return { created: false, job: existing };
+  const now = new Date().toISOString();
+  const record = normalizeJob(projectRoot, {
+    ...job,
+    jobId,
+    status: 'running',
+    createdAt: job.createdAt || now,
+    updatedAt: now,
+    leasePid: process.pid,
+  });
+  return { created: true, job: writeJob(projectRoot, record) };
+}
+
+export function updateMicroJob(projectRoot, jobId, patch = {}) {
+  if (!projectRoot || !jobId) return null;
+  const existing = readMicroJob(projectRoot, jobId);
+  if (!existing) return null;
+  const next = normalizeJob(projectRoot, {
+    ...existing,
+    ...patch,
+    jobId,
+    updatedAt: new Date().toISOString(),
+  });
+  return writeJob(projectRoot, next);
+}
+
+export function readMicroJob(projectRoot, jobId) {
+  if (!projectRoot || !jobId) return null;
+  const filePath = jobPath(projectRoot, String(jobId));
+  const job = readJobFile(filePath);
+  if (!job) return null;
+  const normalized = normalizeJob(projectRoot, job);
+  if (normalized && normalized.status !== job.status) writeJob(projectRoot, normalized);
+  return normalized;
+}
+
+export function listMicroJobs(projectRoot, { status = null, limit = 20 } = {}) {
+  if (!projectRoot) return [];
+  let files = [];
+  try {
+    files = fs.readdirSync(jobsDir(projectRoot))
+      .filter((name) => name.endsWith('.json'))
+      .slice(-Math.max(1, Math.min(Number(limit) || 20, 100)));
+  } catch (_) {
+    return [];
+  }
+  return files
+    .map((name) => readMicroJob(projectRoot, name.replace(/\.json$/, '')))
+    .filter(Boolean)
+    .filter((job) => !status || job.status === status)
+    .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
 }
 
 export function claimMicroDeliveries(projectRoot, options = {}) {
