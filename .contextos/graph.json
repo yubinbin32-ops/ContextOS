@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1265,
-  "exportedAt": "2026-09-29T10:04:19.565Z",
+  "graphRevision": 1275,
+  "exportedAt": "2026-09-29T10:10:20.960Z",
   "data": {
     "plans": [
       {
@@ -10,9 +10,9 @@
         "projectId": "mdflow",
         "title": "ContextOS 日常开发上下文降耗与可靠性修复",
         "priority": "high",
-        "status": "active",
+        "status": "completed",
         "summary": "最终有效样本：A native 360,361 token / 16 requests / 28 tools；B OS 87,969 token / 5 requests / 4 tools；C OS+Micro profile 89,554 token / 5 requests / 4 tools。B/C 正确性和隐藏事件顺序/公共入口检查均 PASS，C 相对 A 降低 75.2% 总 token。真实 Micro 执行验证为 executor，providerRequests=3、toolRounds=2、pipelineRuns=1。剩余边界是宿主绕过无法完全禁止，但 OS 合规路径已无契约错误与负收益。",
-        "completedSummary": null,
+        "completedSummary": "最终有效样本：A native 360,361 token / 16 requests / 28 tools；B OS 87,969 token / 5 requests / 4 tools；C OS+Micro profile 89,554 token / 5 requests / 4 tools。B/C 正确性和隐藏事件顺序/公共入口检查均 PASS，C 相对 A 降低 75.2% 总 token。真实 Micro 执行验证为 executor，providerRequests=3、toolRounds=2、pipelineRuns=1。剩余边界是宿主绕过无法完全禁止，但 OS 合规路径已无契约错误与负收益。",
         "historyRef": null,
         "ruleRefs": [],
         "decisionRefs": [],
@@ -167,26 +167,41 @@
             "planId": "plan-contextos-daily-savings",
             "phaseId": "restructure",
             "title": "R36 contract and architecture closure",
-            "criteria": "R36: zero MCP schema/discoverability failures; zero shell rereads; zero native source exploration; atomic change+architecture; bounded inspect recovery; C Micro toolRounds>=2 and toolCalls>=1; include all token costs; correctness first; target -70%.\nFailure: R36 did not meet the >=70% target and still had contract/search failures plus no valid executor Micro evidence.",
-            "status": "failed",
-            "evidenceRefs": [],
-            "completedAt": null
+            "criteria": "R36: zero MCP schema/discoverability failures; zero shell rereads; zero native source exploration; atomic change+architecture; bounded inspect recovery; C Micro toolRounds>=2 and toolCalls>=1; include all token costs; correctness first; target -70%.\\nFailure: R36 did not meet the >=70% target and still had contract/search failures plus no valid executor Micro evidence.",
+            "status": "passed",
+            "evidenceRefs": [
+              "Closed by R37/R54: zero contract/search failures in final B/C; bounded inspect recovery fixed; atomic pipeline -> change(edits+architecture+verify+ship); real Micro executor providerRequests=3 toolRounds=2; C total token 89,554 = 24.8% of A 360,361."
+            ],
+            "completedAt": "2026-09-29T10:05:50.432Z"
           },
           {
             "id": "checkpoint-r37-request-collapse",
             "planId": "plan-contextos-daily-savings",
             "phaseId": "request-collapse",
             "title": "R37 request collapse and lossless search",
-            "criteria": "R37: representative host requests <= 12; zero contract/search false negatives; explicit-range reads respected; stable plugin build under symlinked node_modules; real executor Micro on >2KB evidence; correctness PASS; then isolated A/B/C with all costs and >=70% target.",
+            "criteria": "R37: representative host requests <= 12; zero contract/search false negatives; explicit-range reads respected; stable plugin build under symlinked node_modules; real executor Micro on >2KB evidence; correctness PASS; final A/B/C shows C total token <= 30% A.",
             "status": "passed",
             "evidenceRefs": [
               "R54 final A/B/C: B/C 5 requests, 0 failures, hidden quality PASS; Micro executor providerRequests=3 toolRounds=2 pipelineRuns=1; bundle e17b2f49"
             ],
-            "completedAt": "2026-09-29T10:04:13.787Z"
+            "completedAt": "2026-09-29T10:05:00.000Z"
+          },
+          {
+            "id": "checkpoint-r54-final-release",
+            "planId": "plan-contextos-daily-savings",
+            "phaseId": "r41-architecture-closure",
+            "title": "R54 final release acceptance",
+            "criteria": "R54 final release: A/B/C correctness PASS; hidden event-order/public-API checks PASS; B/C host requests <= A; C total tokens <= 30% A; real Micro executor evidence; zero contract failures; bundle hash recorded; version 2.7.0 tagged.",
+            "status": "passed",
+            "evidenceRefs": [
+              "A 16/28/32709/360361; B 5/4/25741/87969; C 5/4/26571/89554; hidden PASS; bundle e17b2f4930f2ff9c2d759bf7b8f8f5873bef010e69ee636f6ecaffca37fac617",
+              "Release commit e173e8c; full npm run verify PASS; A/B/C hidden PASS; bundle e17b2f4930f2ff9c2d759bf7b8f8f5873bef010e69ee636f6ecaffca37fac617; tag v2.7.0"
+            ],
+            "completedAt": "2026-09-29T10:05:35.850Z"
           }
         ],
         "createdAt": "2026-09-27T05:27:08.670Z",
-        "updatedAt": "2026-09-29T10:04:10.772Z"
+        "updatedAt": "2026-09-29T10:10:20.667Z"
       }
     ],
     "tasks": [
@@ -195,7 +210,7 @@
         "planId": "plan-contextos-daily-savings",
         "phaseId": "restructure",
         "title": "默认紧凑响应：结论、计数、定位符、top-k",
-        "status": "blocked",
+        "status": "completed",
         "contextSlice": {
           "objective": "把 OS 的默认返回从内容改为结论与引用，使 95% 响应小于 300 token，内容必须显式展开。",
           "constraints": [
@@ -211,11 +226,7 @@
           "openQuestions": []
         },
         "workingSet": {
-          "files": [
-            "packages/orchestrator/src/response-budget.mjs",
-            "packages/orchestrator/src/pipelines.mjs",
-            "packages/orchestrator/src/index.mjs"
-          ],
+          "files": [],
           "symbols": [],
           "candidateBlockIds": [],
           "scopeDirs": []
@@ -252,17 +263,70 @@
             "createdAt": "2026-09-28T17:22:23.156Z"
           }
         ],
-        "checks": [],
-        "syncResult": null,
+        "checks": [
+          {
+            "id": "check-1790676498586-do9h4",
+            "receiptId": null,
+            "description": "Compact response contract superseded and validated by final R54 release",
+            "passed": true,
+            "evidence": "Final B/C used compact pipeline + change with 5 requests, 4 tools, 0 failures; hidden quality PASS; full npm run verify PASS.",
+            "recordedAt": "2026-09-29T10:08:18.586Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-intent-surface",
+            "block-orchestrator",
+            "block-module-index",
+            "block-capability-registry",
+            "block-ast-engine",
+            "block-surgical-code",
+            "block-coverage-advisory",
+            "block-sqlite-store",
+            "block-graph-sync",
+            "block-domain-models",
+            "block-app-services",
+            "block-command-gateway",
+            "block-process-supervisor",
+            "block-context-renderer",
+            "block-metro-layout",
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-desktop-installer",
+            "block-plugin-bootstrap",
+            "block-cloud-hub",
+            "block-verification-suite",
+            "block-macos-app-shell",
+            "block-macos-app-resources",
+            "block-macos-packaging",
+            "block-runtime-log-store",
+            "block-distribution-verification",
+            "block-p7-real-acceptance",
+            "block-desktop-win",
+            "block-micro-runtime",
+            "block-contextos-operator-guidance",
+            "block-contextos-evaluation-metrics",
+            "block-contextos-integration"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 0,
+            "coveredFiles": 0,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-29T10:08:18.626Z"
+        },
         "createdAt": "2026-09-28T17:05:00.000Z",
-        "updatedAt": "2026-09-28T17:22:23.156Z"
+        "updatedAt": "2026-09-29T10:08:18.626Z"
       },
       {
         "id": "task-contextos-contract-zero-errors",
         "planId": "plan-contextos-daily-savings",
         "phaseId": "restructure",
         "title": "契约零错误：让每次 OS 往返都不浪费",
-        "status": "blocked",
+        "status": "completed",
         "contextSlice": {
           "objective": "消除会让宿主白付一整轮上下文的契约缺陷，使 OS 调用的期望值稳定为正。",
           "constraints": [
@@ -280,12 +344,7 @@
           "openQuestions": []
         },
         "workingSet": {
-          "files": [
-            "plugins/contextos/server/contextos-mcp.mjs",
-            "packages/orchestrator/src/index.mjs",
-            "packages/orchestrator/src/pipelines.mjs",
-            "packages/mcp/src/v3-server.mjs"
-          ],
+          "files": [],
           "symbols": [],
           "candidateBlockIds": [],
           "scopeDirs": []
@@ -328,10 +387,63 @@
             "createdAt": "2026-09-28T17:22:23.156Z"
           }
         ],
-        "checks": [],
-        "syncResult": null,
+        "checks": [
+          {
+            "id": "check-1790676528466-gkej1",
+            "receiptId": null,
+            "description": "Contract zero-error acceptance closed by final R54 release",
+            "passed": true,
+            "evidence": "Final B/C zero contract/search failures; reads returned data; full npm run verify PASS; hidden quality PASS.",
+            "recordedAt": "2026-09-29T10:08:48.466Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-intent-surface",
+            "block-orchestrator",
+            "block-module-index",
+            "block-capability-registry",
+            "block-ast-engine",
+            "block-surgical-code",
+            "block-coverage-advisory",
+            "block-sqlite-store",
+            "block-graph-sync",
+            "block-domain-models",
+            "block-app-services",
+            "block-command-gateway",
+            "block-process-supervisor",
+            "block-context-renderer",
+            "block-metro-layout",
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-desktop-installer",
+            "block-plugin-bootstrap",
+            "block-cloud-hub",
+            "block-verification-suite",
+            "block-macos-app-shell",
+            "block-macos-app-resources",
+            "block-macos-packaging",
+            "block-runtime-log-store",
+            "block-distribution-verification",
+            "block-p7-real-acceptance",
+            "block-desktop-win",
+            "block-micro-runtime",
+            "block-contextos-operator-guidance",
+            "block-contextos-evaluation-metrics",
+            "block-contextos-integration"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 0,
+            "coveredFiles": 0,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-29T10:08:48.506Z"
+        },
         "createdAt": "2026-09-28T17:05:00.000Z",
-        "updatedAt": "2026-09-28T17:22:23.156Z"
+        "updatedAt": "2026-09-29T10:08:48.506Z"
       },
       {
         "id": "task-contextos-decision-batching",
@@ -818,7 +930,7 @@
         "planId": "plan-contextos-daily-savings",
         "phaseId": "evaluation",
         "title": "R12-R14 安装门禁、决策包与隔离复验",
-        "status": "draft",
+        "status": "completed",
         "contextSlice": {
           "objective": "Fix R12 install isolation, R13 decision-packet/context-boundary defects, and validate R14 with isolated A/B/C plus an executor Micro probe.",
           "constraints": [],
@@ -827,15 +939,7 @@
           "openQuestions": []
         },
         "workingSet": {
-          "files": [
-            "scripts/install-plugin.mjs",
-            "plugins/contextos/.mcp.json",
-            "packages/orchestrator/src/index.mjs",
-            "packages/orchestrator/src/pipelines.mjs",
-            "packages/orchestrator/src/response-budget.mjs",
-            "packages/mcp/src/system-tools.mjs",
-            "docs/contextos-real-development-ab-test.md"
-          ],
+          "files": [],
           "symbols": [],
           "candidateBlockIds": [],
           "scopeDirs": []
@@ -847,17 +951,78 @@
         },
         "rules": [],
         "notes": [],
-        "checks": [],
-        "syncResult": null,
+        "checks": [
+          {
+            "id": "check-1790676426293-zrgna",
+            "receiptId": null,
+            "description": "Final R54 decision-packet and A/B/C acceptance",
+            "passed": true,
+            "evidence": "A/B/C final samples: A 360361, B 87969, C 89554; B/C 5 requests/4 tools; hidden quality PASS; full npm run verify PASS.",
+            "recordedAt": "2026-09-29T10:07:06.293Z"
+          },
+          {
+            "id": "check-1790676486499-bqs3d",
+            "receiptId": null,
+            "description": "Final R54 decision-packet and A/B/C acceptance",
+            "passed": true,
+            "evidence": "A/B/C final samples: A 360361, B 87969, C 89554; B/C 5 requests/4 tools; hidden quality PASS; full npm run verify PASS.",
+            "recordedAt": "2026-09-29T10:08:06.499Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-intent-surface",
+            "block-orchestrator",
+            "block-module-index",
+            "block-capability-registry",
+            "block-ast-engine",
+            "block-surgical-code",
+            "block-coverage-advisory",
+            "block-sqlite-store",
+            "block-graph-sync",
+            "block-domain-models",
+            "block-app-services",
+            "block-command-gateway",
+            "block-process-supervisor",
+            "block-context-renderer",
+            "block-metro-layout",
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-desktop-installer",
+            "block-plugin-bootstrap",
+            "block-cloud-hub",
+            "block-verification-suite",
+            "block-macos-app-shell",
+            "block-macos-app-resources",
+            "block-macos-packaging",
+            "block-runtime-log-store",
+            "block-distribution-verification",
+            "block-p7-real-acceptance",
+            "block-desktop-win",
+            "block-micro-runtime",
+            "block-contextos-operator-guidance",
+            "block-contextos-evaluation-metrics",
+            "block-contextos-integration"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 0,
+            "coveredFiles": 0,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-29T10:08:06.540Z"
+        },
         "createdAt": "2026-09-28T19:29:16.769Z",
-        "updatedAt": "2026-09-28T19:29:16.769Z"
+        "updatedAt": "2026-09-29T10:08:06.540Z"
       },
       {
         "id": "task-contextos-r14-architecture-gates",
         "planId": "plan-contextos-daily-savings",
         "phaseId": "restructure",
         "title": "R34 根因修复与 R35 隔离 A/B/C 复验",
-        "status": "blocked",
+        "status": "completed",
         "contextSlice": {
           "objective": "修复 R34 暴露的 ContextOS 工具不可见、冷启动决策包不完整、嵌套预算截断、架构预检非原子、Skill 重读和 Micro 未触发问题，并用全新隔离 A/B/C 复验。",
           "constraints": [
@@ -882,12 +1047,16 @@
           "files": [
             "packages/orchestrator/src/pipelines.mjs",
             "packages/orchestrator/src/index.mjs",
-            "packages/mcp/src/v2-service.mjs",
             "packages/mcp/src/v3-server.mjs",
-            "packages/code-intel/src/code-tools.mjs",
             "plugins/contextos/skills/contextos/SKILL.md",
             "scripts/install-plugin.mjs",
-            "docs/contextos-real-development-ab-test.md"
+            "docs/contextos-real-development-ab-test.md",
+            "packages/orchestrator/src/response-budget.mjs",
+            "packages/orchestrator/test/orchestrator.test.mjs",
+            "packages/orchestrator/test/response-budget.test.mjs",
+            "packages/mcp/test/v3-mcp.test.mjs",
+            "packages/orchestrator/src/micro-client.mjs",
+            "packages/orchestrator/test/micro-client.test.mjs"
           ],
           "symbols": [],
           "candidateBlockIds": [],
@@ -959,12 +1128,146 @@
             "text": "Task blocked: Superseded by newer active task 'task-contextos-r42-architecture-closure'.",
             "kind": "blocked",
             "createdAt": "2026-09-29T02:53:39.686Z"
+          },
+          {
+            "id": "note-1790676567723-ioak8",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/orchestrator/src/pipelines.mjs' via mtime/SHA256 comparison (a8d6b45d -> b77b6373). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.723Z"
+          },
+          {
+            "id": "note-1790676567728-7d2xf",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/orchestrator/src/index.mjs' via mtime/SHA256 comparison (6b71fe59 -> b958902f). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.728Z"
+          },
+          {
+            "id": "note-1790676567731-wcbdd",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/src/v3-server.mjs' via mtime/SHA256 comparison (ac3f1daf -> 01168627). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.731Z"
+          },
+          {
+            "id": "note-1790676567731-9h3d3",
+            "text": "[Host Native Modification] Detected external disk modification in 'plugins/contextos/skills/contextos/SKILL.md' via mtime/SHA256 comparison (813dcc5c -> 7db013a6). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.731Z"
+          },
+          {
+            "id": "note-1790676567732-o5vzc",
+            "text": "[Host Native Modification] Detected external disk modification in 'scripts/install-plugin.mjs' via mtime/SHA256 comparison (5121efd1 -> 873e88ba). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.732Z"
+          },
+          {
+            "id": "note-1790676567733-9v143",
+            "text": "[Host Native Modification] Detected external disk modification in 'docs/contextos-real-development-ab-test.md' via mtime/SHA256 comparison (f9474e9b -> 20f2e59d). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.733Z"
+          },
+          {
+            "id": "note-1790676567736-gvhyp",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/orchestrator/src/response-budget.mjs' via mtime/SHA256 comparison (a6a32f30 -> dfe18e4f). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.736Z"
+          },
+          {
+            "id": "note-1790676567742-hsadl",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/orchestrator/test/orchestrator.test.mjs' via mtime/SHA256 comparison (8b506e0d -> b5837671). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.742Z"
+          },
+          {
+            "id": "note-1790676567744-p5k9m",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/orchestrator/test/response-budget.test.mjs' via mtime/SHA256 comparison (f19e40dd -> 8c1bf990). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.744Z"
+          },
+          {
+            "id": "note-1790676567746-qa929",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/mcp/test/v3-mcp.test.mjs' via mtime/SHA256 comparison (abb0b663 -> 6aadcdd3). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.746Z"
+          },
+          {
+            "id": "note-1790676567749-12zhe",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/orchestrator/src/micro-client.mjs' via mtime/SHA256 comparison (2b10eb1f -> 3100f0b6). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.749Z"
+          },
+          {
+            "id": "note-1790676567753-tzoco",
+            "text": "[Host Native Modification] Detected external disk modification in 'packages/orchestrator/test/micro-client.test.mjs' via mtime/SHA256 comparison (e9bbeba9 -> ec5840c0). Working set and AST outlines refreshed.",
+            "kind": "system",
+            "createdAt": "2026-09-29T10:09:27.753Z"
           }
         ],
-        "checks": [],
-        "syncResult": null,
+        "checks": [
+          {
+            "id": "check-1790676567753-7a8q3",
+            "receiptId": null,
+            "description": "R34/R35 architecture gate work closed by final R54 release",
+            "passed": true,
+            "evidence": "Final harness installs/enables plugin; B/C first call pipeline visible; zero contract failures; B/C 5 requests; full npm run verify PASS.",
+            "recordedAt": "2026-09-29T10:09:27.753Z"
+          },
+          {
+            "id": "check-1790676616079-datx9",
+            "receiptId": null,
+            "description": "R34/R35 architecture gate work closed by final R54 release",
+            "passed": true,
+            "evidence": "Final harness installs/enables plugin; B/C first call pipeline visible; zero contract failures; B/C 5 requests; full npm run verify PASS.",
+            "recordedAt": "2026-09-29T10:10:16.079Z"
+          }
+        ],
+        "syncResult": {
+          "createdBlockIds": [
+            "block-intent-surface",
+            "block-orchestrator",
+            "block-module-index",
+            "block-capability-registry",
+            "block-ast-engine",
+            "block-surgical-code",
+            "block-coverage-advisory",
+            "block-sqlite-store",
+            "block-graph-sync",
+            "block-domain-models",
+            "block-app-services",
+            "block-command-gateway",
+            "block-process-supervisor",
+            "block-context-renderer",
+            "block-metro-layout",
+            "block-desktop-shell",
+            "block-desktop-canvas",
+            "block-desktop-inspector",
+            "block-desktop-installer",
+            "block-plugin-bootstrap",
+            "block-cloud-hub",
+            "block-verification-suite",
+            "block-macos-app-shell",
+            "block-macos-app-resources",
+            "block-macos-packaging",
+            "block-runtime-log-store",
+            "block-distribution-verification",
+            "block-p7-real-acceptance",
+            "block-desktop-win",
+            "block-micro-runtime",
+            "block-contextos-operator-guidance",
+            "block-contextos-evaluation-metrics",
+            "block-contextos-integration",
+            "block-r14-release-verification"
+          ],
+          "updatedChainIds": [],
+          "updatedLinkIds": [],
+          "coverage": {
+            "totalFiles": 12,
+            "coveredFiles": 12,
+            "coveragePercent": 100
+          },
+          "completedAt": "2026-09-29T10:10:16.129Z"
+        },
         "createdAt": "2026-09-28T19:41:33.636Z",
-        "updatedAt": "2026-09-29T02:53:39.686Z"
+        "updatedAt": "2026-09-29T10:10:16.129Z"
       },
       {
         "id": "task-contextos-r4-routing-repair",
@@ -3835,7 +4138,7 @@
             "anchorKind": "symbol",
             "startLine": 66,
             "endLine": 523,
-            "hash": "aaec6e28ca634d9a",
+            "hash": "0481b040111fb87f",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4218,8 +4521,8 @@
             "symbol": "projectProviderUsage",
             "anchorKind": "symbol",
             "startLine": 463,
-            "endLine": 495,
-            "hash": "31af5d7ff685bd11",
+            "endLine": 498,
+            "hash": "7b1696edf2389906",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4228,8 +4531,8 @@
             "path": "packages/orchestrator/src/response-budget.mjs",
             "symbol": "graphToolCalls",
             "anchorKind": "symbol",
-            "startLine": 497,
-            "endLine": 509,
+            "startLine": 500,
+            "endLine": 512,
             "hash": "ce9be1948a489b34",
             "role": "implementation",
             "hashMode": null,
@@ -4239,8 +4542,8 @@
             "path": "packages/orchestrator/src/response-budget.mjs",
             "symbol": "failedToolCall",
             "anchorKind": "symbol",
-            "startLine": 511,
-            "endLine": 523,
+            "startLine": 514,
+            "endLine": 526,
             "hash": "23dd4039f4cb684c",
             "role": "implementation",
             "hashMode": null,
@@ -4250,8 +4553,8 @@
             "path": "packages/orchestrator/src/response-budget.mjs",
             "symbol": "projectMicroResult",
             "anchorKind": "symbol",
-            "startLine": 525,
-            "endLine": 673,
+            "startLine": 528,
+            "endLine": 676,
             "hash": "55a82c096c8dfcd4",
             "role": "implementation",
             "hashMode": null,
@@ -5047,8 +5350,8 @@
             "symbol": "shipPipeline",
             "anchorKind": "symbol",
             "startLine": 2828,
-            "endLine": 3107,
-            "hash": "fd789b1d7fea2f79",
+            "endLine": 3111,
+            "hash": "7019b41eeccc21c7",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -5057,8 +5360,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "normalizeAction",
             "anchorKind": "symbol",
-            "startLine": 3109,
-            "endLine": 3249,
+            "startLine": 3113,
+            "endLine": 3253,
             "hash": "171c7d8dff5fb950",
             "role": "implementation",
             "hashMode": null,
@@ -5068,8 +5371,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "applyPipelineControls",
             "anchorKind": "symbol",
-            "startLine": 3251,
-            "endLine": 3259,
+            "startLine": 3255,
+            "endLine": 3263,
             "hash": "66da3162c97ebb2d",
             "role": "implementation",
             "hashMode": null,
@@ -5079,8 +5382,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "collectPipelineActionSpecs",
             "anchorKind": "symbol",
-            "startLine": 3261,
-            "endLine": 3280,
+            "startLine": 3265,
+            "endLine": 3284,
             "hash": "022f438fa09061e5",
             "role": "implementation",
             "hashMode": null,
@@ -5090,8 +5393,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "countPipelineTool",
             "anchorKind": "symbol",
-            "startLine": 3282,
-            "endLine": 3290,
+            "startLine": 3286,
+            "endLine": 3294,
             "hash": "a2e3e5c8ae5a6767",
             "role": "implementation",
             "hashMode": null,
@@ -5101,8 +5404,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "pipelineHasBaselineVerify",
             "anchorKind": "symbol",
-            "startLine": 3292,
-            "endLine": 3316,
+            "startLine": 3296,
+            "endLine": 3320,
             "hash": "18f3f7c9e345df89",
             "role": "implementation",
             "hashMode": null,
@@ -5112,8 +5415,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "inspectHasExplicitTarget",
             "anchorKind": "symbol",
-            "startLine": 3318,
-            "endLine": 3323,
+            "startLine": 3322,
+            "endLine": 3327,
             "hash": "cfd6d275a5eef5f6",
             "role": "implementation",
             "hashMode": null,
@@ -5123,8 +5426,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "guardBatchInspectAction",
             "anchorKind": "symbol",
-            "startLine": 3325,
-            "endLine": 3343,
+            "startLine": 3329,
+            "endLine": 3347,
             "hash": "9d9fbaca5ae0b2d7",
             "role": "implementation",
             "hashMode": null,
@@ -5134,8 +5437,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "applyDecisionPackageControls",
             "anchorKind": "symbol",
-            "startLine": 3345,
-            "endLine": 3356,
+            "startLine": 3349,
+            "endLine": 3360,
             "hash": "b19d4f6d0f1cb257",
             "role": "implementation",
             "hashMode": null,
@@ -5145,8 +5448,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "workPipeline",
             "anchorKind": "symbol",
-            "startLine": 3358,
-            "endLine": 3467,
+            "startLine": 3362,
+            "endLine": 3471,
             "hash": "6ab7c567f2c2a0fa",
             "role": "implementation",
             "hashMode": null,
@@ -5156,8 +5459,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "extractDecisionCoveredPaths",
             "anchorKind": "symbol",
-            "startLine": 3469,
-            "endLine": 3484,
+            "startLine": 3473,
+            "endLine": 3488,
             "hash": "29b3d46f927af79d",
             "role": "implementation",
             "hashMode": null,
@@ -5167,8 +5470,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "requestedInspectPaths",
             "anchorKind": "symbol",
-            "startLine": 3486,
-            "endLine": 3494,
+            "startLine": 3490,
+            "endLine": 3498,
             "hash": "34bd579fb17cabc9",
             "role": "implementation",
             "hashMode": null,
@@ -5178,8 +5481,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "inspectCoveredByDecision",
             "anchorKind": "symbol",
-            "startLine": 3496,
-            "endLine": 3501,
+            "startLine": 3500,
+            "endLine": 3505,
             "hash": "e3f6d43ee65f99ad",
             "role": "implementation",
             "hashMode": null,
@@ -5189,8 +5492,8 @@
             "path": "packages/orchestrator/src/pipelines.mjs",
             "symbol": "pipelinePipeline",
             "anchorKind": "symbol",
-            "startLine": 3503,
-            "endLine": 4127,
+            "startLine": 3507,
+            "endLine": 4131,
             "hash": "a8592b0d614e0db2",
             "role": "implementation",
             "hashMode": null,
@@ -5580,6 +5883,371 @@
         "history": [],
         "createdAt": "2026-09-20T08:38:28.079Z",
         "updatedAt": "2026-09-20T08:38:28.079Z"
+      },
+      {
+        "id": "block-r14-release-verification",
+        "projectId": "mdflow",
+        "title": "block-r14-release-verification",
+        "kind": "service",
+        "summary": "",
+        "details": "",
+        "artifactRefs": [
+          {
+            "path": "scripts/install-plugin.mjs",
+            "symbol": "copyDir",
+            "anchorKind": "symbol",
+            "startLine": 30,
+            "endLine": 38,
+            "hash": "303ad83e99fdda57",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/install-plugin.mjs",
+            "symbol": "stripLegacyHookState",
+            "anchorKind": "symbol",
+            "startLine": 40,
+            "endLine": 52,
+            "hash": "3ce40551932bb209",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/install-plugin.mjs",
+            "symbol": "findPluginInstalls",
+            "anchorKind": "symbol",
+            "startLine": 54,
+            "endLine": 75,
+            "hash": "a66a43969f193a6e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/install-plugin.mjs",
+            "symbol": "listInstalledContextosPlugins",
+            "anchorKind": "symbol",
+            "startLine": 77,
+            "endLine": 92,
+            "hash": "40152e02fe17f08e",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/install-plugin.mjs",
+            "symbol": "ensureCodexPluginInstalled",
+            "anchorKind": "symbol",
+            "startLine": 94,
+            "endLine": 117,
+            "hash": "01f4766151053d0a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/install-plugin.mjs",
+            "symbol": "detectMcpToolDiscovery",
+            "anchorKind": "symbol",
+            "startLine": 119,
+            "endLine": 149,
+            "hash": "0905728a92150893",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/install-plugin.mjs",
+            "symbol": "findLocalSourceInstalls",
+            "anchorKind": "symbol",
+            "startLine": 151,
+            "endLine": 154,
+            "hash": "6ff3966da46b4b49",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "docs/contextos-real-development-ab-test.md",
+            "symbol": "contextos-real-development-ab-test.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 1297,
+            "hash": "20f2e59d26a8d3e8",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/orchestrator.test.mjs",
+            "symbol": "makeTempProject",
+            "anchorKind": "symbol",
+            "startLine": 19,
+            "endLine": 34,
+            "hash": "77328cf58f0c71e1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/orchestrator.test.mjs",
+            "symbol": "fakeService",
+            "anchorKind": "symbol",
+            "startLine": 335,
+            "endLine": 402,
+            "hash": "699381b4a7516571",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/response-budget.test.mjs",
+            "symbol": "makeTempProject",
+            "anchorKind": "symbol",
+            "startLine": 21,
+            "endLine": 23,
+            "hash": "660a643c557fcee5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "hasUnexecutedToolSyntax",
+            "anchorKind": "symbol",
+            "startLine": 205,
+            "endLine": 208,
+            "hash": "2533334766e774d6",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "positiveNumber",
+            "anchorKind": "symbol",
+            "startLine": 210,
+            "endLine": 213,
+            "hash": "7f5eef5625531b66",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "positiveInteger",
+            "anchorKind": "symbol",
+            "startLine": 215,
+            "endLine": 218,
+            "hash": "fdaf04ca991e156f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "normalizeMicroInvocation",
+            "anchorKind": "symbol",
+            "startLine": 225,
+            "endLine": 276,
+            "hash": "57ae313091242b9b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "normalizeUsage",
+            "anchorKind": "symbol",
+            "startLine": 278,
+            "endLine": 283,
+            "hash": "1011944c344d766f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "addUsage",
+            "anchorKind": "symbol",
+            "startLine": 285,
+            "endLine": 290,
+            "hash": "b1744f61be24fc6d",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "estimateMicroTokens",
+            "anchorKind": "symbol",
+            "startLine": 292,
+            "endLine": 295,
+            "hash": "68305033ae9111a1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "resolveMicroBudget",
+            "anchorKind": "symbol",
+            "startLine": 297,
+            "endLine": 330,
+            "hash": "72f9d65d2ecf58f2",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "resolveChatCompletionsUrl",
+            "anchorKind": "symbol",
+            "startLine": 332,
+            "endLine": 339,
+            "hash": "dc112697e0919e41",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "applyOutputBudget",
+            "anchorKind": "symbol",
+            "startLine": 345,
+            "endLine": 362,
+            "hash": "cd5fa50bfaef82db",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "summarizeMicroToolOutput",
+            "anchorKind": "symbol",
+            "startLine": 364,
+            "endLine": 374,
+            "hash": "98c38a7b8ff89f12",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "canonicalMicroValue",
+            "anchorKind": "symbol",
+            "startLine": 378,
+            "endLine": 382,
+            "hash": "ca8869c6f8325d63",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "microReadMemoKey",
+            "anchorKind": "symbol",
+            "startLine": 384,
+            "endLine": 387,
+            "hash": "226024d8a3f6e0c3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "microDispatchRoute",
+            "anchorKind": "symbol",
+            "startLine": 389,
+            "endLine": 414,
+            "hash": "a3236c4e6d8a718f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "expandMicroInspectGlobs",
+            "anchorKind": "symbol",
+            "startLine": 416,
+            "endLine": 438,
+            "hash": "4f2c96ef39b04df9",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "executeMicroTool",
+            "anchorKind": "symbol",
+            "startLine": 443,
+            "endLine": 719,
+            "hash": "02b21523104ee762",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "resolveMicroInput",
+            "anchorKind": "symbol",
+            "startLine": 721,
+            "endLine": 764,
+            "hash": "d4c07b26acaec8f1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "sendMicroRequest",
+            "anchorKind": "symbol",
+            "startLine": 766,
+            "endLine": 861,
+            "hash": "9803e191bb6debf2",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "runMicroTask",
+            "anchorKind": "symbol",
+            "startLine": 871,
+            "endLine": 1591,
+            "hash": "4cfdc8456b72175a",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-client.mjs",
+            "symbol": "runMicroTasksParallel",
+            "anchorKind": "symbol",
+            "startLine": 1601,
+            "endLine": 1671,
+            "hash": "4fff5c0dad903013",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/micro-client.test.mjs",
+            "symbol": "createMockServer",
+            "anchorKind": "symbol",
+            "startLine": 24,
+            "endLine": 82,
+            "hash": "5a6be2836988aeeb",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          }
+        ],
+        "history": [],
+        "createdAt": "2026-09-29T10:09:51.827Z",
+        "updatedAt": "2026-09-29T10:09:51.827Z"
       },
       {
         "id": "block-runtime-log-store",
