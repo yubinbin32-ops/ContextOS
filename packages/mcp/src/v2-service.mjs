@@ -1474,6 +1474,7 @@ export class ContextOSV2Service {
   }
 
   async _code({ action, path: relPath, selector, symbol, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = 'markdown', changes = [], ranges, budget, maxChars }) {
+    if (!action && !relPath && String(query || '').trim()) action = 'search';
     if (action === 'changeset') {
       const result = applyChangeset(this.projectRoot, changes);
       this._recordChangedFiles(result.files);
@@ -1576,7 +1577,7 @@ export class ContextOSV2Service {
       return lines.join('\n');
     }
 
-    if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
+    if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter. Available actions: outline, read, search, create, edit, changeset`);
     const resolvedPath = this._resolveProjectPath(relPath, 'path');
     relPath = resolvedPath.relativePath;
     const fullPath = resolvedPath.fullPath;

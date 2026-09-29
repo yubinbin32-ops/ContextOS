@@ -295,16 +295,34 @@ export function estimateMicroTokens(value) {
 }
 
 export function resolveMicroBudget(config = {}, options = {}, presetKey = 'custom') {
+  const invocation = options.invocation && typeof options.invocation === 'object'
+    ? options.invocation
+    : {};
+  const provider = invocation.provider && typeof invocation.provider === 'object'
+    ? invocation.provider
+    : {};
+  const tools = invocation.tools && typeof invocation.tools === 'object'
+    ? invocation.tools
+    : {};
   const source = {
     ...config,
     ...options,
-    ...(options.invocation?.provider && typeof options.invocation.provider === 'object'
-      ? options.invocation.provider
-      : {}),
+    ...provider,
   };
   const defaultTokenBudget = MICRO_PROVIDER_TOKEN_BUDGETS[presetKey] || MICRO_PROVIDER_TOKEN_BUDGETS.custom;
+  const toolsEnabled = options.withOS === true || tools.enabled === true;
+  const maxRequests = positiveInteger(
+    provider.maxRequests
+      ?? invocation.maxRequests
+      ?? options.maxRequests
+      ?? config.maxRequests,
+    null,
+  );
+  const multiRequestBudget = toolsEnabled && maxRequests > 1
+    ? Math.min(defaultTokenBudget * maxRequests, defaultTokenBudget * 4)
+    : defaultTokenBudget;
   return {
-    maxProviderTokens: positiveNumber(source.maxProviderTokens, defaultTokenBudget),
+    maxProviderTokens: positiveNumber(source.maxProviderTokens, multiRequestBudget),
     maxCostUsd: positiveNumber(source.maxCostUsd, null),
     inputUsdPerMillion: positiveNumber(source.inputUsdPerMillion, null),
     outputUsdPerMillion: positiveNumber(source.outputUsdPerMillion, null),

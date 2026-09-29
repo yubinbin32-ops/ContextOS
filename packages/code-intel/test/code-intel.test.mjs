@@ -391,6 +391,8 @@ test('CodeTools.searchText supports alternation and slash-delimited regex querie
     'const FAILURE = true;',
     'const healthy = true;',
     'const errorCode = 3;',
+    'const mode = "serve";',
+    'const action = "logs";',
     '',
   ].join('\n'));
 
@@ -399,6 +401,12 @@ test('CodeTools.searchText supports alternation and slash-delimited regex querie
 
   const regex = CodeTools.searchText(dir, '/^const\\s+(failure|errorCode)/i');
   assert.deepEqual(regex.hits.map((hit) => hit.line), [1, 3]);
+
+  const autoRegex = CodeTools.searchText(dir, 'mode.*serve');
+  assert.deepEqual(autoRegex.hits.map((hit) => hit.line), [4]);
+
+  const propertyQuery = CodeTools.searchText(dir, 'action: "logs"');
+  assert.deepEqual(propertyQuery.hits.map((hit) => hit.line), [5]);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

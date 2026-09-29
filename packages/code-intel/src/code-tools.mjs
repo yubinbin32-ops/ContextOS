@@ -13,6 +13,10 @@ function buildLocators(filePath, symbols = []) {
   }));
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function createSearchMatcher(query) {
   const raw = String(query || '').trim();
   if (!raw) return null;
@@ -25,12 +29,21 @@ function createSearchMatcher(query) {
       return null;
     }
   }
-  if (!raw.includes('|')) return null;
-  try {
-    return new RegExp(raw, 'i');
-  } catch (_) {
-    return null;
+  const regexHints = ['|', '.*', '.+', '\\b', '[', ']', '^', '$'];
+  if (regexHints.some((hint) => raw.includes(hint))) {
+    try {
+      return new RegExp(raw, 'i');
+    } catch (_) {}
   }
+  if (/[:="'\s]/.test(raw)) {
+    const tokens = [...new Set((raw.match(/[A-Za-z0-9_$.-]{2,}/g) || []).map((token) => token.toLowerCase()))];
+    if (tokens.length) {
+      try {
+        return new RegExp(tokens.map((token) => `(?=[\\s\\S]*${escapeRegExp(token)})`).join('') + '[\\s\\S]*', 'i');
+      } catch (_) {}
+    }
+  }
+  return null;
 }
 
 function matchesSearchQuery(value, query, matcher) {

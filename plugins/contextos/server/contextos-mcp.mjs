@@ -30737,6 +30737,9 @@ function buildLocators(filePath, symbols = []) {
     role: "implementation"
   }));
 }
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function createSearchMatcher(query) {
   const raw = String(query || "").trim();
   if (!raw) return null;
@@ -30749,12 +30752,23 @@ function createSearchMatcher(query) {
       return null;
     }
   }
-  if (!raw.includes("|")) return null;
-  try {
-    return new RegExp(raw, "i");
-  } catch (_) {
-    return null;
+  const regexHints = ["|", ".*", ".+", "\\b", "[", "]", "^", "$"];
+  if (regexHints.some((hint) => raw.includes(hint))) {
+    try {
+      return new RegExp(raw, "i");
+    } catch (_) {
+    }
   }
+  if (/[:="'\s]/.test(raw)) {
+    const tokens = [...new Set((raw.match(/[A-Za-z0-9_$.-]{2,}/g) || []).map((token) => token.toLowerCase()))];
+    if (tokens.length) {
+      try {
+        return new RegExp(tokens.map((token) => `(?=[\\s\\S]*${escapeRegExp(token)})`).join("") + "[\\s\\S]*", "i");
+      } catch (_) {
+      }
+    }
+  }
+  return null;
 }
 function matchesSearchQuery(value, query, matcher) {
   const text = String(value || "");
@@ -33043,10 +33057,8 @@ async function inspectPipeline(ctx, input = {}) {
   const decisionGated = repeatedFullExpansion || oversizedRange || expansionBudgetGated;
   const isFull = requestedFull && !decisionGated;
   const explicitMaxChars = typeof input.maxChars === "number" && input.maxChars > 0 ? input.maxChars : null;
-  const contentMaxChars = isFull ? Math.min(
-    explicitMaxChars ?? INSPECT_RECOVERY_OUTPUT_MAX_CHARS,
-    INSPECT_RECOVERY_OUTPUT_MAX_CHARS
-  ) : Math.min(explicitMaxChars ?? RESPONSE_BUDGETS.inspect, RESPONSE_BUDGETS.inspect);
+  const explicitInspectMaxChars = explicitMaxChars ? Math.min(explicitMaxChars, INSPECT_RECOVERY_OUTPUT_MAX_CHARS) : null;
+  const contentMaxChars = isFull ? explicitInspectMaxChars ?? INSPECT_RECOVERY_OUTPUT_MAX_CHARS : explicitInspectMaxChars ?? RESPONSE_BUDGETS.inspect;
   if (!requestedPaths.length) {
     const globHint = Array.isArray(input.globs) && input.globs.length ? `No files matched globs: ${input.globs.join(", ")}.` : symbol ? `No declaration or text match found for symbol \`${symbol}\`. Pass a path or a broader symbol query.` : 'No target path provided. Pass `path`, `paths`, `globs`, or `slot` (e.g. `slot: "S1"`).';
     return `# ContextOS inspect
@@ -33187,7 +33199,7 @@ ${clip3(numberCodeLines(read.data, effectiveRanges?.[0]?.startLine || effectiveS
     } catch (_) {
     }
   }
-  const budget = isFull ? Infinity : Math.min(explicitMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget), RESPONSE_BUDGETS.inspect);
+  const budget = isFull ? Infinity : explicitInspectMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget);
   const { text } = fitSections(
     [{ key: "inspect", title: "Inspection Result", priority: 0, lines: outLines }],
     { maxChars: budget }
@@ -33292,13 +33304,22 @@ ${diag}`);
   const obviousRootCause = /(?:not implemented|unimplemented|syntaxerror|cannot find module|module_not_found)/i.test(failureEvidence);
   const triageRequested = input.autoTriage === true || profile?.autoTriage === true;
   const autoTriage = input.autoTriage === false ? false : triageRequested || !obviousRootCause && !isFull && failureEvidence.length > MICRO_TRIAGE_MIN_CHARS;
+  const triageEvidence = failureEvidence.length > 6e3 ? `${failureEvidence.slice(0, 4800)}
+
+...[middle omitted]...
+
+${failureEvidence.slice(-1e3)}` : failureEvidence;
   if (autoTriage && !passed && failureLines.length && profile?.micro?.url && profile?.micro?.model && typeof caps?.micro === "function") {
     try {
       const triageRes = await caps.micro(
         {
           preset: "triage",
           prompt: "\u5206\u6790\u4EE5\u4E0B\u6D4B\u8BD5/\u6784\u5EFA\u5931\u8D25\u65E5\u5FD7\uFF0C\u7ED9\u51FA\u6700\u7B80\u8BCA\u65AD\u4E0E\u4FEE\u590D\u5EFA\u8BAE\uFF1A",
-          input: failureEvidence
+          input: triageEvidence,
+          invocation: {
+            tools: { enabled: false },
+            provider: { maxRequests: 1 }
+          }
         },
         profile.micro
       );
@@ -33313,7 +33334,7 @@ ${diag}`);
         triageLines.push(triageRes.data.content.trim());
         tracer.step("micro.triage", {
           durationMs: triageRes.data.durationMs,
-          evidenceChars: failureEvidence.length
+          evidenceChars: triageEvidence.length
         });
       }
     } catch (error2) {
@@ -33750,10 +33771,14 @@ function countPipelineTool(steps, toolName, projectRoot) {
     }
   }, 0);
 }
+function inspectHasExplicitTarget(input = {}) {
+  return Boolean(input.symbol) || input.startLine !== void 0 || input.endLine !== void 0 || Array.isArray(input.ranges) && input.ranges.length > 0;
+}
 function guardBatchInspectAction(normalized, enabled) {
   if (!enabled || normalized?.tool !== "inspect" || !normalized.input || typeof normalized.input !== "object") {
     return normalized;
   }
+  if (normalized.input.allowExplicitBatchInspect === true && inspectHasExplicitTarget(normalized.input)) return normalized;
   const requestedMax = Number(normalized.input.maxChars);
   return {
     ...normalized,
@@ -33794,6 +33819,7 @@ async function workPipeline(ctx, input = {}) {
           action: "inspect",
           args: {
             path: probe,
+            allowExplicitBatchInspect: true,
             ...nestedFull ? { full: true } : {},
             ...nestedMaxChars2 ? { maxChars: nestedMaxChars2 } : {}
           }
@@ -33806,6 +33832,7 @@ async function workPipeline(ctx, input = {}) {
         action: "inspect",
         args: {
           ...probe,
+          allowExplicitBatchInspect: true,
           ...nestedFull && probe.full === void 0 ? { full: true } : {},
           ...nestedMaxChars2 && probe.maxChars === void 0 ? { maxChars: nestedMaxChars2 } : {}
         }
@@ -33870,7 +33897,8 @@ async function workPipeline(ctx, input = {}) {
     maxChars: responseBudget,
     branches: input.branches,
     budget: input.budget,
-    continueOnFailure: input.continueOnFailure
+    continueOnFailure: input.continueOnFailure,
+    decisionPackage: !hasMutation && preflight.length > 0
   });
   return result.replace(/^# ContextOS pipeline/, "# ContextOS work").replace(/^pipeline=/m, "work=");
 }
@@ -33889,7 +33917,7 @@ async function pipelinePipeline(ctx, input = {}) {
   const mode = input.mode || (explicitlyFull ? "full" : "summary");
   const receiptMode = isReceiptMode(mode);
   const exploreActionCount = countPipelineTool(steps, "explore", ctx.projectRoot);
-  const decisionPackage = !receiptMode && exploreActionCount > 0 && input.decisionPackage !== false;
+  const decisionPackage = !receiptMode && (exploreActionCount > 0 || input.decisionPackage === true) && input.decisionPackage !== false;
   const renderFull = !receiptMode && (mode === "full" || nestedFull && input.mode !== "summary");
   const responseBudget = input.maxChars ?? (mode === "full" ? Infinity : receiptMode ? PIPELINE_RECEIPT_RESPONSE_BUDGET : decisionPackage ? PIPELINE_DECISION_RESPONSE_BUDGET : RESPONSE_BUDGETS.pipeline);
   const actionBudgetOptions = {
@@ -34863,14 +34891,23 @@ function estimateMicroTokens(value) {
   return Math.ceil(String(text).length / 4);
 }
 function resolveMicroBudget(config2 = {}, options = {}, presetKey = "custom") {
+  const invocation = options.invocation && typeof options.invocation === "object" ? options.invocation : {};
+  const provider = invocation.provider && typeof invocation.provider === "object" ? invocation.provider : {};
+  const tools = invocation.tools && typeof invocation.tools === "object" ? invocation.tools : {};
   const source = {
     ...config2,
     ...options,
-    ...options.invocation?.provider && typeof options.invocation.provider === "object" ? options.invocation.provider : {}
+    ...provider
   };
   const defaultTokenBudget = MICRO_PROVIDER_TOKEN_BUDGETS[presetKey] || MICRO_PROVIDER_TOKEN_BUDGETS.custom;
+  const toolsEnabled = options.withOS === true || tools.enabled === true;
+  const maxRequests = positiveInteger(
+    provider.maxRequests ?? invocation.maxRequests ?? options.maxRequests ?? config2.maxRequests,
+    null
+  );
+  const multiRequestBudget = toolsEnabled && maxRequests > 1 ? Math.min(defaultTokenBudget * maxRequests, defaultTokenBudget * 4) : defaultTokenBudget;
   return {
-    maxProviderTokens: positiveNumber(source.maxProviderTokens, defaultTokenBudget),
+    maxProviderTokens: positiveNumber(source.maxProviderTokens, multiRequestBudget),
     maxCostUsd: positiveNumber(source.maxCostUsd, null),
     inputUsdPerMillion: positiveNumber(source.inputUsdPerMillion, null),
     outputUsdPerMillion: positiveNumber(source.outputUsdPerMillion, null)
@@ -53667,6 +53704,7 @@ var SEMANTIC_OPS_READS = /* @__PURE__ */ new Set([
   "telemetry:summary"
 ]);
 var CONVERGENCE_DISCOVERY_LIMIT = 6;
+var INSPECT_RESPONSE_HARD_CAP = 32e3;
 var MICRO_BATCH_DEFAULT_CONCURRENCY2 = 4;
 var MICRO_BATCH_MAX_CONCURRENCY2 = 8;
 function normalizeMicroBatchConcurrency(value) {
@@ -54557,9 +54595,10 @@ var Orchestrator = class {
       const nestedRequests = nestedResponseRequests(input);
       const requestedMaxChars = nestedMaxChars(nestedRequests);
       const responseMaxChars = typeof input.maxChars === "number" ? input.maxChars : typeof responseArgs.maxChars === "number" ? responseArgs.maxChars : requestedMaxChars ?? void 0;
-      const decisionPackageBudget = decisionPackage && responseMaxChars === void 0 ? RESPONSE_BUDGETS.pipelineDecision : responseMaxChars;
+      const explicitInspectWiden = tool === "inspect" && responseMaxChars !== void 0;
+      const decisionPackageBudget = explicitInspectWiden ? Math.min(responseMaxChars, INSPECT_RESPONSE_HARD_CAP) : decisionPackage && responseMaxChars === void 0 ? RESPONSE_BUDGETS.pipelineDecision : responseMaxChars;
       const nestedFull = nestedFullRequest(nestedRequests);
-      const allowWiden = input.allowWiden === true || responseArgs.allowWiden === true || nestedFull || Boolean(decisionPackage);
+      const allowWiden = input.allowWiden === true || responseArgs.allowWiden === true || nestedFull || explicitInspectWiden || Boolean(decisionPackage);
       const full = input.full === true || input.budget === "full" || input.mode === "full" || responseArgs.full === true || responseArgs.budget === "full" || nestedFull || tool === "ops" && responseArgs.format === "json" || isJsonValueString(response);
       const finalized = finalizeResponse(response, {
         projectRoot: this.projectRoot,
@@ -54629,10 +54668,17 @@ var Orchestrator = class {
   }
   async _ops(ctx, input = {}) {
     let { capability, action, args: nestedArgs = {}, projectRoot: _projectRoot, ...directArgs } = input;
+    const requestedAction = action ?? nestedArgs.operation ?? directArgs.operation;
+    if (!action && typeof requestedAction === "string") action = requestedAction;
     if (!capability && typeof action === "string" && action.includes(".")) {
       const separator = action.indexOf(".");
       capability = action.slice(0, separator);
       action = action.slice(separator + 1);
+    }
+    if (capability === "code" && !action) {
+      const query = nestedArgs.query ?? directArgs.query;
+      const path36 = nestedArgs.path ?? directArgs.path;
+      if (!path36 && typeof query === "string" && query.trim()) action = "search";
     }
     if (capability === "block" && ["get", "inspect", "show"].includes(action)) action = "open";
     if (capability === "chain" && ["get", "inspect", "show"].includes(action)) action = "open";
@@ -61564,6 +61610,7 @@ Members: ${chain.memberIds.join(", ")}`;
     this.db.saveTask(activeTask);
   }
   async _code({ action, path: relPath, selector, symbol, startLine, endLine, targetContent, replacementContent, content: rawContent, query, root = null, limit, maxResults, format = "markdown", changes = [], ranges, budget, maxChars }) {
+    if (!action && !relPath && String(query || "").trim()) action = "search";
     if (action === "changeset") {
       const result = applyChangeset(this.projectRoot, changes);
       this._recordChangedFiles(result.files);
@@ -61658,7 +61705,7 @@ No symbol or text match. Scanned ${text.scanned} files${text.truncated ? " (walk
       }
       return lines.join("\n");
     }
-    if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter`);
+    if (!relPath) throw new Error(`Code action '${action}' requires 'path' parameter. Available actions: outline, read, search, create, edit, changeset`);
     const resolvedPath = this._resolveProjectPath(relPath, "path");
     relPath = resolvedPath.relativePath;
     const fullPath = resolvedPath.fullPath;
@@ -63246,9 +63293,9 @@ function createV3Server({
     server.registerTool(
       "contextos",
       {
-        description: "Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; micro=bulky evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.",
+        description: "Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; search/create aliases; micro=evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.",
         inputSchema: {
-          action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops"]),
+          action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops", "search", "create"]),
           args: record(any()).optional(),
           projectRoot: string2().describe("Absolute repository root."),
           refresh: boolean2().optional().describe("Force a fresh read instead of reusing a compact receipt."),
@@ -63302,8 +63349,12 @@ function createV3Server({
         ]) {
           if (input[field] !== void 0) args2[field] = input[field];
         }
+        if (input.action === "search" && args2.search === void 0) {
+          args2.search = { query: input.query ?? input.search ?? "" };
+        }
+        const compactAction = input.action === "search" || input.action === "explore" && input.search !== void 0 ? "work" : input.action === "create" ? "change" : input.action;
         const payload = { ...args2, projectRoot: input.projectRoot };
-        if (input.action === "micro") {
+        if (compactAction === "micro") {
           return textResult(await dispatch("ops", {
             capability: "micro",
             action: "run",
@@ -63311,10 +63362,10 @@ function createV3Server({
             projectRoot: input.projectRoot
           }));
         }
-        if (input.action === "resume") {
+        if (compactAction === "resume") {
           return textResult(await dispatch("ops", { ...payload, capability: "session", action: "resume" }));
         }
-        return textResult(await dispatch(input.action, payload));
+        return textResult(await dispatch(compactAction, payload));
       }
     );
     return server;

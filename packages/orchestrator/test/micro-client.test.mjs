@@ -12,6 +12,7 @@ import {
   applyOutputBudget,
   executeMicroTool,
   normalizeMicroInvocation,
+  resolveMicroBudget,
   resolveChatCompletionsUrl,
   resolveMicroInput,
   runMicroTask,
@@ -771,6 +772,21 @@ test('Micro input budgets short-circuit before dispatch and empty responses get 
   } finally {
     await mock.close();
   }
+});
+
+test('resolveMicroBudget scales default total budget for bounded multi-step tools', () => {
+  assert.equal(
+    resolveMicroBudget({}, { withOS: true, invocation: { provider: { maxRequests: 4 } } }, 'custom').maxProviderTokens,
+    32000,
+  );
+  assert.equal(
+    resolveMicroBudget({}, { withOS: true, invocation: { provider: { maxRequests: 4, maxProviderTokens: 9000 } } }, 'custom').maxProviderTokens,
+    9000,
+  );
+  assert.equal(
+    resolveMicroBudget({}, { withOS: false, invocation: { provider: { maxRequests: 4 } } }, 'custom').maxProviderTokens,
+    8000,
+  );
 });
 
 test('normalizeMicroInvocation keeps flat fields compatible with the bounded contract', () => {

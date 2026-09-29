@@ -106,6 +106,49 @@ test("V3 default surface exposes one compact transport tool", async () => {
   fixture.cleanup();
 });
 
+test("V3 compact search/create aliases route through work and change", async () => {
+  const server = createV3Server();
+  const client = new Client({ name: "contextos-v3-alias-test", version: packageVersion });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-aliases" });
+
+  try {
+    const search = await client.callTool({
+      name: "contextos",
+      arguments: { action: "search", query: "add", projectRoot: fixture.root },
+    });
+    const searchText = (search.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!search.isError, searchText);
+    assert.match(searchText, /Search: `add`/);
+
+    const exploreSearch = await client.callTool({
+      name: "contextos",
+      arguments: { action: "explore", search: { query: "add(a" }, projectRoot: fixture.root },
+    });
+    const exploreText = (exploreSearch.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!exploreSearch.isError, exploreText);
+    assert.match(exploreText, /Search: `add\(a`/);
+
+    const created = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "create",
+        create: [{ path: "src/alias.mjs", content: "export const alias = 1;\n" }],
+        verify: ["node --check src/alias.mjs"],
+        projectRoot: fixture.root,
+      },
+    });
+    const createdText = (created.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!created.isError, createdText);
+    assert.match(createdText, /ContextOS change/);
+    assert.match(fixture.read("src/alias.mjs"), /alias = 1/);
+  } finally {
+    fixture.cleanup();
+    await client.close();
+  }
+});
+
 test("V3 compact ops exposes frozen rollout telemetry and rollout-aware comparison", async () => {
   const fixture = createFixtureProject({ prefix: "ctxos-v3-rollout" });
   const usage = (inputTokens, outputTokens) => ({

@@ -21,6 +21,7 @@ Default transport is the compact `contextos` tool:
 
 - Trivial one-line change: one bounded `change({ edits, verify })`; skip `explore` and `ship`.
 - Normal or complex task: first call one `pipeline` containing `explore`, any known `inspect`, and baseline `verify`; then one `change`/`work` containing all edits, `verify`, `architecture`, and final `ship`.
+- A `work` call containing search or inspect is also a decision package. When it returns `read_complete=true`, do not issue another search/inspect; submit all edits in one `change`/`work` with verification.
 - Do not split the workflow into mechanical `explore -> inspect -> verify -> change -> ship` turns. One host decision is one OS call.
 - A pipeline response with `status`, `receipt`, or `Micro-Triage` is already the decision packet. Do not call `resume` or replay raw artifacts.
 - After `read_complete=true`, mutate directly. After `read_complete=false`, make only the named bounded recovery read, then mutate.

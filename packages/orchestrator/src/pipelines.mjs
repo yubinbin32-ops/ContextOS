@@ -2219,12 +2219,12 @@ export async function inspectPipeline(ctx, input = {}) {
   ) || oversizedRange || expansionBudgetGated;
   const isFull = requestedFull && !decisionGated;
   const explicitMaxChars = typeof input.maxChars === 'number' && input.maxChars > 0 ? input.maxChars : null;
+  const explicitInspectMaxChars = explicitMaxChars
+    ? Math.min(explicitMaxChars, INSPECT_RECOVERY_OUTPUT_MAX_CHARS)
+    : null;
   const contentMaxChars = isFull
-    ? Math.min(
-        explicitMaxChars ?? INSPECT_RECOVERY_OUTPUT_MAX_CHARS,
-        INSPECT_RECOVERY_OUTPUT_MAX_CHARS
-      )
-    : Math.min(explicitMaxChars ?? RESPONSE_BUDGETS.inspect, RESPONSE_BUDGETS.inspect);
+    ? (explicitInspectMaxChars ?? INSPECT_RECOVERY_OUTPUT_MAX_CHARS)
+    : (explicitInspectMaxChars ?? RESPONSE_BUDGETS.inspect);
 
   if (!requestedPaths.length) {
     const globHint = Array.isArray(input.globs) && input.globs.length
@@ -2395,7 +2395,7 @@ export async function inspectPipeline(ctx, input = {}) {
 
   const budget = isFull
     ? Infinity
-    : Math.min(explicitMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget), RESPONSE_BUDGETS.inspect);
+    : (explicitInspectMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget));
   const { text } = fitSections(
     [{ key: 'inspect', title: 'Inspection Result', priority: 0, lines: outLines }],
     { maxChars: budget }
@@ -2509,13 +2509,20 @@ export async function verifyPipeline(ctx, input = {}) {
     ? false
     : (triageRequested
         || (!obviousRootCause && !isFull && failureEvidence.length > MICRO_TRIAGE_MIN_CHARS));
+  const triageEvidence = failureEvidence.length > 6000
+    ? `${failureEvidence.slice(0, 4800)}\n\n...[middle omitted]...\n\n${failureEvidence.slice(-1000)}`
+    : failureEvidence;
   if (autoTriage && !passed && failureLines.length && profile?.micro?.url && profile?.micro?.model && typeof caps?.micro === 'function') {
     try {
       const triageRes = await caps.micro(
         {
           preset: 'triage',
           prompt: '分析以下测试/构建失败日志，给出最简诊断与修复建议：',
-          input: failureEvidence,
+          input: triageEvidence,
+          invocation: {
+            tools: { enabled: false },
+            provider: { maxRequests: 1 },
+          },
         },
         profile.micro
       );
@@ -2530,7 +2537,7 @@ export async function verifyPipeline(ctx, input = {}) {
         triageLines.push(triageRes.data.content.trim());
         tracer.step('micro.triage', {
           durationMs: triageRes.data.durationMs,
-          evidenceChars: failureEvidence.length,
+          evidenceChars: triageEvidence.length,
         });
       }
     } catch (error) {
@@ -3071,10 +3078,18 @@ function countPipelineTool(steps, toolName, projectRoot) {
   }, 0);
 }
 
+function inspectHasExplicitTarget(input = {}) {
+  return Boolean(input.symbol)
+    || input.startLine !== undefined
+    || input.endLine !== undefined
+    || (Array.isArray(input.ranges) && input.ranges.length > 0);
+}
+
 function guardBatchInspectAction(normalized, enabled) {
   if (!enabled || normalized?.tool !== 'inspect' || !normalized.input || typeof normalized.input !== 'object') {
     return normalized;
   }
+  if (normalized.input.allowExplicitBatchInspect === true && inspectHasExplicitTarget(normalized.input)) return normalized;
   const requestedMax = Number(normalized.input.maxChars);
   return {
     ...normalized,
@@ -3117,6 +3132,7 @@ export async function workPipeline(ctx, input = {}) {
           action: 'inspect',
           args: {
             path: probe,
+            allowExplicitBatchInspect: true,
             ...(nestedFull ? { full: true } : {}),
             ...(nestedMaxChars ? { maxChars: nestedMaxChars } : {}),
           },
@@ -3129,6 +3145,7 @@ export async function workPipeline(ctx, input = {}) {
         action: 'inspect',
         args: {
           ...probe,
+          allowExplicitBatchInspect: true,
           ...(nestedFull && probe.full === undefined ? { full: true } : {}),
           ...(nestedMaxChars && probe.maxChars === undefined ? { maxChars: nestedMaxChars } : {}),
         },
@@ -3205,6 +3222,7 @@ export async function workPipeline(ctx, input = {}) {
     branches: input.branches,
     budget: input.budget,
     continueOnFailure: input.continueOnFailure,
+    decisionPackage: !hasMutation && preflight.length > 0,
   });
   return result
     .replace(/^# ContextOS pipeline/, '# ContextOS work')
@@ -3227,7 +3245,7 @@ export async function pipelinePipeline(ctx, input = {}) {
   const mode = input.mode || (explicitlyFull ? 'full' : 'summary');
   const receiptMode = isReceiptMode(mode);
   const exploreActionCount = countPipelineTool(steps, 'explore', ctx.projectRoot);
-  const decisionPackage = !receiptMode && exploreActionCount > 0 && input.decisionPackage !== false;
+  const decisionPackage = !receiptMode && (exploreActionCount > 0 || input.decisionPackage === true) && input.decisionPackage !== false;
   // An explicit aggregate summary wins over a nested action's full-output
   // request. Otherwise one inspect can expand the entire courier response.
   const renderFull = !receiptMode && (mode === 'full' || (nestedFull && input.mode !== 'summary'));

@@ -1677,6 +1677,28 @@ test('inspect accepts per-path ranges for a bounded batch', async () => {
   fs.rmSync(projectRoot, { recursive: true, force: true });
 });
 
+test('work explicit ranges return bodies and a mutation handoff instead of outlines', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(path.join(projectRoot, 'src', 'helper.mjs'), 'export function helper() { return `HELPER_MARKER`; }\n');
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('work', {
+    inspect: [
+      { path: 'src/math.mjs', ranges: [{ startLine: 1, endLine: 2 }] },
+      { path: 'src/helper.mjs', ranges: [{ startLine: 1, endLine: 1 }] },
+    ],
+  });
+  assert.match(result, /export function add/);
+  assert.match(result, /HELPER_MARKER/);
+  assert.doesNotMatch(result, /AST Outline/);
+  assert.match(result, /decision=complete/);
+  assert.match(result, /next=change/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
 test('work search accepts paths aliases without falling back to native rg', async () => {
   const projectRoot = makeTempProject();
   const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
@@ -1692,6 +1714,9 @@ test('work search accepts paths aliases without falling back to native rg', asyn
     search: { query: 'add', paths: ['src'] },
   });
   assert.match(result, /work=OK/);
+  assert.match(result, /decision=complete/);
+  assert.match(result, /read_complete=true/);
+  assert.match(result, /next=change/);
   assert.ok(searchArgs.some((args) => args.root === 'src'), 'work.search.paths must map to the search root');
 
   service.close();
@@ -1824,7 +1849,7 @@ test('pipeline explore decision package inlines a small workspace without duplic
   fs.rmSync(projectRoot, { recursive: true, force: true });
 });
 
-test('inspect explicit maxChars cannot widen past the inspect budget', async () => {
+test('inspect explicit maxChars can widen to the bounded recovery cap', async () => {
   const projectRoot = makeTempProject();
   fs.writeFileSync(path.join(projectRoot, 'src', 'wide.mjs'), `export const wide = '${'w'.repeat(9000)}';\n`);
   const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
@@ -1834,7 +1859,8 @@ test('inspect explicit maxChars cannot widen past the inspect budget', async () 
     path: 'src/wide.mjs',
     maxChars: 30000,
   });
-  assert.ok(result.length <= RESPONSE_BUDGETS.inspect + 120, `inspect widened to ${result.length} chars`);
+  assert.ok(result.length > RESPONSE_BUDGETS.inspect, `inspect did not honor explicit widening: ${result.length} chars`);
+  assert.ok(result.length <= 32000 + 120, `inspect exceeded the bounded recovery cap: ${result.length} chars`);
 
   service.close();
   fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -2269,7 +2295,10 @@ test('ops supports micro capability and verify triggers micro triage on failure'
     assert.match(verifyFail, /出错文件: test\.mjs/);
     const microUsagePath = path.join(projectRoot, '.contextos', 'logs', 'micro-usage.jsonl');
     const microUsage = fs.readFileSync(microUsagePath, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
-    assert.ok(microUsage.some((entry) => entry.preset === 'triage' && entry.hostSessionId === orchestrator.store.current.id));
+    const triageUsage = microUsage.find((entry) => entry.preset === 'triage' && entry.hostSessionId === orchestrator.store.current.id);
+    assert.ok(triageUsage);
+    assert.equal(triageUsage.providerRequests, 1);
+    assert.equal(triageUsage.toolRounds, 0);
 
     // 5. Full failure output is an explicit raw-evidence mode, so it must not
     // spend a redundant Micro provider request summarizing the same log.

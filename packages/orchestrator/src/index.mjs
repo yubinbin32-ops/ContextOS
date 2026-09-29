@@ -100,6 +100,7 @@ const SEMANTIC_OPS_READS = new Set([
 ]);
 
 const CONVERGENCE_DISCOVERY_LIMIT = 6;
+const INSPECT_RESPONSE_HARD_CAP = 32000;
 const MICRO_BATCH_DEFAULT_CONCURRENCY = 4;
 const MICRO_BATCH_MAX_CONCURRENCY = 8;
 
@@ -1115,13 +1116,17 @@ export class Orchestrator {
         : (typeof responseArgs.maxChars === 'number'
             ? responseArgs.maxChars
             : (requestedMaxChars ?? undefined));
-      const decisionPackageBudget = decisionPackage && responseMaxChars === undefined
-        ? RESPONSE_BUDGETS.pipelineDecision
-        : responseMaxChars;
+      const explicitInspectWiden = tool === 'inspect' && responseMaxChars !== undefined;
+      const decisionPackageBudget = explicitInspectWiden
+        ? Math.min(responseMaxChars, INSPECT_RESPONSE_HARD_CAP)
+        : (decisionPackage && responseMaxChars === undefined
+            ? RESPONSE_BUDGETS.pipelineDecision
+            : responseMaxChars);
       const nestedFull = nestedFullRequest(nestedRequests);
       const allowWiden = input.allowWiden === true
         || responseArgs.allowWiden === true
         || nestedFull
+        || explicitInspectWiden
         || Boolean(decisionPackage);
       const full = input.full === true || input.budget === 'full' || input.mode === 'full'
         || responseArgs.full === true || responseArgs.budget === 'full'
@@ -1197,6 +1202,8 @@ export class Orchestrator {
 
   async _ops(ctx, input = {}) {
     let { capability, action, args: nestedArgs = {}, projectRoot: _projectRoot, ...directArgs } = input;
+    const requestedAction = action ?? nestedArgs.operation ?? directArgs.operation;
+    if (!action && typeof requestedAction === 'string') action = requestedAction;
     // Accept the natural `ops({ action: "artifact.read", ... })` spelling as
     // well as the canonical capability/action pair. This avoids a full host
     // round spent discovering that a dot was the only schema difference.
@@ -1204,6 +1211,11 @@ export class Orchestrator {
       const separator = action.indexOf('.');
       capability = action.slice(0, separator);
       action = action.slice(separator + 1);
+    }
+    if (capability === 'code' && !action) {
+      const query = nestedArgs.query ?? directArgs.query;
+      const path = nestedArgs.path ?? directArgs.path;
+      if (!path && typeof query === 'string' && query.trim()) action = 'search';
     }
     if (capability === 'block' && ['get', 'inspect', 'show'].includes(action)) action = 'open';
     if (capability === 'chain' && ['get', 'inspect', 'show'].includes(action)) action = 'open';

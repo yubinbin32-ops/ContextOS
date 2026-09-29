@@ -91,9 +91,9 @@ export function createV3Server({
     server.registerTool(
       'contextos',
       {
-        description: 'Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; micro=bulky evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.',
+        description: 'Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; search/create aliases; micro=evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.',
         inputSchema: {
-          action: z.enum(['explore', 'inspect', 'change', 'verify', 'ship', 'pipeline', 'work', 'micro', 'resume', 'ops']),
+          action: z.enum(['explore', 'inspect', 'change', 'verify', 'ship', 'pipeline', 'work', 'micro', 'resume', 'ops', 'search', 'create']),
           args: z.record(z.any()).optional(),
           projectRoot: z.string().describe('Absolute repository root.'),
           refresh: z.boolean().optional().describe('Force a fresh read instead of reusing a compact receipt.'),
@@ -132,8 +132,14 @@ export function createV3Server({
         ]) {
           if (input[field] !== undefined) args[field] = input[field];
         }
+        if (input.action === 'search' && args.search === undefined) {
+          args.search = { query: input.query ?? input.search ?? '' };
+        }
+        const compactAction = input.action === 'search' || (input.action === 'explore' && input.search !== undefined)
+          ? 'work'
+          : (input.action === 'create' ? 'change' : input.action);
         const payload = { ...args, projectRoot: input.projectRoot };
-        if (input.action === 'micro') {
+        if (compactAction === 'micro') {
           return textResult(await dispatch('ops', {
             capability: 'micro',
             action: 'run',
@@ -141,10 +147,10 @@ export function createV3Server({
             projectRoot: input.projectRoot,
           }));
         }
-        if (input.action === 'resume') {
+        if (compactAction === 'resume') {
           return textResult(await dispatch('ops', { ...payload, capability: 'session', action: 'resume' }));
         }
-        return textResult(await dispatch(input.action, payload));
+        return textResult(await dispatch(compactAction, payload));
       }
     );
     return server;
