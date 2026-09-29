@@ -9010,6 +9010,7 @@ function projectProviderUsage(result) {
       allowCommands: Boolean(invocation.allowCommands),
       providerRequests: Number(invocation.providerRequests ?? result?.providerRequests) || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0),
       toolRounds: Number(invocation.toolRounds ?? result?.steps) || 0,
+      toolCalls: Array.isArray(result?.toolCalls) ? result.toolCalls.length : Number(invocation.toolCalls ?? result?.toolCallCount) || 0,
       shortCircuited: Boolean(invocation.shortCircuited),
       ...invocation.shortCircuitReason ? { shortCircuitReason: invocation.shortCircuitReason } : {}
     }
@@ -31498,9 +31499,10 @@ function compactOutlineData(text) {
   return clip3(text, 200);
 }
 function stripOuterCodeFence(text) {
-  const value = String(text ?? "");
+  let value = String(text ?? "");
   const match = value.match(/^\s*```[^\n]*\n([\s\S]*?)\n```\s*$/);
-  return match ? match[1] : value;
+  if (match) value = match[1];
+  return value.split(/\r?\n/).filter((line, index) => !(index === 0 && /^\s*\/\/\s+.+\[L\d+-L\d+\]\s+\(hash:\s*[^)]+\)\s*$/.test(line))).join("\n");
 }
 function compactTestContract(text, maxChars = 420) {
   const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line) => /^(?:test\(|assert\.|await assert\.|const (?:report|replay)\b)/.test(line));
@@ -31718,6 +31720,27 @@ function receiptStatus(receipt) {
   if (receipt.exitCode === 0) return "passed";
   return receipt.status === "superseded" ? "superseded" : "unresolved";
 }
+function normalizeVerificationCommand(value) {
+  const command = String(value || "").trim().replace(/\s+/g, " ");
+  return command.replace(/^npm\s+run\s+test\b/, "npm test");
+}
+function sameReceiptCommand(left, right) {
+  const leftCommand = normalizeVerificationCommand(left?.command);
+  const rightCommand = normalizeVerificationCommand(right?.command);
+  if (!leftCommand || leftCommand !== rightCommand) return false;
+  if (!left?.cwd || !right?.cwd) return true;
+  return path11.resolve(left.cwd) === path11.resolve(right.cwd);
+}
+function effectiveReceiptStatus(receipt, receipts = []) {
+  if (receipt?.exitCode === 0) return "passed";
+  if (receipt?.status === "superseded") return "superseded";
+  const index = receipts.indexOf(receipt);
+  if (index < 0) return "unresolved";
+  const laterPass = receipts.slice(index + 1).some(
+    (candidate) => candidate?.exitCode === 0 && sameReceiptCommand(receipt, candidate)
+  );
+  return laterPass ? "superseded" : "unresolved";
+}
 function latinQueries(text = "", exclude = "") {
   const haystack = String(exclude).toLowerCase();
   return Array.from(tokenize(text)).filter((token) => /^[a-z][a-z0-9_-]{4,}$/.test(token)).filter((token) => !haystack.includes(token)).slice(0, 2);
@@ -31830,6 +31853,7 @@ async function explorePipeline(ctx, input = {}) {
   const identifiers = extractIdentifiers(intent);
   const tokens = tokenize(`${intent} ${paths.join(" ")} ${identifiers.join(" ")}`);
   const dirty = [...obs.untracked, ...obs.changed];
+  const testContractLines = [];
   let activePlan = null;
   try {
     const plansRes = await caps.plan({ action: "list", format: "json", status: "active", limit: 25, offset: 0 });
@@ -31935,7 +31959,7 @@ async function explorePipeline(ctx, input = {}) {
       if (outline.ok) {
         outlineByPath.set(target, outline.data);
         if (smallWorkspaceBundle) {
-          if (fileIndex < 6) whereLines.push(`- \`${target}\` ${compactOutlineData(outline.data)}`);
+          if (fileIndex < 3) whereLines.push(`- \`${target}\` ${compactOutlineData(outline.data)}`);
         } else if (input.depth === "deep") {
           whereLines.push(`- \`${target}\`
 ${clip3(outline.data, OUTLINE_CLIP)}`);
@@ -31949,11 +31973,9 @@ ${clip3(outline.data, OUTLINE_CLIP)}`);
     tracer.step("outline", { paths: filePaths });
   }
   if (smallWorkspaceBundle) {
-    const readme = filePaths.find((file) => /(^|\/)readme(?:_[^/]*)?\.md$/i.test(file));
     whereLines.push(
-      `- Small workspace bundle (${filePaths.length} files, ${bundleChars} chars): ` + filePaths.map((file) => `\`${file}\``).join(", ") + ". All source/test bodies are inlined below; do not list or reread the repository."
+      `- Small workspace bundle (${filePaths.length} files, ${bundleChars} chars): ` + filePaths.map((file) => `\`${file}\``).join(", ") + ". All selected source bodies and test contracts are inlined below; do not list or reread the repository."
     );
-    whereLines.push(readme ? `- Project documentation: \`${readme}\` is included in the bundle.` : "- Project documentation: no README.md is present in this workspace.");
   }
   const criticalCandidates = [];
   const intentTokens = tokenize(intent);
@@ -31985,12 +32007,13 @@ ${clip3(outline.data, OUTLINE_CLIP)}`);
   let focusSliceChars = 0;
   for (const candidate of criticalCandidates.slice(0, criticalLimit)) {
     const { target, fileChars, read, stub, focusTarget } = candidate;
+    if (smallWorkspaceBundle && isTestPath(target)) continue;
     const nextCriticalChars = criticalChars + String(read).length;
     if (!smallWorkspaceBundle && criticalLines.length > 0 && nextCriticalChars > DECISION_SOURCE_TOTAL_MAX_CHARS) {
       continue;
     }
     const fence = path11.extname(target).slice(1) || "text";
-    const readLimit = smallWorkspaceBundle ? Math.max(fileChars + 256, INSPECT_INLINE_MAX_CHARS) : focusTarget ? DECISION_SOURCE_FILE_MAX_CHARS : INSPECT_INLINE_MAX_CHARS;
+    const readLimit = smallWorkspaceBundle ? Math.max(fileChars + 64, 512) : focusTarget ? DECISION_SOURCE_FILE_MAX_CHARS : INSPECT_INLINE_MAX_CHARS;
     criticalLines.push(
       `- \`${target}\` (${fileChars} chars${stub ? ", implementation stub" : ""})
 \`\`\`${fence}
@@ -32070,6 +32093,12 @@ ${slice.body}
     maxCallers: 4,
     maxTests: 2
   });
+  if (smallWorkspaceBundle) {
+    for (const target of filePaths) {
+      if (isTestPath(target)) closure.tests.push(target);
+    }
+    closure.tests = [...new Set(closure.tests)];
+  }
   if (closure.dependencies.length || closure.callers.length || closure.tests.length) {
     const closureLines = [];
     if (closure.dependencies.length) {
@@ -32080,10 +32109,17 @@ ${slice.body}
     }
     if (closure.tests.length) {
       closureLines.push(`- Test entry: ${closure.tests.map((file) => `\`${file}\``).join(", ")}`);
-      for (const testFile of closure.tests.slice(0, 2)) {
+      for (const testFile of closure.tests.slice(0, smallWorkspaceBundle ? 4 : 2)) {
         const testRead = await caps.code({ action: "read", path: testFile, startLine: 1, endLine: 80 });
         if (testRead.ok && testRead.data) {
-          closureLines.push(`- Test contract \`${testFile}\`: ${compactTestContract(testRead.data)}`);
+          const testContract = clip3(stripOuterCodeFence(testRead.data), 4200, { withHint: true });
+          const testFence = path11.extname(testFile).slice(1) || "text";
+          testContractLines.push(
+            `- Test contract \`${testFile}\`: ${compactTestContract(testRead.data)}
+\`\`\`${testFence}
+${testContract}
+\`\`\``
+          );
         }
       }
     }
@@ -32129,6 +32165,8 @@ ${clip3(read.data, 240)}
   }
   store.setSlots(slots);
   const blocks = await caps.blocks();
+  const chains = await caps.chains();
+  const architectureState = blocks.ok && chains.ok ? Array.isArray(blocks.data) && blocks.data.length === 0 && Array.isArray(chains.data) && chains.data.length === 0 ? "empty" : "ready" : "unknown";
   if (blocks.ok && blocks.data.length) {
     const scored = blocks.data.map((block) => ({
       block,
@@ -32189,6 +32227,9 @@ ${clip3(read.data, 240)}
   const decisionLines = [
     `- read_complete=${decisionComplete ? "true" : "false"}`,
     `- do_not_reread=${decisionComplete ? "true" : "false"}`,
+    `- native_mutation=forbidden${decisionComplete ? "-after-read-complete" : ""}`,
+    "- after_read_complete=change_or_work_only",
+    `- architecture=${architectureState}${architectureState === "empty" ? "; change must bind blocks/chains (chain.memberIds=block ids)" : ""}`,
     `- files=${filePaths.length}`,
     decisionComplete ? "- next=change({edits,verify,architecture})" : "- next=inspect({path,full:true}) for the named missing target, then change({edits,verify})"
   ];
@@ -32213,6 +32254,9 @@ ${clip3(read.data, 240)}
   }
   if (focusSliceLines.length) {
     sections.push({ key: "focus-slices", title: "Focused symbol slices (bounded)", priority: 0, lines: focusSliceLines });
+  }
+  if (testContractLines.length) {
+    sections.push({ key: "test-contract", title: "Test contract", priority: 0, lines: testContractLines });
   }
   sections.push(
     { key: "where", title: "Where to look", priority: 4, lines: whereLines }
@@ -32307,7 +32351,7 @@ function formatArchitectureGap(gap) {
   }
   return "- " + file + ": architecture could not be verified.";
 }
-async function bindChangedArchitecture(caps, changedPaths, architecture) {
+async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRun = false } = {}) {
   if (architecture !== void 0 && architecture !== null && (typeof architecture !== "object" || Array.isArray(architecture))) {
     return { ok: false, error: "architecture must be an object with blocks and chains arrays.", refreshed: 0, bound: 0, composed: 0, gaps: [] };
   }
@@ -32333,7 +32377,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
   for (const spec of blockSpecs) {
     const id = String(spec?.id || "").trim();
     const existing = blockById.get(id);
-    const title = String(spec?.title || spec?.name || existing?.title || "").trim();
+    const title = String(spec?.title || spec?.name || existing?.title || id).trim();
     const kind = String(spec?.kind || existing?.kind || "component").trim();
     const rawPaths = spec?.paths ?? spec?.path ?? spec?.files ?? spec?.file;
     const pathValues = Array.isArray(rawPaths) ? rawPaths : rawPaths == null ? [] : [rawPaths];
@@ -32357,7 +32401,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
   }
   for (const spec of chainSpecs) {
     const id = String(spec?.id || "").trim();
-    const title = String(spec?.title || spec?.name || "").trim();
+    const title = String(spec?.title || spec?.name || id).trim();
     const rawMemberIds = spec?.memberIds ?? spec?.member_ids ?? spec?.blocks;
     const memberIds = Array.isArray(rawMemberIds) ? [...new Set(rawMemberIds.map((value) => String(value || "").trim()).filter(Boolean))] : [];
     if (!id || !title || !memberIds.length) {
@@ -32419,15 +32463,59 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
       errors.push("Chain " + chainData.id + " cannot include non-curated module Block(s): " + nonCuratedMembers.join(", ") + ".");
     }
   }
+  const chainMembersAfterPreparation = /* @__PURE__ */ new Map();
+  for (const chain of initialChainsResult.data || []) {
+    chainMembersAfterPreparation.set(
+      chain.id,
+      new Set(Array.isArray(chain.memberIds) ? chain.memberIds : [])
+    );
+  }
+  for (const { chainData, replaceMembers } of preparedChains) {
+    const existingMembers = chainMembersAfterPreparation.get(chainData.id) || /* @__PURE__ */ new Set();
+    const requestedMembers = Array.isArray(chainData.memberIds) ? chainData.memberIds : [];
+    chainMembersAfterPreparation.set(
+      chainData.id,
+      new Set(replaceMembers ? requestedMembers : [...existingMembers, ...requestedMembers])
+    );
+  }
+  const coveredBlockIds = new Set(
+    [...chainMembersAfterPreparation.values()].flatMap((members2) => [...members2])
+  );
+  const uncoveredPreparedBlocks = preparedBlocks.map((block) => block.id).filter((id) => !coveredBlockIds.has(id));
+  if (uncoveredPreparedBlocks.length) {
+    const existingChangedSurface = preparedChains.find(
+      (entry) => entry.chainData.id === "chain-changed-surface"
+    );
+    if (existingChangedSurface) {
+      existingChangedSurface.chainData.memberIds = [
+        .../* @__PURE__ */ new Set([
+          ...existingChangedSurface.chainData.memberIds || [],
+          ...uncoveredPreparedBlocks
+        ])
+      ];
+    } else {
+      preparedChains.push({
+        chainData: {
+          id: "chain-changed-surface",
+          title: "Changed surface",
+          memberIds: uncoveredPreparedBlocks
+        },
+        replaceMembers: false
+      });
+    }
+  }
   if (errors.length) {
     return { ok: false, error: errors.join("; "), refreshed: 0, bound: 0, composed: 0, gaps: [] };
+  }
+  if (dryRun) {
+    return { ok: true, refreshed: 0, bound: 0, composed: 0, gaps: [] };
   }
   const explicitPaths = new Set(preparedBlocks.flatMap((block) => block.paths.map(normalizeGraphPath)));
   let bound = 0;
   let refreshed = 0;
   let composed = 0;
   for (const spec of preparedBlocks) {
-    const result = await caps.block({
+    const payload = {
       action: "bind_auto",
       id: spec.id,
       paths: spec.paths,
@@ -32435,7 +32523,11 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
       replacePaths: true,
       blockData: spec.blockData,
       format: "json"
-    });
+    };
+    let result = await caps.block(payload);
+    if (!result.ok && Array.isArray(spec.symbols) && spec.symbols.length) {
+      result = await caps.block({ ...payload, symbols: void 0 });
+    }
     if (result.ok) bound += 1;
     else errors.push("Block " + spec.id + ": " + result.error);
   }
@@ -32612,6 +32704,9 @@ async function changePipeline(ctx, input = {}) {
 ${text2}`;
   }
   if (!creates.length && !edits.length && !deletes.length) {
+    if (input.verify !== void 0 || Array.isArray(input.commands) && input.commands.length) {
+      return verifyPipeline(ctx, input);
+    }
     if (input.architecture && typeof input.architecture === "object" && !Array.isArray(input.architecture)) {
       const architectureResult = await bindChangedArchitecture(caps, [], input.architecture);
       tracer.step("architecture_state_only", {
@@ -32684,6 +32779,31 @@ ${text2}`;
       path: spec?.path
     }))
   ];
+  if (input.architecture && typeof input.architecture === "object" && !Array.isArray(input.architecture)) {
+    const architecturePreflight = await bindChangedArchitecture(
+      caps,
+      changes.map((change) => change.path).filter(Boolean),
+      input.architecture,
+      { dryRun: true }
+    );
+    if (!architecturePreflight.ok) {
+      const lines = [
+        "- Architecture contract rejected before changeset: " + clip3(architecturePreflight.error || "invalid contract", 300),
+        "- No files were modified. Fix the Block/Chain payload, then retry the same change call."
+      ];
+      tracer.step("architecture_preflight", { ok: false, error: architecturePreflight.error || "invalid contract" });
+      return [
+        "# ContextOS change",
+        "",
+        "## Next",
+        "\u{1F449} fix the architecture contract error, then retry the same change call; no files were modified.",
+        "",
+        "## Result",
+        ...lines
+      ].join("\n");
+    }
+    tracer.step("architecture_preflight", { ok: true });
+  }
   const backups = /* @__PURE__ */ new Map();
   const originallyMissing = /* @__PURE__ */ new Set();
   if (input.autoRevert === true && input.verify) {
@@ -32849,6 +32969,16 @@ ${diag}`);
 
 ${text}`;
 }
+function normalizeInspectTargetPath(projectRoot, target) {
+  const raw = String(target || "").trim();
+  if (!raw) return raw;
+  const root = path11.resolve(projectRoot);
+  const normalizedRaw = raw.replace(/\\/g, "/");
+  const candidate = path11.isAbsolute(normalizedRaw) ? path11.resolve(normalizedRaw) : path11.resolve(root, normalizedRaw);
+  const relative = path11.relative(root, candidate).split(path11.sep).join("/");
+  if (!relative || relative.startsWith("..") || path11.isAbsolute(relative)) return raw;
+  return relative;
+}
 function expandInspectTargets(projectRoot, target) {
   const raw = String(target || "");
   const normalized = raw.replace(/\\/g, "/");
@@ -32862,7 +32992,7 @@ function expandInspectTargets(projectRoot, target) {
   } catch (_) {
     return [raw];
   }
-  if (!stat.isDirectory()) return [raw];
+  if (!stat.isDirectory()) return [normalizeInspectTargetPath(projectRoot, raw)];
   const files = [];
   const walk2 = (directory, depth = 0) => {
     if (files.length >= 30 || depth > 4) return;
@@ -32957,8 +33087,9 @@ async function inspectPipeline(ctx, input = {}) {
       symbol = slotData.symbol || symbol;
     }
   }
+  if (targetPath) targetPath = normalizeInspectTargetPath(ctx.projectRoot, targetPath);
   const requestedBudget = input.budget || input.depth;
-  const paths = Array.isArray(input.paths) && input.paths.length ? input.paths : targetPath ? [targetPath] : [];
+  const paths = (Array.isArray(input.paths) && input.paths.length ? input.paths : targetPath ? [targetPath] : []).map((target) => normalizeInspectTargetPath(ctx.projectRoot, target));
   const globPaths = expandInspectGlobs(ctx.projectRoot, input.globs);
   let requestedPaths = [...paths, ...globPaths];
   let symbolCandidates = [];
@@ -32977,6 +33108,7 @@ async function inspectPipeline(ctx, input = {}) {
       requestedPaths = symbolCandidates.slice(0, 1);
     }
   }
+  requestedPaths = uniquePaths(requestedPaths.map((target) => normalizeInspectTargetPath(ctx.projectRoot, target)));
   const queryRangeEntries = [];
   if (!symbol && typeof input.query === "string" && input.query.trim() && requestedPaths.length) {
     for (const target of uniquePaths(requestedPaths).slice(0, 4)) {
@@ -32994,7 +33126,7 @@ async function inspectPipeline(ctx, input = {}) {
       if (ranges.length) queryRangeEntries.push({ path: target, ranges });
     }
   }
-  const inspectPaths = requestedPaths.flatMap((target) => expandInspectTargets(ctx.projectRoot, target));
+  const inspectPaths = requestedPaths.flatMap((target) => expandInspectTargets(ctx.projectRoot, target)).map((target) => normalizeInspectTargetPath(ctx.projectRoot, target));
   const inspectFileChars = inspectPaths.map((target) => {
     try {
       const stat = fs11.statSync(path11.join(ctx.projectRoot, target));
@@ -33012,7 +33144,8 @@ async function inspectPipeline(ctx, input = {}) {
   for (const entry of Array.isArray(input.ranges) ? input.ranges : []) {
     if (!entry || typeof entry !== "object" || typeof entry.path !== "string") continue;
     const normalized = normalizeRanges(entry.ranges);
-    if (normalized.length) perPathRanges.set(entry.path.replace(/^\.\//, ""), normalized);
+    const rangePath = normalizeInspectTargetPath(ctx.projectRoot, entry.path);
+    if (normalized.length && rangePath) perPathRanges.set(rangePath.replace(/^\.\//, ""), normalized);
   }
   for (const entry of queryRangeEntries) {
     const normalized = normalizeRanges(entry.ranges);
@@ -33302,8 +33435,10 @@ ${diag}`);
   const triageLines = [];
   const failureEvidence = failureLines.join("\n\n");
   const obviousRootCause = /(?:not implemented|unimplemented|syntaxerror|cannot find module|module_not_found)/i.test(failureEvidence);
-  const triageRequested = input.autoTriage === true || profile?.autoTriage === true;
-  const autoTriage = input.autoTriage === false ? false : triageRequested || !obviousRootCause && !isFull && failureEvidence.length > MICRO_TRIAGE_MIN_CHARS;
+  const explicitTriage = input.autoTriage === true;
+  const profileTriage = profile?.autoTriage === true;
+  const evidenceWorthTriage = !obviousRootCause && !isFull && failureEvidence.length > MICRO_TRIAGE_MIN_CHARS;
+  const autoTriage = input.autoTriage === false ? false : explicitTriage || evidenceWorthTriage || profileTriage && !obviousRootCause && !isFull;
   const triageEvidence = failureEvidence.length > 6e3 ? `${failureEvidence.slice(0, 4800)}
 
 ...[middle omitted]...
@@ -33447,8 +33582,13 @@ ${text2}`;
       "- Reused passing receipt(s): " + receiptReuse.imported.join(", ") + " (state hash matches current workspace)."
     );
   }
-  if (wantsVerify && !session.receipts.some((receipt) => receipt.exitCode === 0)) {
-    const commands = shipVerifyCommands;
+  const currentFingerprint = workspaceFingerprint(ctx.projectRoot);
+  const hasCurrentPass = (command) => (session.receipts || []).some(
+    (receipt) => receipt.exitCode === 0 && sameReceiptCommand(receipt, { command, cwd: null }) && receipt.stateHash === currentFingerprint
+  );
+  const commandsToRun = shipVerifyCommands.filter((command) => !hasCurrentPass(command));
+  if (wantsVerify && commandsToRun.length) {
+    const commands = commandsToRun;
     for (const command of commands) {
       const res = await caps.run({ command, maxChars: profile.maxChars, timeoutMs: profile.timeoutMs });
       if (res.ok) {
@@ -33461,9 +33601,10 @@ ${text2}`;
     }
     session = store.current;
   }
-  const green = (session.receipts || []).filter((receipt) => receipt.exitCode === 0);
-  const superseded = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === "superseded");
-  const unresolved = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === "unresolved");
+  const sessionReceipts = session.receipts || [];
+  const green = sessionReceipts.filter((receipt) => receipt.exitCode === 0);
+  const superseded = sessionReceipts.filter((receipt) => effectiveReceiptStatus(receipt, sessionReceipts) === "superseded");
+  const unresolved = sessionReceipts.filter((receipt) => effectiveReceiptStatus(receipt, sessionReceipts) === "unresolved");
   const unverified = green.length === 0 && unresolved.length === 0;
   const allowUnverified = input.allowUnverified === true || input.force === true;
   const hasWork = (session.touchedFiles || []).length > 0 || (session.receipts || []).length > 0;
@@ -33771,6 +33912,27 @@ function countPipelineTool(steps, toolName, projectRoot) {
     }
   }, 0);
 }
+function pipelineHasBaselineVerify(steps, profile, projectRoot) {
+  const configured = Array.isArray(profile?.verify) ? profile.verify.filter((command) => typeof command === "string" && command.trim()).map(normalizeVerificationCommand) : [];
+  for (const step of collectPipelineActionSpecs(steps)) {
+    let normalized;
+    try {
+      normalized = normalizeAction(step, projectRoot);
+    } catch (_) {
+      continue;
+    }
+    if (normalized.tool !== "verify") continue;
+    const input = normalized.input || {};
+    const explicitCommands = [
+      ...verifyCommandsFromInput(input.commands ?? input.verify, {}),
+      ...typeof input.command === "string" && input.command.trim() ? [input.command] : []
+    ];
+    if (!explicitCommands.length) return true;
+    const normalizedExplicit = explicitCommands.map(normalizeVerificationCommand);
+    if (configured.some((command) => normalizedExplicit.includes(command))) return true;
+  }
+  return false;
+}
 function inspectHasExplicitTarget(input = {}) {
   return Boolean(input.symbol) || input.startLine !== void 0 || input.endLine !== void 0 || Array.isArray(input.ranges) && input.ranges.length > 0;
 }
@@ -33902,6 +34064,35 @@ async function workPipeline(ctx, input = {}) {
   });
   return result.replace(/^# ContextOS pipeline/, "# ContextOS work").replace(/^pipeline=/m, "work=");
 }
+function extractDecisionCoveredPaths(output = "") {
+  const covered = /* @__PURE__ */ new Set();
+  const source = String(output);
+  const patterns = [
+    /^- `([^`\n]+)` \([^)]*\)/gm,
+    /^- Test contract `([^`\n]+)`:/gm
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const candidate = String(match[1] || "").trim().replace(/^\.\//, "");
+      if (!candidate || !candidate.includes("/") && !candidate.includes(".")) continue;
+      covered.add(candidate);
+    }
+  }
+  return covered;
+}
+function requestedInspectPaths(input = {}) {
+  return [
+    input.path,
+    ...Array.isArray(input.paths) ? input.paths : [],
+    ...Array.isArray(input.globs) ? input.globs : []
+  ].filter((value) => typeof value === "string" && value.trim()).map((value) => value.trim().replace(/^\\.\//, ""));
+}
+function inspectCoveredByDecision(normalized, coveredPaths) {
+  if (normalized?.tool !== "inspect" || !coveredPaths?.size) return false;
+  if (normalized.input?.allowExplicitBatchInspect === true) return false;
+  const requested = requestedInspectPaths(normalized.input);
+  return requested.length > 0 && requested.every((target) => coveredPaths.has(target));
+}
 async function pipelinePipeline(ctx, input = {}) {
   let steps = input.steps || input.flow || input.actions;
   if (!steps) {
@@ -33911,6 +34102,22 @@ async function pipelinePipeline(ctx, input = {}) {
   }
   if (!Array.isArray(steps) || !steps.length) {
     return "# ContextOS pipeline\n- No steps provided in pipeline. Pass `steps: [...]`, `chain: [...]`, or `parallel: [...]`.";
+  }
+  let autoBaselineVerify = false;
+  const initialExploreCount = countPipelineTool(steps, "explore", ctx.projectRoot);
+  const initialMutationCount = ["change", "work", "ship"].reduce((count, toolName) => count + countPipelineTool(steps, toolName, ctx.projectRoot), 0);
+  if (initialExploreCount > 0 && !pipelineHasBaselineVerify(steps, ctx.profile, ctx.projectRoot) && initialMutationCount === 0 && input.autoVerify !== false) {
+    const commands = verifyCommandsFromInput(true, ctx.profile);
+    if (commands.length) {
+      steps = [...steps, {
+        tool: "verify",
+        args: {
+          commands,
+          ...input.autoTriage !== void 0 ? { autoTriage: input.autoTriage } : {}
+        }
+      }];
+      autoBaselineVerify = true;
+    }
   }
   const explicitlyFull = input.full === true || input.budget === "full" || input.mode === "full";
   const nestedFull = requestsFullOutput(steps);
@@ -33929,10 +34136,12 @@ async function pipelinePipeline(ctx, input = {}) {
   let haltReason = null;
   let failureCount = 0;
   let executedActions = 0;
+  let decisionExploreSeen = false;
+  let decisionCoveredPaths = /* @__PURE__ */ new Set();
   const batchStartedAt = Date.now();
   const batchInspectCount = countPipelineTool(steps, "inspect", ctx.projectRoot);
   const forceBatchInspectOutline = batchInspectCount > 1;
-  const continueOnFailure = input.continueOnFailure === true || requestsContinueOnFailure(steps);
+  const continueOnFailure = input.continueOnFailure === true || requestsContinueOnFailure(steps) || autoBaselineVerify;
   const branches = Array.isArray(input.branches) ? input.branches : [];
   const batchBudget = input.budget && typeof input.budget === "object" && !Array.isArray(input.budget) ? input.budget : {};
   const maxActions = Number.isFinite(Number(batchBudget.maxActions)) ? Math.max(1, Math.floor(Number(batchBudget.maxActions))) : null;
@@ -34058,8 +34267,29 @@ async function pipelinePipeline(ctx, input = {}) {
     }
     try {
       const normalized = guardBatchInspectAction(applyPipelineControls(normalizeAction(step, ctx.projectRoot), input), forceBatchInspectOutline);
+      if (inspectCoveredByDecision(normalized, decisionCoveredPaths)) {
+        const skippedOutput = `# ContextOS inspect
+
+- Skipped redundant inspect: the prior explore decision package already contains ${requestedInspectPaths(normalized.input).map((target) => `\`${target}\``).join(", ")}.
+- Next: mutate with change/work; do not replay the artifact.`;
+        results.push({
+          step: stepNum,
+          kind: "single",
+          tool: normalized.tool,
+          ok: true,
+          output: skippedOutput,
+          maxChars: skippedOutput.length,
+          requestedMaxChars: null
+        });
+        executedActions += 1;
+        continue;
+      }
       const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
       executedActions += 1;
+      if (normalized.tool === "explore" && /\bread_complete=true\b/.test(String(res ?? ""))) {
+        decisionExploreSeen = true;
+        decisionCoveredPaths = extractDecisionCoveredPaths(res);
+      }
       const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
       results.push({
         step: stepNum,
@@ -34262,11 +34492,28 @@ async function pipelinePipeline(ctx, input = {}) {
     });
     return `${artifactRef(output)}${summary}`.trim();
   }
-  function renderPipelineActionDetail(item) {
-    const budget = renderFull ? item.maxChars ?? responseBudget ?? PIPELINE_MAX_OUTPUT_CLIP : Math.min(
+  function isCompleteExploreDecision(item) {
+    if (item?.tool !== "explore") return false;
+    const output = String(item.output ?? "");
+    return /\bread_complete=true\b/.test(output) && /\bnext=change\(/.test(output) && !/\[response truncated\b/.test(output) && !/<!--\s*os-response\b[^\n]*\bartifact=/.test(output);
+  }
+  function actionRenderBudget(item) {
+    if (renderFull) {
+      return item.maxChars ?? responseBudget ?? PIPELINE_MAX_OUTPUT_CLIP;
+    }
+    if (isCompleteExploreDecision(item)) {
+      return Math.min(
+        item.maxChars ?? PIPELINE_EXPLORE_OUTPUT_CLIP,
+        responseBudget ?? PIPELINE_EXPLORE_OUTPUT_CLIP
+      );
+    }
+    return Math.min(
       item.maxChars ?? PIPELINE_MAX_OUTPUT_CLIP,
       summaryBudgetFor(item.tool)
     );
+  }
+  function renderPipelineActionDetail(item) {
+    const budget = actionRenderBudget(item);
     const detail = formatPipelineOutput(item.output, budget);
     if (!detail) return "";
     if (item.tool === "explore" || item.tool === "inspect") return `
@@ -34328,19 +34575,29 @@ ${detail}`;
     const items = result.items || [result];
     return items.some((item) => {
       if (!item?.ok) return false;
-      if (/\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? ""))) return true;
-      const limit = Math.min(item.maxChars ?? Infinity, summaryBudgetFor(item.tool));
-      return outputLength(item.output) > limit;
+      const completeExplore = isCompleteExploreDecision(item);
+      if (/\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? "")) && !completeExplore) {
+        return true;
+      }
+      return outputLength(item.output) > actionRenderBudget(item);
     });
   });
   const exploreIncomplete = results.some((result) => {
     const items = result.items || [result];
-    return items.some((item) => item?.tool === "explore" && /read_complete=false\b/.test(String(item.output || "")));
+    return items.some((item) => {
+      if (item?.tool !== "explore") return false;
+      const output = String(item.output || "");
+      if (/\bread_complete=false\b/.test(output)) return true;
+      return /\bread_complete=true\b/.test(output) && !isCompleteExploreDecision(item);
+    });
   });
   const decisionReady = decisionPackage && !exploreIncomplete && !summaryTruncated && lines.join("\n").length <= responseBudget;
   if (decisionReady) {
+    for (let index = 0; index < lines.length; index += 1) {
+      lines[index] = lines[index].replace(/\s+artifact=[A-Za-z0-9._-]+/g, "");
+    }
     lines[0] += " decision=complete";
-    lines.push("decision=complete read_complete=true do_not_reread=true next=change({edits,verify,architecture}); after_pass=finalize_without_speculative_edits");
+    lines.push("decision=complete read_complete=true do_not_reread=true native_mutation=forbidden after_read_complete=change_or_work_only next=change({edits,verify,architecture}); after_pass=finalize_without_speculative_edits");
   } else if (decisionPackage && exploreIncomplete) {
     lines[0] += " decision=partial";
     lines.push("decision=partial read_complete=false; perform the named bounded recovery read, then mutate or verify.");
@@ -34378,11 +34635,11 @@ var init_pipelines = __esm({
     await init_code_tools();
     OUTLINE_CLIP = 1200;
     INSPECT_INLINE_MAX_CHARS = 2500;
-    INSPECT_BATCH_INLINE_MAX_CHARS = 12e3;
-    INSPECT_BATCH_INLINE_MAX_FILES = 8;
+    INSPECT_BATCH_INLINE_MAX_CHARS = 32e3;
+    INSPECT_BATCH_INLINE_MAX_FILES = 24;
     SMALL_WORKSPACE_MAX_CHARS = 16e3;
     SMALL_WORKSPACE_MAX_FILES = 24;
-    SMALL_WORKSPACE_CRITICAL_MAX_FILES = 16;
+    SMALL_WORKSPACE_CRITICAL_MAX_FILES = SMALL_WORKSPACE_MAX_FILES;
     DECISION_SOURCE_FILE_MAX_CHARS = 8e3;
     DECISION_SOURCE_TOTAL_MAX_CHARS = 18e3;
     INSPECT_RECOVERY_OUTPUT_MAX_CHARS = 32e3;
@@ -35617,6 +35874,10 @@ ${resolvedInput.input}
       shortCircuitReason: kind
     },
     delivery: requestedDelivery,
+    withOS,
+    executionMode: withOS ? toolExecutionTrace.length > 0 ? "executor" : "executor-idle" : "summarizer-only",
+    summarizerOnly: !withOS,
+    hostTurnsSaved: step,
     budgetExceeded: kind,
     budgetDecision: {
       action: kind === "requests" ? "narrow_or_raise_requests" : kind === "inputTokens" ? "narrow_or_raise_input" : kind === "cost" ? "narrow_or_raise_cost" : "narrow_or_raise_provider_tokens",
@@ -35687,7 +35948,11 @@ ${resolvedInput.input}
           toolRounds: step,
           shortCircuited: false
         },
-        delivery: requestedDelivery
+        delivery: requestedDelivery,
+        withOS,
+        executionMode: withOS ? toolExecutionTrace.length > 0 ? "executor" : "executor-idle" : "summarizer-only",
+        summarizerOnly: !withOS,
+        hostTurnsSaved: step
       };
     }
     const data = res.data;
@@ -53803,13 +54068,16 @@ function convergenceHint(projectRoot, sessionId, tool, input, semanticReceipt) {
   if (count < CONVERGENCE_DISCOVERY_LIMIT) return null;
   return `${count} discovery/diagnostic calls since the last mutation or verification; converge with one bounded work/change/verify or a dependent pipeline. Result returned in full.`;
 }
-function shouldAutoVerifyExplore(input = {}) {
+function shouldAutoVerifyExplore(input = {}, commands = []) {
   if (input.autoVerify === false || input.verify === false) return false;
+  if (!Array.isArray(commands) || commands.length === 0) return false;
   const intent = String(input.intent || "");
+  const task = String(input.task || "");
   const repairIntent = /(?:修复|失败|报错|缺陷|故障|诊断|fix(?:ing)?|fail(?:ing|ure)?|error|bug|debug|repair|diagnos(?:e|is|tic)|regression)/i.test(intent);
   const implementationIntent = /(?:实现|开发|修改|重构|implement(?:ation|ing|s)?|develop(?:ment|ing)?|feature|refactor(?:ing)?|modify|modification|update|build)/i.test(intent);
   const verificationIntent = /(?:测试|验证|校验|test(?:s|ing)?|spec(?:s)?|verify|verification|failure(?:s)?|error(?:s)?)/i.test(intent);
-  return repairIntent || implementationIntent && verificationIntent;
+  const taskVerificationIntent = /(?:基线|baseline|测试|验证|校验|验收|acceptance|test(?:s|ing)?|spec(?:s)?|verify|verification)/i.test(task);
+  return repairIntent || implementationIntent && verificationIntent || taskVerificationIntent;
 }
 function exploreBaselineCommands(input = {}, profile = {}) {
   if (input.verify === true) {
@@ -53857,9 +54125,17 @@ function semanticOpsReuse(spec, receipt) {
     "- Prior diagnostic replay suppressed; use refresh:true or dedupeReads:false for fresh state."
   ].join("\n");
 }
+function isDecisionArtifactKind(kind) {
+  return kind === "response:pipeline" || kind === "response:explore" || kind === "response:work";
+}
 function compactPipelineArtifactPreview(projectRoot, artifact, maxChars = 1400) {
-  if (!artifact || artifact.kind !== "response:pipeline") return null;
+  if (!artifact || !isDecisionArtifactKind(artifact.kind)) return null;
   try {
+    if (artifact.kind !== "response:pipeline") {
+      const preview2 = readArtifact(projectRoot, artifact.id, { maxChars, lineNumbers: false });
+      if (!preview2?.text) return null;
+      return `${preview2.text}${preview2.truncated ? "\n[preview clipped; raw replay requires allowRawPipeline:true plus auditReason]" : ""}`;
+    }
     const full = readArtifact(projectRoot, artifact.id, { maxChars: Infinity, lineNumbers: false });
     const payload = full && !full.truncated ? JSON.parse(full.text) : null;
     if (!payload || !Array.isArray(payload.steps)) return null;
@@ -54500,7 +54776,7 @@ var Orchestrator = class {
           case "explore": {
             const baselineCommands = exploreBaselineCommands(input, ctx.profile);
             const inferredCommands = baselineCommands.length ? baselineCommands : Array.isArray(ctx.profile?.verify) ? ctx.profile.verify.filter(Boolean) : [];
-            if (!internal && !exploreReceipt && shouldAutoVerifyExplore(input) && inferredCommands.length) {
+            if (!internal && !exploreReceipt && shouldAutoVerifyExplore(input, inferredCommands) && inferredCommands.length) {
               result = await pipelinePipeline(ctx, {
                 steps: [
                   { tool: "explore", args: { ...input, autoVerify: false } },
@@ -54579,17 +54855,14 @@ var Orchestrator = class {
         attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
         hostHint
       );
-      let decisionPackage = null;
-      if (!internal) {
-        decisionPackage = decisionPackageMetadata(tool, result);
-        if (decisionPackage && typeof this.store.markDecisionPackage === "function") {
-          this.store.markDecisionPackage({
-            tool,
-            status: decisionPackage.status,
-            artifactId: decisionPackage.artifactId,
-            receiptId: decisionPackage.receiptId
-          });
-        }
+      const decisionPackage = decisionPackageMetadata(tool, result);
+      if (!internal && decisionPackage && typeof this.store.markDecisionPackage === "function") {
+        this.store.markDecisionPackage({
+          tool,
+          status: decisionPackage.status,
+          artifactId: decisionPackage.artifactId,
+          receiptId: decisionPackage.receiptId
+        });
       }
       const responseArgs = input.args && typeof input.args === "object" && !Array.isArray(input.args) ? input.args : {};
       const nestedRequests = nestedResponseRequests(input);
@@ -54754,6 +55027,15 @@ var Orchestrator = class {
       case "chain":
         return render(await service.chain({ ...args2, action }));
       case "code":
+        if (action === "help" || !action && !args2.path && !args2.query) {
+          return [
+            "# ContextOS code",
+            '- Read: `ops({ capability: "code", action: "read", path, ranges })`.',
+            '- Search: `ops({ capability: "code", action: "search", query, root|paths })`.',
+            "- Mutate: prefer `change({ edits: [{ path, target|startLine+endLine, replacement }], verify })`.",
+            "- Full-file edit: `change({ edits: [{ path, content, fullFile: true }], verify })`."
+          ].join("\n");
+        }
         if (action === "read" && args2.dedupeReads !== false && !isExplicitReadReplay(args2)) {
           const spec = codeReadMemoSpec(this.projectRoot, args2);
           if (spec) {
@@ -54812,7 +55094,7 @@ var Orchestrator = class {
             };
             if (artifactId) {
               const artifactStat = statArtifact(this.projectRoot, artifactId);
-              if (artifactStat?.kind === "response:pipeline") {
+              if (isDecisionArtifactKind(artifactStat?.kind)) {
                 const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 900);
                 diagnostic.artifact = {
                   id: artifactId,
@@ -54867,14 +55149,14 @@ var Orchestrator = class {
         return render(loadProfile(this.projectRoot));
       }
       case "artifact": {
-        if (action === "read") {
+        if (action === "read" || action === "get" || action === "open") {
           const artifactId = args2.id || args2.artifactId || args2.artifact;
           const artifactStat = statArtifact(this.projectRoot, artifactId);
-          const pipelineArtifact = artifactStat?.kind === "response:pipeline";
+          const decisionArtifact = isDecisionArtifactKind(artifactStat?.kind);
           const auditReason = typeof args2.auditReason === "string" ? args2.auditReason.trim() : "";
           const rawPipelineRequested = args2.allowRawPipeline === true;
           const allowRawPipeline = rawPipelineRequested && auditReason.length > 0;
-          const fullArtifact = (args2.full === true || args2.budget === "full") && (!pipelineArtifact || allowRawPipeline);
+          const fullArtifact = (args2.full === true || args2.budget === "full") && (!decisionArtifact || allowRawPipeline);
           const requestedArtifactChars = Number(args2.maxChars);
           const artifactReadArgs = {
             ...args2,
@@ -54884,14 +55166,14 @@ var Orchestrator = class {
           const artifact = readArtifact(this.projectRoot, artifactId, artifactReadArgs);
           if (!artifact) return `# ContextOS artifact
 - Not found: \`${artifactId || "(missing)"}\``;
-          const canPreviewPipeline = pipelineArtifact && !allowRawPipeline && !args2.grep && args2.startLine === void 0 && args2.endLine === void 0;
-          if (canPreviewPipeline) {
+          const canPreviewDecision = decisionArtifact && !allowRawPipeline && !args2.grep && args2.startLine === void 0 && args2.endLine === void 0;
+          if (canPreviewDecision) {
             const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 1400);
             if (preview) {
               return [
                 `# ContextOS artifact ${artifact.id}`,
-                `- Pipeline preview (decision package); fullChars=${artifactStat.contentChars}.`,
-                "- Next: use `change`/`work` directly; raw Pipeline replay requires `allowRawPipeline:true` plus a non-empty `auditReason` for an intentional audit.",
+                `- Decision artifact preview (${artifactStat.kind}); fullChars=${artifactStat.contentChars}.`,
+                "- Next: use `change`/`work` directly; raw replay requires `allowRawPipeline:true` plus a non-empty `auditReason` for an intentional audit.",
                 "",
                 "```text",
                 preview,
@@ -54923,7 +55205,7 @@ var Orchestrator = class {
             totalBytes: result.totalBytes || 0
           });
         }
-        throw new Error(`Unknown artifact action '${action}'. Available: read, stat, list, evict`);
+        throw new Error(`Unknown artifact action '${action}'. Available: read, get, open, stat, list, evict`);
       }
       case "telemetry": {
         if (action === "audit") {
@@ -54981,6 +55263,23 @@ var Orchestrator = class {
       }
       case "micro": {
         const microConfig = ctx.profile?.micro || {};
+        if (action === "help" || action === "schema") {
+          return render({
+            ok: true,
+            local: true,
+            capability: "micro",
+            actions: ["doctor", "run", "batch"],
+            sessionActions: ["create", "send", "get", "list", "close", "delete"],
+            executor: {
+              withOS: true,
+              invocation: {
+                tools: { enabled: true, allowCommands: true },
+                provider: { maxRequests: 5 }
+              }
+            },
+            note: "Micro help is resolved locally and never calls the provider."
+          });
+        }
         if (action === "doctor") {
           const checks = [
             { name: "url", ok: Boolean(microConfig.url), value: microConfig.url || null },
@@ -63296,7 +63595,9 @@ function createV3Server({
         description: "Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; search/create aliases; micro=evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.",
         inputSchema: {
           action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops", "search", "create"]),
+          capability: string2().optional(),
           args: record(any()).optional(),
+          arguments: record(any()).optional(),
           projectRoot: string2().describe("Absolute repository root."),
           refresh: boolean2().optional().describe("Force a fresh read instead of reusing a compact receipt."),
           dedupeReads: boolean2().optional().describe("Set false to bypass read deduplication."),
@@ -63318,13 +63619,24 @@ function createV3Server({
           paths: array(string2()).optional(),
           symbol: string2().optional(),
           query: string2().optional(),
-          ranges: array(record(any())).optional(),
+          ranges: array(union([array(number2()), record(any())])).optional(),
           startLine: number2().optional(),
-          endLine: number2().optional()
+          endLine: number2().optional(),
+          preset: string2().optional(),
+          task: string2().optional(),
+          pipeline: record(any()).optional(),
+          pipelines: any().optional(),
+          withOS: boolean2().optional(),
+          invocation: record(any()).optional(),
+          delivery: string2().optional(),
+          provider: record(any()).optional(),
+          inputRef: string2().optional(),
+          inputArtifact: string2().optional(),
+          inputReceipt: string2().optional()
         }
       },
       async (input) => {
-        const args2 = { ...input.args || {} };
+        const args2 = { ...input.arguments || {}, ...input.args || {} };
         for (const control of ["refresh", "dedupeReads", "full", "budget", "maxChars", "maxLogBytes"]) {
           if (input[control] !== void 0) args2[control] = input[control];
         }
@@ -63349,10 +63661,203 @@ function createV3Server({
         ]) {
           if (input[field] !== void 0) args2[field] = input[field];
         }
+        for (const field of [
+          "preset",
+          "task",
+          "pipeline",
+          "pipelines",
+          "withOS",
+          "invocation",
+          "delivery",
+          "provider",
+          "inputRef",
+          "inputArtifact",
+          "inputReceipt"
+        ]) {
+          if (input[field] !== void 0) args2[field] = input[field];
+        }
         if (input.action === "search" && args2.search === void 0) {
           args2.search = { query: input.query ?? input.search ?? "" };
         }
         const compactAction = input.action === "search" || input.action === "explore" && input.search !== void 0 ? "work" : input.action === "create" ? "change" : input.action;
+        if (compactAction === "ops" && input.capability !== void 0 && args2.capability === void 0) {
+          args2.capability = input.capability;
+        }
+        if (compactAction === "ops") {
+          const knownCapabilities = /* @__PURE__ */ new Set([
+            "os_context",
+            "plan",
+            "task",
+            "block",
+            "chain",
+            "code",
+            "run_command",
+            "process",
+            "knowledge",
+            "session",
+            "system",
+            "profile",
+            "micro",
+            "artifact",
+            "telemetry"
+          ]);
+          if (!args2.capability && knownCapabilities.has(args2.action)) {
+            args2.capability = args2.action;
+          }
+          if (args2.capability === "run_command" && args2.command === void 0 && Array.isArray(args2.commands)) {
+            args2.command = args2.commands.filter((entry) => typeof entry === "string" && entry.trim()).join(" && ");
+          }
+        }
+        const normalizeRange = (range) => {
+          const startLine = Number(Array.isArray(range) ? range[0] : range?.startLine ?? range?.start);
+          const endLine = Number(Array.isArray(range) ? range[1] : range?.endLine ?? range?.end);
+          return Number.isFinite(startLine) && Number.isFinite(endLine) && endLine >= startLine ? { startLine, endLine } : null;
+        };
+        const rangesByPath = (values) => {
+          const grouped = /* @__PURE__ */ new Map();
+          for (const entry of Array.isArray(values) ? values : []) {
+            const rangePath = typeof entry?.path === "string" ? entry.path : null;
+            const range = normalizeRange(entry);
+            if (!rangePath || !range) continue;
+            const list = grouped.get(rangePath) || [];
+            list.push(range);
+            grouped.set(rangePath, list);
+          }
+          return grouped;
+        };
+        if (compactAction === "inspect" || compactAction === "work") {
+          if (typeof args2.inspect === "string") {
+            args2.inspect = {
+              path: args2.inspect,
+              ...args2.ranges !== void 0 ? { ranges: args2.ranges } : {},
+              ...args2.budget !== void 0 ? { budget: args2.budget } : {}
+            };
+          }
+          if (args2.inspect && typeof args2.inspect === "object" && !Array.isArray(args2.inspect) && Array.isArray(args2.inspect.paths)) {
+            const nestedInspect = args2.inspect;
+            args2.inspect = nestedInspect.paths.map((target) => ({
+              path: target,
+              ...nestedInspect.budget !== void 0 ? { budget: nestedInspect.budget } : {},
+              ...nestedInspect.ranges !== void 0 ? { ranges: nestedInspect.ranges } : {}
+            }));
+          }
+          if (Array.isArray(args2.inspect)) {
+            args2.inspect = args2.inspect.map((entry) => {
+              if (typeof entry === "string") return { path: entry };
+              if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+              const normalized = entry.full === true && entry.budget === void 0 ? { ...entry, budget: "full" } : entry;
+              const grouped = rangesByPath(normalized.ranges);
+              if (grouped.size === 1 && !normalized.path) {
+                const [rangePath, ranges] = [...grouped.entries()][0];
+                return { ...normalized, path: rangePath, ranges };
+              }
+              return normalized;
+            });
+            const inspectBudgets = args2.inspect.map((entry) => entry?.budget).filter((value) => value !== void 0);
+            if (args2.budget === void 0 && inspectBudgets.length && inspectBudgets.every((value) => value === inspectBudgets[0])) {
+              args2.budget = inspectBudgets[0];
+            }
+          }
+          if (args2.full === true && args2.budget === void 0) args2.budget = "full";
+          if (!args2.inspect && Array.isArray(args2.ranges)) {
+            const grouped = rangesByPath(args2.ranges);
+            if (grouped.size) {
+              args2.inspect = [...grouped.entries()].map(([target, ranges]) => ({ path: target, ranges }));
+            }
+          }
+          if (!args2.inspect && typeof args2.path === "string") {
+            args2.inspect = {
+              path: args2.path,
+              ...args2.ranges !== void 0 ? { ranges: args2.ranges } : {},
+              ...args2.budget !== void 0 ? { budget: args2.budget } : {}
+            };
+          }
+          if (!args2.inspect && Array.isArray(args2.paths)) {
+            args2.inspect = args2.paths.map((target) => ({
+              path: target,
+              ...args2.budget !== void 0 ? { budget: args2.budget } : {}
+            }));
+          }
+        }
+        if (Array.isArray(args2.edits)) {
+          args2.edits = args2.edits.map((spec) => {
+            if (!spec || typeof spec !== "object" || Array.isArray(spec)) return spec;
+            const contentOnly = spec.content !== void 0 && spec.replacement === void 0 && spec.replacementContent === void 0 && spec.target === void 0 && spec.symbol === void 0 && spec.startLine === void 0 && spec.fullFile !== true;
+            return contentOnly ? { ...spec, fullFile: true, replacement: spec.content } : spec;
+          });
+        }
+        if (compactAction === "pipeline" && args2.pipeline && typeof args2.pipeline === "object") {
+          const nestedPipeline = args2.pipeline;
+          delete args2.pipeline;
+          for (const field of ["steps", "chain", "parallel", "mode", "budget", "branches"]) {
+            if (args2[field] === void 0 && nestedPipeline[field] !== void 0) {
+              args2[field] = nestedPipeline[field];
+            }
+          }
+          if (args2.steps === void 0 && Array.isArray(nestedPipeline.stages)) {
+            args2.steps = nestedPipeline.stages.map((stage) => {
+              if (!stage || typeof stage !== "object" || Array.isArray(stage)) return stage;
+              const tool = stage.tool || stage.action || stage.type;
+              const { tool: _tool, action: _action, type: _type, args: stageArgs, ...stageBody } = stage;
+              return {
+                tool,
+                args: {
+                  ...stageBody,
+                  ...stageArgs && typeof stageArgs === "object" && !Array.isArray(stageArgs) ? stageArgs : {}
+                }
+              };
+            });
+          }
+          if (args2.steps === void 0) {
+            const actionKeys = ["explore", "inspect", "verify", "search", "change", "work", "ops", "run_command", "ship"];
+            const shorthandSteps = [];
+            for (const key of actionKeys) {
+              const value = nestedPipeline[key];
+              if (value === void 0 || value === null || value === false) continue;
+              let stepArgs = value === true ? {} : typeof value === "object" && !Array.isArray(value) ? value : { value };
+              if (key === "explore" && args2.intent !== void 0 && stepArgs.intent === void 0) {
+                stepArgs = { ...stepArgs, intent: args2.intent };
+              }
+              if (key === "explore" && stepArgs.task !== void 0 && stepArgs.intent === void 0) {
+                stepArgs = { ...stepArgs, intent: stepArgs.task };
+              }
+              if (key === "verify" && args2.maxLogBytes !== void 0 && stepArgs.maxLogBytes === void 0) {
+                stepArgs = { ...stepArgs, maxLogBytes: args2.maxLogBytes };
+              }
+              shorthandSteps.push({ tool: key, args: stepArgs });
+            }
+            if (shorthandSteps.length) args2.steps = shorthandSteps;
+          }
+          if (args2.steps === void 0 && typeof (nestedPipeline.task || args2.task) === "string") {
+            const task = nestedPipeline.task || args2.task;
+            args2.steps = [
+              { tool: "explore", args: { intent: task } },
+              { tool: "verify", args: {} }
+            ];
+          }
+        }
+        if (compactAction === "pipeline" && args2.steps === void 0 && typeof args2.task === "string" && args2.task.trim()) {
+          args2.steps = [
+            { tool: "explore", args: { intent: args2.task } },
+            { tool: "verify", args: {} }
+          ];
+        }
+        if (compactAction === "pipeline" && args2.continueOnFailure === void 0) {
+          const toolsInPipeline = /* @__PURE__ */ new Set();
+          const collectPipelineTools = (items) => {
+            if (!Array.isArray(items)) return;
+            for (const item of items) {
+              if (Array.isArray(item)) collectPipelineTools(item);
+              else if (item && Array.isArray(item.parallel)) collectPipelineTools(item.parallel);
+              else if (item && Array.isArray(item.chain)) collectPipelineTools(item.chain);
+              else if (item?.tool || item?.action) toolsInPipeline.add(item.tool || item.action);
+            }
+          };
+          collectPipelineTools(args2.steps);
+          if (toolsInPipeline.has("explore") && toolsInPipeline.has("verify")) {
+            args2.continueOnFailure = true;
+          }
+        }
         const payload = { ...args2, projectRoot: input.projectRoot };
         if (compactAction === "micro") {
           return textResult(await dispatch("ops", {
@@ -63396,7 +63901,7 @@ function createV3Server({
         path: string2().optional().describe("File path to inspect."),
         paths: array(string2()).optional().describe("Multiple file paths to inspect in parallel (batch inspection)."),
         globs: array(string2()).optional().describe("Glob patterns to resolve to repository files before inspection."),
-        ranges: array(object2({ startLine: number2(), endLine: number2() })).optional().describe("Multiple line ranges to inspect within the same file (e.g. [{ startLine: 1, endLine: 20 }])."),
+        ranges: array(union([array(number2()), object2({ startLine: number2(), endLine: number2() })])).optional().describe("Multiple line ranges to inspect within the same file (e.g. [[1, 20]] or [{ startLine: 1, endLine: 20 }])."),
         symbol: string2().optional().describe("Optional symbol/function name to slice."),
         startLine: number2().optional(),
         endLine: number2().optional(),

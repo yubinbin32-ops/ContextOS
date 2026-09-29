@@ -488,6 +488,9 @@ function projectProviderUsage(result) {
       providerRequests: Number(invocation.providerRequests ?? result?.providerRequests)
         || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0),
       toolRounds: Number(invocation.toolRounds ?? result?.steps) || 0,
+      toolCalls: Array.isArray(result?.toolCalls)
+        ? result.toolCalls.length
+        : (Number(invocation.toolCalls ?? result?.toolCallCount) || 0),
       shortCircuited: Boolean(invocation.shortCircuited),
       ...(invocation.shortCircuitReason ? { shortCircuitReason: invocation.shortCircuitReason } : {}),
     },

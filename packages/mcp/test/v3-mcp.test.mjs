@@ -70,6 +70,9 @@ test("V3 default surface exposes one compact transport tool", async () => {
     listing.tools[0].description.length < 600,
     `the per-request compact tool description must stay below 600 chars, got ${listing.tools[0].description.length}`,
   );
+  for (const field of ['pipeline', 'withOS', 'invocation', 'preset', 'task', 'delivery', 'provider']) {
+    assert.ok(listing.tools[0].inputSchema.properties[field], `compact micro field ${field} must remain visible`);
+  }
   const fixture = createFixtureProject({ prefix: "ctxos-v3-lean-work" });
   const work = await client.callTool({
     name: "contextos",
@@ -104,6 +107,145 @@ test("V3 default surface exposes one compact transport tool", async () => {
   assert.match(fixture.read("src/lean-work.mjs"), /value = 2/);
   await client.close();
   fixture.cleanup();
+});
+
+test("V3 compact normalizes common pipeline, range, capability, and edit shapes", async () => {
+  const server = createV3Server();
+  const client = new Client({ name: "contextos-v3-normalize-test", version: packageVersion });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-normalize" });
+  const text = (result) => (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+
+  try {
+    const shorthand = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "pipeline",
+        intent: "inspect math",
+        pipeline: { inspect: { path: "src/math.mjs" } },
+        projectRoot: fixture.root,
+      },
+    });
+    const shorthandText = text(shorthand);
+    assert.ok(!shorthand.isError, shorthandText);
+    assert.match(shorthandText, /pipeline=OK/);
+    assert.doesNotMatch(shorthandText, /No steps provided/);
+
+    const staged = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "pipeline",
+        pipeline: { stages: [{ type: "inspect", path: "src/math.mjs", full: true }] },
+        projectRoot: fixture.root,
+      },
+    });
+    const stagedText = text(staged);
+    assert.ok(!staged.isError, stagedText);
+    assert.match(stagedText, /pipeline=OK/);
+    assert.match(stagedText, /add\(a, b\)/);
+
+    const bare = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "pipeline",
+        task: "inspect math and verify the fixture",
+        projectRoot: fixture.root,
+      },
+    });
+    const bareText = text(bare);
+    assert.ok(!bare.isError, bareText);
+    assert.match(bareText, /pipeline=/);
+    assert.doesNotMatch(bareText, /No steps provided/);
+
+    const command = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "ops",
+        arguments: { action: "run_command", commands: ["git status --short"] },
+        projectRoot: fixture.root,
+      },
+    });
+    const commandText = text(command);
+    assert.match(commandText, /\"exitCode\":0/);
+    assert.match(commandText, /git status --short/);
+
+    const ranged = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "inspect",
+        ranges: [{ path: "src/math.mjs", startLine: 1, endLine: 1 }],
+        projectRoot: fixture.root,
+      },
+    });
+    assert.match(text(ranged), /add\(a, b\)/);
+
+    const rangedArray = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "inspect",
+        path: "src/math.mjs",
+        ranges: [[1, 1]],
+        budget: "full",
+        refresh: true,
+        dedupeReads: false,
+        projectRoot: fixture.root,
+      },
+    });
+    const rangedArrayText = text(rangedArray);
+    assert.match(rangedArrayText, /add\(a, b\)/);
+    assert.doesNotMatch(rangedArrayText, /return a \+ b;/);
+
+    const absoluteBatch = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "inspect",
+        paths: [
+          path.join(fixture.root, "src/math.mjs"),
+          path.join(fixture.root, "src/strings.mjs"),
+        ],
+        refresh: true,
+        dedupeReads: false,
+        projectRoot: fixture.root,
+      },
+    });
+    const absoluteBatchText = text(absoluteBatch);
+    assert.match(absoluteBatchText, /add\(a, b\)/);
+    assert.match(absoluteBatchText, /greet\(name\)/);
+    assert.doesNotMatch(absoluteBatchText, /AST Outline/);
+
+    const capability = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "ops",
+        capability: "code",
+        args: { action: "read", path: "src/math.mjs" },
+        refresh: true,
+        dedupeReads: false,
+        projectRoot: fixture.root,
+      },
+    });
+    const capabilityText = text(capability);
+    assert.match(capabilityText, /add\(a, b\)/);
+    assert.doesNotMatch(capabilityText, /Unknown capability 'undefined'/);
+
+    const edit = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "change",
+        edits: [{ path: "src/math.mjs", content: "export function add(a, b) {\n  return a + b + 1;\n}\n" }],
+        verify: ["node --check src/math.mjs"],
+        projectRoot: fixture.root,
+      },
+    });
+    const editText = text(edit);
+    assert.ok(!edit.isError, editText);
+    assert.match(editText, /done: verified/i);
+    assert.match(fixture.read("src/math.mjs"), /a \+ b \+ 1/);
+  } finally {
+    fixture.cleanup();
+    await client.close();
+  }
 });
 
 test("V3 compact search/create aliases route through work and change", async () => {

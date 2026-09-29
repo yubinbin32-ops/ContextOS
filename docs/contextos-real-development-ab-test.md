@@ -1111,3 +1111,73 @@ Micro 不是“把脏对话丢出去”就会自动省轮次。当前架构中�
 4. C 必须有一个超过 2KB 的真实失败证据任务，第一次 Micro 调用直接携带 pipeline evidence，并至少出现 `toolRounds>=2`、`toolCalls>=1`、`executionMode!=summarizer-only`；Micro provider token 计入总成本。
 5. 记录总请求、工具调用、ContextOS/Micro 调用、峰值 input、主模型 token、Micro provider token、总 token 和正确性；正确性不通过时收益无效。
 6. 最终目标仍是多步骤真实开发任务总 token 相对 native 下降 ≥70%；未达到时必须给出可复现瓶颈，不能把缺失 usage 或主线程省 token 当作收益。
+
+## 39. R42/R43 最终闭环：温度控制下的 ≥70% 有效样本
+
+### 39.1 控制条件
+
+- fixture commit：`6408896981f4b6a98c087b1e52d0db5a8ff6a13d`。
+- 模型：`deepseek-v4.1-flash`，`model_reasoning_effort=xhigh`，R43 run5 增加 `model_temperature=0`。
+- A/B/C 使用独立 clone、`CODEX_HOME`、`CONTEXTOS_HOME`、marketplace 与 MCP 进程，按 A → B → C 串行执行。
+- 三组提示词完全一致：`快速理解当前项目并修复失败验收。批量回放必须保留幂等键、冲突检测、终态、重试次数和事件顺序，并据此生成审计报告。不得修改测试或降低断言。完成生产代码后运行完整验收测试。`
+- 三组均在会话结束后由主控独立执行 `npm test`；三组生产代码均完成，测试文件未修改。
+
+### 39.2 R43 run5 指标
+
+| 组 | 请求 | 工具调用 | OS 调用 | Micro | 峰值 input | 总 token | 相对 A | 正确性 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| A Native | 14 | 23 | 0 | 0 | 31,633 | 307,243 | baseline | PASS 3/3 |
+| B OS | 5 | 4 | 2 | 0 | 21,816 | 79,299 | -74.2% | PASS 3/3 |
+| C OS+Micro | 5 | 4 | 2 | 0 | 24,031 | 83,779 | -72.7% | PASS 3/3 |
+
+B/C 的 OS 调用形状稳定为一次 `pipeline` + 一次 `change`，没有 `resume`、没有多轮 `inspect`、没有原生源码探索，也没有在 `change` 已 `verified and shipped` 后再次运行 `npm test`。C 的 Micro 配置可用，但这轮失败证据是明显的未实现桩函数且体积很小，按新门控正确地没有调用 Micro；把这类失败强塞给 Micro 只会增加 provider token。
+
+### 39.3 R43 迭代中的方差与失败样本
+
+| 运行 | A 总 token | B 总 token | C 总 token | 结论 |
+| --- | ---: | ---: | ---: | --- |
+| R43 run1 | 264,343 | 85,200 | 88,213（含 Micro 809） | B -67.8%，C -66.6%；形状已接近目标，但 C 有 summarizer-only 负调用 |
+| R43 run2 | 281,181 | 779,274 | 887,670 | 禁止读 Skill 的启动指令实验失败；宿主回退到 19–24 次原生命令 |
+| R43 run3 | 354,281 | 306,718 | 210,675 | Skill 压缩过度，宿主把决策拆成 10–14 个 OS 回合 |
+| R43 run4 | 269,440 | 119,916 | 108,815 | 协议恢复但未固定温度；宿主额外跑了 1 次原生验收 |
+| R43 run5 | 307,243 | 79,299 | 83,779 | `temperature=0` 后 B -74.2%、C -72.7%，达到目标 |
+
+结论：ContextOS 当前的上限已经能覆盖目标，但收益高度依赖宿主是否遵守“一个决策一次 OS 调用”。温度、Skill 完整度和工具返回形状会共同放大或抵消收益；单一运行不能替代重复样本。
+
+### 39.4 本轮根因与修复
+
+1. `shouldAutoVerifyExplore` 一度把任何非空 intent/task 都当成自动验证信号，导致信息型 explore 额外执行基线 verify。现在只对修复/实现+验证意图或显式任务验证词生效。
+2. `bindChangedArchitecture` 允许没有 Chain 成员的 Block 写入，迫使宿主再发一次 `change` 补 Chain。现在对未覆盖的准备态 Block 自动合成确定性的 `chain-changed-surface`，并保留既有 Chain 的成员合并语义。
+3. profile 的 `autoTriage=true` 会强制把明显的 `not implemented` 桩函数也送进 Micro，R43 run1 C 因此多花 809 token 的 summarizer-only 调用。现在显式 `autoTriage:true` 仍可强制；profile 自动分诊会跳过 obvious root cause 和 full-evidence 模式。
+4. Skill 不能压缩成只保留口号；宿主需要完整的“首调用 pipeline、禁止目录级重复 inspect、`change` 已 shipped 后立即收口、只绑定本次变更路径”协议。R43 run5 使用恢复后的完整协议。
+5. 架构 payload 改为只绑定本次变更路径，避免为了修两个文件枚举整个仓库。OS 仍要求每个 tracked path 有唯一 Block owner 和至少一个 Chain 成员。
+6. `model_temperature=0` 是控制宿主采样方差的关键实验变量；它不是 ContextOS 运行时依赖，但缺少它时宿主可能把一个决策拆成多个回合，从而掩盖 OS 的真实收益。
+
+### 39.5 Micro 的当前结论
+
+- 本轮 A/B/C 任务不需要 Micro：基线失败已经由 pipeline 的 compact verify 证据直接暴露，Micro 的 summarizer-only 路径是负收益。
+- 独立执行器探针已验证生命周期：`providerRequests=3`、`toolRounds=2`、`toolCalls=4`、`executionMode=executor`；主 Micro 调用约 11,633 provider token，另有 summarizer 766 token。
+- Micro 应按证据体积和任务边界路由：只有原始失败/日志证据超过约 2KB，或宿主明确分配一个 bounded executor 任务时才应启用；`errors-only` 适合 fire-and-forget，`defer`/`auto` 适合宿主还能继续工作的场景。
+
+### 39.6 剩余架构缺口
+
+- OS 无法拦截宿主原生工具；宿主仍可能在非零温度或指令遵循波动时额外跑一次 native `npm test`。当前依靠 Skill、工具描述和 `change` 的 `verified and shipped` 收口提示约束，尚未形成硬门禁。
+- convergence gate 目前是提示而非硬阻断；可在“已有 `read_complete=true` 决策包且没有 mutation/verify”时，把后续 standalone `explore`/`inspect` 直接拒绝，逼宿主进入 `change`/`work`。
+- 峰值 input 的下降仍有限（31.6k → 21.8k/24.0k）；主要收益来自请求数和工具链的坍缩，而不是单次返回的极端压缩。
+- 自动生成的 `chain-changed-surface` 保证结构完整，但语义质量仍取决于宿主提供的 Block 边界；后续需要在真实复杂任务中验证它不会成为“形式上有 Chain”的伪闭环。
+
+### 39.7 当前验证状态
+
+- `npm test`：PASS。
+- `npm run plugin:verify`：PASS。
+- `npm run plugin:build`：PASS；最终 bundle hash `5a389b18c9f074a36829c3ca416d58087f8499a6c06b92f4759136d393889dcc`。
+- R43 run5 A/B/C fixture：`npm test` 全部 PASS，测试文件未修改。
+- R43 run5 rollout：A `/Users/a1-6/ab-r43-run5/a.jsonl`，B `/Users/a1-6/ab-r43-run5/b.jsonl`，C `/Users/a1-6/ab-r43-run5/c.jsonl`。
+
+### 39.8 下一轮门槛
+
+1. 在同一 `temperature=0` 条件下至少重复 R43 run5 两次，报告 A/B/C 的中位数和分布，不能只拿单次最优样本。
+2. 增加 decision-packet 后只读硬门禁：`read_complete=true` 且无 mutation/verify 时，拒绝新的 standalone `explore`/`inspect`，只允许 `change`/`work` 或显式 recovery。
+3. 设计 C-only >2KB 原始失败证据任务，首次 Micro 调用直接携带 pipeline evidence，并同时记录 `providerRequests`、`toolRounds`、`toolCalls`、`executionMode` 与 provider token。
+4. 保持“只绑定本次变更路径”的架构负载约束，验证自动 `chain-changed-surface` 在复杂多模块任务中的语义正确性。
+5. 继续以总 token 相对 native 下降 ≥70%、请求/工具坍缩、峰值 input 和正确性四项一起作为有效样本门槛。

@@ -116,6 +116,54 @@ test('session history is compact by default and can target one closed session', 
   assert.ok(response.length < 2200, 'MCP history response must stay within the ops budget');
 });
 
+test('artifact get and open aliases resolve to bounded reads', async () => {
+  const projectRoot = makeTempProject();
+  storeArtifact(projectRoot, 'artifact alias body', { id: 'art-alias' });
+  const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
+
+  for (const action of ['get', 'open']) {
+    const response = await orchestrator.dispatch('ops', {
+      capability: 'artifact',
+      action,
+      args: { id: 'art-alias' },
+    });
+    assert.match(response, /artifact alias body/);
+  }
+});
+
+test('micro help resolves locally without a provider call', async () => {
+  const projectRoot = makeTempProject();
+  const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
+  const response = await orchestrator.dispatch('ops', {
+    capability: 'micro',
+    action: 'help',
+    args: {},
+  });
+  const parsed = JSON.parse(response);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.local, true);
+  assert.deepEqual(parsed.actions, ['doctor', 'run', 'batch']);
+  assert.equal(parsed.executor.withOS, true);
+  assert.equal(parsed.executor.invocation.provider.maxRequests, 5);
+});
+
+test('decision artifact reads preview instead of replaying raw explore output', async () => {
+  const projectRoot = makeTempProject();
+  storeArtifact(projectRoot, 'x'.repeat(12000), {
+    id: 'art-decision-explore',
+    kind: 'response:explore',
+  });
+  const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
+  const response = await orchestrator.dispatch('ops', {
+    capability: 'artifact',
+    action: 'get',
+    args: { id: 'art-decision-explore' },
+  });
+  assert.match(response, /Decision artifact preview/);
+  assert.ok(response.length < 2200, `decision preview must stay bounded, got ${response.length}`);
+  assert.ok(!response.includes('x'.repeat(2000)), 'raw explore transcript must not be replayed');
+});
+
 test('artifact eviction returns a compact requested-id receipt', async () => {
   const projectRoot = makeTempProject();
   storeArtifact(projectRoot, 'artifact body', { id: 'art-evict-me' });
@@ -225,7 +273,7 @@ test('pipeline artifacts reject raw replay without an explicit audit override', 
     full: true,
     maxChars: 30000,
   });
-  assert.match(guarded, /Pipeline preview/);
+  assert.match(guarded, /Decision artifact preview/);
   assert.match(guarded, /allowRawPipeline:true/);
   assert.match(guarded, /auditReason/);
   assert.ok(guarded.length < 2200, 'raw Pipeline replay must stay a bounded preview without an audit override');
@@ -237,7 +285,7 @@ test('pipeline artifacts reject raw replay without an explicit audit override', 
     full: true,
     allowRawPipeline: true,
   });
-  assert.match(missingReason, /Pipeline preview/);
+  assert.match(missingReason, /Decision artifact preview/);
   assert.match(missingReason, /auditReason/);
 
   const audited = await orchestrator.dispatch('ops', {
@@ -584,7 +632,7 @@ test('pipeline artifact reads return a compact preview unless raw output is expl
     action: 'read',
     args: { id: artifact.id },
   });
-  assert.match(preview, /Pipeline preview/);
+  assert.match(preview, /Decision artifact preview/);
   assert.match(preview, /tool=inspect OK/);
   assert.match(preview, /tool=verify FAIL/);
   assert.match(preview, /auditReason/);
@@ -933,6 +981,28 @@ test('change without edits binds architecture in the same call', async () => {
   );
 });
 
+test('change auto-composes uncovered Blocks into a changed-surface Chain', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('change', {
+    architecture: {
+      blocks: [{ id: 'block-api', title: 'API boundary', kind: 'service', paths: ['src/api.mjs'] }],
+    },
+  });
+
+  assert.match(result, /1 curated Block\(s\) bound/);
+  assert.match(result, /1 Chain\(s\) composed/);
+  assert.doesNotMatch(result, /NOT applied/);
+  const composed = service.calls.filter((call) =>
+    call.capability === 'chain' && call.args.action === 'compose'
+  );
+  assert.equal(composed.length, 1);
+  assert.equal(composed[0].args.chainData.id, 'chain-changed-surface');
+  assert.deepEqual(composed[0].args.chainData.memberIds, ['block-api']);
+});
+
 test('ship on an unverified reopened session points at receipt re-attachment', async () => {
   const projectRoot = makeTempProject();
   const service = fakeService();
@@ -975,6 +1045,46 @@ test('failed receipts are superseded only by the same command and remain explici
   assert.match(shipped, /Unresolved failures: 1/);
   assert.match(shipped, /\[SUPERSEDED\]/);
   assert.match(shipped, /\[UNRESOLVED\]/);
+});
+
+test('npm test and npm run test receipts share the same verification generation', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService({ exitCodes: [1, 0] });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const failed = await orchestrator.dispatch('verify', { command: 'npm run test' });
+  assert.match(failed, /Verdict: FAIL/);
+  const passed = await orchestrator.dispatch('verify', { command: 'npm test' });
+  assert.match(passed, /Verdict: PASS/);
+
+  const shipped = await orchestrator.dispatch('ship', { summary: 'alias verification generation' });
+  assert.match(shipped, /Superseded failures: 1/);
+  assert.doesNotMatch(shipped, /BLOCKED/);
+  assert.equal(orchestrator.store.current, null);
+});
+
+test('nested ship options survive a change verification closure', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService({ exitCodes: [1, 0] });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const failed = await orchestrator.dispatch('verify', { command: 'node --test retry.test.mjs' });
+  assert.match(failed, /Verdict: FAIL/);
+
+  const result = await orchestrator.dispatch('change', {
+    intent: 'repair and close',
+    edits: [{ path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 1;' }],
+    verify: ['node --test retry.test.mjs'],
+    ship: {
+      summary: 'repair verified',
+      allowUnverified: true,
+      reason: 'explicit closure after same-command PASS',
+    },
+  });
+
+  assert.match(result, /Ship: # ContextOS ship/);
+  assert.doesNotMatch(result, /BLOCKED/);
+  assert.equal(orchestrator.store.current, null);
 });
 
 test('verify reuses a passing receipt until a tracked file changes', async () => {
@@ -1384,9 +1494,12 @@ test('architecture payload preflight prevents partial Block writes when a Chain 
     },
   });
 
-  assert.match(result, /Architecture update needs attention/);
+  assert.match(result, /Architecture contract rejected before changeset/);
   assert.match(result, /chain-invalid cannot include missing Block/);
-  assert.equal(fs.readFileSync(path.join(projectRoot, 'src', 'math.mjs'), 'utf8'), 'export const PI = 3.14;\n');
+  assert.equal(
+    fs.readFileSync(path.join(projectRoot, 'src', 'math.mjs'), 'utf8'),
+    'export function add(a, b) {\n  return a + b;\n}\n'
+  );
   const blocks = await service.block({ action: 'list', includeRefs: true, limit: 100, offset: 0, format: 'json' });
   assert.equal(blocks.items.some((block) => block.id === 'block-math'), false);
 
@@ -1415,8 +1528,12 @@ test('architecture payload preflight rejects duplicate path owners before writin
     },
   });
 
-  assert.match(result, /Architecture update needs attention/);
+  assert.match(result, /Architecture contract rejected before changeset/);
   assert.match(result, /assigned to multiple Blocks/);
+  assert.equal(
+    fs.readFileSync(path.join(projectRoot, 'src', 'math.mjs'), 'utf8'),
+    'export function add(a, b) {\n  return a + b;\n}\n'
+  );
   const blocks = await service.block({ action: 'list', includeRefs: true, limit: 100, offset: 0, format: 'json' });
   assert.equal(blocks.items.some((block) => block.id === 'block-math-a' || block.id === 'block-math-b'), false);
 
@@ -1772,6 +1889,8 @@ test('explore inlines every bounded implementation stub in the first decision pa
   assert.match(result, /do not dump source with native/);
   assert.match(result, /throw new Error\("batch replay is not implemented"\)/);
   assert.match(result, /throw new Error\("audit report is not implemented"\)/);
+  assert.doesNotMatch(result, /\/\/ src\/batch\.mjs \[L\d+-L\d+\] \(hash:/);
+  assert.doesNotMatch(result, /\/\/ src\/audit\.mjs \[L\d+-L\d+\] \(hash:/);
 
   service.close();
   fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -1840,10 +1959,137 @@ test('pipeline explore decision package inlines a small workspace without duplic
   assert.match(result, /BATCH_TAIL_MARKER/);
   assert.match(result, /CONTEXT_TAIL_MARKER/);
   assert.match(result, /TEST_TAIL_MARKER/);
+  assert.equal(result.split('TEST_TAIL_MARKER').length - 1, 1, 'small workspace test body must not be duplicated by a test contract section');
   assert.match(result, /decision=complete/);
   assert.match(result, /read_complete=true/);
+  assert.match(result, /architecture=empty/);
   assert.ok(result.length > 4000, `decision package should widen past the generic pipeline budget, got ${result.length}`);
   assert.doesNotMatch(result, /```(?:mjs|js)\n```(?:mjs|js)/);
+  assert.doesNotMatch(result, /\[response truncated:/);
+  assert.doesNotMatch(result, /<!-- os-response tool=explore\b/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('pipeline explore auto-adds baseline verification when no verify step is supplied', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService({ exitCode: 1 });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    parallel: [
+      { tool: 'explore', args: { intent: 'fix failing acceptance test' } },
+    ],
+  });
+
+  assert.match(result, /pipeline=(?:PARTIAL|FAIL)/);
+  assert.match(result, /verify=FAIL/);
+  assert.match(result, /Verdict: FAIL/);
+  assert.equal(
+    service.calls.filter((call) => call.capability === 'run').length,
+    1,
+    'pipeline explore must carry the baseline verification in the same host decision'
+  );
+
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('pipeline explore still adds baseline verification when verify was used for a discovery command', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService({ exitCodes: [0, 1] });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    steps: [
+      { tool: 'explore', args: { intent: 'fix failing acceptance test' } },
+      { tool: 'verify', args: { command: 'pwd && ls' } },
+    ],
+  });
+
+  const runCommands = service.calls
+    .filter((call) => call.capability === 'run')
+    .map((call) => call.args.command);
+  assert.deepEqual(runCommands, ['pwd && ls', 'npm run test']);
+  assert.match(result, /pipeline=(?:PARTIAL|FAIL)/);
+  assert.match(result, /Verdict: FAIL/);
+
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('pipeline explore does not duplicate npm test aliases as baseline verification', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService({ exitCode: 0 });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    steps: [
+      { tool: 'explore', args: { intent: 'fix failing acceptance test' } },
+      { tool: 'verify', args: { commands: ['npm test'] } },
+    ],
+  });
+
+  const runCommands = service.calls
+    .filter((call) => call.capability === 'run')
+    .map((call) => call.args.command);
+  assert.deepEqual(runCommands, ['npm test']);
+  assert.match(result, /pipeline=OK/);
+
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('pipeline skips redundant inspect after a complete explore decision package', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'batch.mjs'),
+    'export function replayBatch() {\n  throw new Error("batch replay is not implemented");\n}\n// REDUNDANT_INSPECT_MARKER\n'
+  );
+  fs.mkdirSync(path.join(projectRoot, 'test'), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, 'test', 'batch.test.mjs'),
+    'import { replayBatch } from "../src/batch.mjs";\nassert.equal(typeof replayBatch, "function");\n'
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    steps: [
+      { tool: 'explore', args: { intent: 'implement batch replay', paths: ['src/batch.mjs'] } },
+      { tool: 'inspect', args: { paths: ['src/batch.mjs', 'test/batch.test.mjs'], budget: 'shallow' } },
+      { tool: 'verify', args: { command: 'node --check src/batch.mjs' } },
+    ],
+  });
+
+  assert.match(result, /REDUNDANT_INSPECT_MARKER/);
+  assert.match(result, /Skipped redundant inspect/);
+  assert.doesNotMatch(result, /AST Outline/);
+  assert.match(result, /decision=complete/);
+  assert.ok(result.length < 24000, `decision package should not need artifact replay, got ${result.length}`);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('small workspace explore inlines every source file beyond the old sixteen-file cap', async () => {
+  const projectRoot = makeTempProject();
+  for (let index = 0; index < 18; index += 1) {
+    fs.writeFileSync(
+      path.join(projectRoot, 'src', `module-${index}.mjs`),
+      `export const value${index} = ${index};\n// MODULE_${index}_TAIL\n`
+    );
+  }
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('explore', {
+    intent: 'understand every module in this small workspace',
+    paths: ['src/module-17.mjs'],
+  });
+
+  assert.match(result, /read_complete=true/);
+  assert.match(result, /MODULE_17_TAIL/);
+  assert.match(result, /MODULE_0_TAIL/);
+  assert.doesNotMatch(result, /All source\/test bodies are inlined below[^\n]*module-17\.mjs[^\n]*missing/i);
 
   service.close();
   fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -2347,12 +2593,15 @@ test('ops supports micro capability and verify triggers micro triage on failure'
   }
 });
 
-test('default verify triage skips obvious implementation stubs', async () => {
+test('verify triage skips obvious implementation stubs even when autoTriage is enabled', async () => {
   const projectRoot = makeTempProject();
   fs.mkdirSync(path.join(projectRoot, '.contextos'), { recursive: true });
   fs.writeFileSync(
     path.join(projectRoot, '.contextos', 'profile.json'),
-    JSON.stringify({ micro: { url: 'http://127.0.0.1:1', model: 'mock-model' } }, null, 2),
+    JSON.stringify({
+      autoTriage: true,
+      micro: { url: 'http://127.0.0.1:1', model: 'mock-model' },
+    }, null, 2),
   );
   const service = fakeService();
   let microCalls = 0;
@@ -2376,7 +2625,11 @@ test('default verify triage skips obvious implementation stubs', async () => {
     assert.match(result, /Verdict: FAIL/);
     assert.match(result, /not implemented/);
     assert.doesNotMatch(result, /Micro-Triage/);
-    assert.equal(microCalls, 0, 'an explicit not-implemented root cause must not spend a Micro request');
+    assert.equal(
+      microCalls,
+      0,
+      'an explicit not-implemented root cause must not spend a Micro request even when autoTriage is enabled'
+    );
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }

@@ -1155,6 +1155,10 @@ export async function runMicroTask(config = {}, options = {}) {
       shortCircuitReason: kind,
     },
     delivery: requestedDelivery,
+    withOS,
+    executionMode: withOS ? (toolExecutionTrace.length > 0 ? 'executor' : 'executor-idle') : 'summarizer-only',
+    summarizerOnly: !withOS,
+    hostTurnsSaved: step,
     budgetExceeded: kind,
     budgetDecision: {
       action: kind === 'requests'
@@ -1246,6 +1250,10 @@ export async function runMicroTask(config = {}, options = {}) {
           shortCircuited: false,
         },
         delivery: requestedDelivery,
+        withOS,
+        executionMode: withOS ? (toolExecutionTrace.length > 0 ? 'executor' : 'executor-idle') : 'summarizer-only',
+        summarizerOnly: !withOS,
+        hostTurnsSaved: step,
       };
     }
 

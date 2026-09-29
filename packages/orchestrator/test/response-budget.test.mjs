@@ -127,6 +127,8 @@ test('projectMicroResult keeps reasoning and tool traces out of model context', 
     assert.deepEqual(projected.providerUsage, { promptTokens: 12, completionTokens: 4, totalTokens: 16 });
     assert.deepEqual(projected.estimatedUsage, { promptTokens: 5, completionTokens: 1, totalTokens: 6 });
     assert.equal(projected.toolCalls, undefined);
+    assert.equal(projected.invocation.toolCalls, 1);
+    assert.equal(projected.invocation.toolRounds, 0);
 
     const failed = projectMicroResult({
       ok: false,

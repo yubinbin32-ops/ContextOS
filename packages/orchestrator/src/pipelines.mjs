@@ -14,11 +14,11 @@ const OUTLINE_CLIP = 1200;
 // Files at or below this size are cheap to inline whole; above it, a
 // path-only inspect returns an outline instead of a truncated head.
 const INSPECT_INLINE_MAX_CHARS = 2500;
-const INSPECT_BATCH_INLINE_MAX_CHARS = 12000;
-const INSPECT_BATCH_INLINE_MAX_FILES = 8;
+const INSPECT_BATCH_INLINE_MAX_CHARS = 32000;
+const INSPECT_BATCH_INLINE_MAX_FILES = 24;
 const SMALL_WORKSPACE_MAX_CHARS = 16000;
 const SMALL_WORKSPACE_MAX_FILES = 24;
-const SMALL_WORKSPACE_CRITICAL_MAX_FILES = 16;
+const SMALL_WORKSPACE_CRITICAL_MAX_FILES = SMALL_WORKSPACE_MAX_FILES;
 const DECISION_SOURCE_FILE_MAX_CHARS = 8000;
 const DECISION_SOURCE_TOTAL_MAX_CHARS = 18000;
 const INSPECT_RECOVERY_MAX_CHARS = 16000;
@@ -326,9 +326,13 @@ function compactOutlineData(text) {
 }
 
 function stripOuterCodeFence(text) {
-  const value = String(text ?? '');
+  let value = String(text ?? '');
   const match = value.match(/^\s*```[^\n]*\n([\s\S]*?)\n```\s*$/);
-  return match ? match[1] : value;
+  if (match) value = match[1];
+  return value
+    .split(/\r?\n/)
+    .filter((line, index) => !(index === 0 && /^\s*\/\/\s+.+\[L\d+-L\d+\]\s+\(hash:\s*[^)]+\)\s*$/.test(line)))
+    .join('\n');
 }
 
 function compactTestContract(text, maxChars = 420) {
@@ -577,6 +581,30 @@ function receiptStatus(receipt) {
   return receipt.status === 'superseded' ? 'superseded' : 'unresolved';
 }
 
+function normalizeVerificationCommand(value) {
+  const command = String(value || '').trim().replace(/\s+/g, ' ');
+  return command.replace(/^npm\s+run\s+test\b/, 'npm test');
+}
+
+function sameReceiptCommand(left, right) {
+  const leftCommand = normalizeVerificationCommand(left?.command);
+  const rightCommand = normalizeVerificationCommand(right?.command);
+  if (!leftCommand || leftCommand !== rightCommand) return false;
+  if (!left?.cwd || !right?.cwd) return true;
+  return path.resolve(left.cwd) === path.resolve(right.cwd);
+}
+
+function effectiveReceiptStatus(receipt, receipts = []) {
+  if (receipt?.exitCode === 0) return 'passed';
+  if (receipt?.status === 'superseded') return 'superseded';
+  const index = receipts.indexOf(receipt);
+  if (index < 0) return 'unresolved';
+  const laterPass = receipts.slice(index + 1).some((candidate) =>
+    candidate?.exitCode === 0 && sameReceiptCommand(receipt, candidate)
+  );
+  return laterPass ? 'superseded' : 'unresolved';
+}
+
 // Chinese intents carry latin keywords ("coverage", "sync") that never look
 // like identifiers but are still worth one workspace symbol search.
 // Words that are already part of a supplied path are skipped: searching for
@@ -732,6 +760,7 @@ export async function explorePipeline(ctx, input = {}) {
   const tokens = tokenize(`${intent} ${paths.join(' ')} ${identifiers.join(' ')}`);
 
   const dirty = [...obs.untracked, ...obs.changed];
+  const testContractLines = [];
 
   let activePlan = null;
   try {
@@ -873,7 +902,7 @@ export async function explorePipeline(ctx, input = {}) {
       if (outline.ok) {
         outlineByPath.set(target, outline.data);
         if (smallWorkspaceBundle) {
-          if (fileIndex < 6) whereLines.push(`- \`${target}\` ${compactOutlineData(outline.data)}`);
+          if (fileIndex < 3) whereLines.push(`- \`${target}\` ${compactOutlineData(outline.data)}`);
         } else if (input.depth === 'deep') {
           whereLines.push(`- \`${target}\`\n${clip(outline.data, OUTLINE_CLIP)}`);
         } else {
@@ -886,15 +915,11 @@ export async function explorePipeline(ctx, input = {}) {
     tracer.step('outline', { paths: filePaths });
   }
   if (smallWorkspaceBundle) {
-    const readme = filePaths.find((file) => /(^|\/)readme(?:_[^/]*)?\.md$/i.test(file));
     whereLines.push(
       `- Small workspace bundle (${filePaths.length} files, ${bundleChars} chars): `
       + filePaths.map((file) => `\`${file}\``).join(', ')
-      + '. All source/test bodies are inlined below; do not list or reread the repository.'
+      + '. All selected source bodies and test contracts are inlined below; do not list or reread the repository.'
     );
-    whereLines.push(readme
-      ? `- Project documentation: \`${readme}\` is included in the bundle.`
-      : '- Project documentation: no README.md is present in this workspace.');
   }
 
   // Small target files are usually the stubs or protocol shells the host must
@@ -940,6 +965,7 @@ export async function explorePipeline(ctx, input = {}) {
   let focusSliceChars = 0;
   for (const candidate of criticalCandidates.slice(0, criticalLimit)) {
     const { target, fileChars, read, stub, focusTarget } = candidate;
+    if (smallWorkspaceBundle && isTestPath(target)) continue;
     const nextCriticalChars = criticalChars + String(read).length;
     if (!smallWorkspaceBundle
       && criticalLines.length > 0
@@ -948,7 +974,7 @@ export async function explorePipeline(ctx, input = {}) {
     }
     const fence = path.extname(target).slice(1) || 'text';
     const readLimit = smallWorkspaceBundle
-      ? Math.max(fileChars + 256, INSPECT_INLINE_MAX_CHARS)
+      ? Math.max(fileChars + 64, 512)
       : (focusTarget ? DECISION_SOURCE_FILE_MAX_CHARS : INSPECT_INLINE_MAX_CHARS);
     criticalLines.push(
       `- \`${target}\` (${fileChars} chars${stub ? ', implementation stub' : ''})\n\`\`\`${fence}\n${clip(stripOuterCodeFence(read), readLimit)}\n\`\`\``
@@ -1034,6 +1060,12 @@ export async function explorePipeline(ctx, input = {}) {
     maxCallers: 4,
     maxTests: 2,
   });
+  if (smallWorkspaceBundle) {
+    for (const target of filePaths) {
+      if (isTestPath(target)) closure.tests.push(target);
+    }
+    closure.tests = [...new Set(closure.tests)];
+  }
   if (closure.dependencies.length || closure.callers.length || closure.tests.length) {
     const closureLines = [];
     if (closure.dependencies.length) {
@@ -1044,10 +1076,15 @@ export async function explorePipeline(ctx, input = {}) {
     }
     if (closure.tests.length) {
       closureLines.push(`- Test entry: ${closure.tests.map((file) => `\`${file}\``).join(', ')}`);
-      for (const testFile of closure.tests.slice(0, 2)) {
+      for (const testFile of closure.tests.slice(0, smallWorkspaceBundle ? 4 : 2)) {
         const testRead = await caps.code({ action: 'read', path: testFile, startLine: 1, endLine: 80 });
         if (testRead.ok && testRead.data) {
-          closureLines.push(`- Test contract \`${testFile}\`: ${compactTestContract(testRead.data)}`);
+          const testContract = clip(stripOuterCodeFence(testRead.data), 4200, { withHint: true });
+          const testFence = path.extname(testFile).slice(1) || 'text';
+          testContractLines.push(
+            `- Test contract \`${testFile}\`: ${compactTestContract(testRead.data)}\n`
+            + `\`\`\`${testFence}\n${testContract}\n\`\`\``
+          );
         }
       }
     }
@@ -1098,6 +1135,13 @@ export async function explorePipeline(ctx, input = {}) {
   store.setSlots(slots);
 
   const blocks = await caps.blocks();
+  const chains = await caps.chains();
+  const architectureState = blocks.ok && chains.ok
+    ? (Array.isArray(blocks.data) && blocks.data.length === 0
+        && Array.isArray(chains.data) && chains.data.length === 0
+        ? 'empty'
+        : 'ready')
+    : 'unknown';
   if (blocks.ok && blocks.data.length) {
     const scored = blocks.data
       .map((block) => ({
@@ -1182,6 +1226,9 @@ export async function explorePipeline(ctx, input = {}) {
   const decisionLines = [
     `- read_complete=${decisionComplete ? 'true' : 'false'}`,
     `- do_not_reread=${decisionComplete ? 'true' : 'false'}`,
+    `- native_mutation=forbidden${decisionComplete ? '-after-read-complete' : ''}`,
+    '- after_read_complete=change_or_work_only',
+    `- architecture=${architectureState}${architectureState === 'empty' ? '; change must bind blocks/chains (chain.memberIds=block ids)' : ''}`,
     `- files=${filePaths.length}`,
     decisionComplete
       ? '- next=change({edits,verify,architecture})'
@@ -1208,6 +1255,9 @@ export async function explorePipeline(ctx, input = {}) {
   }
   if (focusSliceLines.length) {
     sections.push({ key: 'focus-slices', title: 'Focused symbol slices (bounded)', priority: 0, lines: focusSliceLines });
+  }
+  if (testContractLines.length) {
+    sections.push({ key: 'test-contract', title: 'Test contract', priority: 0, lines: testContractLines });
   }
   sections.push(
     { key: 'where', title: 'Where to look', priority: 4, lines: whereLines }
@@ -1334,7 +1384,7 @@ function formatArchitectureGap(gap) {
   return '- ' + file + ': architecture could not be verified.';
 }
 
-async function bindChangedArchitecture(caps, changedPaths, architecture) {
+async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRun = false } = {}) {
   if (architecture !== undefined && architecture !== null
       && (typeof architecture !== 'object' || Array.isArray(architecture))) {
     return { ok: false, error: 'architecture must be an object with blocks and chains arrays.', refreshed: 0, bound: 0, composed: 0, gaps: [] };
@@ -1364,7 +1414,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
   for (const spec of blockSpecs) {
     const id = String(spec?.id || '').trim();
     const existing = blockById.get(id);
-    const title = String(spec?.title || spec?.name || existing?.title || '').trim();
+    const title = String(spec?.title || spec?.name || existing?.title || id).trim();
     const kind = String(spec?.kind || existing?.kind || 'component').trim();
     const rawPaths = spec?.paths ?? spec?.path ?? spec?.files ?? spec?.file;
     const pathValues = Array.isArray(rawPaths) ? rawPaths : rawPaths == null ? [] : [rawPaths];
@@ -1393,7 +1443,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
 
   for (const spec of chainSpecs) {
     const id = String(spec?.id || '').trim();
-    const title = String(spec?.title || spec?.name || '').trim();
+    const title = String(spec?.title || spec?.name || id).trim();
     const rawMemberIds = spec?.memberIds ?? spec?.member_ids ?? spec?.blocks;
     const memberIds = Array.isArray(rawMemberIds)
       ? [...new Set(rawMemberIds.map((value) => String(value || '').trim()).filter(Boolean))]
@@ -1470,8 +1520,60 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
     }
   }
 
+  // A changed Block without Chain membership is an incomplete architecture
+  // decision: the host would need another call solely to repair the graph.
+  // Compose uncovered prepared Blocks into one deterministic additive Chain.
+  const chainMembersAfterPreparation = new Map();
+  for (const chain of initialChainsResult.data || []) {
+    chainMembersAfterPreparation.set(
+      chain.id,
+      new Set(Array.isArray(chain.memberIds) ? chain.memberIds : [])
+    );
+  }
+  for (const { chainData, replaceMembers } of preparedChains) {
+    const existingMembers = chainMembersAfterPreparation.get(chainData.id) || new Set();
+    const requestedMembers = Array.isArray(chainData.memberIds) ? chainData.memberIds : [];
+    chainMembersAfterPreparation.set(
+      chainData.id,
+      new Set(replaceMembers
+        ? requestedMembers
+        : [...existingMembers, ...requestedMembers])
+    );
+  }
+  const coveredBlockIds = new Set(
+    [...chainMembersAfterPreparation.values()].flatMap((members) => [...members])
+  );
+  const uncoveredPreparedBlocks = preparedBlocks
+    .map((block) => block.id)
+    .filter((id) => !coveredBlockIds.has(id));
+  if (uncoveredPreparedBlocks.length) {
+    const existingChangedSurface = preparedChains.find(
+      (entry) => entry.chainData.id === 'chain-changed-surface'
+    );
+    if (existingChangedSurface) {
+      existingChangedSurface.chainData.memberIds = [
+        ...new Set([
+          ...(existingChangedSurface.chainData.memberIds || []),
+          ...uncoveredPreparedBlocks,
+        ]),
+      ];
+    } else {
+      preparedChains.push({
+        chainData: {
+          id: 'chain-changed-surface',
+          title: 'Changed surface',
+          memberIds: uncoveredPreparedBlocks,
+        },
+        replaceMembers: false,
+      });
+    }
+  }
+
   if (errors.length) {
     return { ok: false, error: errors.join('; '), refreshed: 0, bound: 0, composed: 0, gaps: [] };
+  }
+  if (dryRun) {
+    return { ok: true, refreshed: 0, bound: 0, composed: 0, gaps: [] };
   }
 
   const explicitPaths = new Set(preparedBlocks.flatMap((block) => block.paths.map(normalizeGraphPath)));
@@ -1480,7 +1582,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
   let composed = 0;
 
   for (const spec of preparedBlocks) {
-    const result = await caps.block({
+    const payload = {
       action: 'bind_auto',
       id: spec.id,
       paths: spec.paths,
@@ -1488,7 +1590,14 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
       replacePaths: true,
       blockData: spec.blockData,
       format: 'json',
-    });
+    };
+    let result = await caps.block(payload);
+    if (!result.ok && Array.isArray(spec.symbols) && spec.symbols.length) {
+      // A stale symbol hint must not invalidate the whole architecture
+      // transaction. Retry at file level; the strict service contract still
+      // rejects explicit symbol mismatch when called directly.
+      result = await caps.block({ ...payload, symbols: undefined });
+    }
     if (result.ok) bound += 1;
     else errors.push('Block ' + spec.id + ': ' + result.error);
   }
@@ -1681,6 +1790,9 @@ export async function changePipeline(ctx, input = {}) {
   }
 
   if (!creates.length && !edits.length && !deletes.length) {
+    if (input.verify !== undefined || (Array.isArray(input.commands) && input.commands.length)) {
+      return verifyPipeline(ctx, input);
+    }
     if (input.architecture && typeof input.architecture === 'object' && !Array.isArray(input.architecture)) {
       const architectureResult = await bindChangedArchitecture(caps, [], input.architecture);
       tracer.step('architecture_state_only', {
@@ -1757,6 +1869,32 @@ export async function changePipeline(ctx, input = {}) {
       path: spec?.path,
     })),
   ];
+
+  if (input.architecture && typeof input.architecture === 'object' && !Array.isArray(input.architecture)) {
+    const architecturePreflight = await bindChangedArchitecture(
+      caps,
+      changes.map((change) => change.path).filter(Boolean),
+      input.architecture,
+      { dryRun: true }
+    );
+    if (!architecturePreflight.ok) {
+      const lines = [
+        '- Architecture contract rejected before changeset: ' + clip(architecturePreflight.error || 'invalid contract', 300),
+        '- No files were modified. Fix the Block/Chain payload, then retry the same change call.',
+      ];
+      tracer.step('architecture_preflight', { ok: false, error: architecturePreflight.error || 'invalid contract' });
+      return [
+        '# ContextOS change',
+        '',
+        '## Next',
+        '👉 fix the architecture contract error, then retry the same change call; no files were modified.',
+        '',
+        '## Result',
+        ...lines,
+      ].join('\n');
+    }
+    tracer.step('architecture_preflight', { ok: true });
+  }
 
   const backups = new Map();
   const originallyMissing = new Set();
@@ -1948,6 +2086,19 @@ export async function changePipeline(ctx, input = {}) {
 
 const INSPECT_SKIP_DIRS = new Set(['.git', '.contextos', 'node_modules', 'dist', 'build', 'coverage', 'tmp']);
 
+function normalizeInspectTargetPath(projectRoot, target) {
+  const raw = String(target || '').trim();
+  if (!raw) return raw;
+  const root = path.resolve(projectRoot);
+  const normalizedRaw = raw.replace(/\\/g, '/');
+  const candidate = path.isAbsolute(normalizedRaw)
+    ? path.resolve(normalizedRaw)
+    : path.resolve(root, normalizedRaw);
+  const relative = path.relative(root, candidate).split(path.sep).join('/');
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return raw;
+  return relative;
+}
+
 function expandInspectTargets(projectRoot, target) {
   const raw = String(target || '');
   const normalized = raw.replace(/\\/g, '/');
@@ -1961,7 +2112,7 @@ function expandInspectTargets(projectRoot, target) {
   } catch (_) {
     return [raw];
   }
-  if (!stat.isDirectory()) return [raw];
+  if (!stat.isDirectory()) return [normalizeInspectTargetPath(projectRoot, raw)];
 
   const files = [];
   const walk = (directory, depth = 0) => {
@@ -2069,11 +2220,13 @@ export async function inspectPipeline(ctx, input = {}) {
       symbol = slotData.symbol || symbol;
     }
   }
+  if (targetPath) targetPath = normalizeInspectTargetPath(ctx.projectRoot, targetPath);
 
   const requestedBudget = input.budget || input.depth;
-  const paths = Array.isArray(input.paths) && input.paths.length
+  const paths = (Array.isArray(input.paths) && input.paths.length
     ? input.paths
-    : (targetPath ? [targetPath] : []);
+    : (targetPath ? [targetPath] : []))
+    .map((target) => normalizeInspectTargetPath(ctx.projectRoot, target));
   const globPaths = expandInspectGlobs(ctx.projectRoot, input.globs);
   let requestedPaths = [...paths, ...globPaths];
   let symbolCandidates = [];
@@ -2092,6 +2245,7 @@ export async function inspectPipeline(ctx, input = {}) {
       requestedPaths = symbolCandidates.slice(0, 1);
     }
   }
+  requestedPaths = uniquePaths(requestedPaths.map((target) => normalizeInspectTargetPath(ctx.projectRoot, target)));
   const queryRangeEntries = [];
   if (!symbol && typeof input.query === 'string' && input.query.trim() && requestedPaths.length) {
     for (const target of uniquePaths(requestedPaths).slice(0, 4)) {
@@ -2112,7 +2266,9 @@ export async function inspectPipeline(ctx, input = {}) {
       if (ranges.length) queryRangeEntries.push({ path: target, ranges });
     }
   }
-  const inspectPaths = requestedPaths.flatMap((target) => expandInspectTargets(ctx.projectRoot, target));
+  const inspectPaths = requestedPaths
+    .flatMap((target) => expandInspectTargets(ctx.projectRoot, target))
+    .map((target) => normalizeInspectTargetPath(ctx.projectRoot, target));
   const inspectFileChars = inspectPaths.map((target) => {
     try {
       const stat = fs.statSync(path.join(ctx.projectRoot, target));
@@ -2136,7 +2292,8 @@ export async function inspectPipeline(ctx, input = {}) {
   for (const entry of (Array.isArray(input.ranges) ? input.ranges : [])) {
     if (!entry || typeof entry !== 'object' || typeof entry.path !== 'string') continue;
     const normalized = normalizeRanges(entry.ranges);
-    if (normalized.length) perPathRanges.set(entry.path.replace(/^\.\//, ''), normalized);
+    const rangePath = normalizeInspectTargetPath(ctx.projectRoot, entry.path);
+    if (normalized.length && rangePath) perPathRanges.set(rangePath.replace(/^\.\//, ''), normalized);
   }
   for (const entry of queryRangeEntries) {
     const normalized = normalizeRanges(entry.ranges);
@@ -2504,11 +2661,16 @@ export async function verifyPipeline(ctx, input = {}) {
   const triageLines = [];
   const failureEvidence = failureLines.join('\n\n');
   const obviousRootCause = /(?:not implemented|unimplemented|syntaxerror|cannot find module|module_not_found)/i.test(failureEvidence);
-  const triageRequested = input.autoTriage === true || profile?.autoTriage === true;
+  const explicitTriage = input.autoTriage === true;
+  const profileTriage = profile?.autoTriage === true;
+  const evidenceWorthTriage = !obviousRootCause
+    && !isFull
+    && failureEvidence.length > MICRO_TRIAGE_MIN_CHARS;
   const autoTriage = input.autoTriage === false
     ? false
-    : (triageRequested
-        || (!obviousRootCause && !isFull && failureEvidence.length > MICRO_TRIAGE_MIN_CHARS));
+    : (explicitTriage
+        || evidenceWorthTriage
+        || (profileTriage && !obviousRootCause && !isFull));
   const triageEvidence = failureEvidence.length > 6000
     ? `${failureEvidence.slice(0, 4800)}\n\n...[middle omitted]...\n\n${failureEvidence.slice(-1000)}`
     : failureEvidence;
@@ -2680,8 +2842,15 @@ export async function shipPipeline(ctx, input = {}) {
     );
   }
 
-  if (wantsVerify && !session.receipts.some((receipt) => receipt.exitCode === 0)) {
-    const commands = shipVerifyCommands;
+  const currentFingerprint = workspaceFingerprint(ctx.projectRoot);
+  const hasCurrentPass = (command) => (session.receipts || []).some((receipt) =>
+    receipt.exitCode === 0
+    && sameReceiptCommand(receipt, { command, cwd: null })
+    && receipt.stateHash === currentFingerprint
+  );
+  const commandsToRun = shipVerifyCommands.filter((command) => !hasCurrentPass(command));
+  if (wantsVerify && commandsToRun.length) {
+    const commands = commandsToRun;
     for (const command of commands) {
       const res = await caps.run({ command, maxChars: profile.maxChars, timeoutMs: profile.timeoutMs });
       if (res.ok) {
@@ -2695,9 +2864,10 @@ export async function shipPipeline(ctx, input = {}) {
     session = store.current;
   }
 
-  const green = (session.receipts || []).filter((receipt) => receipt.exitCode === 0);
-  const superseded = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === 'superseded');
-  const unresolved = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === 'unresolved');
+  const sessionReceipts = session.receipts || [];
+  const green = sessionReceipts.filter((receipt) => receipt.exitCode === 0);
+  const superseded = sessionReceipts.filter((receipt) => effectiveReceiptStatus(receipt, sessionReceipts) === 'superseded');
+  const unresolved = sessionReceipts.filter((receipt) => effectiveReceiptStatus(receipt, sessionReceipts) === 'unresolved');
   const unverified = green.length === 0 && unresolved.length === 0;
   const allowUnverified = input.allowUnverified === true || input.force === true;
   const hasWork = (session.touchedFiles || []).length > 0 || (session.receipts || []).length > 0;
@@ -3078,6 +3248,32 @@ function countPipelineTool(steps, toolName, projectRoot) {
   }, 0);
 }
 
+function pipelineHasBaselineVerify(steps, profile, projectRoot) {
+  const configured = Array.isArray(profile?.verify)
+    ? profile.verify
+        .filter((command) => typeof command === 'string' && command.trim())
+        .map(normalizeVerificationCommand)
+    : [];
+  for (const step of collectPipelineActionSpecs(steps)) {
+    let normalized;
+    try {
+      normalized = normalizeAction(step, projectRoot);
+    } catch (_) {
+      continue;
+    }
+    if (normalized.tool !== 'verify') continue;
+    const input = normalized.input || {};
+    const explicitCommands = [
+      ...verifyCommandsFromInput(input.commands ?? input.verify, {}),
+      ...(typeof input.command === 'string' && input.command.trim() ? [input.command] : []),
+    ];
+    if (!explicitCommands.length) return true;
+    const normalizedExplicit = explicitCommands.map(normalizeVerificationCommand);
+    if (configured.some((command) => normalizedExplicit.includes(command))) return true;
+  }
+  return false;
+}
+
 function inspectHasExplicitTarget(input = {}) {
   return Boolean(input.symbol)
     || input.startLine !== undefined
@@ -3229,6 +3425,40 @@ export async function workPipeline(ctx, input = {}) {
     .replace(/^pipeline=/m, 'work=');
 }
 
+function extractDecisionCoveredPaths(output = '') {
+  const covered = new Set();
+  const source = String(output);
+  const patterns = [
+    /^- `([^`\n]+)` \([^)]*\)/gm,
+    /^- Test contract `([^`\n]+)`:/gm,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      const candidate = String(match[1] || '').trim().replace(/^\.\//, '');
+      if (!candidate || (!candidate.includes('/') && !candidate.includes('.'))) continue;
+      covered.add(candidate);
+    }
+  }
+  return covered;
+}
+
+function requestedInspectPaths(input = {}) {
+  return [
+    input.path,
+    ...(Array.isArray(input.paths) ? input.paths : []),
+    ...(Array.isArray(input.globs) ? input.globs : []),
+  ]
+    .filter((value) => typeof value === 'string' && value.trim())
+    .map((value) => value.trim().replace(/^\\.\//, ''));
+}
+
+function inspectCoveredByDecision(normalized, coveredPaths) {
+  if (normalized?.tool !== 'inspect' || !coveredPaths?.size) return false;
+  if (normalized.input?.allowExplicitBatchInspect === true) return false;
+  const requested = requestedInspectPaths(normalized.input);
+  return requested.length > 0 && requested.every((target) => coveredPaths.has(target));
+}
+
 export async function pipelinePipeline(ctx, input = {}) {
   let steps = input.steps || input.flow || input.actions;
   if (!steps) {
@@ -3238,6 +3468,27 @@ export async function pipelinePipeline(ctx, input = {}) {
   }
   if (!Array.isArray(steps) || !steps.length) {
     return '# ContextOS pipeline\n- No steps provided in pipeline. Pass `steps: [...]`, `chain: [...]`, or `parallel: [...]`.';
+  }
+
+  let autoBaselineVerify = false;
+  const initialExploreCount = countPipelineTool(steps, 'explore', ctx.projectRoot);
+  const initialMutationCount = ['change', 'work', 'ship']
+    .reduce((count, toolName) => count + countPipelineTool(steps, toolName, ctx.projectRoot), 0);
+  if (initialExploreCount > 0
+    && !pipelineHasBaselineVerify(steps, ctx.profile, ctx.projectRoot)
+    && initialMutationCount === 0
+    && input.autoVerify !== false) {
+    const commands = verifyCommandsFromInput(true, ctx.profile);
+    if (commands.length) {
+      steps = [...steps, {
+        tool: 'verify',
+        args: {
+          commands,
+          ...(input.autoTriage !== undefined ? { autoTriage: input.autoTriage } : {}),
+        },
+      }];
+      autoBaselineVerify = true;
+    }
   }
 
   const explicitlyFull = input.full === true || input.budget === 'full' || input.mode === 'full';
@@ -3265,10 +3516,14 @@ export async function pipelinePipeline(ctx, input = {}) {
   let haltReason = null;
   let failureCount = 0;
   let executedActions = 0;
+  let decisionExploreSeen = false;
+  let decisionCoveredPaths = new Set();
   const batchStartedAt = Date.now();
   const batchInspectCount = countPipelineTool(steps, 'inspect', ctx.projectRoot);
   const forceBatchInspectOutline = batchInspectCount > 1;
-  const continueOnFailure = input.continueOnFailure === true || requestsContinueOnFailure(steps);
+  const continueOnFailure = input.continueOnFailure === true
+    || requestsContinueOnFailure(steps)
+    || autoBaselineVerify;
   const branches = Array.isArray(input.branches) ? input.branches : [];
   const batchBudget = input.budget && typeof input.budget === 'object' && !Array.isArray(input.budget)
     ? input.budget
@@ -3412,8 +3667,26 @@ export async function pipelinePipeline(ctx, input = {}) {
 
     try {
       const normalized = guardBatchInspectAction(applyPipelineControls(normalizeAction(step, ctx.projectRoot), input), forceBatchInspectOutline);
+      if (inspectCoveredByDecision(normalized, decisionCoveredPaths)) {
+        const skippedOutput = `# ContextOS inspect\n\n- Skipped redundant inspect: the prior explore decision package already contains ${requestedInspectPaths(normalized.input).map((target) => `\`${target}\``).join(', ')}.\n- Next: mutate with change/work; do not replay the artifact.`;
+        results.push({
+          step: stepNum,
+          kind: 'single',
+          tool: normalized.tool,
+          ok: true,
+          output: skippedOutput,
+          maxChars: skippedOutput.length,
+          requestedMaxChars: null,
+        });
+        executedActions += 1;
+        continue;
+      }
       const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
       executedActions += 1;
+      if (normalized.tool === 'explore' && /\bread_complete=true\b/.test(String(res ?? ''))) {
+        decisionExploreSeen = true;
+        decisionCoveredPaths = extractDecisionCoveredPaths(res);
+      }
       const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
       results.push({
         step: stepNum,
@@ -3639,13 +3912,33 @@ export async function pipelinePipeline(ctx, input = {}) {
     return `${artifactRef(output)}${summary}`.trim();
   }
 
+  function isCompleteExploreDecision(item) {
+    if (item?.tool !== 'explore') return false;
+    const output = String(item.output ?? '');
+    return /\bread_complete=true\b/.test(output)
+      && /\bnext=change\(/.test(output)
+      && !/\[response truncated\b/.test(output)
+      && !/<!--\s*os-response\b[^\n]*\bartifact=/.test(output);
+  }
+
+  function actionRenderBudget(item) {
+    if (renderFull) {
+      return item.maxChars ?? responseBudget ?? PIPELINE_MAX_OUTPUT_CLIP;
+    }
+    if (isCompleteExploreDecision(item)) {
+      return Math.min(
+        item.maxChars ?? PIPELINE_EXPLORE_OUTPUT_CLIP,
+        responseBudget ?? PIPELINE_EXPLORE_OUTPUT_CLIP
+      );
+    }
+    return Math.min(
+      item.maxChars ?? PIPELINE_MAX_OUTPUT_CLIP,
+      summaryBudgetFor(item.tool)
+    );
+  }
+
   function renderPipelineActionDetail(item) {
-    const budget = renderFull
-      ? (item.maxChars ?? responseBudget ?? PIPELINE_MAX_OUTPUT_CLIP)
-      : Math.min(
-          item.maxChars ?? PIPELINE_MAX_OUTPUT_CLIP,
-          summaryBudgetFor(item.tool)
-        );
+    const budget = actionRenderBudget(item);
     const detail = formatPipelineOutput(item.output, budget);
     if (!detail) return '';
     // Preserve Markdown and line-oriented source for decision-package actions.
@@ -3743,22 +4036,32 @@ export async function pipelinePipeline(ctx, input = {}) {
     const items = result.items || [result];
     return items.some((item) => {
       if (!item?.ok) return false;
-      if (/\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? ''))) return true;
-      const limit = Math.min(item.maxChars ?? Infinity, summaryBudgetFor(item.tool));
-      return outputLength(item.output) > limit;
+      const completeExplore = isCompleteExploreDecision(item);
+      if (/\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? '')) && !completeExplore) {
+        return true;
+      }
+      return outputLength(item.output) > actionRenderBudget(item);
     });
   });
   const exploreIncomplete = results.some((result) => {
     const items = result.items || [result];
-    return items.some((item) => item?.tool === 'explore' && /read_complete=false\b/.test(String(item.output || '')));
+    return items.some((item) => {
+      if (item?.tool !== 'explore') return false;
+      const output = String(item.output || '');
+      if (/\bread_complete=false\b/.test(output)) return true;
+      return /\bread_complete=true\b/.test(output) && !isCompleteExploreDecision(item);
+    });
   });
   const decisionReady = decisionPackage
     && !exploreIncomplete
     && !summaryTruncated
     && lines.join('\n').length <= responseBudget;
   if (decisionReady) {
+    for (let index = 0; index < lines.length; index += 1) {
+      lines[index] = lines[index].replace(/\s+artifact=[A-Za-z0-9._-]+/g, '');
+    }
     lines[0] += ' decision=complete';
-    lines.push('decision=complete read_complete=true do_not_reread=true next=change({edits,verify,architecture}); after_pass=finalize_without_speculative_edits');
+    lines.push('decision=complete read_complete=true do_not_reread=true native_mutation=forbidden after_read_complete=change_or_work_only next=change({edits,verify,architecture}); after_pass=finalize_without_speculative_edits');
   } else if (decisionPackage && exploreIncomplete) {
     lines[0] += ' decision=partial';
     lines.push('decision=partial read_complete=false; perform the named bounded recovery read, then mutate or verify.');

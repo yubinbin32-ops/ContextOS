@@ -94,7 +94,9 @@ export function createV3Server({
         description: 'Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; search/create aliases; micro=evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.',
         inputSchema: {
           action: z.enum(['explore', 'inspect', 'change', 'verify', 'ship', 'pipeline', 'work', 'micro', 'resume', 'ops', 'search', 'create']),
+          capability: z.string().optional(),
           args: z.record(z.any()).optional(),
+          arguments: z.record(z.any()).optional(),
           projectRoot: z.string().describe('Absolute repository root.'),
           refresh: z.boolean().optional().describe('Force a fresh read instead of reusing a compact receipt.'),
           dedupeReads: z.boolean().optional().describe('Set false to bypass read deduplication.'),
@@ -116,13 +118,24 @@ export function createV3Server({
           paths: z.array(z.string()).optional(),
           symbol: z.string().optional(),
           query: z.string().optional(),
-          ranges: z.array(z.record(z.any())).optional(),
+          ranges: z.array(z.union([z.array(z.number()), z.record(z.any())])).optional(),
           startLine: z.number().optional(),
           endLine: z.number().optional(),
+          preset: z.string().optional(),
+          task: z.string().optional(),
+          pipeline: z.record(z.any()).optional(),
+          pipelines: z.any().optional(),
+          withOS: z.boolean().optional(),
+          invocation: z.record(z.any()).optional(),
+          delivery: z.string().optional(),
+          provider: z.record(z.any()).optional(),
+          inputRef: z.string().optional(),
+          inputArtifact: z.string().optional(),
+          inputReceipt: z.string().optional(),
         },
       },
       async (input) => {
-        const args = { ...(input.args || {}) };
+        const args = { ...(input.arguments || {}), ...(input.args || {}) };
         for (const control of ['refresh', 'dedupeReads', 'full', 'budget', 'maxChars', 'maxLogBytes']) {
           if (input[control] !== undefined) args[control] = input[control];
         }
@@ -132,12 +145,196 @@ export function createV3Server({
         ]) {
           if (input[field] !== undefined) args[field] = input[field];
         }
+        for (const field of [
+          'preset', 'task', 'pipeline', 'pipelines', 'withOS', 'invocation', 'delivery',
+          'provider', 'inputRef', 'inputArtifact', 'inputReceipt',
+        ]) {
+          if (input[field] !== undefined) args[field] = input[field];
+        }
         if (input.action === 'search' && args.search === undefined) {
           args.search = { query: input.query ?? input.search ?? '' };
         }
         const compactAction = input.action === 'search' || (input.action === 'explore' && input.search !== undefined)
           ? 'work'
           : (input.action === 'create' ? 'change' : input.action);
+        if (compactAction === 'ops' && input.capability !== undefined && args.capability === undefined) {
+          args.capability = input.capability;
+        }
+        if (compactAction === 'ops') {
+          const knownCapabilities = new Set([
+            'os_context', 'plan', 'task', 'block', 'chain', 'code', 'run_command', 'process',
+            'knowledge', 'session', 'system', 'profile', 'micro', 'artifact', 'telemetry',
+          ]);
+          if (!args.capability && knownCapabilities.has(args.action)) {
+            args.capability = args.action;
+          }
+          if (args.capability === 'run_command' && args.command === undefined && Array.isArray(args.commands)) {
+            args.command = args.commands.filter((entry) => typeof entry === 'string' && entry.trim()).join(' && ');
+          }
+        }
+        const normalizeRange = (range) => {
+          const startLine = Number(Array.isArray(range) ? range[0] : (range?.startLine ?? range?.start));
+          const endLine = Number(Array.isArray(range) ? range[1] : (range?.endLine ?? range?.end));
+          return Number.isFinite(startLine) && Number.isFinite(endLine) && endLine >= startLine
+            ? { startLine, endLine }
+            : null;
+        };
+        const rangesByPath = (values) => {
+          const grouped = new Map();
+          for (const entry of Array.isArray(values) ? values : []) {
+            const rangePath = typeof entry?.path === 'string' ? entry.path : null;
+            const range = normalizeRange(entry);
+            if (!rangePath || !range) continue;
+            const list = grouped.get(rangePath) || [];
+            list.push(range);
+            grouped.set(rangePath, list);
+          }
+          return grouped;
+        };
+        if (compactAction === 'inspect' || compactAction === 'work') {
+          if (typeof args.inspect === 'string') {
+            args.inspect = {
+              path: args.inspect,
+              ...(args.ranges !== undefined ? { ranges: args.ranges } : {}),
+              ...(args.budget !== undefined ? { budget: args.budget } : {}),
+            };
+          }
+          if (args.inspect && typeof args.inspect === 'object' && !Array.isArray(args.inspect) && Array.isArray(args.inspect.paths)) {
+            const nestedInspect = args.inspect;
+            args.inspect = nestedInspect.paths.map((target) => ({
+              path: target,
+              ...(nestedInspect.budget !== undefined ? { budget: nestedInspect.budget } : {}),
+              ...(nestedInspect.ranges !== undefined ? { ranges: nestedInspect.ranges } : {}),
+            }));
+          }
+          if (Array.isArray(args.inspect)) {
+            args.inspect = args.inspect.map((entry) => {
+              if (typeof entry === 'string') return { path: entry };
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+              const normalized = entry.full === true && entry.budget === undefined
+                ? { ...entry, budget: 'full' }
+                : entry;
+              const grouped = rangesByPath(normalized.ranges);
+              if (grouped.size === 1 && !normalized.path) {
+                const [rangePath, ranges] = [...grouped.entries()][0];
+                return { ...normalized, path: rangePath, ranges };
+              }
+              return normalized;
+            });
+            const inspectBudgets = args.inspect
+              .map((entry) => entry?.budget)
+              .filter((value) => value !== undefined);
+            if (args.budget === undefined && inspectBudgets.length
+                && inspectBudgets.every((value) => value === inspectBudgets[0])) {
+              args.budget = inspectBudgets[0];
+            }
+          }
+          if (args.full === true && args.budget === undefined) args.budget = 'full';
+          if (!args.inspect && Array.isArray(args.ranges)) {
+            const grouped = rangesByPath(args.ranges);
+            if (grouped.size) {
+              args.inspect = [...grouped.entries()].map(([target, ranges]) => ({ path: target, ranges }));
+            }
+          }
+          if (!args.inspect && typeof args.path === 'string') {
+            args.inspect = {
+              path: args.path,
+              ...(args.ranges !== undefined ? { ranges: args.ranges } : {}),
+              ...(args.budget !== undefined ? { budget: args.budget } : {}),
+            };
+          }
+          if (!args.inspect && Array.isArray(args.paths)) {
+            args.inspect = args.paths.map((target) => ({
+              path: target,
+              ...(args.budget !== undefined ? { budget: args.budget } : {}),
+            }));
+          }
+        }
+        if (Array.isArray(args.edits)) {
+          args.edits = args.edits.map((spec) => {
+            if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return spec;
+            const contentOnly = spec.content !== undefined
+              && spec.replacement === undefined
+              && spec.replacementContent === undefined
+              && spec.target === undefined
+              && spec.symbol === undefined
+              && spec.startLine === undefined
+              && spec.fullFile !== true;
+            return contentOnly ? { ...spec, fullFile: true, replacement: spec.content } : spec;
+          });
+        }
+        if (compactAction === 'pipeline' && args.pipeline && typeof args.pipeline === 'object') {
+          const nestedPipeline = args.pipeline;
+          delete args.pipeline;
+          for (const field of ['steps', 'chain', 'parallel', 'mode', 'budget', 'branches']) {
+            if (args[field] === undefined && nestedPipeline[field] !== undefined) {
+              args[field] = nestedPipeline[field];
+            }
+          }
+          if (args.steps === undefined && Array.isArray(nestedPipeline.stages)) {
+            args.steps = nestedPipeline.stages.map((stage) => {
+              if (!stage || typeof stage !== 'object' || Array.isArray(stage)) return stage;
+              const tool = stage.tool || stage.action || stage.type;
+              const { tool: _tool, action: _action, type: _type, args: stageArgs, ...stageBody } = stage;
+              return {
+                tool,
+                args: {
+                  ...stageBody,
+                  ...(stageArgs && typeof stageArgs === 'object' && !Array.isArray(stageArgs) ? stageArgs : {}),
+                },
+              };
+            });
+          }
+          if (args.steps === undefined) {
+            const actionKeys = ['explore', 'inspect', 'verify', 'search', 'change', 'work', 'ops', 'run_command', 'ship'];
+            const shorthandSteps = [];
+            for (const key of actionKeys) {
+              const value = nestedPipeline[key];
+              if (value === undefined || value === null || value === false) continue;
+              let stepArgs = value === true ? {} : (typeof value === 'object' && !Array.isArray(value) ? value : { value });
+              if (key === 'explore' && args.intent !== undefined && stepArgs.intent === undefined) {
+                stepArgs = { ...stepArgs, intent: args.intent };
+              }
+              if (key === 'explore' && stepArgs.task !== undefined && stepArgs.intent === undefined) {
+                stepArgs = { ...stepArgs, intent: stepArgs.task };
+              }
+              if (key === 'verify' && args.maxLogBytes !== undefined && stepArgs.maxLogBytes === undefined) {
+                stepArgs = { ...stepArgs, maxLogBytes: args.maxLogBytes };
+              }
+              shorthandSteps.push({ tool: key, args: stepArgs });
+            }
+            if (shorthandSteps.length) args.steps = shorthandSteps;
+          }
+          if (args.steps === undefined && typeof (nestedPipeline.task || args.task) === 'string') {
+            const task = nestedPipeline.task || args.task;
+            args.steps = [
+              { tool: 'explore', args: { intent: task } },
+              { tool: 'verify', args: {} },
+            ];
+          }
+        }
+        if (compactAction === 'pipeline' && args.steps === undefined && typeof args.task === 'string' && args.task.trim()) {
+          args.steps = [
+            { tool: 'explore', args: { intent: args.task } },
+            { tool: 'verify', args: {} },
+          ];
+        }
+        if (compactAction === 'pipeline' && args.continueOnFailure === undefined) {
+          const toolsInPipeline = new Set();
+          const collectPipelineTools = (items) => {
+            if (!Array.isArray(items)) return;
+            for (const item of items) {
+              if (Array.isArray(item)) collectPipelineTools(item);
+              else if (item && Array.isArray(item.parallel)) collectPipelineTools(item.parallel);
+              else if (item && Array.isArray(item.chain)) collectPipelineTools(item.chain);
+              else if (item?.tool || item?.action) toolsInPipeline.add(item.tool || item.action);
+            }
+          };
+          collectPipelineTools(args.steps);
+          if (toolsInPipeline.has('explore') && toolsInPipeline.has('verify')) {
+            args.continueOnFailure = true;
+          }
+        }
         const payload = { ...args, projectRoot: input.projectRoot };
         if (compactAction === 'micro') {
           return textResult(await dispatch('ops', {
@@ -183,7 +380,7 @@ export function createV3Server({
         path: z.string().optional().describe('File path to inspect.'),
         paths: z.array(z.string()).optional().describe('Multiple file paths to inspect in parallel (batch inspection).'),
         globs: z.array(z.string()).optional().describe('Glob patterns to resolve to repository files before inspection.'),
-        ranges: z.array(z.object({ startLine: z.number(), endLine: z.number() })).optional().describe('Multiple line ranges to inspect within the same file (e.g. [{ startLine: 1, endLine: 20 }]).'),
+        ranges: z.array(z.union([z.array(z.number()), z.object({ startLine: z.number(), endLine: z.number() })])).optional().describe('Multiple line ranges to inspect within the same file (e.g. [[1, 20]] or [{ startLine: 1, endLine: 20 }]).'),
         symbol: z.string().optional().describe('Optional symbol/function name to slice.'),
         startLine: z.number().optional(),
         endLine: z.number().optional(),

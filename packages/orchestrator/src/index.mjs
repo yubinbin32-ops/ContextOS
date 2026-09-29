@@ -215,13 +215,18 @@ function convergenceHint(projectRoot, sessionId, tool, input, semanticReceipt) {
   return `${count} discovery/diagnostic calls since the last mutation or verification; converge with one bounded work/change/verify or a dependent pipeline. Result returned in full.`;
 }
 
-function shouldAutoVerifyExplore(input = {}) {
+function shouldAutoVerifyExplore(input = {}, commands = []) {
   if (input.autoVerify === false || input.verify === false) return false;
+  if (!Array.isArray(commands) || commands.length === 0) return false;
   const intent = String(input.intent || '');
+  const task = String(input.task || '');
   const repairIntent = /(?:修复|失败|报错|缺陷|故障|诊断|fix(?:ing)?|fail(?:ing|ure)?|error|bug|debug|repair|diagnos(?:e|is|tic)|regression)/i.test(intent);
   const implementationIntent = /(?:实现|开发|修改|重构|implement(?:ation|ing|s)?|develop(?:ment|ing)?|feature|refactor(?:ing)?|modify|modification|update|build)/i.test(intent);
   const verificationIntent = /(?:测试|验证|校验|test(?:s|ing)?|spec(?:s)?|verify|verification|failure(?:s)?|error(?:s)?)/i.test(intent);
-  return repairIntent || (implementationIntent && verificationIntent);
+  const taskVerificationIntent = /(?:基线|baseline|测试|验证|校验|验收|acceptance|test(?:s|ing)?|spec(?:s)?|verify|verification)/i.test(task);
+  return repairIntent
+    || (implementationIntent && verificationIntent)
+    || taskVerificationIntent;
 }
 
 function exploreBaselineCommands(input = {}, profile = {}) {
@@ -278,9 +283,18 @@ function semanticOpsReuse(spec, receipt) {
   ].join('\n');
 }
 
+function isDecisionArtifactKind(kind) {
+  return kind === 'response:pipeline' || kind === 'response:explore' || kind === 'response:work';
+}
+
 function compactPipelineArtifactPreview(projectRoot, artifact, maxChars = 1400) {
-  if (!artifact || artifact.kind !== 'response:pipeline') return null;
+  if (!artifact || !isDecisionArtifactKind(artifact.kind)) return null;
   try {
+    if (artifact.kind !== 'response:pipeline') {
+      const preview = readArtifact(projectRoot, artifact.id, { maxChars, lineNumbers: false });
+      if (!preview?.text) return null;
+      return `${preview.text}${preview.truncated ? '\n[preview clipped; raw replay requires allowRawPipeline:true plus auditReason]' : ''}`;
+    }
     const full = readArtifact(projectRoot, artifact.id, { maxChars: Infinity, lineNumbers: false });
     const payload = full && !full.truncated ? JSON.parse(full.text) : null;
     if (!payload || !Array.isArray(payload.steps)) return null;
@@ -1012,7 +1026,7 @@ export class Orchestrator {
               : (Array.isArray(ctx.profile?.verify) ? ctx.profile.verify.filter(Boolean) : []);
             if (!internal
               && !exploreReceipt
-              && shouldAutoVerifyExplore(input)
+              && shouldAutoVerifyExplore(input, inferredCommands)
               && inferredCommands.length) {
               result = await pipelinePipeline(ctx, {
                 steps: [
@@ -1094,17 +1108,14 @@ export class Orchestrator {
         attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
         hostHint
       );
-      let decisionPackage = null;
-      if (!internal) {
-        decisionPackage = decisionPackageMetadata(tool, result);
-        if (decisionPackage && typeof this.store.markDecisionPackage === 'function') {
-          this.store.markDecisionPackage({
-            tool,
-            status: decisionPackage.status,
-            artifactId: decisionPackage.artifactId,
-            receiptId: decisionPackage.receiptId,
-          });
-        }
+      const decisionPackage = decisionPackageMetadata(tool, result);
+      if (!internal && decisionPackage && typeof this.store.markDecisionPackage === 'function') {
+        this.store.markDecisionPackage({
+          tool,
+          status: decisionPackage.status,
+          artifactId: decisionPackage.artifactId,
+          receiptId: decisionPackage.receiptId,
+        });
       }
       const responseArgs = input.args && typeof input.args === 'object' && !Array.isArray(input.args)
         ? input.args
@@ -1295,6 +1306,15 @@ export class Orchestrator {
       case 'chain':
         return render(await service.chain({ ...args, action }));
       case 'code':
+        if (action === 'help' || (!action && !args.path && !args.query)) {
+          return [
+            '# ContextOS code',
+            '- Read: `ops({ capability: "code", action: "read", path, ranges })`.',
+            '- Search: `ops({ capability: "code", action: "search", query, root|paths })`.',
+            '- Mutate: prefer `change({ edits: [{ path, target|startLine+endLine, replacement }], verify })`.',
+            '- Full-file edit: `change({ edits: [{ path, content, fullFile: true }], verify })`.',
+          ].join('\n');
+        }
         if (action === 'read' && args.dedupeReads !== false && !isExplicitReadReplay(args)) {
           const spec = codeReadMemoSpec(this.projectRoot, args);
           if (spec) {
@@ -1353,7 +1373,7 @@ export class Orchestrator {
             };
             if (artifactId) {
               const artifactStat = statArtifact(this.projectRoot, artifactId);
-              if (artifactStat?.kind === 'response:pipeline') {
+              if (isDecisionArtifactKind(artifactStat?.kind)) {
                 const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 900);
                 diagnostic.artifact = {
                   id: artifactId,
@@ -1410,18 +1430,17 @@ export class Orchestrator {
         return render(loadProfile(this.projectRoot));
       }
       case 'artifact': {
-        if (action === 'read') {
+        if (action === 'read' || action === 'get' || action === 'open') {
           const artifactId = args.id || args.artifactId || args.artifact;
           const artifactStat = statArtifact(this.projectRoot, artifactId);
-          const pipelineArtifact = artifactStat?.kind === 'response:pipeline';
+          const decisionArtifact = isDecisionArtifactKind(artifactStat?.kind);
           const auditReason = typeof args.auditReason === 'string' ? args.auditReason.trim() : '';
           const rawPipelineRequested = args.allowRawPipeline === true;
           const allowRawPipeline = rawPipelineRequested && auditReason.length > 0;
-          // Pipeline artifacts are decision packages, not source files. A
-          // `full:true` request on one must not replay the raw transcript that
-          // the bounded pipeline response was designed to replace.
+          // Decision artifacts are bounded transport packets, not source files.
+          // A `full:true` request must not replay the transcript they replaced.
           const fullArtifact = (args.full === true || args.budget === 'full')
-            && (!pipelineArtifact || allowRawPipeline);
+            && (!decisionArtifact || allowRawPipeline);
           const requestedArtifactChars = Number(args.maxChars);
           const artifactReadArgs = {
             ...args,
@@ -1434,18 +1453,18 @@ export class Orchestrator {
           };
           const artifact = readArtifact(this.projectRoot, artifactId, artifactReadArgs);
           if (!artifact) return `# ContextOS artifact\n- Not found: \`${artifactId || '(missing)'}\``;
-          const canPreviewPipeline = pipelineArtifact
+          const canPreviewDecision = decisionArtifact
             && !allowRawPipeline
             && !args.grep
             && args.startLine === undefined
             && args.endLine === undefined;
-          if (canPreviewPipeline) {
+          if (canPreviewDecision) {
             const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 1400);
             if (preview) {
               return [
                 `# ContextOS artifact ${artifact.id}`,
-                `- Pipeline preview (decision package); fullChars=${artifactStat.contentChars}.`,
-                '- Next: use `change`/`work` directly; raw Pipeline replay requires `allowRawPipeline:true` plus a non-empty `auditReason` for an intentional audit.',
+                `- Decision artifact preview (${artifactStat.kind}); fullChars=${artifactStat.contentChars}.`,
+                '- Next: use `change`/`work` directly; raw replay requires `allowRawPipeline:true` plus a non-empty `auditReason` for an intentional audit.',
                 '',
                 '```text',
                 preview,
@@ -1480,7 +1499,7 @@ export class Orchestrator {
             totalBytes: result.totalBytes || 0,
           });
         }
-        throw new Error(`Unknown artifact action '${action}'. Available: read, stat, list, evict`);
+        throw new Error(`Unknown artifact action '${action}'. Available: read, get, open, stat, list, evict`);
       }
       case 'telemetry': {
         if (action === 'audit') {
@@ -1538,6 +1557,23 @@ export class Orchestrator {
       }
       case 'micro': {
         const microConfig = ctx.profile?.micro || {};
+        if (action === 'help' || action === 'schema') {
+          return render({
+            ok: true,
+            local: true,
+            capability: 'micro',
+            actions: ['doctor', 'run', 'batch'],
+            sessionActions: ['create', 'send', 'get', 'list', 'close', 'delete'],
+            executor: {
+              withOS: true,
+              invocation: {
+                tools: { enabled: true, allowCommands: true },
+                provider: { maxRequests: 5 },
+              },
+            },
+            note: 'Micro help is resolved locally and never calls the provider.',
+          });
+        }
         if (action === 'doctor') {
           const checks = [
             { name: 'url', ok: Boolean(microConfig.url), value: microConfig.url || null },

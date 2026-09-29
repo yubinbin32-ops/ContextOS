@@ -941,6 +941,54 @@ test('runMicroTask enforces budgets before final tool-convergence dispatch', asy
   }
 });
 
+test('runMicroTask classifies request exhaustion after executor tool rounds', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-micro-executor-budget-'));
+  fs.writeFileSync(path.join(root, 'a.mjs'), 'export const x = 1;\n');
+  const mock = createMockServer();
+  const { url } = await mock.listen();
+  mock.setHandler((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: `inspect-${mock.requests.length}`,
+            type: 'function',
+            function: { name: 'inspect', arguments: JSON.stringify({ path: 'a.mjs' }) },
+          }],
+        },
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+    }));
+  });
+  try {
+    const result = await runMicroTask({ url, model: 'test-model' }, {
+      prompt: 'inspect the file twice',
+      projectRoot: root,
+      withOS: true,
+      maxSteps: 2,
+      invocation: {
+        provider: { maxRequests: 2 },
+        tools: { enabled: true },
+      },
+      caps: { inspect: async () => 'export const x = 1;' },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.budgetExceeded, 'requests');
+    assert.equal(result.withOS, true);
+    assert.equal(result.executionMode, 'executor');
+    assert.equal(result.summarizerOnly, false);
+    assert.equal(result.invocation.toolRounds, 2);
+    assert.equal(result.toolCalls.length, 2);
+    assert.equal(mock.requests.length, 2);
+  } finally {
+    await mock.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('runMicroTask rejects oversized provider responses', async () => {
   const mock = createMockServer();
   const { url } = await mock.listen();
