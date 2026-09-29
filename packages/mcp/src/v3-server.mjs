@@ -70,7 +70,7 @@ export function createV3Server({
     { name: 'contextos', version: VERSION },
     {
       instructions:
-        'ContextOS is the repository execution layer. Prefer one contextos call per host decision: work for read+edit+verify, pipeline for known batches, micro for bulky evidence. Trust verified receipts; expand artifacts only when the next decision needs the body.',
+        'ContextOS is the repository execution layer and exoskeleton. For non-trivial repo work: first call one pipeline containing explore plus baseline verify; then one change/work containing all edits, verify, architecture, and ship. Search with work.search or pipeline search; do not run native cat/sed/rg/npm test between OS calls. After read_complete=true, mutate directly; after a passing verify/ship, finalize. Use micro only for >2KB raw evidence or an explicit assignment.',
     }
   );
 
@@ -91,7 +91,7 @@ export function createV3Server({
     server.registerTool(
       'contextos',
       {
-        description: 'Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; search/create aliases; micro=evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.',
+        description: 'Repository execution exoskeleton. Non-trivial: one pipeline (explore + baseline verify) directly, then one change/work (edits + verify + architecture + ship). Search via work.search/pipeline; no native cat/sed/rg/npm test between OS calls. After read_complete=true mutate; PASS is final. Micro evidence/delivery only for >2KB or explicit assignment. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; ops for advanced capabilities. Expand with full/maxChars.',
         inputSchema: {
           action: z.enum(['explore', 'inspect', 'change', 'verify', 'ship', 'pipeline', 'work', 'micro', 'resume', 'ops', 'search', 'create']),
           capability: z.string().optional(),

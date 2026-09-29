@@ -1177,7 +1177,64 @@ B/C 的 OS 调用形状稳定为一次 `pipeline` + 一次 `change`，没有 `re
 ### 39.8 下一轮门槛
 
 1. 在同一 `temperature=0` 条件下至少重复 R43 run5 两次，报告 A/B/C 的中位数和分布，不能只拿单次最优样本。
-2. 增加 decision-packet 后只读硬门禁：`read_complete=true` 且无 mutation/verify 时，拒绝新的 standalone `explore`/`inspect`，只允许 `change`/`work` 或显式 recovery。
+2. ~~增加 decision-packet 后只读硬门禁~~：R47-R51 验证发现硬拒绝会阻断只读 recovery、复用型 `explore` 和 search alias，属于能力损失；已撤销，改为 Skill 收敛引导 + 非阻断 convergence hint。
 3. 设计 C-only >2KB 原始失败证据任务，首次 Micro 调用直接携带 pipeline evidence，并同时记录 `providerRequests`、`toolRounds`、`toolCalls`、`executionMode` 与 provider token。
 4. 保持“只绑定本次变更路径”的架构负载约束，验证自动 `chain-changed-surface` 在复杂多模块任务中的语义正确性。
 5. 继续以总 token 相对 native 下降 ≥70%、请求/工具坍缩、峰值 input 和正确性四项一起作为有效样本门槛。
+
+## 40. R47-R51 严格隔离复验：真实收益、方差与边界
+
+### 40.1 隔离修正
+
+R43 及更早的 A 组使用 `--dangerously-bypass-approvals-and-sandbox`，宿主可以读取同级 fixture、原始仓库和 git remote；这会把 A 的探索成本抬高，制造出偏高的节省比例。R47 起改为：
+
+- 三组各自位于独立顶层目录：`/private/tmp/contextos-ab/<run>-{a,b,c}`，不再共享父目录。
+- 克隆后执行 `git remote remove origin`，宿主无法从 remote 推断源仓库。
+- 每组独立 `CODEX_HOME`、`CONTEXTOS_HOME`、marketplace、MCP 进程和临时目录。
+- 外层 `sandbox-exec` 拒绝 `/Users/a1-6` 读取，仅放行自己的 run root；探针确认 `cat /Users/a1-6/ab-r6-micro-routing/c8/mdflow/package.json` 返回 `Operation not permitted`，同时 ContextOS 工具仍可正常调用。
+- 三组仍按 A → B → C 串行执行；A 不使用插件，B 使用 OS，C 使用 OS+Micro profile。
+
+### 40.2 关键样本
+
+| 运行 | A 请求/工具/峰值 input/总 token | B 请求/工具/峰值 input/总 token | C 请求/工具/峰值 input/总 token | 正确性 |
+| --- | --- | --- | --- | --- |
+| R47 严格隔离 | 9 / 24 / 30,960 / 192,406 | 5 / 4 / 28,683 / 93,373 | 5 / 4 / 24,266 / 84,600 | A/B/C 全部 PASS |
+| R48 严格隔离 | 13 / 26 / 33,536 / 303,958 | 5 / 4 / 24,196 / 93,490 | 5 / 4 / 24,266 / 84,600 | A/B/C 全部 PASS；B/C 均更新 barrel |
+| R49 A + B | 15 / 24 / 33,226 / 340,754 | 8 / 7 / 25,420 / 151,181 | 未跑 | A/B PASS |
+| R50 B/C（最终 Skill + 归一化） | 使用 R49 A 基线 | 6 / 5 / 24,088 / 107,334 | 5 / 4 / 23,762 / 83,950 | B/C PASS；B 因宿主一次错误 target 多一轮，C barrel 正确 |
+| R51 C（`task` alias 修复后） | 使用 R49 A 基线 | 未跑 | 7 / 6 / 24,646 / 133,346 | PASS；宿主把 verify/ship 拆成额外轮次 |
+
+三组 A 的 native 总 token 为 192k、304k、341k，中位数 304k；请求 9/13/15，工具 24/26/24，峰值 input 31.0k/33.5k/33.2k。A 的方差主要来自宿主是否批量读取、是否使用 `update_plan`、是否额外跑验收命令，而不是 ContextOS 行为。
+
+C 在协议合规的 R47/R48/R50 三次都落在 84.0k-84.6k、5 请求、4 工具、峰值 23.8k-24.3k；相对中位数 A 节省约 72%，相对最省 A 节省约 56%。R51 因宿主把 `change` 拆成 `change -> verify -> ship`，退化为 7 请求/133k，但仍低于 A。B 的合规样本为 93k-107k；R49 的 151k 是 Skill 过度压缩导致协议退化的负样本。
+
+### 40.3 本轮确认的缺陷与修复
+
+1. **硬读取门禁是错误方向**：它阻断只读 `work`、复用型 `explore`、search alias，违反“读取/搜索永不返回策略文本代替数据”的契约；已删除，保留读取预算跨 mutation/verify 重置。
+2. **public surface 闭包漏判**：只检查 `focus.paths`，没有检查 decision package 里的 stub 模块，导致 `src/index.mjs` 明明缺少 `audit-report`/`batch-replay` 却提示“已全部导出”。现改为以 decision-package modules 计算，并增加回归测试。
+3. **test fixture 污染决策包**：`test/fixtures/*` 被当成测试契约内联，浪费约 1KB+ 上下文；现在只内联真实 `*.test.*`/`*.spec.*` 契约。
+4. **架构 schema 常见错误造成额外轮次**：宿主写 `kind:"module"` 时 compact `change` 直接拒绝并让宿主重试；现在自动归一化为 `component`，仍拒绝 `mod-*` 派生身份。
+5. **Skill 过度压缩产生负收益**：R49 把 Skill 压缩到 1.5KB 后，宿主不遵守“首包 pipeline / 不拆 inspect / 不调 update_plan”，退化为 8 请求/151k；恢复详细协议后 R50 C 回到 5 请求/84k。
+6. **`task` 未作为 `intent` 别名**：宿主常用 `explore({task})`，旧实现显示 `Intent: (none yet)`，大型仓库会丢失 focus；现改为 `intent || task`，并验证 session intent。
+7. **隔离测试装置本身是缺陷源**：`dangerously-bypass` + 同级 fixture + git remote 使早期样本不再可比；新增 `.contextos/tmp/contextos-ab-isolated-{setup,run}.sh`，用外层 Seatbelt 做只读隔离。
+
+### 40.4 质量审查：测试 PASS 不等于任务完成
+
+- R50 C 的 `npm test` PASS，但 `buildAuditReport` 只输出事件计数，没有像 B 一样保留 `eventLog`/sequence；如果“保留事件顺序”是硬要求，C 的可见测试通过但语义质量仍不足。后续任务必须把这类非测试断言的要求单独审查。
+- R50 B 因宿主把一个 `src/index.mjs` 的 target 文本误写成 `src/batch-replay.mjs` 的内容，第一次 `change` 被 changeset 拒绝；OS 正确做到“未修改任何文件”，但宿主仍多花一轮。这是宿主编辑错误，不是 OS 静默假成功。
+- R51 C 把 `verify`/`ship` 拆出 `change`，说明当前协议只能靠 Skill 引导，不能硬性保证“一个决策一次事务”。
+
+### 40.5 Micro 结论与剩余门槛
+
+- R47-R51 的 Micro 调用均为 0；该任务失败证据是明显 stub 且小于 2KB，OS triage 后继续走 Micro 只会增加 provider token，跳过是正确的。
+- 因此本轮不能宣称 Micro 节省；执行型 Micro 仍只有早期探针证据（`providerRequests=3`、`toolRounds=2`、`toolCalls=4`、`executionMode=executor`）。
+- 剩余必须补的测试：C-only >2KB 原始失败/日志证据，首次 Micro 调用直接携带 pipeline evidence，并同时记录 provider token、`providerRequests`、`toolRounds`、`toolCalls`、`executionMode`。
+- 剩余架构边界：OS 是外骨骼，不能阻止宿主使用原生工具或写错 target；峰值 input 目前只降到 ~24k，主要节省来自请求/工具坍缩，而不是单次上下文极端压缩。
+
+### 40.6 当前验证状态
+
+- `npm test`：PASS。
+- `npm run plugin:verify`：PASS。
+- 最终 bundle hash：`bf7e617eac9e34564c6bc4cfc0361c437734a6082d01c5b409b50a149ad5008c`。
+- 严格隔离样本：`/private/tmp/contextos-ab/ab-r47-isolated-*`、`ab-r48-isolated-*`、`ab-r49-isolated-*`、`ab-r50-isolated-*`、`ab-r51-isolated-*`。
+- 早期 R43 的 74% 结果保留为历史记录，但在严格隔离口径下不再作为主证据。

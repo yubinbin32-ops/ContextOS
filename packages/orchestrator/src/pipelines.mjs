@@ -621,6 +621,10 @@ function isTestPath(filePath = '') {
   return /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(?:test|spec)\.[^/]+$/i.test(String(filePath));
 }
 
+function isTestContractPath(filePath = '') {
+  return isTestPath(filePath) && !/(^|\/)fixtures?\//i.test(String(filePath));
+}
+
 function isImplementationSource(filePath = '') {
   return /\.(?:mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|rb|php|swift|kt|cs|cpp|c|h)$/i.test(String(filePath))
     && !isTestPath(filePath);
@@ -748,7 +752,7 @@ function computeNext({ session, changedCount, profile, stage, intent = '' }) {
 
 export async function explorePipeline(ctx, input = {}) {
   const { caps, store, tracer, projectRoot, profile } = ctx;
-  const intent = input.intent || '';
+  const intent = input.intent || input.task || '';
 
   const obs = await observe({ projectRoot, store });
   const session = store.ensureSession(intent);
@@ -1062,10 +1066,10 @@ export async function explorePipeline(ctx, input = {}) {
   });
   if (smallWorkspaceBundle) {
     for (const target of filePaths) {
-      if (isTestPath(target)) closure.tests.push(target);
+      if (isTestContractPath(target)) closure.tests.push(target);
     }
-    closure.tests = [...new Set(closure.tests)];
   }
+  closure.tests = [...new Set(closure.tests)].filter(isTestContractPath);
   if (closure.dependencies.length || closure.callers.length || closure.tests.length) {
     const closureLines = [];
     if (closure.dependencies.length) {
@@ -1193,11 +1197,47 @@ export async function explorePipeline(ctx, input = {}) {
   }
 
   const implementationFocus = focus.paths.filter((filePath) => isImplementationSource(filePath));
+  const publicSurfaceModules = uniquePaths([
+    ...implementationFocus,
+    ...criticalCandidates.map((candidate) => candidate.target),
+  ]).filter((filePath) => isImplementationSource(filePath));
   const missingDecisionPaths = implementationFocus.filter((filePath) => (
     !includedCriticalTargets.has(filePath) && !includedFocusSliceTargets.has(filePath)
   ));
   const decisionComplete = smallWorkspaceBundle
     || (implementationFocus.length > 0 && missingDecisionPaths.length === 0);
+
+  const criticalReadByTarget = new Map(criticalCandidates.map((candidate) => [candidate.target, candidate.read]));
+  const entrypointPaths = filePaths
+    .filter((filePath) => isImplementationSource(filePath))
+    .filter((filePath) => /(^|\/)(index|main)\.(?:mjs|js|cjs|ts|tsx)$/i.test(filePath))
+    .slice(0, 2);
+  const publicSurfaceLines = [];
+  const publicSurfaceGaps = [];
+  for (const entrypoint of entrypointPaths) {
+    let entryText = criticalReadByTarget.get(entrypoint);
+    if (!entryText) {
+      const entryRead = await caps.code({ action: 'read', path: entrypoint, fullFile: true });
+      if (entryRead.ok) entryText = entryRead.data;
+    }
+    if (!entryText) continue;
+    const entryDir = path.posix.dirname(entrypoint);
+    const missingExports = publicSurfaceModules.filter((filePath) => {
+      if (filePath === entrypoint) return false;
+      const relative = path.posix.relative(entryDir, filePath);
+      const normalized = relative.startsWith('.') ? relative : `./${relative}`;
+      const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return !new RegExp(`from\\s+['"]${escaped}['"]`).test(entryText);
+    });
+    if (missingExports.length) {
+      publicSurfaceGaps.push(...missingExports);
+      publicSurfaceLines.push(
+        `- \`${entrypoint}\` does not re-export decision-package module(s): ${missingExports.map((file) => `\`${file}\``).join(', ')}. Include the entrypoint update in the same change only when these modules expose public API.`
+      );
+    } else {
+              publicSurfaceLines.push(`- \`${entrypoint}\` re-exports every decision-package module.`);
+    }
+  }
 
   const nextLines = [`👉 ${computeNext({ session, changedCount: dirty.length, profile, stage: 'explore', intent })}`];
   if (smallWorkspaceBundle) {
@@ -1216,6 +1256,9 @@ export async function explorePipeline(ctx, input = {}) {
   if (stubTargets.length) {
     nextLines.push(`Exact implementation stubs are already included: ${stubTargets.join(', ')}. Build \`change\` directly; do not dump source with native \`rg\`/\`cat\`.`);
   }
+  if (publicSurfaceGaps.length) {
+    nextLines.push('Public surface gap detected: include the entrypoint/barrel update in the same change when the new capability is public.');
+  }
 
   const requestedBudget = Number(input.maxChars);
   const budget = smallWorkspaceBundle
@@ -1228,7 +1271,7 @@ export async function explorePipeline(ctx, input = {}) {
     `- do_not_reread=${decisionComplete ? 'true' : 'false'}`,
     `- native_mutation=forbidden${decisionComplete ? '-after-read-complete' : ''}`,
     '- after_read_complete=change_or_work_only',
-    `- architecture=${architectureState}${architectureState === 'empty' ? '; change must bind blocks/chains (chain.memberIds=block ids)' : ''}`,
+    `- architecture=${architectureState}${architectureState === 'empty' ? '; change must bind blocks/chains (chain.memberIds=block ids; use semantic kinds, never kind:"module")' : ''}`,
     `- files=${filePaths.length}`,
     decisionComplete
       ? '- next=change({edits,verify,architecture})'
@@ -1258,6 +1301,9 @@ export async function explorePipeline(ctx, input = {}) {
   }
   if (testContractLines.length) {
     sections.push({ key: 'test-contract', title: 'Test contract', priority: 0, lines: testContractLines });
+  }
+  if (publicSurfaceLines.length) {
+    sections.push({ key: 'public-surface', title: 'Public surface', priority: 0, lines: publicSurfaceLines });
   }
   sections.push(
     { key: 'where', title: 'Where to look', priority: 4, lines: whereLines }
@@ -1416,16 +1462,17 @@ async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRu
     const existing = blockById.get(id);
     const title = String(spec?.title || spec?.name || existing?.title || id).trim();
     const kind = String(spec?.kind || existing?.kind || 'component').trim();
+    const semanticKind = kind === 'module' ? 'component' : kind;
     const rawPaths = spec?.paths ?? spec?.path ?? spec?.files ?? spec?.file;
     const pathValues = Array.isArray(rawPaths) ? rawPaths : rawPaths == null ? [] : [rawPaths];
     const paths = pathValues
       .map((value) => String(value || '').trim())
       .filter(Boolean);
-    if (!id || !title || !kind || !paths.length) {
+    if (!id || !title || !semanticKind || !paths.length) {
       errors.push('each architecture Block needs id, title, paths, and optional kind (kind defaults to component)');
       continue;
     }
-    if (id.startsWith('mod-') || kind === 'module' || /^derived module\b/i.test(title)) {
+    if (id.startsWith('mod-') || /^derived module\b/i.test(title)) {
       errors.push(
         'derived module identity is not a semantic Block: ' + id
         + '; use a semantic kind such as component, service, engine, gateway, api, ui, tooling, verification, or testing'
@@ -1433,7 +1480,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRu
       );
       continue;
     }
-    const blockData = { title, kind };
+    const blockData = { title, kind: semanticKind };
     const summary = spec.summary ?? spec.responsibility ?? existing?.summary;
     const details = spec.details ?? existing?.details;
     if (summary !== undefined) blockData.summary = summary;

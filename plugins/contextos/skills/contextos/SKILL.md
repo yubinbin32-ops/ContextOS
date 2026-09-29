@@ -13,6 +13,7 @@ Default transport: `contextos({action,args,projectRoot})`.
 - Load this Skill body once at session start. If it is not already present in context, read it once; never reread it or use shell reads as a recovery loop. Do not call host `update_plan` in an OS-owned task.
 - A/B/C launchers must install/enable the plugin and export `CONTEXTOS_HOME` before `codex exec`; do not spend a turn checking it.
 - After `decision=complete` or `read_complete=true`, native `apply_patch`, `rg`, `cat`, `sed`, and `npm test` are protocol violations. Use `change`/`work`; a passing verify is final evidence.
+- After a complete decision package, prefer `change`/`work`; if a named path is genuinely missing, use one explicit bounded recovery read with `full:true`/`refresh:true`, then mutate.
 
 ## Route work
 - Trivial one-line change: one `change({edits,verify})`; skip `explore` and `ship`.
@@ -21,6 +22,7 @@ Default transport: `contextos({action,args,projectRoot})`.
 - A decision packet is final: do not call `resume` or replay raw artifacts. After `read_complete=true`, mutate directly; after `false`, make only the named bounded recovery read.
 - Search with `work.search` or pipeline `{tool:"search",args:{query,root|paths}}`; use `maxLogBytes` on noisy commands. Do not place native `sed`/`cat`/`rg`/`npm test` between OS calls.
 - `verify.commands` is an array of command strings; pass a top-level `maxLogBytes` when the batch may be noisy.
+- Public surface: if `explore` reports a barrel gap, include the entrypoint/barrel update in the same change when the new capability is public.
 
 ## Inspection
 - Prefer exact `inspect({path,symbol|ranges:[{startLine,endLine}]})`. Explicit ranges are honored exactly; do not ask for a whole file when a slice is enough.
@@ -39,7 +41,7 @@ Default transport: `contextos({action,args,projectRoot})`.
 
 ## Architecture
 - Blocks are semantic ownership boundaries; Chains group Blocks; Links express directed relationships.
-- Never use `mod-*` or `kind:"module"` as ownership.
+- Never use `mod-*` or `kind:"module"` as ownership. Compact `change` normalizes `kind:"module"` to `component`, but new payloads must use semantic ids and kinds directly.
 - After changing business code, include `architecture.blocks` and `architecture.chains` in the same `change`/`work`. A state-only `change({architecture})` is valid.
 - Bind only paths touched by this change; do not enumerate unrelated repository paths. For a bounded repair, one semantic Block for the changed surface plus one Chain is valid; split only for real ownership boundaries.
 - Every tracked source path needs exactly one curated Block and at least one Chain membership.
@@ -51,4 +53,4 @@ architecture:{blocks:[{id,title,kind,paths,summary}],chains:[{id,title,memberIds
 - Discover with `ops({capability:"architecture",action:"list|open|search"})`; `block.get` and `block.inspect` alias `open`.
 
 ## Advanced
-Legal capabilities: `os_context`, `plan`, `task`, `block`, `chain`, `architecture`, `code`, `run_command`, `process`, `knowledge`, `session`, `system`, `profile`, `micro`, `artifact`, `telemetry`. Route them through `ops({capability,action,args})`; do not shell-read capability source.
+Legal capabilities: `os_context`, `plan`, `task`, `block`, `chain`, `architecture`, `code`, `run_command`, `process`, `knowledge`, `session`, `system`, `profile`, `micro`, `artifact`, `telemetry`. Route them through `ops({capability: "...", action: "...", args: {...}})`; do not shell-read capability source.

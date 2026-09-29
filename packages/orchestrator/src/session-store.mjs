@@ -174,6 +174,7 @@ function emptySession(projectId, intent, workspaceRoot) {
     readPolicy: {
       decisionPackageSeen: false,
       decisionPackageTool: null,
+      decisionComplete: false,
       decisionPackageAt: null,
       decisionPackageCount: 0,
       fullExpansions: 0,
@@ -451,6 +452,7 @@ export class SessionStore {
     return session?.readPolicy || {
       decisionPackageSeen: false,
       decisionPackageTool: null,
+      decisionComplete: false,
       decisionPackageAt: null,
       decisionPackageCount: 0,
       fullExpansions: 0,
@@ -462,18 +464,37 @@ export class SessionStore {
     };
   }
 
-  markDecisionPackage({ tool = null, status = null, artifactId = null, receiptId = null } = {}) {
+  markDecisionPackage({ tool = null, status = null, decisionComplete = false, artifactId = null, receiptId = null } = {}) {
     const session = this.ensureSession();
     const current = session.readPolicy || {};
     session.readPolicy = {
       ...current,
       decisionPackageSeen: true,
       decisionPackageTool: tool || current.decisionPackageTool || null,
+      decisionComplete: decisionComplete === true,
       decisionPackageAt: new Date().toISOString(),
       decisionPackageCount: (Number(current.decisionPackageCount) || 0) + 1,
       decisionPackageStatus: status || current.decisionPackageStatus || null,
       decisionPackageArtifactId: artifactId || current.decisionPackageArtifactId || null,
       decisionPackageReceiptId: receiptId || current.decisionPackageReceiptId || null,
+    };
+    return this.save(session);
+  }
+
+  resetReadPolicy() {
+    const session = this.ensureSession();
+    session.readPolicy = {
+      decisionPackageSeen: false,
+      decisionPackageTool: null,
+      decisionComplete: false,
+      decisionPackageAt: null,
+      decisionPackageCount: 0,
+      fullExpansions: 0,
+      fullExpansionPaths: [],
+      directedExpansions: 0,
+      directedExpansionPaths: [],
+      pathOnlyFullDenied: 0,
+      lastPathOnlyFullDeniedAt: null,
     };
     return this.save(session);
   }

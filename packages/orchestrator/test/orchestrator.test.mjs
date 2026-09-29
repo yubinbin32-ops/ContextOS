@@ -771,6 +771,104 @@ test('decision packages bound oversized ranges and cap directed expansion rounds
   assert.match(budgeted, /8 directed expansion slots/);
   assert.match(budgeted, /AST Outline/);
 
+  await orchestrator.dispatch('verify', { commands: ['node -e "0"'] });
+  const afterVerify = await orchestrator.dispatch('inspect', {
+    path: 'src/long.mjs',
+    ranges: [{ startLine: 161, endLine: 180 }],
+  });
+  assert.match(afterVerify, /line161/);
+  assert.doesNotMatch(afterVerify, /directed expansion slots/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('complete decision packages keep recovery reads available without latching the read budget', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const explored = await orchestrator.dispatch('explore', { intent: '了解 src/math.mjs 的结构' });
+  assert.match(explored, /read_complete=true/);
+
+  const recoveryExplore = await orchestrator.dispatch('explore', { intent: '补充确认 src/math.mjs 的调用方' });
+  assert.match(recoveryExplore, /# ContextOS explore/);
+  assert.doesNotMatch(recoveryExplore, /decision gate/);
+
+  const recoveryInspect = await orchestrator.dispatch('inspect', { path: 'src/math.mjs' });
+  assert.match(recoveryInspect, /# ContextOS inspect/);
+  assert.doesNotMatch(recoveryInspect, /decision gate/);
+
+  const directed = await orchestrator.dispatch('inspect', { path: 'src/math.mjs', symbol: 'add' });
+  assert.match(directed, /add/);
+
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('explore decision packages expose focused public-surface gaps', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(path.join(projectRoot, 'src', 'index.mjs'), "export * from './other.mjs';\n");
+  fs.writeFileSync(path.join(projectRoot, 'src', 'other.mjs'), 'export const other = true;\n');
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('explore', { intent: '了解 src/math.mjs 的结构' });
+  assert.match(result, /Public surface/);
+  assert.match(result, /src\/math\.mjs/);
+  assert.match(result, /does not re-export/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('public surface gaps include decision-package modules when intent omits their names', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(path.join(projectRoot, 'src', 'index.mjs'), "export * from './math.mjs';\n");
+  fs.writeFileSync(path.join(projectRoot, 'src', 'audit-report.mjs'), "export function buildAuditReport() {\n  throw new Error('audit report is not implemented');\n}\n");
+  fs.writeFileSync(path.join(projectRoot, 'src', 'batch-replay.mjs'), "export async function replayBatch() {\n  throw new Error('batch replay is not implemented');\n}\n");
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('explore', { intent: '快速理解项目并修复失败验收，保留审计报告和批量回放' });
+  assert.match(result, /Public surface/);
+  assert.match(result, /src\/audit-report\.mjs/);
+  assert.match(result, /src\/batch-replay\.mjs/);
+  assert.match(result, /does not re-export/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('change normalizes architecture kind module to a semantic component before binding', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const changed = await orchestrator.dispatch('change', {
+    edits: [{ path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 1;' }],
+    architecture: {
+      blocks: [{ id: 'block-math', title: 'Math core', kind: 'module', paths: ['src/math.mjs'] }],
+      chains: [{ id: 'chain-math', title: 'Math flow', memberIds: ['block-math'] }],
+    },
+    verify: ['node -e "0"'],
+  });
+  assert.match(changed, /Verify: PASS/);
+  const bind = service.calls.find((call) => call.capability === 'block' && call.args.action === 'bind_auto');
+  assert.equal(bind?.args.blockData.kind, 'component');
+
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('explore accepts task as an intent alias for focus and session state', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('explore', { task: '修复 src/math.mjs 的 add 行为' });
+  assert.match(result, /src\/math\.mjs/);
+  const session = JSON.parse(fs.readFileSync(path.join(projectRoot, '.contextos', 'session.json'), 'utf8'));
+  assert.match(session.intent, /src\/math\.mjs/);
+
   service.close();
   fs.rmSync(projectRoot, { recursive: true, force: true });
 });

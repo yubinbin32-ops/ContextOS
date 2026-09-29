@@ -7340,6 +7340,7 @@ function emptySession(projectId, intent, workspaceRoot) {
     readPolicy: {
       decisionPackageSeen: false,
       decisionPackageTool: null,
+      decisionComplete: false,
       decisionPackageAt: null,
       decisionPackageCount: 0,
       fullExpansions: 0,
@@ -7605,6 +7606,7 @@ var init_session_store = __esm({
         return session?.readPolicy || {
           decisionPackageSeen: false,
           decisionPackageTool: null,
+          decisionComplete: false,
           decisionPackageAt: null,
           decisionPackageCount: 0,
           fullExpansions: 0,
@@ -7615,18 +7617,36 @@ var init_session_store = __esm({
           lastPathOnlyFullDeniedAt: null
         };
       }
-      markDecisionPackage({ tool = null, status = null, artifactId = null, receiptId = null } = {}) {
+      markDecisionPackage({ tool = null, status = null, decisionComplete = false, artifactId = null, receiptId = null } = {}) {
         const session = this.ensureSession();
         const current = session.readPolicy || {};
         session.readPolicy = {
           ...current,
           decisionPackageSeen: true,
           decisionPackageTool: tool || current.decisionPackageTool || null,
+          decisionComplete: decisionComplete === true,
           decisionPackageAt: (/* @__PURE__ */ new Date()).toISOString(),
           decisionPackageCount: (Number(current.decisionPackageCount) || 0) + 1,
           decisionPackageStatus: status || current.decisionPackageStatus || null,
           decisionPackageArtifactId: artifactId || current.decisionPackageArtifactId || null,
           decisionPackageReceiptId: receiptId || current.decisionPackageReceiptId || null
+        };
+        return this.save(session);
+      }
+      resetReadPolicy() {
+        const session = this.ensureSession();
+        session.readPolicy = {
+          decisionPackageSeen: false,
+          decisionPackageTool: null,
+          decisionComplete: false,
+          decisionPackageAt: null,
+          decisionPackageCount: 0,
+          fullExpansions: 0,
+          fullExpansionPaths: [],
+          directedExpansions: 0,
+          directedExpansionPaths: [],
+          pathOnlyFullDenied: 0,
+          lastPathOnlyFullDeniedAt: null
         };
         return this.save(session);
       }
@@ -31748,6 +31768,9 @@ function latinQueries(text = "", exclude = "") {
 function isTestPath(filePath = "") {
   return /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(?:test|spec)\.[^/]+$/i.test(String(filePath));
 }
+function isTestContractPath(filePath = "") {
+  return isTestPath(filePath) && !/(^|\/)fixtures?\//i.test(String(filePath));
+}
 function isImplementationSource(filePath = "") {
   return /\.(?:mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|rb|php|swift|kt|cs|cpp|c|h)$/i.test(String(filePath)) && !isTestPath(filePath);
 }
@@ -31844,7 +31867,7 @@ function computeNext({ session, changedCount, profile, stage, intent = "" }) {
 }
 async function explorePipeline(ctx, input = {}) {
   const { caps, store, tracer, projectRoot, profile } = ctx;
-  const intent = input.intent || "";
+  const intent = input.intent || input.task || "";
   const obs = await observe({ projectRoot, store });
   const session = store.ensureSession(intent);
   tracer.step("observe", { gitAvailable: obs.gitAvailable, reconciled: obs.reconciled });
@@ -32095,10 +32118,10 @@ ${slice.body}
   });
   if (smallWorkspaceBundle) {
     for (const target of filePaths) {
-      if (isTestPath(target)) closure.tests.push(target);
+      if (isTestContractPath(target)) closure.tests.push(target);
     }
-    closure.tests = [...new Set(closure.tests)];
   }
+  closure.tests = [...new Set(closure.tests)].filter(isTestContractPath);
   if (closure.dependencies.length || closure.callers.length || closure.tests.length) {
     const closureLines = [];
     if (closure.dependencies.length) {
@@ -32206,8 +32229,40 @@ ${clip3(read.data, 240)}
     if (headings.length) memoryLines.push(headings[0]);
   }
   const implementationFocus = focus.paths.filter((filePath) => isImplementationSource(filePath));
+  const publicSurfaceModules = uniquePaths([
+    ...implementationFocus,
+    ...criticalCandidates.map((candidate) => candidate.target)
+  ]).filter((filePath) => isImplementationSource(filePath));
   const missingDecisionPaths = implementationFocus.filter((filePath) => !includedCriticalTargets.has(filePath) && !includedFocusSliceTargets.has(filePath));
   const decisionComplete = smallWorkspaceBundle || implementationFocus.length > 0 && missingDecisionPaths.length === 0;
+  const criticalReadByTarget = new Map(criticalCandidates.map((candidate) => [candidate.target, candidate.read]));
+  const entrypointPaths = filePaths.filter((filePath) => isImplementationSource(filePath)).filter((filePath) => /(^|\/)(index|main)\.(?:mjs|js|cjs|ts|tsx)$/i.test(filePath)).slice(0, 2);
+  const publicSurfaceLines = [];
+  const publicSurfaceGaps = [];
+  for (const entrypoint of entrypointPaths) {
+    let entryText = criticalReadByTarget.get(entrypoint);
+    if (!entryText) {
+      const entryRead = await caps.code({ action: "read", path: entrypoint, fullFile: true });
+      if (entryRead.ok) entryText = entryRead.data;
+    }
+    if (!entryText) continue;
+    const entryDir = path11.posix.dirname(entrypoint);
+    const missingExports = publicSurfaceModules.filter((filePath) => {
+      if (filePath === entrypoint) return false;
+      const relative = path11.posix.relative(entryDir, filePath);
+      const normalized = relative.startsWith(".") ? relative : `./${relative}`;
+      const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return !new RegExp(`from\\s+['"]${escaped}['"]`).test(entryText);
+    });
+    if (missingExports.length) {
+      publicSurfaceGaps.push(...missingExports);
+      publicSurfaceLines.push(
+        `- \`${entrypoint}\` does not re-export decision-package module(s): ${missingExports.map((file) => `\`${file}\``).join(", ")}. Include the entrypoint update in the same change only when these modules expose public API.`
+      );
+    } else {
+      publicSurfaceLines.push(`- \`${entrypoint}\` re-exports every decision-package module.`);
+    }
+  }
   const nextLines = [`\u{1F449} ${computeNext({ session, changedCount: dirty.length, profile, stage: "explore", intent })}`];
   if (smallWorkspaceBundle) {
     nextLines.push("The complete small-workspace source/test bundle is already in this response. Go directly to change/work; do not run `rg --files`, `cat`, `sed`, or per-file inspect first.");
@@ -32222,6 +32277,9 @@ ${clip3(read.data, 240)}
   if (stubTargets.length) {
     nextLines.push(`Exact implementation stubs are already included: ${stubTargets.join(", ")}. Build \`change\` directly; do not dump source with native \`rg\`/\`cat\`.`);
   }
+  if (publicSurfaceGaps.length) {
+    nextLines.push("Public surface gap detected: include the entrypoint/barrel update in the same change when the new capability is public.");
+  }
   const requestedBudget = Number(input.maxChars);
   const budget = smallWorkspaceBundle ? Math.max(resolveBudget(input.depth, ctx.profile?.budget), PIPELINE_EXPLORE_OUTPUT_CLIP) : Number.isFinite(requestedBudget) && requestedBudget > 0 ? Math.min(Math.floor(requestedBudget), PIPELINE_EXPLORE_OUTPUT_CLIP) : resolveBudget(input.depth, ctx.profile?.budget);
   const decisionLines = [
@@ -32229,7 +32287,7 @@ ${clip3(read.data, 240)}
     `- do_not_reread=${decisionComplete ? "true" : "false"}`,
     `- native_mutation=forbidden${decisionComplete ? "-after-read-complete" : ""}`,
     "- after_read_complete=change_or_work_only",
-    `- architecture=${architectureState}${architectureState === "empty" ? "; change must bind blocks/chains (chain.memberIds=block ids)" : ""}`,
+    `- architecture=${architectureState}${architectureState === "empty" ? '; change must bind blocks/chains (chain.memberIds=block ids; use semantic kinds, never kind:"module")' : ""}`,
     `- files=${filePaths.length}`,
     decisionComplete ? "- next=change({edits,verify,architecture})" : "- next=inspect({path,full:true}) for the named missing target, then change({edits,verify})"
   ];
@@ -32257,6 +32315,9 @@ ${clip3(read.data, 240)}
   }
   if (testContractLines.length) {
     sections.push({ key: "test-contract", title: "Test contract", priority: 0, lines: testContractLines });
+  }
+  if (publicSurfaceLines.length) {
+    sections.push({ key: "public-surface", title: "Public surface", priority: 0, lines: publicSurfaceLines });
   }
   sections.push(
     { key: "where", title: "Where to look", priority: 4, lines: whereLines }
@@ -32379,20 +32440,21 @@ async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRu
     const existing = blockById.get(id);
     const title = String(spec?.title || spec?.name || existing?.title || id).trim();
     const kind = String(spec?.kind || existing?.kind || "component").trim();
+    const semanticKind = kind === "module" ? "component" : kind;
     const rawPaths = spec?.paths ?? spec?.path ?? spec?.files ?? spec?.file;
     const pathValues = Array.isArray(rawPaths) ? rawPaths : rawPaths == null ? [] : [rawPaths];
     const paths = pathValues.map((value) => String(value || "").trim()).filter(Boolean);
-    if (!id || !title || !kind || !paths.length) {
+    if (!id || !title || !semanticKind || !paths.length) {
       errors.push("each architecture Block needs id, title, paths, and optional kind (kind defaults to component)");
       continue;
     }
-    if (id.startsWith("mod-") || kind === "module" || /^derived module\b/i.test(title)) {
+    if (id.startsWith("mod-") || /^derived module\b/i.test(title)) {
       errors.push(
         "derived module identity is not a semantic Block: " + id + '; use a semantic kind such as component, service, engine, gateway, api, ui, tooling, verification, or testing ("module" and "mod-*" ids are reserved for AST-derived ModuleIndex entries)'
       );
       continue;
     }
-    const blockData = { title, kind };
+    const blockData = { title, kind: semanticKind };
     const summary = spec.summary ?? spec.responsibility ?? existing?.summary;
     const details = spec.details ?? existing?.details;
     if (summary !== void 0) blockData.summary = summary;
@@ -54044,18 +54106,20 @@ function decisionPackageMetadata(tool, result) {
   if (!text) return null;
   const pipelineStatus = text.match(/^(?:pipeline|work)=([A-Z]+)/m)?.[1] || null;
   const readComplete = text.match(/\bread_complete=(true|false)\b/)?.[1] || null;
+  const decisionComplete = readComplete === "true" || /\bdecision=complete\b/.test(text);
   if (pipelineStatus) {
     const artifactId = text.match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1] || null;
     const receiptId = text.match(/\breceipt(?:\s+|[=:~-])([A-Za-z0-9._-]+)/i)?.[1] || null;
     return {
       status: readComplete === "false" ? "partial" : pipelineStatus,
+      decisionComplete,
       artifactId,
       receiptId
     };
   }
   if (tool === "explore" && /##\s+Where to look/i.test(text) && /##\s+Critical slices/i.test(text)) {
     const artifactId = text.match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1] || null;
-    return { status: "OK", artifactId, receiptId: null };
+    return { status: "OK", decisionComplete: true, artifactId, receiptId: null };
   }
   return null;
 }
@@ -54736,10 +54800,13 @@ var Orchestrator = class {
     await this._selfHeal();
     const seed = this.store.current || this.store.ensureSession(input.intent || input.summary || "");
     const route = routeKind(tool, input);
-    if (route === "mutation" || tool === "ops" && ["run_command", "process"].includes(input.capability)) {
+    if (route === "mutation" || tool === "verify" || tool === "ship" || tool === "ops" && ["run_command", "process"].includes(input.capability)) {
       this.store.invalidateReadReceipts();
       this.store.invalidateSearchReceipts();
       this.store.invalidateSemanticReceipts();
+      if (input.dryRun !== true && typeof this.store.resetReadPolicy === "function") {
+        this.store.resetReadPolicy();
+      }
       if (turnMemo instanceof Map) turnMemo.clear();
     }
     const tracer = new Tracer({ projectRoot: this.projectRoot, sessionId: seed.id });
@@ -54860,6 +54927,7 @@ var Orchestrator = class {
         this.store.markDecisionPackage({
           tool,
           status: decisionPackage.status,
+          decisionComplete: decisionPackage.decisionComplete === true,
           artifactId: decisionPackage.artifactId,
           receiptId: decisionPackage.receiptId
         });
@@ -63573,7 +63641,7 @@ function createV3Server({
   const server = new McpServer(
     { name: "contextos", version: VERSION },
     {
-      instructions: "ContextOS is the repository execution layer. Prefer one contextos call per host decision: work for read+edit+verify, pipeline for known batches, micro for bulky evidence. Trust verified receipts; expand artifacts only when the next decision needs the body."
+      instructions: "ContextOS is the repository execution layer and exoskeleton. For non-trivial repo work: first call one pipeline containing explore plus baseline verify; then one change/work containing all edits, verify, architecture, and ship. Search with work.search or pipeline search; do not run native cat/sed/rg/npm test between OS calls. After read_complete=true, mutate directly; after a passing verify/ship, finalize. Use micro only for >2KB raw evidence or an explicit assignment."
     }
   );
   const dispatch = async (tool, input) => {
@@ -63592,7 +63660,7 @@ function createV3Server({
     server.registerTool(
       "contextos",
       {
-        description: "Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; search/create aliases; micro=evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.",
+        description: "Repository execution exoskeleton. Non-trivial: one pipeline (explore + baseline verify) directly, then one change/work (edits + verify + architecture + ship). Search via work.search/pipeline; no native cat/sed/rg/npm test between OS calls. After read_complete=true mutate; PASS is final. Micro evidence/delivery only for >2KB or explicit assignment. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; ops for advanced capabilities. Expand with full/maxChars.",
         inputSchema: {
           action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops", "search", "create"]),
           capability: string2().optional(),

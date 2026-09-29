@@ -181,11 +181,13 @@ function decisionPackageMetadata(tool, result) {
   if (!text) return null;
   const pipelineStatus = text.match(/^(?:pipeline|work)=([A-Z]+)/m)?.[1] || null;
   const readComplete = text.match(/\bread_complete=(true|false)\b/)?.[1] || null;
+  const decisionComplete = readComplete === 'true' || /\bdecision=complete\b/.test(text);
   if (pipelineStatus) {
     const artifactId = text.match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1] || null;
     const receiptId = text.match(/\breceipt(?:\s+|[=:~-])([A-Za-z0-9._-]+)/i)?.[1] || null;
     return {
       status: readComplete === 'false' ? 'partial' : pipelineStatus,
+      decisionComplete,
       artifactId,
       receiptId,
     };
@@ -194,7 +196,7 @@ function decisionPackageMetadata(tool, result) {
     && /##\s+Where to look/i.test(text)
     && /##\s+Critical slices/i.test(text)) {
     const artifactId = text.match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1] || null;
-    return { status: 'OK', artifactId, receiptId: null };
+    return { status: 'OK', decisionComplete: true, artifactId, receiptId: null };
   }
   return null;
 }
@@ -975,10 +977,15 @@ export class Orchestrator {
     // Invalidate durable read/search receipts before the operation so a failed
     // mutation cannot accidentally make a stale source look reusable.
     if (route === 'mutation'
+      || tool === 'verify'
+      || tool === 'ship'
       || (tool === 'ops' && ['run_command', 'process'].includes(input.capability))) {
       this.store.invalidateReadReceipts();
       this.store.invalidateSearchReceipts();
       this.store.invalidateSemanticReceipts();
+      if (input.dryRun !== true && typeof this.store.resetReadPolicy === 'function') {
+        this.store.resetReadPolicy();
+      }
       if (turnMemo instanceof Map) turnMemo.clear();
     }
     const tracer = new Tracer({ projectRoot: this.projectRoot, sessionId: seed.id });
@@ -1113,6 +1120,7 @@ export class Orchestrator {
         this.store.markDecisionPackage({
           tool,
           status: decisionPackage.status,
+          decisionComplete: decisionPackage.decisionComplete === true,
           artifactId: decisionPackage.artifactId,
           receiptId: decisionPackage.receiptId,
         });
