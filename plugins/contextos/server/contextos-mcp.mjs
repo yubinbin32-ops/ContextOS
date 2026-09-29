@@ -63374,8 +63374,6 @@ var package_default = {
     "plugin:verify": "npm run plugin:build && node scripts/plugin-smoke.mjs",
     "dist:smoke": "node scripts/distribution-smoke.mjs",
     "acceptance:real": "node scripts/p7-real-acceptance.mjs",
-    "acceptance:micro": "node scripts/micro-direct-pipeline-acceptance.mjs",
-    "acceptance:micro:executor": "node scripts/micro-executor-acceptance.mjs",
     "preplugin:install": "npm run version:sync",
     "plugin:install": "npm run plugin:build && node scripts/install-plugin.mjs",
     "plugin:install:check": "node scripts/install-plugin.mjs --check",

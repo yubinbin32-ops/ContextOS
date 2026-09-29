@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1275,
-  "exportedAt": "2026-09-29T10:10:20.960Z",
+  "graphRevision": 1277,
+  "exportedAt": "2026-09-29T10:36:34.302Z",
   "data": {
     "plans": [
       {
@@ -2163,184 +2163,6 @@
         "history": [],
         "createdAt": "2026-09-20T08:38:28.094Z",
         "updatedAt": "2026-09-20T08:38:28.094Z"
-      },
-      {
-        "id": "block-contextos-evaluation-metrics",
-        "projectId": "mdflow",
-        "title": "block-contextos-evaluation-metrics",
-        "kind": "service",
-        "summary": "",
-        "details": "",
-        "artifactRefs": [
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "usage",
-            "anchorKind": "symbol",
-            "startLine": 9,
-            "endLine": 20,
-            "hash": "ec3766567c2fe82f",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "parseArgs",
-            "anchorKind": "symbol",
-            "startLine": 22,
-            "endLine": 35,
-            "hash": "1e4ff72313aea03a",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "readJsonl",
-            "anchorKind": "symbol",
-            "startLine": 37,
-            "endLine": 49,
-            "hash": "0f72a64dd6363e6a",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "isCodexExecStream",
-            "anchorKind": "symbol",
-            "startLine": 51,
-            "endLine": 53,
-            "hash": "4ed8540fc88361f7",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "hasPerRequestUsage",
-            "anchorKind": "symbol",
-            "startLine": 55,
-            "endLine": 57,
-            "hash": "2ff2e12d67e02584",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "findSessionRollout",
-            "anchorKind": "symbol",
-            "startLine": 59,
-            "endLine": 75,
-            "hash": "bc19d0b7508449e0",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "resolveRolloutInput",
-            "anchorKind": "symbol",
-            "startLine": 77,
-            "endLine": 101,
-            "hash": "c2850ad159e5fad3",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "increment",
-            "anchorKind": "symbol",
-            "startLine": 103,
-            "endLine": 106,
-            "hash": "164f4caa0bc0ff95",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "classifyCall",
-            "anchorKind": "symbol",
-            "startLine": 114,
-            "endLine": 139,
-            "hash": "e874a0328d61f822",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "classifyTurn",
-            "anchorKind": "symbol",
-            "startLine": 141,
-            "endLine": 148,
-            "hash": "87604832b58df1a1",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "collectRollout",
-            "anchorKind": "symbol",
-            "startLine": 150,
-            "endLine": 256,
-            "hash": "34e13fcd0cafb980",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "collectMicroUsage",
-            "anchorKind": "symbol",
-            "startLine": 258,
-            "endLine": 304,
-            "hash": "1bddeb70d5aaa5fc",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "summarize",
-            "anchorKind": "symbol",
-            "startLine": 306,
-            "endLine": 429,
-            "hash": "879f4128d725c619",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "formatSummary",
-            "anchorKind": "symbol",
-            "startLine": 431,
-            "endLine": 464,
-            "hash": "11a8641f15bdffef",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/contextos-ab-metrics.mjs",
-            "symbol": "main",
-            "anchorKind": "symbol",
-            "startLine": 466,
-            "endLine": 482,
-            "hash": "f375e395d299b063",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          }
-        ],
-        "history": [],
-        "createdAt": "2026-09-28T17:34:40.125Z",
-        "updatedAt": "2026-09-28T17:34:40.125Z"
       },
       {
         "id": "block-contextos-integration",
@@ -5887,9 +5709,9 @@
       {
         "id": "block-r14-release-verification",
         "projectId": "mdflow",
-        "title": "block-r14-release-verification",
-        "kind": "service",
-        "summary": "",
+        "title": "发布与隔离验证",
+        "kind": "verification",
+        "summary": "插件安装、Micro 执行与隔离发布验证。",
         "details": "",
         "artifactRefs": [
           {
@@ -5965,17 +5787,6 @@
             "startLine": 151,
             "endLine": 154,
             "hash": "6ff3966da46b4b49",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "docs/contextos-real-development-ab-test.md",
-            "symbol": "contextos-real-development-ab-test.md",
-            "anchorKind": "file",
-            "startLine": 1,
-            "endLine": 1297,
-            "hash": "20f2e59d26a8d3e8",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
