@@ -210,9 +210,9 @@ test('Micro preload collects test failures and continues to later evidence steps
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.status, 'FAIL');
+    assert.equal(result.status, 'PARTIAL');
     assert.equal(calls.length, 2, 'failure collection must not stop the remaining evidence step');
-    assert.match(result.summary, /Pipeline status: FAIL/);
+    assert.match(result.summary, /Pipeline status: PARTIAL/);
     assert.match(result.summary, /AssertionError/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

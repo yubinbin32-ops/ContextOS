@@ -9,13 +9,18 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const repoRoot = process.cwd();
+const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
+const contextosHome = process.env.CONTEXTOS_HOME || path.join(os.homedir(), ".contextos");
 const pluginDir = path.join(repoRoot, "plugins", "contextos");
 const bundle = path.join(pluginDir, "server", "contextos-mcp.mjs");
 const skillDir = path.join(pluginDir, "skills", "contextos");
 const manifestDir = path.join(pluginDir, ".codex-plugin");
 const mcpConfig = path.join(pluginDir, ".mcp.json");
+const checkOnly = process.argv.includes("--check");
+const requestedPluginId = process.env.CONTEXTOS_PLUGIN_ID || "contextos@personal";
 
 if (!fs.existsSync(bundle)) {
   console.error("Missing bundle. Run `npm run plugin:build` first.");
@@ -47,7 +52,7 @@ function stripLegacyHookState(configPath) {
 }
 
 function findPluginInstalls() {
-  const cacheRoot = path.join(os.homedir(), ".codex", "plugins", "cache");
+  const cacheRoot = path.join(codexHome, "plugins", "cache");
   if (!fs.existsSync(cacheRoot)) return [];
   const installs = [];
   for (const marketplace of fs.readdirSync(cacheRoot)) {
@@ -69,13 +74,109 @@ function findPluginInstalls() {
   return installs;
 }
 
+function listInstalledContextosPlugins() {
+  const codexBin = process.env.CONTEXTOS_CODEX_BIN || "codex";
+  try {
+    const output = execFileSync(codexBin, ["plugin", "list", "--json"], {
+      encoding: "utf8",
+      env: { ...process.env, CODEX_HOME: codexHome },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const parsed = JSON.parse(output);
+    return (parsed.installed || []).filter((plugin) =>
+      plugin.name === "contextos" && plugin.installed !== false && plugin.enabled !== false
+    );
+  } catch (_) {
+    return [];
+  }
+}
+
+function ensureCodexPluginInstalled() {
+  const existing = listInstalledContextosPlugins();
+  if (existing.length) return existing;
+  const codexBin = process.env.CONTEXTOS_CODEX_BIN || "codex";
+  try {
+    execFileSync(codexBin, ["plugin", "add", requestedPluginId, "--json"], {
+      encoding: "utf8",
+      env: { ...process.env, CODEX_HOME: codexHome },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    const detail = String(error?.stderr || error?.message || "unknown error").trim();
+    throw new Error(
+      `ContextOS is not registered as an installed Codex plugin. Run 'codex plugin add ${requestedPluginId}' first. ${detail}`
+    );
+  }
+  const installed = listInstalledContextosPlugins();
+  if (!installed.length) {
+    throw new Error(
+      `Codex accepted '${requestedPluginId}' but did not report an installed ContextOS plugin. Refusing to continue with an unverified install.`
+    );
+  }
+  return installed;
+}
+
+function detectMcpToolDiscovery() {
+  if (process.env.CONTEXTOS_TOOL_DISCOVERY_MODE) {
+    return {
+      ok: true,
+      mode: process.env.CONTEXTOS_TOOL_DISCOVERY_MODE,
+      source: "environment",
+    };
+  }
+  const codexBin = process.env.CONTEXTOS_CODEX_BIN || "codex";
+  let output;
+  try {
+    output = execFileSync(codexBin, ["features", "list"], {
+      encoding: "utf8",
+      env: { ...process.env, CODEX_HOME: codexHome },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    return { ok: false, reason: String(error?.stderr || error?.message || "could not inspect feature flags").trim() };
+  }
+  const lines = output.split(/\r?\n/);
+  const hasToolSearch = lines.some((entry) => entry.trim().startsWith("tool_search "));
+  const deferralLine = lines.find((entry) => entry.trim().startsWith("tool_search_always_defer_mcp_tools "));
+  const deferralEffective = deferralLine
+    ? deferralLine.trim().split(/\s+/).at(-1) === "true"
+    : false;
+  return {
+    ok: true,
+    mode: hasToolSearch || deferralEffective ? "tool_search" : "direct",
+    source: "features-list",
+  };
+}
+
 function findLocalSourceInstalls() {
   const sourceTarget = path.join(os.homedir(), "plugins", "contextos");
   return fs.existsSync(sourceTarget) ? [sourceTarget] : [];
 }
 
+const registeredPlugins = ensureCodexPluginInstalled();
+console.log(`✓ Codex 已注册 ContextOS 插件：${registeredPlugins.map((plugin) => plugin.pluginId).join(", ")}`);
+const mcpDiscovery = detectMcpToolDiscovery();
+if (!mcpDiscovery.ok) {
+  throw new Error(
+    "无法确认 Codex 的 MCP 工具发现模式；拒绝在未知状态下继续。"
+    + ` ${mcpDiscovery.reason || "unknown error"}`
+  );
+}
+if (mcpDiscovery.mode === "tool_search") {
+  console.log("✓ ContextOS MCP discovery mode: tool_search（正式会话首轮必须先执行一次 tool_search）。");
+} else {
+  console.log("✓ ContextOS MCP discovery mode: direct（compact 工具应首轮可见）。");
+}
+console.log(`  CONTEXTOS_HOME=${contextosHome}`);
+if (checkOnly) {
+  console.log("✓ 插件安装与 MCP discovery 门禁通过。");
+  process.exit(0);
+}
+
 const targets = [...new Set([...findPluginInstalls(), ...findLocalSourceInstalls()])];
-if (!targets.length) console.log("! 未找到已安装的 ContextOS 插件缓存，跳过缓存同步。");
+if (!targets.length) {
+  throw new Error("未找到已安装的 ContextOS 插件缓存；拒绝在未安装状态下继续同步 bundle。");
+}
 
 for (const target of targets) {
   fs.mkdirSync(path.join(target, "server"), { recursive: true });
@@ -102,13 +203,13 @@ for (const target of targets) {
   console.log(`✓ 已同步插件缓存：${target}`);
 }
 
-const canonicalDir = path.join(os.homedir(), ".contextos", "server");
+const canonicalDir = path.join(contextosHome, "server");
 fs.mkdirSync(canonicalDir, { recursive: true });
 fs.copyFileSync(bundle, path.join(canonicalDir, "contextos-mcp.mjs"));
 fs.chmodSync(path.join(canonicalDir, "contextos-mcp.mjs"), 0o755);
 console.log(`✓ 已同步权威服务端：${path.join(canonicalDir, "contextos-mcp.mjs")}`);
-stripLegacyHookState(path.join(os.homedir(), ".codex", "config.toml"));
-const legacyHooksDir = path.join(os.homedir(), ".contextos", "hooks");
+stripLegacyHookState(path.join(codexHome, "config.toml"));
+const legacyHooksDir = path.join(contextosHome, "hooks");
 for (const stale of ["contextos-hook.mjs", "contextos-hook-launcher.mjs", "runtime-policy.mjs", "host-adapters.mjs", "opencode-plugin.mjs", "HOST_ADAPTER_GUIDE.md", ".contextos-hook-manifest.json"]) {
   fs.rmSync(path.join(legacyHooksDir, stale), { force: true });
 }

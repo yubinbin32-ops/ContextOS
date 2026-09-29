@@ -14,11 +14,31 @@ const OUTLINE_CLIP = 1200;
 // Files at or below this size are cheap to inline whole; above it, a
 // path-only inspect returns an outline instead of a truncated head.
 const INSPECT_INLINE_MAX_CHARS = 2500;
+const INSPECT_BATCH_INLINE_MAX_CHARS = 12000;
+const INSPECT_BATCH_INLINE_MAX_FILES = 8;
+const SMALL_WORKSPACE_MAX_CHARS = 16000;
+const SMALL_WORKSPACE_MAX_FILES = 24;
+const SMALL_WORKSPACE_CRITICAL_MAX_FILES = 16;
+const DECISION_SOURCE_FILE_MAX_CHARS = 8000;
+const DECISION_SOURCE_TOTAL_MAX_CHARS = 18000;
+const INSPECT_RECOVERY_MAX_CHARS = 16000;
+const INSPECT_RECOVERY_OUTPUT_MAX_CHARS = 32000;
+const MAX_INSPECT_RANGE_LINES = 240;
+const MAX_DIRECTED_EXPANSIONS = 8;
+const MAX_FOCUS_SEARCH_IDENTIFIERS = 4;
+const MAX_FOCUS_PATH_CANDIDATES = 16;
+const MAX_FOCUS_SLICE_SYMBOLS = 4;
 const SEARCH_CLIP = 360;
-const PIPELINE_DEFAULT_OUTPUT_CLIP = 400;
+const PIPELINE_DEFAULT_OUTPUT_CLIP = 2800;
+const PIPELINE_EXPLORE_OUTPUT_CLIP = 18000;
 const PIPELINE_MAX_OUTPUT_CLIP = 4000;
-const PIPELINE_RECEIPT_OUTPUT_CLIP = 180;
-const PIPELINE_RECEIPT_RESPONSE_BUDGET = 900;
+const PIPELINE_RECEIPT_OUTPUT_CLIP = 2600;
+const PIPELINE_RECEIPT_RESPONSE_BUDGET = 4000;
+// A pipeline containing explore is the host's first decision package. Its
+// purpose is to make the next mutation possible without a second read loop;
+// keeping it at the generic response budget recreates the very cost it should
+// remove. Generic inspect-only pipelines remain bounded at 4000.
+const PIPELINE_DECISION_RESPONSE_BUDGET = 24000;
 const PIPELINE_DEFAULT_PARALLEL_CONCURRENCY = 4;
 const PIPELINE_MAX_PARALLEL_CONCURRENCY = 8;
 const MICRO_TRIAGE_MIN_CHARS = 2000;
@@ -54,6 +74,13 @@ function requestsFullOutput(value) {
   if (value.budget === 'full' || value.full === true) return true;
   if (Array.isArray(value)) return value.some(requestsFullOutput);
   return Object.values(value).some(requestsFullOutput);
+}
+
+function requestsContinueOnFailure(value) {
+  if (!value || typeof value !== 'object') return false;
+  if (value.continueOnFailure === true) return true;
+  if (Array.isArray(value)) return value.some(requestsContinueOnFailure);
+  return Object.values(value).some(requestsContinueOnFailure);
 }
 
 function outputLength(value) {
@@ -104,7 +131,7 @@ function actionFailed(action, result, receipts = []) {
     ))) return true;
   }
 
-  if (tool === 'verify' && input.mode && input.mode !== 'once') return false;
+  if (tool === 'verify' && PROCESS_VERIFY_MODES.has(input.mode)) return false;
   if (tool === 'verify' || tool === 'change') {
     const failuresIndex = headings.indexOf('Failures');
     const statusHeadings = failuresIndex < 0 ? headings : headings.slice(0, failuresIndex);
@@ -154,15 +181,48 @@ function extractMicroTriage(text) {
 // Once Micro has already reduced a failure to a diagnosis, the raw log is
 // redundant in the host window. Keep the identifying lines and a locator so
 // the caller can still open the receipt when it needs the full evidence.
-function compactFailureEvidence(text, { maxChars = 400 } = {}) {
+function isFailureYamlLabel(line) {
+  return /^(?:error|stack|code|location|failureType):\s*(?:\|-|>|-)?\s*$/i.test(line);
+}
+
+function isFailureStackFrame(line) {
+  return /^(?:at\s+)?\S.*(?:\(|at\s+).*:\d+:\d+\)?$/.test(line);
+}
+
+export function extractFailureEvidence(text) {
   const lines = String(text || '')
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
   const test = lines.find((line) => /^not ok\b/i.test(line));
-  const error = lines.find((line) => /AssertionError|^error:|Expected\b|\bError:/i.test(line));
-  const parts = [test, error].filter(Boolean);
-  const head = parts.length ? parts.join('\n') : lines.slice(0, 2).join('\n');
+  const causes = [];
+  const stackFrames = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isFailureYamlLabel(line)) {
+      const next = lines[index + 1];
+      if (next && !isFailureYamlLabel(next)) causes.push(next);
+      continue;
+    }
+    if (/AssertionError|(?:^|\b)(?:Error|Expected):|Expected\s+|not implemented|panicked at/i.test(line)) {
+      causes.push(line);
+    }
+    if (isFailureStackFrame(line)) stackFrames.push(line);
+  }
+  return {
+    test: test || null,
+    cause: causes[0] || null,
+    stackFrame: stackFrames[0] || null,
+    fallback: lines.filter((line) => !isFailureYamlLabel(line)).slice(0, 2),
+  };
+}
+
+function compactFailureEvidence(text, { maxChars = 400 } = {}) {
+  const evidence = extractFailureEvidence(text);
+  const parts = [evidence.test, evidence.cause, evidence.stackFrame]
+    .filter(Boolean)
+    .filter((line, index, values) => values.indexOf(line) === index);
+  const head = parts.length ? parts.join('\n') : evidence.fallback.join('\n');
   // Clip the evidence first: appending the locator before clipping let a long
   // assertion line consume the whole budget and drop the locator.
   return `${clip(head, maxChars)}\n[raw failure log kept in the verification receipt; pass full:true to expand]`;
@@ -202,6 +262,9 @@ function resolveActionOutputLimit(action, { mode = 'summary', aggregateBudget } 
   const requested = typeof action.maxChars === 'number'
     ? action.maxChars
     : (typeof nested?.maxChars === 'number' ? nested.maxChars : null);
+  const defaultClip = toolName === 'explore'
+    ? PIPELINE_EXPLORE_OUTPUT_CLIP
+    : PIPELINE_DEFAULT_OUTPUT_CLIP;
 
   if (mode === 'full') {
     const aggregateLimit = Number.isFinite(aggregateBudget)
@@ -214,10 +277,10 @@ function resolveActionOutputLimit(action, { mode = 'summary', aggregateBudget } 
   }
 
   if (Number.isFinite(requested) && requested > 0) {
-    return Math.min(Math.floor(requested), PIPELINE_MAX_OUTPUT_CLIP);
+    return Math.min(Math.floor(requested), toolName === 'explore' ? PIPELINE_EXPLORE_OUTPUT_CLIP : PIPELINE_MAX_OUTPUT_CLIP);
   }
-  if (nested?.budget === 'full') return PIPELINE_MAX_OUTPUT_CLIP;
-  return PIPELINE_DEFAULT_OUTPUT_CLIP;
+  if (nested?.budget === 'full') return toolName === 'explore' ? PIPELINE_EXPLORE_OUTPUT_CLIP : PIPELINE_MAX_OUTPUT_CLIP;
+  return defaultClip;
 }
 
 function explicitActionMaxChars(action) {
@@ -260,6 +323,80 @@ function compactOutlineData(text) {
     return `(${slice.join(', ')}${symbols.length > 8 ? ` +${symbols.length - 8}` : ''})`;
   }
   return clip(text, 200);
+}
+
+function stripOuterCodeFence(text) {
+  const value = String(text ?? '');
+  const match = value.match(/^\s*```[^\n]*\n([\s\S]*?)\n```\s*$/);
+  return match ? match[1] : value;
+}
+
+function compactTestContract(text, maxChars = 420) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => /^(?:test\(|assert\.|await assert\.|const (?:report|replay)\b)/.test(line));
+  return clip(lines.join(' | '), maxChars);
+}
+
+const INDEX_IMPORT_EXTENSIONS = ['.mjs', '.js', '.cjs', '.ts', '.tsx', '.jsx', '.json'];
+
+function resolveIndexedImport(projectRoot, fromPath, source, index) {
+  const raw = String(source || '').trim();
+  if (!raw || (!raw.startsWith('.') && !raw.startsWith('/'))) return null;
+  const base = path.resolve(projectRoot, path.dirname(fromPath), raw);
+  const candidates = [];
+  if (path.extname(base)) {
+    candidates.push(base);
+  } else {
+    for (const extension of INDEX_IMPORT_EXTENSIONS) candidates.push(base + extension);
+    for (const extension of INDEX_IMPORT_EXTENSIONS) candidates.push(path.join(base, `index${extension}`));
+  }
+  for (const candidate of candidates) {
+    const relative = path.relative(projectRoot, candidate).split(path.sep).join('/');
+    if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+    if (index.entries.has(relative)) return relative;
+  }
+  return null;
+}
+
+function collectExploreClosure(projectRoot, seeds, index, limits = {}) {
+  const maxDependencies = Number.isFinite(limits.maxDependencies) ? Math.max(1, Math.floor(limits.maxDependencies)) : 6;
+  const maxCallers = Number.isFinite(limits.maxCallers) ? Math.max(1, Math.floor(limits.maxCallers)) : 4;
+  const maxTests = Number.isFinite(limits.maxTests) ? Math.max(1, Math.floor(limits.maxTests)) : 2;
+  const seedSet = new Set(seeds);
+  const dependencies = new Set();
+
+  for (const seed of seeds) {
+    const entry = index.entries.get(seed);
+    for (const source of entry?.imports || []) {
+      const resolved = resolveIndexedImport(projectRoot, seed, source, index);
+      if (resolved && resolved !== seed) dependencies.add(resolved);
+      if (dependencies.size >= maxDependencies) break;
+    }
+    if (dependencies.size >= maxDependencies) break;
+  }
+
+  const related = new Set([...seedSet, ...dependencies]);
+  const callers = new Set();
+  const tests = new Set();
+  for (const [candidate, entry] of index.entries) {
+    const imports = (entry?.imports || [])
+      .map((source) => resolveIndexedImport(projectRoot, candidate, source, index))
+      .filter(Boolean);
+    if (!imports.some((target) => related.has(target))) continue;
+    const isTest = /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(?:test|spec)\.[^/]+$/i.test(candidate);
+    if (isTest) tests.add(candidate);
+    else if (!related.has(candidate)) callers.add(candidate);
+    if (callers.size >= maxCallers && tests.size >= maxTests) break;
+  }
+
+  return {
+    dependencies: Array.from(dependencies),
+    callers: Array.from(callers),
+    tests: Array.from(tests),
+  };
 }
 
 function clip(text, max, { withHint = false } = {}) {
@@ -452,6 +589,114 @@ function latinQueries(text = '', exclude = '') {
     .slice(0, 2);
 }
 
+function isTestPath(filePath = '') {
+  return /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(?:test|spec)\.[^/]+$/i.test(String(filePath));
+}
+
+function isImplementationSource(filePath = '') {
+  return /\.(?:mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|rb|php|swift|kt|cs|cpp|c|h)$/i.test(String(filePath))
+    && !isTestPath(filePath);
+}
+
+function uniquePaths(values = []) {
+  return Array.from(new Set(values
+    .map((value) => String(value || '').replace(/\\/g, '/').replace(/^\.\//, ''))
+    .filter(Boolean)));
+}
+
+function parseOutlineSymbols(text) {
+  const symbols = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const match = line.trim().match(/^[-*]\s+\*\*([a-zA-Z]+)\*\*\s+`([^`]+)`\s+\[L(\d+)-L(\d+)\]/);
+    if (!match) continue;
+    const [, kind, display, startLine, endLine] = match;
+    const name = display.split('(')[0].trim().split('.').pop();
+    if (!name) continue;
+    symbols.push({
+      kind,
+      name,
+      display,
+      startLine: Number(startLine),
+      endLine: Number(endLine),
+      line,
+    });
+  }
+  return symbols;
+}
+
+function selectFocusSymbols(outlineText, { identifiers = [], tokens = [] } = {}) {
+  const terms = Array.from(new Set([...identifiers, ...tokens]
+    .map((value) => String(value || '').toLowerCase())
+    .filter((value) => value.length >= 4)))
+    .slice(0, 24);
+  const candidates = parseOutlineSymbols(outlineText)
+    .filter((symbol) => ['func', 'function', 'method', 'constructor'].includes(symbol.kind));
+  const scored = candidates.map((symbol) => {
+    const name = symbol.name.toLowerCase();
+    const haystack = `${symbol.display} ${symbol.line}`.toLowerCase();
+    let score = 0;
+    for (const term of terms) {
+      if (name === term) score += 24;
+      else if (name.includes(term)) score += 12;
+      else if (haystack.includes(term)) score += 4;
+    }
+    if (symbol.kind === 'func' || symbol.kind === 'method' || symbol.kind === 'function') score += 1;
+    if (symbol.name === 'constructor' || symbol.name.startsWith('_')) score -= 3;
+    return { ...symbol, score };
+  }).sort((left, right) => (
+    right.score - left.score
+    || left.startLine - right.startLine
+  ));
+  const matched = scored.filter((symbol) => symbol.score > 0);
+  const selected = (matched.length ? matched : scored).slice(0, MAX_FOCUS_SLICE_SYMBOLS);
+  return { symbols: selected, matched: matched.length > 0 };
+}
+
+async function resolveExploreFocus({ caps, index, intent = '', identifiers = [] }) {
+  const discoveredFiles = index.discover({ limit: 800 });
+  const intentTokens = Array.from(tokenize(intent))
+    .filter((token) => token.length >= 4)
+    .filter((token) => !['implement', 'implementation', 'including', 'relevant', 'public', 'package', 'exports', 'tests'].includes(token))
+    .slice(0, 16);
+  const pathScores = discoveredFiles
+    .map((filePath) => {
+      const normalized = filePath.toLowerCase();
+      let score = 0;
+      for (const token of intentTokens) {
+        if (!normalized.includes(token)) continue;
+        score += token.includes('-') ? 4 : 2;
+      }
+      return { filePath, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || left.filePath.length - right.filePath.length)
+    .slice(0, MAX_FOCUS_PATH_CANDIDATES)
+    .map((entry) => entry.filePath);
+
+  const searchPaths = [];
+  for (const identifier of identifiers.slice(0, MAX_FOCUS_SEARCH_IDENTIFIERS)) {
+    const search = await caps.code({
+      action: 'search',
+      query: identifier,
+      format: 'json',
+      limit: 4,
+    });
+    if (!search.ok || !search.data || typeof search.data !== 'object') continue;
+    for (const symbol of Array.isArray(search.data.symbols) ? search.data.symbols : []) {
+      if (symbol?.path) searchPaths.push(symbol.path);
+    }
+    for (const hit of Array.isArray(search.data.text) ? search.data.text : []) {
+      if (hit?.path) searchPaths.push(hit.path);
+    }
+  }
+
+  return {
+    discoveredFiles,
+    tokens: intentTokens,
+    paths: uniquePaths([...pathScores, ...searchPaths]).slice(0, MAX_FOCUS_PATH_CANDIDATES),
+  };
+}
+
 function computeNext({ session, changedCount, profile, stage, intent = '' }) {
   const receipts = session?.receipts || [];
   const green = receipts.some((receipt) => receipt.exitCode === 0);
@@ -463,7 +708,7 @@ function computeNext({ session, changedCount, profile, stage, intent = '' }) {
       ? `verify(${JSON.stringify({ commands: [command] })})`
       : 'verify({"commands":["<your command>"]}) — set `verify` in .contextos/profile.json to auto-infer';
   }
-  if (green) return 'done: verified; do not rerun the command. Keep the session open unless this is the final closure.';
+  if (green) return 'done: verified; finalize unless a concrete requirement or failing check still needs work. Do not rerun the command.';
   if (changedCount > 0) {
     const command = suggestVerify(profile);
     return command
@@ -538,6 +783,8 @@ export async function explorePipeline(ctx, input = {}) {
   const index = new ModuleIndex({ projectRoot });
   index.bootstrapIfEmpty();
   index.ensure([...paths, ...dirty].slice(0, 12));
+  const focus = await resolveExploreFocus({ caps, index, intent, identifiers });
+  index.ensure(focus.paths.slice(0, 40));
 
   // Paths may point at a directory: expand it into the module's real files
   // instead of asking the AST engine to outline a folder.
@@ -546,7 +793,7 @@ export async function explorePipeline(ctx, input = {}) {
     const fullPath = path.join(projectRoot, target);
     if (!fs.existsSync(fullPath)) continue;
     if (fs.statSync(fullPath).isDirectory()) {
-      for (const file of index.entries.keys()) {
+      for (const file of focus.discoveredFiles) {
         if (file.startsWith(`${target.replace(/\/+$/, '')}/`) && !file.includes('node_modules')) {
           resolvedPaths.push(file);
         }
@@ -555,13 +802,18 @@ export async function explorePipeline(ctx, input = {}) {
       resolvedPaths.push(target);
     }
   }
+  for (const file of focus.paths) {
+    if (!resolvedPaths.includes(file) && fs.existsSync(path.join(projectRoot, file))) {
+      resolvedPaths.push(file);
+    }
+  }
 
   const modules = index.lookup(`${intent} ${paths.join(' ')}`);
   for (const module of modules) {
     const files = module.files.slice(0, 2).map((file) => `\`${file}\``).join(', ');
     const remaining = module.files.length > 2 ? ' (+' + (module.files.length - 2) + ')' : '';
     whereLines.push('- ' + (module.directory || 'workspace') + ' — ' + files + remaining + ' (derived navigation only; not Block ownership)');
-    if (resolvedPaths.length < 6) {
+    if (!focus.paths.length || resolvedPaths.length < 6) {
       for (const f of module.files) {
         if (!resolvedPaths.includes(f)) resolvedPaths.push(f);
       }
@@ -578,13 +830,51 @@ export async function explorePipeline(ctx, input = {}) {
     }
   }
 
-  const filePaths = Array.from(new Set(resolvedPaths)).slice(0, input.depth === 'deep' ? 4 : 2);
+  // Small repositories are the common case for focused feature work and bug
+  // fixes. If the whole relevant source/test surface fits in one bounded
+  // package, inline it once instead of forcing the host to reconstruct it with
+  // one inspect call per file. Large repositories keep the existing narrow
+  // entry-point behavior.
+  const bundleCandidates = Array.from(index.entries.keys())
+    .filter((file) => !file.includes('node_modules'))
+    .filter((file) => !file.startsWith('.contextos/') && !file.startsWith('dist/'))
+    .filter((file) => /\.(?:mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|rb|php|swift|kt|cs|cpp|c|h)$/i.test(file)
+      || /^(?:package\.json|pyproject\.toml|Cargo\.toml|go\.mod|pom\.xml|build\.gradle)$/i.test(file))
+    .filter((file) => /^(?:package\.json|pyproject\.toml|Cargo\.toml|go\.mod|pom\.xml|build\.gradle)$/i.test(file)
+      || /^(?:src|lib|app|packages|test|tests|__tests__)\//.test(file)
+      || /(?:^|\/)(?:test|tests|__tests__)\//.test(file)
+      || /\.(?:test|spec)\.[^/]+$/i.test(file));
+  let bundleChars = 0;
+  for (const file of bundleCandidates) {
+    try {
+      bundleChars += fs.statSync(path.join(projectRoot, file)).size;
+    } catch (_) {}
+  }
+  const smallWorkspaceBundle = bundleCandidates.length > 0
+    && bundleCandidates.length <= SMALL_WORKSPACE_MAX_FILES
+    && bundleChars <= SMALL_WORKSPACE_MAX_CHARS;
+  if (smallWorkspaceBundle) {
+    for (const file of bundleCandidates) {
+      if (!resolvedPaths.includes(file)) resolvedPaths.push(file);
+    }
+  }
+
+  const filePaths = Array.from(new Set(resolvedPaths)).slice(
+    0,
+    smallWorkspaceBundle
+      ? SMALL_WORKSPACE_CRITICAL_MAX_FILES
+      : (input.depth === 'deep' || focus.paths.length ? 10 : 6)
+  );
+  const outlineByPath = new Map();
 
   if (filePaths.length) {
-    for (const target of filePaths) {
+    for (const [fileIndex, target] of filePaths.entries()) {
       const outline = await caps.code({ action: 'outline', path: target });
       if (outline.ok) {
-        if (input.depth === 'deep') {
+        outlineByPath.set(target, outline.data);
+        if (smallWorkspaceBundle) {
+          if (fileIndex < 6) whereLines.push(`- \`${target}\` ${compactOutlineData(outline.data)}`);
+        } else if (input.depth === 'deep') {
           whereLines.push(`- \`${target}\`\n${clip(outline.data, OUTLINE_CLIP)}`);
         } else {
           whereLines.push(`- \`${target}\` ${compactOutlineData(outline.data)}`);
@@ -594,6 +884,183 @@ export async function explorePipeline(ctx, input = {}) {
       }
     }
     tracer.step('outline', { paths: filePaths });
+  }
+  if (smallWorkspaceBundle) {
+    const readme = filePaths.find((file) => /(^|\/)readme(?:_[^/]*)?\.md$/i.test(file));
+    whereLines.push(
+      `- Small workspace bundle (${filePaths.length} files, ${bundleChars} chars): `
+      + filePaths.map((file) => `\`${file}\``).join(', ')
+      + '. All source/test bodies are inlined below; do not list or reread the repository.'
+    );
+    whereLines.push(readme
+      ? `- Project documentation: \`${readme}\` is included in the bundle.`
+      : '- Project documentation: no README.md is present in this workspace.');
+  }
+
+  // Small target files are usually the stubs or protocol shells the host must
+  // edit. Inline every bounded stub, not just the first high-relevance hit:
+  // leaving one implementation stub hidden makes the host fall back to a
+  // whole-repo native dump before it can construct the edit.
+  const criticalCandidates = [];
+  const intentTokens = tokenize(intent);
+  for (const target of filePaths) {
+    let fileChars = 0;
+    try {
+      const stat = fs.statSync(path.join(projectRoot, target));
+      if (stat.isFile()) fileChars = stat.size;
+    } catch (_) {}
+    const focusIndex = focus.paths.indexOf(target);
+    const focusTarget = focusIndex >= 0;
+    const maxInlineChars = smallWorkspaceBundle
+      ? SMALL_WORKSPACE_MAX_CHARS
+      : (focusTarget ? DECISION_SOURCE_FILE_MAX_CHARS : INSPECT_INLINE_MAX_CHARS);
+    if (fileChars === 0 || fileChars > maxInlineChars) continue;
+    const relevance = overlapScore(intentTokens, `${target} ${outlineByPath.get(target) || ''}`);
+    const read = (smallWorkspaceBundle || focusTarget)
+      ? await caps.code({ action: 'read', path: target, fullFile: true })
+      : await caps.code({ action: 'read', path: target, startLine: 1, endLine: 200 });
+    if (!read.ok || !read.data) continue;
+    const stub = /not implemented|not yet implemented|unimplemented|todo|fixme/i.test(read.data);
+    const isTest = isTestPath(target);
+    criticalCandidates.push({ target, fileChars, read: read.data, relevance, stub, isTest, focusTarget, focusIndex });
+  }
+  criticalCandidates.sort((left, right) => (
+    Number(right.focusTarget) - Number(left.focusTarget)
+    || Number(right.stub) - Number(left.stub)
+    || Number(right.isTest) - Number(left.isTest)
+    || right.relevance - left.relevance
+    || left.fileChars - right.fileChars
+  ));
+  const criticalLines = [];
+  const focusSliceLines = [];
+  const includedFocusSliceTargets = new Set();
+  const criticalLimit = smallWorkspaceBundle ? SMALL_WORKSPACE_CRITICAL_MAX_FILES : 8;
+  const includedCriticalTargets = new Set();
+  let criticalChars = 0;
+  let focusSliceChars = 0;
+  for (const candidate of criticalCandidates.slice(0, criticalLimit)) {
+    const { target, fileChars, read, stub, focusTarget } = candidate;
+    const nextCriticalChars = criticalChars + String(read).length;
+    if (!smallWorkspaceBundle
+      && criticalLines.length > 0
+      && nextCriticalChars > DECISION_SOURCE_TOTAL_MAX_CHARS) {
+      continue;
+    }
+    const fence = path.extname(target).slice(1) || 'text';
+    const readLimit = smallWorkspaceBundle
+      ? Math.max(fileChars + 256, INSPECT_INLINE_MAX_CHARS)
+      : (focusTarget ? DECISION_SOURCE_FILE_MAX_CHARS : INSPECT_INLINE_MAX_CHARS);
+    criticalLines.push(
+      `- \`${target}\` (${fileChars} chars${stub ? ', implementation stub' : ''})\n\`\`\`${fence}\n${clip(stripOuterCodeFence(read), readLimit)}\n\`\`\``
+    );
+    includedCriticalTargets.add(target);
+    criticalChars = nextCriticalChars;
+  }
+  if (criticalLines.length) tracer.step('critical_slices', { count: criticalLines.length });
+
+  // Large focused files cannot be inlined whole. Return the exact methods
+  // named by the intent instead of declaring the whole edit surface missing.
+  for (const target of filePaths) {
+    const focusIndex = focus.paths.indexOf(target);
+    if (focusIndex < 0 || !isImplementationSource(target)) continue;
+    let fileChars = 0;
+    try {
+      const stat = fs.statSync(path.join(projectRoot, target));
+      if (stat.isFile()) fileChars = stat.size;
+    } catch (_) {}
+    if (fileChars === 0 || fileChars <= DECISION_SOURCE_FILE_MAX_CHARS) continue;
+    const selected = selectFocusSymbols(outlineByPath.get(target), {
+      identifiers,
+      tokens: intentTokens,
+    });
+    if (!selected.symbols.length) continue;
+    const slices = [];
+    let fileSliceChars = 0;
+    let fileComplete = true;
+    for (const symbol of selected.symbols) {
+      if (focusSliceChars + fileSliceChars >= DECISION_SOURCE_TOTAL_MAX_CHARS) {
+        fileComplete = false;
+        break;
+      }
+      const read = await caps.code({
+        action: 'read',
+        path: target,
+        symbol: symbol.name,
+      });
+      if (!read.ok || !read.data) {
+        fileComplete = false;
+        continue;
+      }
+      const rawBody = stripOuterCodeFence(read.data);
+      const bodyLimit = DECISION_SOURCE_FILE_MAX_CHARS - 256;
+      const complete = rawBody.length <= bodyLimit;
+      const body = complete
+        ? rawBody
+        : clip(rawBody, bodyLimit, { withHint: true });
+      if (fileSliceChars + body.length > DECISION_SOURCE_FILE_MAX_CHARS) {
+        fileComplete = false;
+        continue;
+      }
+      slices.push({ symbol, body, complete });
+      if (!complete) fileComplete = false;
+      fileSliceChars += body.length;
+    }
+    if (!slices.length) continue;
+    const partialSymbols = slices.filter((slice) => !slice.complete).map((slice) => slice.symbol.name);
+    focusSliceLines.push(
+      `- \`${target}\` (${fileChars} chars; focused symbols: ${slices.map((slice) => `\`${slice.symbol.name}\``).join(', ')}`
+      + `${partialSymbols.length ? `; partial: ${partialSymbols.map((name) => `\`${name}\``).join(', ')}` : ''}`
+      + `${selected.matched ? '' : '; fallback outline order'})\n`
+      + slices.map((slice) => {
+        const fence = path.extname(target).slice(1) || 'text';
+        return `\`\`\`${fence}\n${slice.body}\n\`\`\``;
+      }).join('\n\n')
+    );
+    if (fileComplete) includedFocusSliceTargets.add(target);
+    focusSliceChars += fileSliceChars;
+  }
+  if (focusSliceLines.length) {
+    tracer.step('focus_slices', {
+      count: focusSliceLines.length,
+      chars: focusSliceChars,
+    });
+  }
+
+  // A map without dependency edges still forces the host to rediscover the
+  // edit surface. Return one-hop imports, reverse callers, and test entries in
+  // the same bounded response so the next host decision can mutate directly.
+  const closure = collectExploreClosure(projectRoot, filePaths, index, {
+    maxDependencies: 6,
+    maxCallers: 4,
+    maxTests: 2,
+  });
+  if (closure.dependencies.length || closure.callers.length || closure.tests.length) {
+    const closureLines = [];
+    if (closure.dependencies.length) {
+      closureLines.push(`- Direct imports: ${closure.dependencies.map((file) => `\`${file}\``).join(', ')}`);
+    }
+    if (closure.callers.length) {
+      closureLines.push(`- Direct callers: ${closure.callers.map((file) => `\`${file}\``).join(', ')}`);
+    }
+    if (closure.tests.length) {
+      closureLines.push(`- Test entry: ${closure.tests.map((file) => `\`${file}\``).join(', ')}`);
+      for (const testFile of closure.tests.slice(0, 2)) {
+        const testRead = await caps.code({ action: 'read', path: testFile, startLine: 1, endLine: 80 });
+        if (testRead.ok && testRead.data) {
+          closureLines.push(`- Test contract \`${testFile}\`: ${compactTestContract(testRead.data)}`);
+        }
+      }
+    }
+    for (const dependency of closure.dependencies.slice(0, 2)) {
+      const outline = await caps.code({ action: 'outline', path: dependency });
+      if (outline.ok) closureLines.push(`- Import symbols \`${dependency}\`: ${compactOutlineData(outline.data)}`);
+    }
+    whereLines.push(...closureLines);
+    tracer.step('dependency_closure', {
+      dependencies: closure.dependencies.length,
+      callers: closure.callers.length,
+      tests: closure.tests.length,
+    });
   }
 
   // Pre-slicing and Action Slots:
@@ -681,25 +1148,76 @@ export async function explorePipeline(ctx, input = {}) {
     if (headings.length) memoryLines.push(headings[0]);
   }
 
-  const nextLines = [`👉 ${computeNext({ session, changedCount: dirty.length, profile, stage: 'explore', intent })}`];
+  const implementationFocus = focus.paths.filter((filePath) => isImplementationSource(filePath));
+  const missingDecisionPaths = implementationFocus.filter((filePath) => (
+    !includedCriticalTargets.has(filePath) && !includedFocusSliceTargets.has(filePath)
+  ));
+  const decisionComplete = smallWorkspaceBundle
+    || (implementationFocus.length > 0 && missingDecisionPaths.length === 0);
 
-  const budget = resolveBudget(input.depth, ctx.profile?.budget);
+  const nextLines = [`👉 ${computeNext({ session, changedCount: dirty.length, profile, stage: 'explore', intent })}`];
+  if (smallWorkspaceBundle) {
+    nextLines.push('The complete small-workspace source/test bundle is already in this response. Go directly to change/work; do not run `rg --files`, `cat`, `sed`, or per-file inspect first.');
+  } else if (!decisionComplete && missingDecisionPaths.length) {
+    nextLines.push(
+      `Decision package is partial: the exact source for ${missingDecisionPaths.slice(0, 3).map((file) => `\`${file}\``).join(', ')} is not inlined. `
+      + 'Use one bounded `inspect({path, full:true})` recovery read for the named file, then mutate; do not scan unrelated modules.'
+    );
+  } else if (decisionComplete) {
+    nextLines.push('The focused implementation source is already in this response. Go directly to change/work; do not reconstruct it with per-file reads.');
+  }
+  const stubTargets = criticalCandidates
+    .filter((candidate) => candidate.stub)
+    .map((candidate) => `\`${candidate.target}\``);
+  if (stubTargets.length) {
+    nextLines.push(`Exact implementation stubs are already included: ${stubTargets.join(', ')}. Build \`change\` directly; do not dump source with native \`rg\`/\`cat\`.`);
+  }
+
+  const requestedBudget = Number(input.maxChars);
+  const budget = smallWorkspaceBundle
+    ? Math.max(resolveBudget(input.depth, ctx.profile?.budget), PIPELINE_EXPLORE_OUTPUT_CLIP)
+    : (Number.isFinite(requestedBudget) && requestedBudget > 0
+        ? Math.min(Math.floor(requestedBudget), PIPELINE_EXPLORE_OUTPUT_CLIP)
+        : resolveBudget(input.depth, ctx.profile?.budget));
+  const decisionLines = [
+    `- read_complete=${decisionComplete ? 'true' : 'false'}`,
+    `- do_not_reread=${decisionComplete ? 'true' : 'false'}`,
+    `- files=${filePaths.length}`,
+    decisionComplete
+      ? '- next=change({edits,verify,architecture})'
+      : '- next=inspect({path,full:true}) for the named missing target, then change({edits,verify})',
+  ];
+  if (!decisionComplete && missingDecisionPaths.length) {
+    decisionLines.push(`- missing=${missingDecisionPaths.slice(0, 4).join(',')}`);
+  }
   const sections = [
-    { key: 'next', title: 'Next', priority: 0, lines: nextLines },
-    { key: 'now', title: 'Now', priority: 1, lines: nowLines },
+    {
+      key: 'decision',
+      title: 'Decision Package',
+      priority: -1,
+      lines: decisionLines,
+    },
+    { key: 'next', title: 'Next', priority: 1, lines: nextLines },
+    { key: 'now', title: 'Now', priority: 2, lines: nowLines },
   ];
   if (slotLines.length) {
-    sections.push({ key: 'slots', title: 'Available Action Slots (Pick a slot or pass directly)', priority: 2, lines: slotLines });
+    sections.push({ key: 'slots', title: 'Available Action Slots (Pick a slot or pass directly)', priority: 3, lines: slotLines });
+  }
+  if (criticalLines.length) {
+    sections.push({ key: 'critical', title: 'Critical slices (bounded)', priority: 0, lines: criticalLines });
+  }
+  if (focusSliceLines.length) {
+    sections.push({ key: 'focus-slices', title: 'Focused symbol slices (bounded)', priority: 0, lines: focusSliceLines });
   }
   sections.push(
-    { key: 'where', title: 'Where to look', priority: 3, lines: whereLines }
+    { key: 'where', title: 'Where to look', priority: 4, lines: whereLines }
   );
   if (sliceLines.length) {
-    sections.push({ key: 'slices', title: 'Code Slices (Direct Preview)', priority: 4, lines: sliceLines });
+    sections.push({ key: 'slices', title: 'Code Slices (Direct Preview)', priority: 5, lines: sliceLines });
   }
   sections.push(
-    { key: 'rules', title: 'Applicable rules', priority: 5, lines: rulesLines },
-    { key: 'memory', title: 'Memory', priority: 6, lines: memoryLines }
+    { key: 'rules', title: 'Applicable rules', priority: 6, lines: rulesLines },
+    { key: 'memory', title: 'Memory', priority: 7, lines: memoryLines }
   );
 
   const { text, meta } = fitSections(sections, { maxChars: budget });
@@ -732,11 +1250,27 @@ function blockCoversGraphPath(block, filePath) {
   });
 }
 
+function graphBindingsOverlap(left, right) {
+  const a = normalizeGraphPath(left);
+  const b = normalizeGraphPath(right);
+  return Boolean(a && b) && (
+    a === b
+    || a.startsWith(`${b}/`)
+    || b.startsWith(`${a}/`)
+  );
+}
+
 const NON_ARCHITECTURE_PREFIXES = [
-  '.contextos/',
   'dist/',
   'plugins/contextos/server/',
 ];
+
+function isReservedStatePath(filePath) {
+  const normalized = normalizeGraphPath(filePath);
+  const root = normalized.split('/')[0] || '';
+  return root === '.contextos' || root.startsWith('.contextos-') || root.startsWith('.contextos.');
+}
+
 const NON_ARCHITECTURE_EXTENSIONS = new Set([
   '.md',
   '.json',
@@ -746,9 +1280,10 @@ const NON_ARCHITECTURE_EXTENSIONS = new Set([
   '.yml',
 ]);
 
-function isCuratedArchitecturePath(filePath) {
+export function isCuratedArchitecturePath(filePath) {
   const normalized = normalizeGraphPath(filePath);
   if (!normalized) return false;
+  if (isReservedStatePath(normalized)) return false;
   if (NON_ARCHITECTURE_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return false;
   if (NON_ARCHITECTURE_EXTENSIONS.has(path.posix.extname(normalized).toLowerCase())) return false;
   if (new Set(['LICENSE', 'CHANGELOG']).has(path.posix.basename(normalized).toUpperCase())) return false;
@@ -877,6 +1412,36 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
   // this preflight, a valid Block could be persisted before a later Chain
   // references a missing/derived/non-curated member, leaving a half-applied
   // architecture update for the next host turn to diagnose.
+  const explicitOwners = new Map();
+  const conflictKeys = new Set();
+  for (const block of preparedBlocks) {
+    for (const rawPath of block.paths) {
+      const normalized = normalizeGraphPath(rawPath);
+      if (!normalized) continue;
+      const existingOwner = explicitOwners.get(normalized);
+      if (existingOwner && existingOwner !== block.id) {
+        const key = `${existingOwner}:${block.id}:${normalized}`;
+        if (!conflictKeys.has(key)) {
+          errors.push(`path ${normalized} is assigned to multiple Blocks: ${existingOwner}, ${block.id}`);
+          conflictKeys.add(key);
+        }
+      } else {
+        explicitOwners.set(normalized, block.id);
+      }
+      const existingConflicts = initialBlocks.filter((existing) => (
+        existing.id !== block.id
+        && isCuratedArchitectureBlock(existing)
+        && (existing.artifactRefs || []).some((ref) => graphBindingsOverlap(ref.path, normalized))
+      ));
+      for (const existing of existingConflicts) {
+        const key = `${existing.id}:${block.id}:${normalized}`;
+        if (conflictKeys.has(key)) continue;
+        errors.push(`path ${normalized} is already owned by Block ${existing.id}`);
+        conflictKeys.add(key);
+      }
+    }
+  }
+
   const blocksAfterPreparation = new Map(initialBlocks.map((block) => [block.id, block]));
   for (const block of preparedBlocks) {
     blocksAfterPreparation.set(block.id, { id: block.id, ...block.blockData });
@@ -988,6 +1553,11 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
 
 export async function changePipeline(ctx, input = {}) {
   const { caps, store, tracer, profile } = ctx;
+  const shipRequest = input.ship === true
+    ? {}
+    : (typeof input.ship === 'string'
+      ? { summary: input.ship }
+      : (input.ship && typeof input.ship === 'object' && !Array.isArray(input.ship) ? input.ship : null));
   const creates = Array.isArray(input.create) ? [...input.create] : [];
   const rawEdits = Array.isArray(input.edits) ? [...input.edits] : [];
   const rawDeletes = Array.isArray(input.delete)
@@ -1111,6 +1681,35 @@ export async function changePipeline(ctx, input = {}) {
   }
 
   if (!creates.length && !edits.length && !deletes.length) {
+    if (input.architecture && typeof input.architecture === 'object' && !Array.isArray(input.architecture)) {
+      const architectureResult = await bindChangedArchitecture(caps, [], input.architecture);
+      tracer.step('architecture_state_only', {
+        ok: architectureResult.ok,
+        bound: architectureResult.bound,
+        composed: architectureResult.composed,
+        refreshed: architectureResult.refreshed,
+        gaps: architectureResult.gaps?.length || 0,
+      });
+      const lines = [
+        '- Architecture: ' + architectureResult.refreshed + ' existing Block(s) refreshed, '
+          + architectureResult.bound + ' curated Block(s) bound, '
+          + architectureResult.composed + ' Chain(s) composed.',
+      ];
+      if (architectureResult.error) lines.push('- Architecture update needs attention: ' + clip(architectureResult.error, 300));
+      for (const gap of (architectureResult.gaps || []).slice(0, 6)) lines.push(formatArchitectureGap(gap));
+      if ((architectureResult.gaps || []).length > 6) lines.push('- (' + (architectureResult.gaps.length - 6) + ' more architecture gap(s))');
+      return [
+        '# ContextOS change',
+        '',
+        '## Next',
+        architectureResult.ok
+          ? 'done: architecture state is bound; continue with code edits or verification only if required.'
+          : '👉 fix the architecture contract error, then retry the same change call.',
+        '',
+        '## Result',
+        ...lines,
+      ].join('\n');
+    }
     const targets = (Array.isArray(input.paths) && input.paths.length ? input.paths : extractPaths(input.intent || '')).slice(0, 2);
     const previewLines = [];
     for (const target of targets) {
@@ -1229,6 +1828,7 @@ export async function changePipeline(ctx, input = {}) {
         const res = await caps.run({
           command: cmd,
           cwd: input.cwd,
+          maxLogBytes: input.maxLogBytes,
           timeoutMs: input.timeoutMs ?? profile.timeoutMs,
         });
         if (!res.ok) {
@@ -1296,9 +1896,30 @@ export async function changePipeline(ctx, input = {}) {
     }
   }
 
+  if (shipRequest) {
+    if (!verifyCommands.length) {
+      resultLines.push('- Ship skipped: provide verify in the same change call.');
+    } else if (!verifyPassed) {
+      resultLines.push('- Ship skipped because verification failed.');
+    } else {
+      try {
+        const shipped = await shipPipeline(ctx, { ...shipRequest });
+        const closure = String(shipped)
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .slice(0, 4)
+          .join(' | ');
+        resultLines.push(`- Ship: ${clip(closure, 600)}`);
+      } catch (error) {
+        resultLines.push(`- Ship blocked: ${clip(error.message, 300)}`);
+      }
+    }
+  }
+
   const nextLines = verifyCommands.length
     ? (verifyPassed
-        ? ['done: verified; report the result and keep the session open unless this is final closure']
+        ? ['done: verified and shipped; finalize now. Do not make speculative follow-up edits without a failing check or unmet requirement.']
         : [`👉 change(${JSON.stringify({ intent: input.intent || '<fix the failure>' })}) to repair and verify again`])
     : [`👉 ${computeNext({ session, changedCount: touched.length, profile, stage: 'change', intent: input.intent })}`];
 
@@ -1398,9 +2019,44 @@ function readReceiptStillValid(projectRoot, relativePath, receipt) {
   }
 }
 
+function numberCodeLines(text, fallbackStartLine = 1) {
+  const lines = String(text ?? '').split('\n');
+  const headerIndex = lines.findIndex((line) => /\[L(\d+)-L(\d+)\]/.test(line));
+  const header = headerIndex >= 0 ? lines[headerIndex] : '';
+  const match = /\[L(\d+)-L(\d+)\]/.exec(header);
+  const startLine = match ? Number(match[1]) : fallbackStartLine;
+  const bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
+  const closingFence = lines.lastIndexOf('```');
+  const bodyEnd = closingFence > bodyStart ? closingFence : lines.length;
+  const prefix = headerIndex >= 0 ? lines.slice(0, headerIndex + 1) : [];
+  const body = lines.slice(bodyStart, bodyEnd);
+  const suffix = lines.slice(bodyEnd);
+  const numbered = body
+    .map((line, index) => `${String(startLine + index).padStart(4, ' ')} | ${line}`)
+    .join('\n');
+  return [...prefix, numbered, ...suffix].filter((line, index, values) => line !== '' || index === values.length - 1).join('\n');
+}
+
 export async function inspectPipeline(ctx, input = {}) {
   if (input.inspect && typeof input.inspect === 'object' && !Array.isArray(input.inspect)) {
     input = { ...input.inspect, ...input };
+  }
+  if (Array.isArray(input.inspect)) {
+    const specs = input.inspect
+      .map((entry) => (typeof entry === 'string' ? { path: entry } : entry))
+      .filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry));
+    const arrayPaths = uniquePaths(specs.map((entry) => entry.path));
+    const arrayRanges = specs
+      .filter((entry) => entry.path && Array.isArray(entry.ranges) && entry.ranges.length)
+      .map((entry) => ({ path: entry.path, ranges: entry.ranges }));
+    const singleSymbol = specs.length === 1 ? specs[0].symbol : undefined;
+    input = {
+      ...input,
+      paths: input.paths?.length ? input.paths : arrayPaths,
+      ranges: input.ranges?.length ? input.ranges : arrayRanges,
+      symbol: input.symbol || singleSymbol,
+      inspect: undefined,
+    };
   }
   const { caps, store } = ctx;
   let targetPath = input.path;
@@ -1415,26 +2071,174 @@ export async function inspectPipeline(ctx, input = {}) {
   }
 
   const requestedBudget = input.budget || input.depth;
-  const isFull = requestedBudget === 'full';
-  const explicitMaxChars = typeof input.maxChars === 'number' && input.maxChars > 0 ? input.maxChars : null;
-  const contentMaxChars = isFull ? Infinity : (explicitMaxChars ?? 8000);
-
   const paths = Array.isArray(input.paths) && input.paths.length
     ? input.paths
     : (targetPath ? [targetPath] : []);
   const globPaths = expandInspectGlobs(ctx.projectRoot, input.globs);
-  const requestedPaths = [...paths, ...globPaths];
+  let requestedPaths = [...paths, ...globPaths];
+  let symbolCandidates = [];
+  if (!requestedPaths.length && symbol) {
+    const search = await caps.code({
+      action: 'search',
+      query: symbol,
+      format: 'json',
+      limit: 6,
+    });
+    if (search.ok && search.data && typeof search.data === 'object') {
+      symbolCandidates = uniquePaths([
+        ...(Array.isArray(search.data.symbols) ? search.data.symbols.map((entry) => entry?.path) : []),
+        ...(Array.isArray(search.data.text) ? search.data.text.map((entry) => entry?.path) : []),
+      ]).slice(0, 3);
+      requestedPaths = symbolCandidates.slice(0, 1);
+    }
+  }
+  const queryRangeEntries = [];
+  if (!symbol && typeof input.query === 'string' && input.query.trim() && requestedPaths.length) {
+    for (const target of uniquePaths(requestedPaths).slice(0, 4)) {
+      const search = await caps.codeJson({
+        action: 'search',
+        query: input.query,
+        root: target,
+        limit: 12,
+      });
+      if (!search.ok || !search.data || typeof search.data !== 'object') continue;
+      const ranges = (Array.isArray(search.data.symbols) ? search.data.symbols : [])
+        .filter((entry) => entry?.path === target)
+        .map((entry) => ({
+          startLine: Number(entry.startLine),
+          endLine: Number(entry.endLine),
+        }))
+        .filter((range) => Number.isFinite(range.startLine) && Number.isFinite(range.endLine));
+      if (ranges.length) queryRangeEntries.push({ path: target, ranges });
+    }
+  }
+  const inspectPaths = requestedPaths.flatMap((target) => expandInspectTargets(ctx.projectRoot, target));
+  const inspectFileChars = inspectPaths.map((target) => {
+    try {
+      const stat = fs.statSync(path.join(ctx.projectRoot, target));
+      return stat.isFile() ? stat.size : 0;
+    } catch (_) {
+      return 0;
+    }
+  });
+  const normalizeRanges = (values) => (Array.isArray(values) ? values : []).flatMap((range) => {
+    const start = Array.isArray(range)
+      ? Number(range[0])
+      : Number(range?.startLine ?? range?.start);
+    const end = Array.isArray(range)
+      ? Number(range[1])
+      : Number(range?.endLine ?? range?.end);
+    return Number.isFinite(start) && Number.isFinite(end) && end >= start
+      ? [{ startLine: start, endLine: end }]
+      : [];
+  });
+  const perPathRanges = new Map();
+  for (const entry of (Array.isArray(input.ranges) ? input.ranges : [])) {
+    if (!entry || typeof entry !== 'object' || typeof entry.path !== 'string') continue;
+    const normalized = normalizeRanges(entry.ranges);
+    if (normalized.length) perPathRanges.set(entry.path.replace(/^\.\//, ''), normalized);
+  }
+  for (const entry of queryRangeEntries) {
+    const normalized = normalizeRanges(entry.ranges);
+    if (!normalized.length) continue;
+    const existing = perPathRanges.get(entry.path) || [];
+    perPathRanges.set(entry.path, [...existing, ...normalized]);
+  }
+  const hasPerPathRanges = perPathRanges.size > 0;
+  const directRanges = hasPerPathRanges ? [] : normalizeRanges(input.ranges);
+  const allRanges = hasPerPathRanges
+    ? [...perPathRanges.values()].flat()
+    : directRanges;
+  const totalInspectChars = inspectFileChars.reduce((sum, chars) => sum + chars, 0);
+  // A batch request is a map request for large files. Small bounded batches
+  // are safe to inline whole: refusing them costs more than the bytes saved
+  // because the host falls back to one native read per file.
+  const batchRead = inspectPaths.length > 1;
+  const smallBatchRead = batchRead
+    && inspectPaths.length <= INSPECT_BATCH_INLINE_MAX_FILES
+    && inspectFileChars.every((chars) => chars > 0 && chars <= INSPECT_INLINE_MAX_CHARS)
+    && totalInspectChars <= INSPECT_BATCH_INLINE_MAX_CHARS;
+  const smallRangeFile = !batchRead
+    && inspectFileChars.length === 1
+    && inspectFileChars[0] > 0
+    && inspectFileChars[0] <= INSPECT_INLINE_MAX_CHARS;
+  const hasExplicitTarget = Boolean(symbol)
+    || input.startLine !== undefined
+    || input.endLine !== undefined
+    || allRanges.length > 0;
+  const requestedFull = (
+    input.full === true
+    || requestedBudget === 'full'
+    || input.fullFile === true
+  ) && (!batchRead || smallBatchRead);
+  const readPolicy = typeof store?.readPolicy === 'function'
+    ? store.readPolicy()
+    : (store?.current?.readPolicy || null);
+  const requestedRangeLines = (() => {
+    let maxLines = 0;
+    for (const range of allRanges) {
+      const start = Number(range?.startLine);
+      const end = Number(range?.endLine);
+      if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+        maxLines = Math.max(maxLines, end - start + 1);
+      }
+    }
+    const start = Number(input.startLine);
+    const end = Number(input.endLine);
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+      maxLines = Math.max(maxLines, end - start + 1);
+    }
+    return maxLines;
+  })();
+  const postDecision = ctx.internal !== true && readPolicy?.decisionPackageSeen === true;
+  const boundedSmallRead = smallBatchRead || smallRangeFile;
+  const oversizedRange = postDecision
+    && !symbol
+    && requestedRangeLines > MAX_INSPECT_RANGE_LINES
+    && !(smallRangeFile || smallBatchRead);
+  const directedExpansion = postDecision && hasExplicitTarget;
+  const expansionBudgetGated = directedExpansion
+    && !smallBatchRead
+    && !smallRangeFile
+    && (Number(readPolicy?.directedExpansions) || 0) >= MAX_DIRECTED_EXPANSIONS;
+  const firstInspectPath = uniquePaths(inspectPaths)[0] || null;
+  const fullExpansionPaths = Array.isArray(readPolicy?.fullExpansionPaths)
+    ? readPolicy.fullExpansionPaths
+    : [];
+  const repeatedFullExpansion = requestedFull
+    && postDecision
+    && !hasExplicitTarget
+    && firstInspectPath
+    && fullExpansionPaths.includes(firstInspectPath);
+  // A decision package is a cache, not a wall. New paths must remain readable:
+  // if exploration missed the edit surface, one bounded full read is cheaper
+  // than forcing the host through many 80-line slices. Repeated full reads of
+  // the same path are still refused so the OS does not become a replay loop.
+  const decisionGated = (
+    repeatedFullExpansion
+  ) || oversizedRange || expansionBudgetGated;
+  const isFull = requestedFull && !decisionGated;
+  const explicitMaxChars = typeof input.maxChars === 'number' && input.maxChars > 0 ? input.maxChars : null;
+  const contentMaxChars = isFull
+    ? Math.min(
+        explicitMaxChars ?? INSPECT_RECOVERY_OUTPUT_MAX_CHARS,
+        INSPECT_RECOVERY_OUTPUT_MAX_CHARS
+      )
+    : Math.min(explicitMaxChars ?? RESPONSE_BUDGETS.inspect, RESPONSE_BUDGETS.inspect);
 
   if (!requestedPaths.length) {
     const globHint = Array.isArray(input.globs) && input.globs.length
       ? `No files matched globs: ${input.globs.join(', ')}.`
-      : 'No target path provided. Pass `path`, `paths`, `globs`, or `slot` (e.g. `slot: "S1"`).';
+      : (symbol
+          ? `No declaration or text match found for symbol \`${symbol}\`. Pass a path or a broader symbol query.`
+          : 'No target path provided. Pass `path`, `paths`, `globs`, or `slot` (e.g. `slot: "S1"`).');
     return `# ContextOS inspect\n\n${globHint}`;
   }
 
   const isOutline = input.mode === 'outline' || Boolean(input.outline);
   const outLines = [];
-  const inspectPaths = requestedPaths.flatMap((target) => expandInspectTargets(ctx.projectRoot, target));
+  let fullExpansionPath = null;
+  let directedExpansionPath = null;
   for (let p of inspectPaths) {
     const fullP = path.join(ctx.projectRoot, p);
     if (!fs.existsSync(fullP) && fs.existsSync(`${fullP}.log`)) {
@@ -1444,27 +2248,32 @@ export async function inspectPipeline(ctx, input = {}) {
     // head: expensive and useless for deciding what to change. Small files are
     // returned whole; large files default to an outline plus a locator, and
     // the caller asks for the exact symbol or range it needs.
-    const hasExplicitTarget = Boolean(symbol)
-      || input.startLine !== undefined
-      || input.endLine !== undefined
-      || (Array.isArray(input.ranges) && input.ranges.length > 0);
     let fileChars = 0;
     try {
       const stat = fs.statSync(fullP);
       if (stat.isFile()) fileChars = stat.size;
     } catch (_) {}
+    const effectiveRanges = hasPerPathRanges
+      ? (perPathRanges.get(p) || perPathRanges.get(p.replace(/^\.\//, '')) || null)
+      : (directRanges.length ? directRanges : null);
+    const effectiveStartLine = hasPerPathRanges ? undefined : input.startLine;
+    const effectiveEndLine = hasPerPathRanges ? undefined : input.endLine;
+    const forceOutline = requestedBudget === 'shallow' || (batchRead && !smallBatchRead) || decisionGated;
     const preferOutline = !isOutline
-      && !hasExplicitTarget
       && !isFull
-      && !explicitMaxChars
-      && !input.fullFile
-      && fileChars > INSPECT_INLINE_MAX_CHARS;
+      && (forceOutline || (!input.fullFile && !hasExplicitTarget && !explicitMaxChars && fileChars > INSPECT_INLINE_MAX_CHARS));
     let outlineHandled = false;
     if (isOutline || preferOutline) {
-      const outline = await caps.code({
-        action: 'outline',
-        path: p,
-      });
+      const outlineKey = `outline:${p}`;
+      let outlinePromise = ctx.turnMemo instanceof Map ? ctx.turnMemo.get(outlineKey) : null;
+      if (!outlinePromise) {
+        outlinePromise = caps.code({
+          action: 'outline',
+          path: p,
+        });
+        if (ctx.turnMemo instanceof Map) ctx.turnMemo.set(outlineKey, outlinePromise);
+      }
+      const outline = await outlinePromise;
       if (outline.ok) {
         // The implicit outline is a map, not a transcript: keep it near the
         // 300-token target. Explicit outline/full requests keep the larger cap.
@@ -1490,7 +2299,9 @@ export async function inspectPipeline(ctx, input = {}) {
         && input.refresh !== true
         && !requestsFullOutput(input)
         && !explicitReadBudget;
-      const range = input.ranges ? JSON.stringify(input.ranges) : { startLine: input.startLine, endLine: input.endLine };
+      const range = effectiveRanges
+        ? JSON.stringify(effectiveRanges)
+        : { startLine: effectiveStartLine, endLine: effectiveEndLine };
       const priorByStat = allowReadReuse && typeof store?.findLatestReadReceipt === 'function'
         ? store.findLatestReadReceipt({ path: p, range, symbol })
         : null;
@@ -1503,9 +2314,9 @@ export async function inspectPipeline(ctx, input = {}) {
         ? JSON.stringify({
             path: p,
             symbol: symbol || null,
-            startLine: input.startLine ?? null,
-            endLine: input.endLine ?? null,
-            ranges: input.ranges || null,
+            startLine: effectiveStartLine ?? null,
+            endLine: effectiveEndLine ?? null,
+            ranges: effectiveRanges || null,
             budget: input.budget || null,
             maxChars: input.maxChars ?? null,
             fullFile: isFull || input.fullFile || false,
@@ -1517,10 +2328,10 @@ export async function inspectPipeline(ctx, input = {}) {
           action: 'read',
           path: p,
           symbol: symbol || undefined,
-          startLine: input.startLine,
-          endLine: input.endLine,
-          ranges: input.ranges,
-          budget: input.budget,
+          startLine: effectiveStartLine,
+          endLine: effectiveEndLine,
+          ranges: effectiveRanges || undefined,
+          budget: isFull ? 'full' : input.budget,
           maxChars: input.maxChars,
           fullFile: isFull || input.fullFile || false,
         });
@@ -1528,6 +2339,8 @@ export async function inspectPipeline(ctx, input = {}) {
       }
       const read = await readPromise;
       if (read.ok) {
+        if (isFull) fullExpansionPath = p;
+        if (directedExpansion && !decisionGated) directedExpansionPath = p;
         const hash = crypto.createHash('sha256').update(String(read.data ?? '')).digest('hex');
         const prior = allowReadReuse && typeof store?.findReadReceipt === 'function'
           ? store.findReadReceipt({ path: p, hash, range, symbol })
@@ -1535,7 +2348,7 @@ export async function inspectPipeline(ctx, input = {}) {
         if (prior) {
           outLines.push(`### \`${p}\` unchanged (hash: ${hash.slice(0, 12)}; reuse prior result${prior.receiptId ? ` from ${prior.receiptId}` : ''})`);
           } else {
-            outLines.push(`### \`${p}\`${symbol ? ` (${symbol})` : ''}\n${clip(read.data, contentMaxChars, { withHint: true })}`);
+            outLines.push(`### \`${p}\`${symbol ? ` (${symbol})` : ''}\n${clip(numberCodeLines(read.data, effectiveRanges?.[0]?.startLine || effectiveStartLine || 1), contentMaxChars, { withHint: true })}`);
             if (typeof store?.recordReadReceipt === 'function') {
               let fileStat = null;
               try {
@@ -1559,17 +2372,51 @@ export async function inspectPipeline(ctx, input = {}) {
     }
   }
 
-  const budget = isFull ? Infinity : (explicitMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget));
+  if (decisionGated && typeof store?.recordPathOnlyFullDenied === 'function') {
+    try {
+      const reason = expansionBudgetGated
+        ? 'directed-expansion-budget'
+        : (oversizedRange
+            ? 'oversized-range'
+            : (repeatedFullExpansion ? 'repeated-full-expansion' : 'path-only-full'));
+      store.recordPathOnlyFullDenied({ path: inspectPaths[0] || null, reason });
+    } catch (_) {}
+  }
+  if (fullExpansionPath && typeof store?.recordFullExpansion === 'function') {
+    try {
+      store.recordFullExpansion({ path: fullExpansionPath });
+    } catch (_) {}
+  }
+  if (directedExpansionPath && typeof store?.recordDirectedExpansion === 'function') {
+    try {
+      store.recordDirectedExpansion({ path: directedExpansionPath });
+    } catch (_) {}
+  }
+
+  const budget = isFull
+    ? Infinity
+    : Math.min(explicitMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget), RESPONSE_BUDGETS.inspect);
   const { text } = fitSections(
     [{ key: 'inspect', title: 'Inspection Result', priority: 0, lines: outLines }],
     { maxChars: budget }
   );
-  return `# ContextOS inspect\n\n${text}`;
+  const gateReason = expansionBudgetGated
+    ? `the ${MAX_DIRECTED_EXPANSIONS} directed expansion slots after the decision package are exhausted`
+    : (oversizedRange
+        ? `the requested range spans ${requestedRangeLines} lines (limit ${MAX_INSPECT_RANGE_LINES})`
+        : 'this file was already expanded in full after the decision package; reuse the prior result or inspect a narrower symbol/range');
+  const gateNotice = decisionGated
+    ? [
+        `> Read policy: ${gateReason}; the request was downgraded to an outline.`,
+        '> Use `symbol` or a bounded `ranges` slice for inspection. Whole-file replacement belongs in `change`/`work` edit payloads, not in an inspect read; then continue with `change`/`work`.',
+      ].join('\n')
+    : '';
+  return `# ContextOS inspect\n\n${gateNotice ? `${gateNotice}\n\n` : ''}${text}`;
 }
 
 export async function verifyPipeline(ctx, input = {}) {
   const { caps, store, tracer, profile } = ctx;
-  const mode = input.mode || 'once';
+  const mode = input.mode === 'summary' ? 'once' : (input.mode || 'once');
   const isFull = input.full === true || mode === 'full' || input.budget === 'full';
 
   if (mode === 'logs' && input.id && /^[A-Za-z0-9._-]+$/.test(input.id)) {
@@ -1593,6 +2440,7 @@ export async function verifyPipeline(ctx, input = {}) {
       id: input.id,
       lines: input.lines ?? 50,
       grep: input.grep,
+      maxLogBytes: input.maxLogBytes,
     });
     const body = res.ok ? stringify(res.data) : `✗ ${res.error}`;
     tracer.step('process', { mode, ok: res.ok });
@@ -1630,6 +2478,7 @@ export async function verifyPipeline(ctx, input = {}) {
       command,
       cwd: input.cwd,
       maxChars: input.maxChars ?? profile.maxChars,
+      maxLogBytes: input.maxLogBytes,
       timeoutMs: input.timeoutMs ?? profile.timeoutMs,
     });
     if (!res.ok) {
@@ -1654,11 +2503,12 @@ export async function verifyPipeline(ctx, input = {}) {
 
   const triageLines = [];
   const failureEvidence = failureLines.join('\n\n');
+  const obviousRootCause = /(?:not implemented|unimplemented|syntaxerror|cannot find module|module_not_found)/i.test(failureEvidence);
+  const triageRequested = input.autoTriage === true || profile?.autoTriage === true;
   const autoTriage = input.autoTriage === false
     ? false
-    : (input.autoTriage === true
-        || profile?.autoTriage === true
-        || failureEvidence.length > MICRO_TRIAGE_MIN_CHARS);
+    : (triageRequested
+        || (!obviousRootCause && !isFull && failureEvidence.length > MICRO_TRIAGE_MIN_CHARS));
   if (autoTriage && !passed && failureLines.length && profile?.micro?.url && profile?.micro?.model && typeof caps?.micro === 'function') {
     try {
       const triageRes = await caps.micro(
@@ -1692,7 +2542,7 @@ export async function verifyPipeline(ctx, input = {}) {
   const session = store.current;
   const nextLines = [
     passed
-      ? 'done: verified; do not rerun this command, and keep the session open unless this is final closure'
+      ? 'done: verified; finalize now unless a concrete requirement or failing check still needs work. Do not rerun this command.'
       : `👉 change(${JSON.stringify({ intent: input.intent || '<fix the failure>' })}) to fix, then verify again`,
   ];
 
@@ -1842,15 +2692,31 @@ export async function shipPipeline(ctx, input = {}) {
   const superseded = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === 'superseded');
   const unresolved = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === 'unresolved');
   const unverified = green.length === 0 && unresolved.length === 0;
+  const allowUnverified = input.allowUnverified === true || input.force === true;
+  const hasWork = (session.touchedFiles || []).length > 0 || (session.receipts || []).length > 0;
 
-  if (profile.strict && (unverified || unresolved.length > 0)) {
+  if (profile.strict && !allowUnverified && (unverified || unresolved.length > 0)) {
     return [
       '# ContextOS ship — BLOCKED (strict profile)',
       '',
       unverified
         ? '- No passing receipt in this session.'
         : `- ${unresolved.length} unresolved failing receipt(s) remain in this session.`,
-      `- Run \`verify({ commands: [...] })\` until the relevant command passes, or relax \`strict\` in \`.contextos/profile.json\`.`,
+      '- Run `verify({ commands: [...] })` until the relevant command passes, or relax `strict` in `.contextos/profile.json`.',
+      '- The session remains open for repair.',
+      ...(extraLines.length ? ['', '## Attempted', ...extraLines] : []),
+    ].join('\n');
+  }
+
+  if (!allowUnverified && hasWork && (unverified || unresolved.length > 0)) {
+    return [
+      '# ContextOS ship — BLOCKED (verification evidence)',
+      '',
+      unverified
+        ? '- No passing receipt in this session; the session remains open.'
+        : `- ${unresolved.length} unresolved failing receipt(s) remain in this session; the session remains open.`,
+      '- Next: run `verify({ commands: ["<test command>"] })` before closure.',
+      '- If closure is intentionally unverified, pass `allowUnverified: true` explicitly.',
       ...(extraLines.length ? ['', '## Attempted', ...extraLines] : []),
     ].join('\n');
   }
@@ -2039,7 +2905,9 @@ function normalizeAction(action, projectRoot) {
     } else if (suppliedArgs && typeof suppliedArgs === 'object') {
       args = { ...suppliedArgs };
     } else if (typeof suppliedArgs === 'string') {
-      args = tool === 'verify' ? { command: suppliedArgs } : { path: suppliedArgs, intent: suppliedArgs };
+      args = tool === 'verify'
+        ? { command: suppliedArgs }
+        : (tool === 'search' ? { query: suppliedArgs } : { path: suppliedArgs, intent: suppliedArgs });
     } else {
       args = {};
     }
@@ -2138,6 +3006,16 @@ function normalizeAction(action, projectRoot) {
     args = { capability: 'run_command', ...commandArgs };
   }
 
+  if (tool === 'search') {
+    const searchArgs = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+    tool = 'ops';
+    args = {
+      capability: 'code',
+      action: 'search',
+      args: searchArgs,
+    };
+  }
+
   if (!tool) {
     const keys = Object.keys(action).slice(0, 8).join(',') || 'none';
     throw new Error(`Could not determine tool. Use {action:"inspect",args:{...}} or {tool:"ops",args:{capability,...}}. Supported shorthand keys: inspect, change, verify, ship, run, search, block, chain, plan, task, ops, explore. Got keys: ${keys}`);
@@ -2150,6 +3028,79 @@ function normalizeAction(action, projectRoot) {
       projectRoot: args.projectRoot || projectRoot,
     },
   };
+}
+
+function applyPipelineControls(normalized, input = {}) {
+  if (!normalized?.input || typeof normalized.input !== 'object') return normalized;
+  for (const key of ['refresh', 'dedupeReads']) {
+    if (input[key] !== undefined && normalized.input[key] === undefined) {
+      normalized.input[key] = input[key];
+    }
+  }
+  return normalized;
+}
+
+function collectPipelineActionSpecs(steps, output = []) {
+  const visit = (step) => {
+    if (!step) return;
+    if (Array.isArray(step)) {
+      for (const item of step) visit(item);
+      return;
+    }
+    if (Array.isArray(step.parallel)) {
+      for (const item of step.parallel) visit(item);
+      return;
+    }
+    if (Array.isArray(step.chain)) {
+      for (const item of step.chain) visit(item);
+      return;
+    }
+    output.push(step);
+  };
+  visit(steps);
+  return output;
+}
+
+function countPipelineTool(steps, toolName, projectRoot) {
+  return collectPipelineActionSpecs(steps).reduce((count, step) => {
+    try {
+      return count + (normalizeAction(step, projectRoot).tool === toolName ? 1 : 0);
+    } catch (_) {
+      return count;
+    }
+  }, 0);
+}
+
+function guardBatchInspectAction(normalized, enabled) {
+  if (!enabled || normalized?.tool !== 'inspect' || !normalized.input || typeof normalized.input !== 'object') {
+    return normalized;
+  }
+  const requestedMax = Number(normalized.input.maxChars);
+  return {
+    ...normalized,
+    input: {
+      ...normalized.input,
+      budget: 'shallow',
+      full: false,
+      maxChars: Math.min(
+        Number.isFinite(requestedMax) && requestedMax > 0 ? Math.floor(requestedMax) : RESPONSE_BUDGETS.inspect,
+        RESPONSE_BUDGETS.inspect
+      ),
+    },
+  };
+}
+
+function applyDecisionPackageControls(normalized, enabled) {
+  if (!enabled || !normalized?.input || typeof normalized.input !== 'object') return normalized;
+  const input = { ...normalized.input };
+  if (normalized.tool === 'explore' && input.maxChars === undefined) {
+    input.maxChars = PIPELINE_EXPLORE_OUTPUT_CLIP;
+  }
+  if (normalized.tool === 'inspect' && input.maxChars === undefined) {
+    input.maxChars = PIPELINE_MAX_OUTPUT_CLIP;
+  }
+  input.allowWiden = true;
+  return { ...normalized, input };
 }
 
 export async function workPipeline(ctx, input = {}) {
@@ -2194,9 +3145,23 @@ export async function workPipeline(ctx, input = {}) {
       if (!spec || typeof spec.query !== 'string' || !spec.query.trim()) {
         throw new Error('work.search entries must be query strings or search argument objects with a query');
       }
-      const searchAction = { search: spec };
-      if (nestedMaxChars) searchAction.maxChars = nestedMaxChars;
-      preflight.push(searchAction);
+      const requestedPaths = Array.isArray(spec.paths)
+        ? spec.paths.filter((value) => typeof value === 'string' && value.trim())
+        : (typeof spec.paths === 'string' && spec.paths.trim() ? [spec.paths] : []);
+      if (typeof spec.path === 'string' && spec.path.trim() && spec.root === undefined) {
+        spec.root = spec.path;
+      }
+      delete spec.path;
+      delete spec.paths;
+      const roots = requestedPaths.length ? requestedPaths : [spec.root];
+      for (const root of roots) {
+        const searchSpec = { ...spec };
+        if (root !== undefined && root !== null && String(root).trim()) searchSpec.root = root;
+        else delete searchSpec.root;
+        const searchAction = { search: searchSpec };
+        if (nestedMaxChars) searchAction.maxChars = nestedMaxChars;
+        preflight.push(searchAction);
+      }
     }
   }
   if (preflight.length) steps.push({ parallel: preflight });
@@ -2261,12 +3226,16 @@ export async function pipelinePipeline(ctx, input = {}) {
   const nestedFull = requestsFullOutput(steps);
   const mode = input.mode || (explicitlyFull ? 'full' : 'summary');
   const receiptMode = isReceiptMode(mode);
+  const exploreActionCount = countPipelineTool(steps, 'explore', ctx.projectRoot);
+  const decisionPackage = !receiptMode && exploreActionCount > 0 && input.decisionPackage !== false;
   // An explicit aggregate summary wins over a nested action's full-output
   // request. Otherwise one inspect can expand the entire courier response.
   const renderFull = !receiptMode && (mode === 'full' || (nestedFull && input.mode !== 'summary'));
   const responseBudget = input.maxChars ?? (mode === 'full'
     ? Infinity
-    : (receiptMode ? PIPELINE_RECEIPT_RESPONSE_BUDGET : RESPONSE_BUDGETS.pipeline));
+    : (receiptMode
+        ? PIPELINE_RECEIPT_RESPONSE_BUDGET
+        : (decisionPackage ? PIPELINE_DECISION_RESPONSE_BUDGET : RESPONSE_BUDGETS.pipeline)));
   const actionBudgetOptions = {
     mode: renderFull ? 'full' : mode,
     aggregateBudget: renderFull && mode !== 'full'
@@ -2279,7 +3248,9 @@ export async function pipelinePipeline(ctx, input = {}) {
   let failureCount = 0;
   let executedActions = 0;
   const batchStartedAt = Date.now();
-  const continueOnFailure = input.continueOnFailure === true;
+  const batchInspectCount = countPipelineTool(steps, 'inspect', ctx.projectRoot);
+  const forceBatchInspectOutline = batchInspectCount > 1;
+  const continueOnFailure = input.continueOnFailure === true || requestsContinueOnFailure(steps);
   const branches = Array.isArray(input.branches) ? input.branches : [];
   const batchBudget = input.budget && typeof input.budget === 'object' && !Array.isArray(input.budget)
     ? input.budget
@@ -2325,7 +3296,10 @@ export async function pipelinePipeline(ctx, input = {}) {
       );
       const subResults = await mapWithConcurrency(items, parallelConcurrency, async (action, idx) => {
         try {
-          const normalized = normalizeAction(action, ctx.projectRoot);
+          const normalized = applyDecisionPackageControls(
+            guardBatchInspectAction(applyPipelineControls(normalizeAction(action, ctx.projectRoot), input), forceBatchInspectOutline),
+            decisionPackage
+          );
           const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
           const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
           return {
@@ -2374,7 +3348,10 @@ export async function pipelinePipeline(ctx, input = {}) {
         }
         const action = items[j];
         try {
-          const normalized = normalizeAction(action, ctx.projectRoot);
+          const normalized = applyDecisionPackageControls(
+            guardBatchInspectAction(applyPipelineControls(normalizeAction(action, ctx.projectRoot), input), forceBatchInspectOutline),
+            decisionPackage
+          );
           const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
           executedActions += 1;
           const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
@@ -2415,9 +3392,8 @@ export async function pipelinePipeline(ctx, input = {}) {
       continue;
     }
 
-    // Regular single action step
     try {
-      const normalized = normalizeAction(step, ctx.projectRoot);
+      const normalized = guardBatchInspectAction(applyPipelineControls(normalizeAction(step, ctx.projectRoot), input), forceBatchInspectOutline);
       const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
       executedActions += 1;
       const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
@@ -2499,7 +3475,10 @@ export async function pipelinePipeline(ctx, input = {}) {
         break;
       }
       try {
-        const normalized = normalizeAction(action, ctx.projectRoot);
+        const normalized = applyDecisionPackageControls(
+          guardBatchInspectAction(applyPipelineControls(normalizeAction(action, ctx.projectRoot), input), forceBatchInspectOutline),
+          decisionPackage
+        );
         const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
         executedActions += 1;
         const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
@@ -2544,16 +3523,57 @@ export async function pipelinePipeline(ctx, input = {}) {
     return sum + 1;
   }, 0) + branchResults.reduce((sum, result) => sum + result.items.length, 0);
   const totalSteps = steps.length + branchResults.reduce((sum, result) => sum + result.items.length, 0);
-  const summaryActionBudget = Number.isFinite(responseBudget)
-    ? Math.max(140, Math.min(260, Math.floor(responseBudget / Math.max(2, totalActions + 1))))
+  const weightedActionUnits = totalActions + exploreActionCount * 4;
+  const summaryUnitBudget = Number.isFinite(responseBudget)
+    ? (responseBudget < 800
+        ? Math.max(140, Math.min(260, Math.floor(responseBudget / Math.max(2, weightedActionUnits + 1))))
+        : Math.max(400, Math.min(
+            PIPELINE_MAX_OUTPUT_CLIP,
+            Math.floor(responseBudget / Math.max(1, weightedActionUnits))
+          )))
     : PIPELINE_DEFAULT_OUTPUT_CLIP;
+  const summaryBudgetFor = (toolName) => Math.max(
+    400,
+    Math.min(
+      toolName === 'explore' ? PIPELINE_EXPLORE_OUTPUT_CLIP : PIPELINE_MAX_OUTPUT_CLIP,
+      summaryUnitBudget * (toolName === 'explore' ? 5 : 1)
+    )
+  );
 
   function artifactRef(output) {
     const match = String(output || '').match(/(?:artifact=|os-response[^\n]*artifact=)([A-Za-z0-9._-]+)/);
     return match ? ` artifact=${match[1]}` : '';
   }
 
-  function formatReceiptOutput(output) {
+  function compactReceiptText(text, maxChars) {
+    const lines = String(text)
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const selected = [];
+    let capture = false;
+    for (const line of lines) {
+      if (/^##\s+(?:Next|Where to look|Result|Verify|Touched|Now)/i.test(line)) {
+        capture = true;
+        selected.push(line);
+        continue;
+      }
+      if (/^##\s+/.test(line)) {
+        capture = false;
+        continue;
+      }
+      if (capture && (/^[-*]/.test(line) || /^(?:change\(|👉)/.test(line))) {
+        selected.push(line);
+        continue;
+      }
+      if (/^(?:👉|Next:|verify:|receipt=|artifact=|done:|edited\s|Architecture:|Ship:)/i.test(line)) {
+        selected.push(line);
+      }
+    }
+    return clip(selected.join(' | ') || lines.slice(0, 4).join(' | '), Math.min(maxChars, 320));
+  }
+
+  function formatReceiptOutput(output, budget = PIPELINE_RECEIPT_OUTPUT_CLIP) {
     const text = typeof output === 'string'
       ? output
       : (typeof output === 'object' && output !== null
@@ -2577,12 +3597,14 @@ export async function pipelinePipeline(ctx, input = {}) {
     if (architectureGaps) parts.push(`architectureGaps=${architectureGaps[1]}`);
     if (missingBlocks) parts.push(`missingBlocks=${missingBlocks[1]}`);
     if (missingChains) parts.push(`missingChains=${missingChains[1]}`);
-    return parts.length ? parts.join(' ') : 'ok';
+    const locatorSummary = compactReceiptText(text, budget);
+    if (parts.length) return clip(`${parts.join(' ')} | ${locatorSummary}`, budget);
+    return locatorSummary;
   }
 
-  function formatPipelineOutput(output, budget = summaryActionBudget) {
+  function formatPipelineOutput(output, budget = summaryBudgetFor('inspect')) {
     if (!output) return '';
-    if (receiptMode) return formatReceiptOutput(output);
+    if (receiptMode) return formatReceiptOutput(output, budget);
     if (renderFull) {
       if (typeof output === 'string') return clip(output, budget);
       if (typeof output === 'object') {
@@ -2593,10 +3615,26 @@ export async function pipelinePipeline(ctx, input = {}) {
       return clip(String(output), budget);
     }
     const summary = summarizeActionResult(output, {
-      maxChars: Math.min(budget, summaryActionBudget),
+      maxChars: budget,
       includeDiagnostics: true,
     });
     return `${artifactRef(output)}${summary}`.trim();
+  }
+
+  function renderPipelineActionDetail(item) {
+    const budget = renderFull
+      ? (item.maxChars ?? responseBudget ?? PIPELINE_MAX_OUTPUT_CLIP)
+      : Math.min(
+          item.maxChars ?? PIPELINE_MAX_OUTPUT_CLIP,
+          summaryBudgetFor(item.tool)
+        );
+    const detail = formatPipelineOutput(item.output, budget);
+    if (!detail) return '';
+    // Preserve Markdown and line-oriented source for decision-package actions.
+    // Flattening fences with " | " makes a bounded package look corrupted and
+    // forces the host to reread it through a different tool.
+    if (item.tool === 'explore' || item.tool === 'inspect') return `\n${detail}`;
+    return detail.replace(/\r?\n/g, ' | ');
   }
 
   function formatPipelineFailure(item) {
@@ -2607,7 +3645,10 @@ export async function pipelinePipeline(ctx, input = {}) {
       .map((value) => value.trim())
       .filter(Boolean);
     const header = lines.find((value) => /(?:Verdict|Verify):\s*FAIL/i.test(value));
-    const detail = lines.find((value) => /AssertionError|(?:Error|Expected):|Expected\s+/i.test(value))
+    const evidence = extractFailureEvidence(source);
+    const detail = evidence.cause
+      || evidence.stackFrame
+      || lines.find((value) => /AssertionError|(?:Error|Expected):|Expected\s+/i.test(value))
       || lines.find((value) => /not ok|exit\s+[1-9]/i.test(value));
     const triage = extractMicroTriage(source);
     // A bounded Pipeline failure is still actionable state, not just a status.
@@ -2615,6 +3656,7 @@ export async function pipelinePipeline(ctx, input = {}) {
     // the existing evidence instead of rerunning the same verification.
     const receipt = String(source).match(/\breceipt(?:\s+|[=:~-])([A-Za-z0-9._-]+)/i)?.[1];
     const artifact = String(source).match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1];
+    const next = lines.find((value) => /change\(|next:\s/i.test(value));
     const sessionReceipts = Array.isArray(ctx.store?.current?.receipts)
       ? ctx.store.current.receipts
       : [];
@@ -2625,16 +3667,23 @@ export async function pipelinePipeline(ctx, input = {}) {
     const references = [
       receipt ? `receipt=${receipt}` : null,
       artifact ? `artifact=${artifact}` : null,
+      next ? `next=${clip(next, 180)}` : null,
       ...(receipt ? [] : fallbackReceipts),
     ];
     // Keep the triage block ahead of raw failure noise: it is the only part of
     // a large failing log that was already reduced by Micro.
-    const body = triage ? `Micro-Triage: ${triage}` : detail;
+    const body = triage
+      ? `Micro-Triage: ${triage}`
+      : [detail, evidence.stackFrame].filter(Boolean).filter((line, index, values) => values.indexOf(line) === index).join(' | ');
     return clip([header, body, ...references].filter(Boolean).join(' | ') || source, triage ? 900 : 500);
   }
 
   const recovered = branchResults.some((branch) => branch.ok);
-  const pipelineStatus = halted ? 'HALTED' : (failureCount ? (recovered ? 'RECOVERED' : 'FAIL') : 'OK');
+  const pipelineStatus = halted
+    ? 'HALTED'
+    : (failureCount
+        ? (recovered ? 'RECOVERED' : (continueOnFailure ? 'PARTIAL' : 'FAIL'))
+        : 'OK');
   const lines = [`pipeline=${pipelineStatus} actions=${totalActions}/${totalSteps}${receiptMode ? ' mode=receipt' : ''}`];
   if (halted && haltReason) lines.push(`stop=${haltReason}`);
 
@@ -2642,45 +3691,61 @@ export async function pipelinePipeline(ctx, input = {}) {
     if (r.kind === 'parallel') {
       const body = r.items.map((item) => {
         const detail = item.ok
-          ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, ' | ')
-          : `FAIL: ${formatPipelineFailure(item)}`;
+          ? renderPipelineActionDetail(item)
+          : ` FAIL: ${formatPipelineFailure(item)}`;
         return `${item.tool}=${item.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`;
       }).join(' ; ');
       lines.push(`parallel#${r.step} ${r.ok ? 'OK' : 'FAIL'} :: ${body}`);
     } else if (r.kind === 'chain') {
       const body = r.items.map((item) => {
         const detail = item.ok
-          ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, ' | ')
-          : `FAIL: ${formatPipelineFailure(item)}`;
+          ? renderPipelineActionDetail(item)
+          : ` FAIL: ${formatPipelineFailure(item)}`;
         return `${item.tool}=${item.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`;
       }).join(' -> ');
       lines.push(`chain#${r.step} ${r.ok ? 'OK' : (halted ? 'HALTED' : 'FAIL')} :: ${body}`);
     } else {
       const detail = r.ok
-        ? (halted ? '' : formatPipelineOutput(r.output, r.maxChars).replace(/\r?\n/g, ' | '))
-        : `FAIL: ${formatPipelineFailure(r)}`;
+        ? (halted ? '' : renderPipelineActionDetail(r))
+        : ` FAIL: ${formatPipelineFailure(r)}`;
       lines.push(`step#${r.step} ${r.tool}=${r.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`);
     }
   }
   for (const r of branchResults) {
     const body = r.items.map((item) => {
       const detail = item.ok
-        ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, ' | ')
-        : `FAIL: ${formatPipelineFailure(item)}`;
+        ? renderPipelineActionDetail(item)
+        : ` FAIL: ${formatPipelineFailure(item)}`;
       return `${item.tool}=${item.ok ? 'OK' : 'FAIL'}${detail ? ` ${detail}` : ''}`;
     }).join(' -> ');
     lines.push(`branch#${r.index} ${r.ok ? 'OK' : 'FAIL'} :: ${body}`);
   }
 
-  const raw = lines.join('\n');
   const summaryTruncated = !renderFull && results.some((result) => {
     const items = result.items || [result];
     return items.some((item) => {
       if (!item?.ok) return false;
-      const limit = Math.min(item.maxChars ?? Infinity, summaryActionBudget);
+      if (/\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? ''))) return true;
+      const limit = Math.min(item.maxChars ?? Infinity, summaryBudgetFor(item.tool));
       return outputLength(item.output) > limit;
     });
   });
+  const exploreIncomplete = results.some((result) => {
+    const items = result.items || [result];
+    return items.some((item) => item?.tool === 'explore' && /read_complete=false\b/.test(String(item.output || '')));
+  });
+  const decisionReady = decisionPackage
+    && !exploreIncomplete
+    && !summaryTruncated
+    && lines.join('\n').length <= responseBudget;
+  if (decisionReady) {
+    lines[0] += ' decision=complete';
+    lines.push('decision=complete read_complete=true do_not_reread=true next=change({edits,verify,architecture}); after_pass=finalize_without_speculative_edits');
+  } else if (decisionPackage && exploreIncomplete) {
+    lines[0] += ' decision=partial';
+    lines.push('decision=partial read_complete=false; perform the named bounded recovery read, then mutate or verify.');
+  }
+  const raw = lines.join('\n');
   const artifactContent = {
     status: pipelineStatus,
     totalActions,
@@ -2692,6 +3757,7 @@ export async function pipelinePipeline(ctx, input = {}) {
     tool: 'pipeline',
     maxChars: responseBudget,
     full: mode === 'full' && !Number.isFinite(responseBudget),
+    allowWiden: (explicitlyFull || decisionPackage) && !receiptMode,
     forceArtifact: input.forceArtifact === true || summaryTruncated,
     artifactContent,
   });

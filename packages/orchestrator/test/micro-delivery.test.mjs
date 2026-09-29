@@ -263,7 +263,7 @@ test('late read-only Micro evidence is not skipped when withOS is explicit', asy
   }
 });
 
-test('Micro errors-only exposes graph write failures and rejects a non-write result', () => {
+test('Micro errors-only hides successful non-graph work and exposes failed tool calls', () => {
   const root = tempProject('contextos-micro-errors-only-');
   try {
     const missingWrite = projectMicroResult({
@@ -273,9 +273,8 @@ test('Micro errors-only exposes graph write failures and rejects a non-write res
       content: 'I inspected the graph',
       toolCalls: [],
     }, { projectRoot: root });
-    assert.equal(missingWrite.ok, false);
-    assert.equal(missingWrite.delivery, 'error');
-    assert.match(missingWrite.error, /requires at least one curated Block bind/);
+    assert.equal(missingWrite.ok, true);
+    assert.equal(missingWrite.delivery, 'success-hidden');
 
     const failedWrite = projectMicroResult({
       ok: true,

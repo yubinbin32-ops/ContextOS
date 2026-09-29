@@ -206,14 +206,24 @@ test('Micro usage records requested delivery, effective outcome, and preload met
       needsHost: true,
       content: 'host-needed answer',
     }, { projectRoot: root });
+    const hiddenSuccess = projectMicroResult({
+      ok: true,
+      receiptId: 'micro-metrics-errors-hidden',
+      delivery: 'errors-only',
+      content: 'hidden non-graph success',
+      toolCalls: [],
+    }, { projectRoot: root });
+    assert.equal(hiddenSuccess.ok, true);
+    assert.equal(hiddenSuccess.delivery, 'success-hidden');
     const failed = projectMicroResult({
       ok: true,
       receiptId: 'micro-metrics-errors-failure',
       delivery: 'errors-only',
       content: 'write failed',
-      toolCalls: [],
+      toolCalls: [{ name: 'run', arguments: JSON.stringify({ command: 'npm test' }), ok: false, error: 'exit 1' }],
     }, { projectRoot: root });
     assert.equal(failed.ok, false);
+    assert.equal(failed.delivery, 'error');
     projectMicroResult({
       ok: true,
       receiptId: 'micro-metrics-preloaded',
@@ -233,17 +243,18 @@ test('Micro usage records requested delivery, effective outcome, and preload met
       ['defer', 'deferred', true],
       ['auto', 'success-hidden', true],
       ['auto', 'deferred', true],
+      ['errors-only', 'success-hidden', true],
       ['errors-only', 'error', false],
       ['immediate', 'immediate', true],
     ]);
-    assert.equal(entries[4].preloadAttached, true);
-    assert.equal(entries[4].preloadChars, 37);
+    assert.equal(entries[5].preloadAttached, true);
+    assert.equal(entries[5].preloadChars, 37);
 
     const summary = summarizeMicroUsage(root);
     assert.deepEqual(summary.deliveryOutcomes, {
       immediate: 1,
       deferred: 2,
-      'success-hidden': 1,
+      'success-hidden': 2,
       error: 1,
     });
     assert.equal(summary.preloadCalls, 1);

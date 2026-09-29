@@ -13,17 +13,19 @@ function usage() {
     'Options:',
     '  --label <name>            Group label used in the output (required).',
     '  --rollout <file.jsonl>    Rollout file; repeat for multiple files.',
+    '  --codex-home <dir>        Resolve codex exec --json streams to sessions/**/rollout-*.jsonl.',
     '  --micro-usage <file.jsonl> Micro usage log; repeat for multiple files.',
     '  --json                    Print one JSON object instead of a text summary.',
   ].join('\n');
 }
 
 function parseArgs(argv) {
-  const options = { label: null, rollouts: [], microUsage: [], json: false };
+  const options = { label: null, rollouts: [], microUsage: [], codexHome: null, json: false };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--label') options.label = argv[++index];
     else if (token === '--rollout') options.rollouts.push(argv[++index]);
+    else if (token === '--codex-home') options.codexHome = argv[++index];
     else if (token === '--micro-usage') options.microUsage.push(argv[++index]);
     else if (token === '--json') options.json = true;
     else if (token === '--help' || token === '-h') options.help = true;
@@ -44,6 +46,58 @@ function readJsonl(filePath) {
     }
   }
   return records;
+}
+
+function isCodexExecStream(records) {
+  return records.some((record) => record.type === 'thread.started' || record.type === 'turn.completed');
+}
+
+function hasPerRequestUsage(records) {
+  return records.some((record) => record.type === 'event_msg' && record.payload?.type === 'token_count');
+}
+
+function findSessionRollout(codexHome, threadId) {
+  if (!codexHome || !threadId) return null;
+  const sessionsRoot = path.join(path.resolve(codexHome), 'sessions');
+  if (!fs.existsSync(sessionsRoot)) return null;
+  const pending = [sessionsRoot];
+  const matches = [];
+  while (pending.length) {
+    const directory = pending.pop();
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) pending.push(entryPath);
+      else if (entry.isFile() && entry.name.endsWith('.jsonl') && entry.name.includes(threadId)) matches.push(entryPath);
+    }
+  }
+  matches.sort();
+  return matches[0] || null;
+}
+
+function resolveRolloutInput(filePath, { codexHome = null } = {}) {
+  const requestedPath = path.resolve(filePath);
+  const records = readJsonl(requestedPath);
+  if (!isCodexExecStream(records)) {
+    if (!hasPerRequestUsage(records)) {
+      throw new Error(`${requestedPath}: rollout has no token_count usage; per-request metrics are unavailable`);
+    }
+    return { path: requestedPath, records, requestedPath };
+  }
+
+  const threadId = records.find((record) => record.type === 'thread.started')?.thread_id;
+  if (!threadId) throw new Error(`${requestedPath}: codex exec stream is missing thread_id`);
+  if (!codexHome) {
+    throw new Error(`${requestedPath}: codex exec stream has no per-request usage; pass --codex-home <dir> to resolve thread ${threadId}`);
+  }
+  const sessionPath = findSessionRollout(codexHome, threadId);
+  if (!sessionPath) {
+    throw new Error(`${requestedPath}: no session rollout for thread ${threadId} under ${path.resolve(codexHome, 'sessions')}`);
+  }
+  const sessionRecords = readJsonl(sessionPath);
+  if (!hasPerRequestUsage(sessionRecords)) {
+    throw new Error(`${sessionPath}: session rollout has no token_count usage`);
+  }
+  return { path: sessionPath, records: sessionRecords, requestedPath };
 }
 
 function increment(map, key) {
@@ -93,8 +147,9 @@ function classifyTurn(kinds) {
   return 'other';
 }
 
-function collectRollout(filePath) {
-  const records = readJsonl(filePath);
+function collectRollout(filePath, { codexHome = null } = {}) {
+  const resolved = resolveRolloutInput(filePath, { codexHome });
+  const records = resolved.records;
   const responseItems = records.filter((record) => record.type === 'response_item' && record.payload);
   const completedItems = records
     .filter((record) => record.type === 'event_msg' && record.payload?.type === 'item_completed')
@@ -166,10 +221,11 @@ function collectRollout(filePath) {
     .map((record) => record.timestamp)
     .filter((value) => typeof value === 'string')
     .sort();
-  const telemetry = parseRolloutTelemetry([filePath], { projectRoot: process.cwd() });
+  const telemetry = parseRolloutTelemetry([resolved.path], { projectRoot: process.cwd() });
 
   return {
-    file: path.resolve(filePath),
+    file: resolved.path,
+    requestedFile: resolved.requestedPath,
     telemetryOk: telemetry.ok,
     telemetryWarnings: telemetry.warnings,
     usage: telemetry.metrics,
@@ -200,6 +256,29 @@ function collectRollout(filePath) {
 }
 
 function collectMicroUsage(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return {
+      file: path.resolve(filePath),
+      missing: true,
+      total: {
+        calls: 0,
+        ok: 0,
+        failed: 0,
+        providerRequests: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        estimatedUsageCalls: 0,
+        toolRounds: 0,
+        toolCallCount: 0,
+        hostTurnsSaved: 0,
+        executorCalls: 0,
+        executorIdleCalls: 0,
+        summarizerOnlyCalls: 0,
+        byDelivery: {},
+      },
+    };
+  }
   const records = readJsonl(filePath);
   const total = {
     calls: records.length,
@@ -392,7 +471,7 @@ function main() {
   }
   if (!options.label) throw new Error('--label is required');
   if (!options.rollouts.length) throw new Error('at least one --rollout is required');
-  const rollouts = options.rollouts.map(collectRollout);
+  const rollouts = options.rollouts.map((filePath) => collectRollout(filePath, { codexHome: options.codexHome }));
   const microUsage = options.microUsage.map(collectMicroUsage);
   const summary = summarize(rollouts, microUsage);
   if (options.json) {

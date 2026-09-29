@@ -214,3 +214,101 @@ SyntaxError: Invalid or unexpected token
   assert.ok(block.includes('/tmp/project/src/ledger.mjs:42'));
   assert.ok(block.includes('^'));
 });
+
+test('ProcessManager rejects invalid maxLogBytes before spawning', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-proc-limit-test-'));
+  const manager = new ProcessManager({ projectRoot: tempDir });
+
+  await assert.rejects(
+    manager.startProcess({ id: 'bad-limit', command: 'echo should-not-run', maxLogBytes: 0 }),
+    /maxLogBytes must be a positive integer of at least 64 bytes/
+  );
+  await assert.rejects(
+    manager.startProcess({ id: 'bad-fraction', command: 'echo should-not-run', maxLogBytes: 64.5 }),
+    /maxLogBytes must be a positive integer of at least 64 bytes/
+  );
+  assert.equal(manager.listProcesses().length, 0);
+  assert.equal(fs.existsSync(path.join(tempDir, '.contextos')), false);
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('runCommand rejects invalid maxLogBytes before creating a process log', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-runner-limit-test-'));
+
+  await assert.rejects(
+    runCommand({ command: 'echo should-not-run', projectRoot: tempDir, maxLogBytes: 63 }),
+    /maxLogBytes must be a positive integer of at least 64 bytes/
+  );
+  await assert.rejects(
+    runCommand({ command: 'echo should-not-run', projectRoot: tempDir, maxLogBytes: 64.5 }),
+    /maxLogBytes must be a positive integer of at least 64 bytes/
+  );
+  assert.equal(fs.existsSync(path.join(tempDir, '.contextos')), false);
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('runCommand persists only the newest bytes with an exact truncation marker', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-runner-bounded-test-'));
+  const maxLogBytes = 64;
+  const marker = '[contextos:log-truncated]\n';
+
+  const receipt = await runCommand({
+    command: 'node -e "process.stdout.write(\'x\'.repeat(200))"',
+    projectRoot: tempDir,
+    maxLogBytes,
+  });
+
+  const fullLogPath = path.join(tempDir, receipt.logHandle);
+  const logContent = fs.readFileSync(fullLogPath, 'utf8');
+  assert.equal(fs.statSync(fullLogPath).size, maxLogBytes);
+  assert.equal(receipt.logBytes, maxLogBytes);
+  assert.equal(receipt.logTruncated, true);
+  assert.equal(logContent, marker + 'x'.repeat(maxLogBytes - Buffer.byteLength(marker)));
+
+  const smallReceipt = await runCommand({
+    command: 'echo short',
+    projectRoot: tempDir,
+    maxLogBytes,
+  });
+  assert.equal(smallReceipt.logTruncated, false);
+  assert.ok(smallReceipt.logBytes < maxLogBytes);
+  assert.equal(fs.statSync(path.join(tempDir, smallReceipt.logHandle)).size, smallReceipt.logBytes);
+
+  fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('ProcessManager bounds streamed logs and reports truncation metadata', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-proc-bounded-test-'));
+  const manager = new ProcessManager({ projectRoot: tempDir });
+  const maxLogBytes = 64;
+  const marker = '[contextos:log-truncated]\n';
+
+  const started = await manager.startProcess({
+    id: 'bounded-process',
+    command: 'node -e "process.stdout.write(\'z\'.repeat(200)); setInterval(() => {}, 1000)"',
+    maxLogBytes,
+  });
+
+  try {
+    const current = manager.getProcess('bounded-process');
+    const listed = manager.listProcesses().find((processInfo) => processInfo.id === 'bounded-process');
+    const logs = manager.getLogs('bounded-process', { lines: 5 });
+
+    assert.equal(started.logBytes, maxLogBytes);
+    assert.equal(started.logTruncated, true);
+    assert.equal(current.logBytes, maxLogBytes);
+    assert.equal(current.logTruncated, true);
+    assert.equal(listed.logBytes, maxLogBytes);
+    assert.equal(listed.logTruncated, true);
+    assert.equal(logs.logBytes, maxLogBytes);
+    assert.equal(logs.logTruncated, true);
+    assert.equal(fs.statSync(started.logFile).size, maxLogBytes);
+    assert.equal(logs.lines[0], marker.trimEnd());
+    assert.equal(logs.lines[1], 'z'.repeat(maxLogBytes - Buffer.byteLength(marker)));
+  } finally {
+    await manager.stopProcess('bounded-process', { graceMs: 1000 });
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});

@@ -1510,22 +1510,34 @@ export class ContextOSV2Service {
           allFiles.add(ref.path);
         }
       }
-      const results = CodeTools.searchWorkspace(this.projectRoot, query || '', Array.from(allFiles));
       // Symbols only cover declarations; agents usually mean "where is this
       // mentioned", so always top the answer up with a bounded textual grep.
       const wanted = Number(limit || maxResults || 8);
       const runText = (needle) => CodeTools.searchText(this.projectRoot, needle, {
-        limit: Math.max(1, wanted - results.length),
+        limit: Math.max(wanted, 40),
         root,
       });
       let text = runText(query || '');
+      if (rootIsFile) allFiles.add(rootRelative);
+      for (const hit of text.hits) {
+        if (hit?.path) allFiles.add(hit.path);
+      }
+      if (!allFiles.size) {
+        for (const file of CodeTools.listWorkspaceFiles(this.projectRoot, { root, maxFiles: 800 })) {
+          allFiles.add(file);
+        }
+      }
+      const results = CodeTools.searchWorkspace(this.projectRoot, query || '', Array.from(allFiles));
       // "git status" / "ship 收尾" never match literally: retry with the single
       // most specific token instead of sending the agent back to `rg`.
       let retriedWith = null;
       if (!results.length && !text.hits.length && /\s/.test(String(query || '').trim())) {
         const token = String(query).split(/[\s,，、]+/).filter(Boolean).sort((a, b) => b.length - a.length)[0];
         if (token) {
-          const retry = runText(token);
+          const retry = CodeTools.searchText(this.projectRoot, token, {
+            limit: Math.max(wanted, 40),
+            root,
+          });
           if (retry.hits.length) {
             text = retry;
             retriedWith = token;
@@ -1533,7 +1545,13 @@ export class ContextOSV2Service {
         }
       }
       if (format === 'json') {
-        return { symbols: results, text: text.hits, scannedFiles: text.scanned, truncated: text.truncated, retriedWith };
+        return {
+          symbols: results,
+          text: text.hits.slice(0, wanted),
+          scannedFiles: text.scanned,
+          truncated: text.truncated,
+          retriedWith,
+        };
       }
       const lines = [`# Search: \`${query}\`${root ? ` (root: \`${root}\`)` : ''}`];
       if (results.length > 0) {
@@ -1545,7 +1563,7 @@ export class ContextOSV2Service {
       }
       if (text.hits.length > 0) {
         lines.push(`\n## Textual matches${retriedWith ? ` (retried with \`${retriedWith}\`)` : ''}`);
-        for (const hit of text.hits) {
+        for (const hit of text.hits.slice(0, wanted)) {
           lines.push(`- \`${hit.path}\`:L${hit.line}: \`${hit.content}\``);
         }
       }
@@ -1697,6 +1715,7 @@ export class ContextOSV2Service {
     command,
     cwd,
     maxChars = 1500,
+    maxLogBytes,
     timeoutMs = 60000,
     raw = false,
     mode = 'auto',
@@ -1708,6 +1727,7 @@ export class ContextOSV2Service {
       command,
       cwd: targetCwd,
       maxChars,
+      maxLogBytes,
       timeoutMs,
       projectRoot: this.projectRoot,
       raw,
@@ -1726,10 +1746,10 @@ export class ContextOSV2Service {
     return this._withWriteLock('process', () => this._process(input));
   }
 
-  async _process({ action, command, id, lines = 50, grep }) {
+  async _process({ action, command, id, lines = 50, grep, maxLogBytes }) {
     switch (action) {
       case 'start':
-        return this.processManager.startProcess({ id, command });
+        return this.processManager.startProcess({ id, command, maxLogBytes });
       case 'list':
         return this.processManager.listProcesses();
       case 'status':

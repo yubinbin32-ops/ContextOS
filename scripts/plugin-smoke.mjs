@@ -34,7 +34,10 @@ assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");
 const skillText = fs.readFileSync(skillPath, "utf8");
 const capabilityReference = path.join("plugins", "contextos", "skills", "contextos", "references", "capabilities.md");
 assert.ok(skillText.includes("## Route work"), "Skill must document repository execution routing");
-assert.ok(skillText.includes("references/capabilities.md"), "Skill must route advanced capabilities to its reference");
+assert.ok(skillText.includes("Legal capabilities:"), "Skill must list legal advanced capabilities");
+for (const capability of ["architecture", "block", "chain", "telemetry", "micro", "run_command"]) {
+  assert.ok(skillText.includes(capability), `Skill must document capability ${capability}`);
+}
 assert.ok(fs.existsSync(capabilityReference), "ContextOS capability reference is missing");
 const capabilityText = fs.readFileSync(capabilityReference, "utf8");
 for (const term of ["decision_write", "rule_write", "bind_rule", "bind_auto", "chain", "compose", "link", "task.finish", "telemetry", "audit", "scope"]) {
@@ -82,13 +85,19 @@ try {
   assert.match(deleted, /deleted `src\/obsolete\.mjs`/);
 
   // 3. verify + sanitization of a leaked secret
+  const retryCommand = `node -e "const fs=require('node:fs');if(!fs.existsSync('verify.ok')){console.error('error: failed with token ghp_123456789012345678901234567890123456');process.exit(1)}"`;
   const runText = await call("verify", {
-    commands: ['echo "error: failed with token ghp_123456789012345678901234567890123456" && exit 1'],
+    commands: [retryCommand],
   });
   assert.ok(!runText.includes("ghp_123456789012345678901234567890123456"), "command gateway leaked secret");
   assert.ok(runText.includes("[REDACTED_GITHUB_TOKEN]"), "secret not redacted");
 
-  // 4. ship closes the session
+  // 4. ship requires passing evidence, then closes the session
+  const blockedShip = await call("ship", { summary: "greet() wording" });
+  assert.match(blockedShip, /BLOCKED \(verification evidence\)/);
+  fixture.write("verify.ok", "ready\n");
+  const passingVerify = await call("verify", { commands: [retryCommand] });
+  assert.match(passingVerify, /Verdict: PASS/);
   const shipped = await call("ship", { summary: "greet() wording" });
   assert.match(shipped, /Closure/);
   const blocksAfterShip = JSON.parse(await call("ops", {

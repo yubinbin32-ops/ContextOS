@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { ContextOSV2Service } from './v2-service.mjs';
 import { ContextOSCloudClient } from './cloud-client.mjs';
@@ -112,6 +113,8 @@ export async function runDoctor(input) {
   }
 
   const platforms = detectInstalledPlatforms();
+  const contextosHome = process.env.CONTEXTOS_HOME || path.join(os.homedir(), '.contextos');
+  const globalProfilePath = path.join(contextosHome, 'profile.json');
   const editorStatuses = platforms
     .map((p) => `  - **${p.name}**: ${p.isInstalled ? 'Installed' : 'Not detected'} (\`${p.configPath}\`)`)
     .join('\n');
@@ -122,6 +125,8 @@ export async function runDoctor(input) {
     `- **Project Root**: \`${root}\``,
     `- **Project ID**: \`${projectId}\``,
     `- **Active Storage Mode**: \`${mode}\``,
+    `- **ContextOS Home**: \`${contextosHome}\``,
+    `- **Global Profile**: \`${globalProfilePath}\` (${fs.existsSync(globalProfilePath) ? 'present' : 'missing'})`,
     `- **Cloud Hub URL**: \`${cloudUrl}\``,
     `- **Global Cloud Config**: ${globalCloud ? `Configured (\`${globalCloud.cloudUrl}\`)` : 'None'}`,
     `- **Cloud Hub Connectivity**: ${cloudHealth}`,

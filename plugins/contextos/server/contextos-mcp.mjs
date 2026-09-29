@@ -7264,6 +7264,11 @@ function compactSessionState(session) {
     closedAt: session.closedAt || null
   };
 }
+function isReservedStatePath(filePath) {
+  const value = String(filePath || "").replace(/\\/g, "/").replace(/^\.\//, "");
+  const root = value.split("/")[0] || "";
+  return root === ".contextos" || root.startsWith(".contextos-") || root.startsWith(".contextos.");
+}
 function fallbackWorkspaceFingerprint(projectRoot) {
   const root = path.resolve(projectRoot);
   const hash = crypto.createHash("sha256");
@@ -7284,6 +7289,8 @@ function fallbackWorkspaceFingerprint(projectRoot) {
     }
     for (const entry of entries) {
       const relative = relativeDirectory ? path.join(relativeDirectory, entry.name) : entry.name;
+      const normalizedRelative = relative.split(path.sep).join("/");
+      if (isReservedStatePath(normalizedRelative)) continue;
       if (entry.isDirectory() && FALLBACK_IGNORED_DIRECTORIES.has(entry.name)) continue;
       const fullPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
@@ -7330,6 +7337,18 @@ function emptySession(projectId, intent, workspaceRoot) {
     searchReceipts: [],
     exploreReceipts: [],
     semanticReceipts: [],
+    readPolicy: {
+      decisionPackageSeen: false,
+      decisionPackageTool: null,
+      decisionPackageAt: null,
+      decisionPackageCount: 0,
+      fullExpansions: 0,
+      fullExpansionPaths: [],
+      directedExpansions: 0,
+      directedExpansionPaths: [],
+      pathOnlyFullDenied: 0,
+      lastPathOnlyFullDeniedAt: null
+    },
     notes: [],
     slots: {},
     startedAt: now,
@@ -7349,7 +7368,7 @@ function workspaceFingerprint(projectRoot) {
   const status = gitStatus.stdout || "";
   const sourceStatus = status.split(/\r?\n/).filter(Boolean).filter((line) => {
     const paths = line.slice(3).trim().split(" -> ").map((value) => value.trim());
-    return paths.every((value) => value !== ".contextos" && !value.startsWith(".contextos/"));
+    return paths.every((value) => !isReservedStatePath(value));
   }).join("\n");
   hash.update(sourceStatus);
   const diff = spawnSync("git", ["diff", "--binary", "HEAD", "--", ".", ":(exclude).contextos"], {
@@ -7361,7 +7380,7 @@ function workspaceFingerprint(projectRoot) {
   for (const line of status.split(/\r?\n/)) {
     if (!line.startsWith("?? ")) continue;
     const relative = line.slice(3).trim();
-    if (!relative || relative.startsWith(".contextos/")) continue;
+    if (!relative || isReservedStatePath(relative)) continue;
     const fullPath = path.join(projectRoot, relative);
     try {
       const stat = fs2.statSync(fullPath);
@@ -7373,7 +7392,7 @@ function workspaceFingerprint(projectRoot) {
   }
   return hash.digest("hex");
 }
-var MAX_TOUCHED, MAX_RECEIPTS, MAX_NOTES, MAX_READ_RECEIPTS, MAX_SEARCH_RECEIPTS, MAX_EXPLORE_RECEIPTS, MAX_SEMANTIC_RECEIPTS, DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, HISTORY_INTENT_CHARS, HISTORY_SUMMARY_CHARS, HISTORY_PATH_CHARS, HISTORY_RECEIPT_COMMAND_CHARS, FALLBACK_FINGERPRINT_MAX_FILES, FALLBACK_FINGERPRINT_CONTENT_BYTES, FALLBACK_FINGERPRINT_FILE_BYTES, FALLBACK_IGNORED_DIRECTORIES, SessionStore;
+var MAX_TOUCHED, MAX_RECEIPTS, MAX_NOTES, MAX_READ_RECEIPTS, MAX_SEARCH_RECEIPTS, MAX_EXPLORE_RECEIPTS, MAX_SEMANTIC_RECEIPTS, MAX_FULL_EXPANSION_PATHS, MAX_DIRECTED_EXPANSION_PATHS, DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, HISTORY_INTENT_CHARS, HISTORY_SUMMARY_CHARS, HISTORY_PATH_CHARS, HISTORY_RECEIPT_COMMAND_CHARS, FALLBACK_FINGERPRINT_MAX_FILES, FALLBACK_FINGERPRINT_CONTENT_BYTES, FALLBACK_FINGERPRINT_FILE_BYTES, FALLBACK_IGNORED_DIRECTORIES, SessionStore;
 var init_session_store = __esm({
   "packages/orchestrator/src/session-store.mjs"() {
     MAX_TOUCHED = 200;
@@ -7383,6 +7402,8 @@ var init_session_store = __esm({
     MAX_SEARCH_RECEIPTS = 100;
     MAX_EXPLORE_RECEIPTS = 50;
     MAX_SEMANTIC_RECEIPTS = 80;
+    MAX_FULL_EXPANSION_PATHS = 12;
+    MAX_DIRECTED_EXPANSION_PATHS = 12;
     DEFAULT_HISTORY_LIMIT = 3;
     MAX_HISTORY_LIMIT = 10;
     HISTORY_INTENT_CHARS = 120;
@@ -7577,6 +7598,70 @@ var init_session_store = __esm({
         if (session.readReceipts.length > MAX_READ_RECEIPTS) {
           session.readReceipts = session.readReceipts.slice(-MAX_READ_RECEIPTS);
         }
+        return this.save(session);
+      }
+      readPolicy() {
+        const session = this.current;
+        return session?.readPolicy || {
+          decisionPackageSeen: false,
+          decisionPackageTool: null,
+          decisionPackageAt: null,
+          decisionPackageCount: 0,
+          fullExpansions: 0,
+          fullExpansionPaths: [],
+          directedExpansions: 0,
+          directedExpansionPaths: [],
+          pathOnlyFullDenied: 0,
+          lastPathOnlyFullDeniedAt: null
+        };
+      }
+      markDecisionPackage({ tool = null, status = null, artifactId = null, receiptId = null } = {}) {
+        const session = this.ensureSession();
+        const current = session.readPolicy || {};
+        session.readPolicy = {
+          ...current,
+          decisionPackageSeen: true,
+          decisionPackageTool: tool || current.decisionPackageTool || null,
+          decisionPackageAt: (/* @__PURE__ */ new Date()).toISOString(),
+          decisionPackageCount: (Number(current.decisionPackageCount) || 0) + 1,
+          decisionPackageStatus: status || current.decisionPackageStatus || null,
+          decisionPackageArtifactId: artifactId || current.decisionPackageArtifactId || null,
+          decisionPackageReceiptId: receiptId || current.decisionPackageReceiptId || null
+        };
+        return this.save(session);
+      }
+      recordFullExpansion({ path: filePath = null } = {}) {
+        const session = this.ensureSession();
+        const current = session.readPolicy || {};
+        const paths = Array.isArray(current.fullExpansionPaths) ? current.fullExpansionPaths : [];
+        session.readPolicy = {
+          ...current,
+          fullExpansions: (Number(current.fullExpansions) || 0) + 1,
+          fullExpansionPaths: filePath ? [...paths, String(filePath)].slice(-MAX_FULL_EXPANSION_PATHS) : paths
+        };
+        return this.save(session);
+      }
+      recordDirectedExpansion({ path: filePath = null } = {}) {
+        const session = this.ensureSession();
+        const current = session.readPolicy || {};
+        const paths = Array.isArray(current.directedExpansionPaths) ? current.directedExpansionPaths : [];
+        session.readPolicy = {
+          ...current,
+          directedExpansions: (Number(current.directedExpansions) || 0) + 1,
+          directedExpansionPaths: filePath ? [...paths, String(filePath)].slice(-MAX_DIRECTED_EXPANSION_PATHS) : paths
+        };
+        return this.save(session);
+      }
+      recordPathOnlyFullDenied({ path: filePath = null, reason = null } = {}) {
+        const session = this.ensureSession();
+        const current = session.readPolicy || {};
+        session.readPolicy = {
+          ...current,
+          pathOnlyFullDenied: (Number(current.pathOnlyFullDenied) || 0) + 1,
+          lastPathOnlyFullDeniedAt: (/* @__PURE__ */ new Date()).toISOString(),
+          lastPathOnlyFullDeniedPath: filePath ? String(filePath) : current.lastPathOnlyFullDeniedPath || null,
+          lastPathOnlyFullDeniedReason: reason || current.lastPathOnlyFullDeniedReason || null
+        };
         return this.save(session);
       }
       invalidateReadReceipts(paths = null) {
@@ -8589,6 +8674,7 @@ function finalizeResponse(text, {
   tool = "default",
   maxChars,
   full = false,
+  allowWiden = false,
   forceArtifact = false,
   artifactContent = null,
   receiptId = null,
@@ -8599,7 +8685,7 @@ function finalizeResponse(text, {
   const raw = typeof text === "string" ? text : JSON.stringify(text, null, 2);
   const toolBudget = RESPONSE_BUDGETS[tool] ?? RESPONSE_BUDGETS.default;
   const requested = Number.isFinite(maxChars) && maxChars > 0 ? Math.floor(maxChars) : toolBudget;
-  const budget = full ? Infinity : Math.min(requested, toolBudget);
+  const budget = full ? Infinity : allowWiden ? requested : Math.min(requested, toolBudget);
   const hintText = routingHint && budget !== Infinity ? `
 [ContextOS route hint: ${String(routingHint).slice(0, 180)}]` : "";
   const contentBudget = hintText ? Math.max(0, budget - hintText.length) : budget;
@@ -8929,21 +9015,27 @@ function projectProviderUsage(result) {
     }
   };
 }
-function graphToolCalls(result) {
-  return (Array.isArray(result?.toolCalls) ? result.toolCalls : []).filter((call) => ["block", "chain"].includes(call?.name)).map((call) => {
-    let args2 = {};
-    let output = {};
+function failedToolCall(result) {
+  const call = (Array.isArray(result?.toolCalls) ? result.toolCalls : []).find((entry) => {
+    let output2 = {};
     try {
-      args2 = typeof call.arguments === "string" ? JSON.parse(call.arguments) : call.arguments || {};
+      output2 = typeof entry.preview === "string" ? JSON.parse(entry.preview) : entry.preview || {};
     } catch (_) {
     }
-    try {
-      output = typeof call.preview === "string" ? JSON.parse(call.preview) : call.preview || {};
-    } catch (_) {
-    }
-    const isMutation = call.name === "block" && args2.action === "bind_auto" || call.name === "chain" && args2.action === "compose";
-    return { call, args: args2, output, isMutation, error: call.error || output?.error || (call.ok === false ? "OS reported failure" : null) };
+    return entry?.error || output2?.error || entry?.ok === false;
   });
+  if (!call) return null;
+  let args2 = {};
+  let output = {};
+  try {
+    args2 = typeof call.arguments === "string" ? JSON.parse(call.arguments) : call.arguments || {};
+  } catch (_) {
+  }
+  try {
+    output = typeof call.preview === "string" ? JSON.parse(call.preview) : call.preview || {};
+  } catch (_) {
+  }
+  return { call, args: args2, error: call.error || output?.error || "OS reported failure" };
 }
 function projectMicroResult(result, { projectRoot, hostSessionId = null, full = false, maxChars = RESPONSE_BUDGETS.micro } = {}) {
   const requestedDelivery = normalizeMicroRequestedDelivery(result?.requestedDelivery ?? result?.delivery);
@@ -8982,29 +9074,17 @@ function projectMicroResult(result, { projectRoot, hostSessionId = null, full = 
   const evidenceAnswer = result.preset === "evidence" && typeof result.structured?.answer === "string" ? result.structured.answer.trim() : "";
   const content = evidenceAnswer || (result.content || "");
   if (requestedDelivery === "errors-only") {
-    const graphCalls = graphToolCalls(result);
-    const failedCall = graphCalls.find((entry) => entry.error || entry.output?.ok === false);
+    const failedCall = failedToolCall(result);
     if (failedCall) {
+      const action = failedCall.args && typeof failedCall.args === "object" ? failedCall.args.action : null;
+      const label = action ? `${failedCall.call.name} ${action}` : failedCall.call.name;
       const projected2 = {
         ok: false,
         delivery: "error",
         receiptId,
         artifactId,
         ...projectProviderUsage(result),
-        error: clipText(`Micro ${failedCall.call.name} ${failedCall.args.action} failed: ${failedCall.error || "OS reported failure"}`, maxChars, { label: "micro error" })
-      };
-      recordOutcome("error", false);
-      return projected2;
-    }
-    if (!graphCalls.some((entry) => entry.isMutation)) {
-      const projected2 = {
-        ok: false,
-        delivery: "error",
-        receiptId,
-        artifactId,
-        ...projectProviderUsage(result),
-        error: `errors-only requires at least one curated Block bind or additive Chain composition.${artifactId ? ` Micro result is available in artifact ${artifactId}.` : " No result artifact could be persisted."}`,
-        ...!artifactId && content ? { content: clipText(content, maxChars, { label: "micro answer", keepTail: false }) } : {}
+        error: clipText(`Micro ${label} failed: ${failedCall.error || "OS reported failure"}`, maxChars, { label: "micro error" })
       };
       recordOutcome("error", false);
       return projected2;
@@ -9096,21 +9176,28 @@ var init_response_budget = __esm({
     MICRO_REQUESTED_DELIVERIES = /* @__PURE__ */ new Set(["immediate", "defer", "errors-only", "auto"]);
     MICRO_DELIVERY_OUTCOMES = /* @__PURE__ */ new Set(["immediate", "deferred", "success-hidden", "error"]);
     RESPONSE_BUDGETS = Object.freeze({
-      default: 4e3,
-      explore: 3e3,
+      default: 2e3,
+      explore: 3200,
       // Source bodies stay in artifacts; default host output should be a slice,
       // not an accidental file dump. Callers can request full:true explicitly.
-      inspect: 8e3,
-      work: 8e3,
-      change: 2500,
-      verify: 5e3,
-      ship: 1600,
-      pipeline: 2800,
+      inspect: 2400,
+      work: 2400,
+      change: 2e3,
+      verify: 2400,
+      ship: 1200,
+      // The first pipeline is the decision package: it must carry all bounded
+      // stubs and locators needed for the next mutation. Clipping it to the same
+      // size as a single read forces the host into a second discovery loop.
+      // Generic pipelines stay compact. A pipeline containing explore is a
+      // decision package and opts into pipelineDecision below so its bounded
+      // source/test contract is not clipped by the outer response finalizer.
+      pipeline: 4e3,
+      pipelineDecision: 24e3,
       // Advanced capability calls are diagnostic plumbing, not a second transcript.
       // Keep the default small; callers that truly need the body can opt into
       // full:true and fetch the artifact explicitly.
-      ops: 2e3,
-      micro: 1600
+      ops: 1200,
+      micro: 1200
     });
   }
 });
@@ -30677,10 +30764,11 @@ function matchesSearchQuery(value, query, matcher) {
   }
   return text.toLowerCase().includes(String(query || "").trim().toLowerCase());
 }
-var CodeTools;
+var SEARCHABLE_SOURCE_EXTENSIONS, CodeTools;
 var init_code_tools = __esm({
   async "packages/code-intel/src/code-tools.mjs"() {
     await init_language_registry();
+    SEARCHABLE_SOURCE_EXTENSIONS = /\.(?:mjs|cjs|js|jsx|ts|tsx|py|swift|go|rs|java|kt|rb|php|c|h|cpp|cs)$/i;
     CodeTools = class {
       /**
        * 1. Outline: Progressive L1 structure view
@@ -31088,6 +31176,59 @@ var init_code_tools = __esm({
       /**
        * 5. Workspace Search: find symbols/methods across project files (VS Code Cmd+T).
        */
+      static listWorkspaceFiles(repoRoot, { root = null, maxFiles = 800 } = {}) {
+        const skipDirs = /* @__PURE__ */ new Set([
+          "node_modules",
+          ".git",
+          "dist",
+          "build",
+          ".next",
+          ".nuxt",
+          "coverage",
+          ".contextos",
+          ".cache",
+          ".wrangler",
+          "DerivedData",
+          ".build",
+          "vendor",
+          "Pods",
+          "target",
+          ".venv"
+        ]);
+        const rootPath = root ? path10.resolve(repoRoot, String(root)) : null;
+        const rootRelative = rootPath ? path10.relative(repoRoot, rootPath).split(path10.sep).join("/").replace(/^\.\//, "").replace(/\/+$/, "") : "";
+        const rootOutsideProject = rootPath ? rootRelative.startsWith("..") || path10.isAbsolute(rootRelative) : false;
+        const rootIsFile = Boolean(rootPath && !rootOutsideProject && fs10.existsSync(rootPath) && fs10.statSync(rootPath).isFile());
+        const files = [];
+        const startDir = rootPath && !rootOutsideProject && !rootIsFile ? rootPath : repoRoot;
+        const walk2 = (dir) => {
+          if (files.length >= maxFiles) return;
+          let entries = [];
+          try {
+            entries = fs10.readdirSync(dir, { withFileTypes: true });
+          } catch (_) {
+            return;
+          }
+          for (const entry of entries) {
+            if (files.length >= maxFiles) return;
+            if (entry.isDirectory()) {
+              if (skipDirs.has(entry.name) || entry.name.startsWith(".")) continue;
+              walk2(path10.join(dir, entry.name));
+              continue;
+            }
+            if (!entry.isFile()) continue;
+            const relative = path10.relative(repoRoot, path10.join(dir, entry.name)).split(path10.sep).join("/");
+            if (!SEARCHABLE_SOURCE_EXTENSIONS.test(relative)) continue;
+            files.push(relative);
+          }
+        };
+        if (rootIsFile) {
+          files.push(rootRelative);
+        } else if (!rootOutsideProject) {
+          walk2(startDir);
+        }
+        return Array.from(new Set(files)).slice(0, maxFiles);
+      }
       static searchWorkspace(repoRoot, query, candidateFiles = []) {
         const matcher = createSearchMatcher(query);
         const results = [];
@@ -31155,6 +31296,12 @@ function requestsFullOutput(value) {
   if (Array.isArray(value)) return value.some(requestsFullOutput);
   return Object.values(value).some(requestsFullOutput);
 }
+function requestsContinueOnFailure(value) {
+  if (!value || typeof value !== "object") return false;
+  if (value.continueOnFailure === true) return true;
+  if (Array.isArray(value)) return value.some(requestsContinueOnFailure);
+  return Object.values(value).some(requestsContinueOnFailure);
+}
 function outputLength(value) {
   if (typeof value === "string") return value.length;
   if (value == null) return 0;
@@ -31186,7 +31333,7 @@ function actionFailed(action, result, receipts = []) {
     if (typeof input.command === "string" && input.command.trim()) commands.push(input.command);
     if (commands.length && receipts.some((receipt) => commands.includes(receipt?.command) && Number(receipt?.exitCode) !== 0)) return true;
   }
-  if (tool === "verify" && input.mode && input.mode !== "once") return false;
+  if (tool === "verify" && PROCESS_VERIFY_MODES.has(input.mode)) return false;
   if (tool === "verify" || tool === "change") {
     const failuresIndex = headings.indexOf("Failures");
     const statusHeadings = failuresIndex < 0 ? headings : headings.slice(0, failuresIndex);
@@ -31224,12 +31371,40 @@ function extractMicroTriage(text) {
   const body2 = match[1].split(/\r?\n/).map((line) => line.trim()).filter(Boolean).join(" ");
   return body2 ? clip3(body2, 700) : null;
 }
-function compactFailureEvidence(text, { maxChars = 400 } = {}) {
+function isFailureYamlLabel(line) {
+  return /^(?:error|stack|code|location|failureType):\s*(?:\|-|>|-)?\s*$/i.test(line);
+}
+function isFailureStackFrame(line) {
+  return /^(?:at\s+)?\S.*(?:\(|at\s+).*:\d+:\d+\)?$/.test(line);
+}
+function extractFailureEvidence(text) {
   const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const test = lines.find((line) => /^not ok\b/i.test(line));
-  const error2 = lines.find((line) => /AssertionError|^error:|Expected\b|\bError:/i.test(line));
-  const parts2 = [test, error2].filter(Boolean);
-  const head = parts2.length ? parts2.join("\n") : lines.slice(0, 2).join("\n");
+  const causes = [];
+  const stackFrames = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (isFailureYamlLabel(line)) {
+      const next = lines[index + 1];
+      if (next && !isFailureYamlLabel(next)) causes.push(next);
+      continue;
+    }
+    if (/AssertionError|(?:^|\b)(?:Error|Expected):|Expected\s+|not implemented|panicked at/i.test(line)) {
+      causes.push(line);
+    }
+    if (isFailureStackFrame(line)) stackFrames.push(line);
+  }
+  return {
+    test: test || null,
+    cause: causes[0] || null,
+    stackFrame: stackFrames[0] || null,
+    fallback: lines.filter((line) => !isFailureYamlLabel(line)).slice(0, 2)
+  };
+}
+function compactFailureEvidence(text, { maxChars = 400 } = {}) {
+  const evidence = extractFailureEvidence(text);
+  const parts2 = [evidence.test, evidence.cause, evidence.stackFrame].filter(Boolean).filter((line, index, values) => values.indexOf(line) === index);
+  const head = parts2.length ? parts2.join("\n") : evidence.fallback.join("\n");
   return `${clip3(head, maxChars)}
 [raw failure log kept in the verification receipt; pass full:true to expand]`;
 }
@@ -31256,6 +31431,7 @@ function resolveActionOutputLimit(action, { mode = "summary", aggregateBudget } 
   }
   if (isReceiptMode(mode)) return PIPELINE_RECEIPT_OUTPUT_CLIP;
   const requested = typeof action.maxChars === "number" ? action.maxChars : typeof nested?.maxChars === "number" ? nested.maxChars : null;
+  const defaultClip = toolName === "explore" ? PIPELINE_EXPLORE_OUTPUT_CLIP : PIPELINE_DEFAULT_OUTPUT_CLIP;
   if (mode === "full") {
     const aggregateLimit = Number.isFinite(aggregateBudget) ? Math.max(1, Math.floor(aggregateBudget)) : Infinity;
     if (Number.isFinite(requested) && requested > 0) {
@@ -31264,10 +31440,10 @@ function resolveActionOutputLimit(action, { mode = "summary", aggregateBudget } 
     return aggregateLimit;
   }
   if (Number.isFinite(requested) && requested > 0) {
-    return Math.min(Math.floor(requested), PIPELINE_MAX_OUTPUT_CLIP);
+    return Math.min(Math.floor(requested), toolName === "explore" ? PIPELINE_EXPLORE_OUTPUT_CLIP : PIPELINE_MAX_OUTPUT_CLIP);
   }
-  if (nested?.budget === "full") return PIPELINE_MAX_OUTPUT_CLIP;
-  return PIPELINE_DEFAULT_OUTPUT_CLIP;
+  if (nested?.budget === "full") return toolName === "explore" ? PIPELINE_EXPLORE_OUTPUT_CLIP : PIPELINE_MAX_OUTPUT_CLIP;
+  return defaultClip;
 }
 function explicitActionMaxChars(action) {
   if (!action || typeof action !== "object") return null;
@@ -31306,6 +31482,65 @@ function compactOutlineData(text) {
     return `(${slice.join(", ")}${symbols.length > 8 ? ` +${symbols.length - 8}` : ""})`;
   }
   return clip3(text, 200);
+}
+function stripOuterCodeFence(text) {
+  const value = String(text ?? "");
+  const match = value.match(/^\s*```[^\n]*\n([\s\S]*?)\n```\s*$/);
+  return match ? match[1] : value;
+}
+function compactTestContract(text, maxChars = 420) {
+  const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).filter((line) => /^(?:test\(|assert\.|await assert\.|const (?:report|replay)\b)/.test(line));
+  return clip3(lines.join(" | "), maxChars);
+}
+function resolveIndexedImport(projectRoot, fromPath, source, index) {
+  const raw = String(source || "").trim();
+  if (!raw || !raw.startsWith(".") && !raw.startsWith("/")) return null;
+  const base = path11.resolve(projectRoot, path11.dirname(fromPath), raw);
+  const candidates = [];
+  if (path11.extname(base)) {
+    candidates.push(base);
+  } else {
+    for (const extension of INDEX_IMPORT_EXTENSIONS) candidates.push(base + extension);
+    for (const extension of INDEX_IMPORT_EXTENSIONS) candidates.push(path11.join(base, `index${extension}`));
+  }
+  for (const candidate of candidates) {
+    const relative = path11.relative(projectRoot, candidate).split(path11.sep).join("/");
+    if (relative.startsWith("..") || path11.isAbsolute(relative)) continue;
+    if (index.entries.has(relative)) return relative;
+  }
+  return null;
+}
+function collectExploreClosure(projectRoot, seeds, index, limits = {}) {
+  const maxDependencies = Number.isFinite(limits.maxDependencies) ? Math.max(1, Math.floor(limits.maxDependencies)) : 6;
+  const maxCallers = Number.isFinite(limits.maxCallers) ? Math.max(1, Math.floor(limits.maxCallers)) : 4;
+  const maxTests = Number.isFinite(limits.maxTests) ? Math.max(1, Math.floor(limits.maxTests)) : 2;
+  const seedSet = new Set(seeds);
+  const dependencies = /* @__PURE__ */ new Set();
+  for (const seed of seeds) {
+    const entry = index.entries.get(seed);
+    for (const source of entry?.imports || []) {
+      const resolved = resolveIndexedImport(projectRoot, seed, source, index);
+      if (resolved && resolved !== seed) dependencies.add(resolved);
+      if (dependencies.size >= maxDependencies) break;
+    }
+    if (dependencies.size >= maxDependencies) break;
+  }
+  const related = /* @__PURE__ */ new Set([...seedSet, ...dependencies]);
+  const callers = /* @__PURE__ */ new Set();
+  const tests = /* @__PURE__ */ new Set();
+  for (const [candidate, entry] of index.entries) {
+    const imports = (entry?.imports || []).map((source) => resolveIndexedImport(projectRoot, candidate, source, index)).filter(Boolean);
+    if (!imports.some((target) => related.has(target))) continue;
+    const isTest = /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(?:test|spec)\.[^/]+$/i.test(candidate);
+    if (isTest) tests.add(candidate);
+    else if (!related.has(candidate)) callers.add(candidate);
+    if (callers.size >= maxCallers && tests.size >= maxTests) break;
+  }
+  return {
+    dependencies: Array.from(dependencies),
+    callers: Array.from(callers),
+    tests: Array.from(tests)
+  };
 }
 function clip3(text, max, { withHint = false } = {}) {
   const value = typeof text === "string" ? text : JSON.stringify(text ?? "", null, 2);
@@ -31473,6 +31708,88 @@ function latinQueries(text = "", exclude = "") {
   const haystack = String(exclude).toLowerCase();
   return Array.from(tokenize(text)).filter((token) => /^[a-z][a-z0-9_-]{4,}$/.test(token)).filter((token) => !haystack.includes(token)).slice(0, 2);
 }
+function isTestPath(filePath = "") {
+  return /(^|\/)(__tests__|test|tests|spec)(\/|$)|\.(?:test|spec)\.[^/]+$/i.test(String(filePath));
+}
+function isImplementationSource(filePath = "") {
+  return /\.(?:mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|rb|php|swift|kt|cs|cpp|c|h)$/i.test(String(filePath)) && !isTestPath(filePath);
+}
+function uniquePaths(values = []) {
+  return Array.from(new Set(values.map((value) => String(value || "").replace(/\\/g, "/").replace(/^\.\//, "")).filter(Boolean)));
+}
+function parseOutlineSymbols(text) {
+  const symbols = [];
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const match = line.trim().match(/^[-*]\s+\*\*([a-zA-Z]+)\*\*\s+`([^`]+)`\s+\[L(\d+)-L(\d+)\]/);
+    if (!match) continue;
+    const [, kind, display, startLine, endLine] = match;
+    const name2 = display.split("(")[0].trim().split(".").pop();
+    if (!name2) continue;
+    symbols.push({
+      kind,
+      name: name2,
+      display,
+      startLine: Number(startLine),
+      endLine: Number(endLine),
+      line
+    });
+  }
+  return symbols;
+}
+function selectFocusSymbols(outlineText, { identifiers = [], tokens = [] } = {}) {
+  const terms = Array.from(new Set([...identifiers, ...tokens].map((value) => String(value || "").toLowerCase()).filter((value) => value.length >= 4))).slice(0, 24);
+  const candidates = parseOutlineSymbols(outlineText).filter((symbol) => ["func", "function", "method", "constructor"].includes(symbol.kind));
+  const scored = candidates.map((symbol) => {
+    const name2 = symbol.name.toLowerCase();
+    const haystack = `${symbol.display} ${symbol.line}`.toLowerCase();
+    let score = 0;
+    for (const term of terms) {
+      if (name2 === term) score += 24;
+      else if (name2.includes(term)) score += 12;
+      else if (haystack.includes(term)) score += 4;
+    }
+    if (symbol.kind === "func" || symbol.kind === "method" || symbol.kind === "function") score += 1;
+    if (symbol.name === "constructor" || symbol.name.startsWith("_")) score -= 3;
+    return { ...symbol, score };
+  }).sort((left, right) => right.score - left.score || left.startLine - right.startLine);
+  const matched = scored.filter((symbol) => symbol.score > 0);
+  const selected = (matched.length ? matched : scored).slice(0, MAX_FOCUS_SLICE_SYMBOLS);
+  return { symbols: selected, matched: matched.length > 0 };
+}
+async function resolveExploreFocus({ caps, index, intent = "", identifiers = [] }) {
+  const discoveredFiles = index.discover({ limit: 800 });
+  const intentTokens = Array.from(tokenize(intent)).filter((token) => token.length >= 4).filter((token) => !["implement", "implementation", "including", "relevant", "public", "package", "exports", "tests"].includes(token)).slice(0, 16);
+  const pathScores = discoveredFiles.map((filePath) => {
+    const normalized = filePath.toLowerCase();
+    let score = 0;
+    for (const token of intentTokens) {
+      if (!normalized.includes(token)) continue;
+      score += token.includes("-") ? 4 : 2;
+    }
+    return { filePath, score };
+  }).filter((entry) => entry.score > 0).sort((left, right) => right.score - left.score || left.filePath.length - right.filePath.length).slice(0, MAX_FOCUS_PATH_CANDIDATES).map((entry) => entry.filePath);
+  const searchPaths = [];
+  for (const identifier of identifiers.slice(0, MAX_FOCUS_SEARCH_IDENTIFIERS)) {
+    const search = await caps.code({
+      action: "search",
+      query: identifier,
+      format: "json",
+      limit: 4
+    });
+    if (!search.ok || !search.data || typeof search.data !== "object") continue;
+    for (const symbol of Array.isArray(search.data.symbols) ? search.data.symbols : []) {
+      if (symbol?.path) searchPaths.push(symbol.path);
+    }
+    for (const hit of Array.isArray(search.data.text) ? search.data.text : []) {
+      if (hit?.path) searchPaths.push(hit.path);
+    }
+  }
+  return {
+    discoveredFiles,
+    tokens: intentTokens,
+    paths: uniquePaths([...pathScores, ...searchPaths]).slice(0, MAX_FOCUS_PATH_CANDIDATES)
+  };
+}
 function computeNext({ session, changedCount, profile, stage, intent = "" }) {
   const receipts = session?.receipts || [];
   const green = receipts.some((receipt) => receipt.exitCode === 0);
@@ -31481,7 +31798,7 @@ function computeNext({ session, changedCount, profile, stage, intent = "" }) {
     const command = suggestVerify(profile);
     return command ? `verify(${JSON.stringify({ commands: [command] })})` : 'verify({"commands":["<your command>"]}) \u2014 set `verify` in .contextos/profile.json to auto-infer';
   }
-  if (green) return "done: verified; do not rerun the command. Keep the session open unless this is the final closure.";
+  if (green) return "done: verified; finalize unless a concrete requirement or failing check still needs work. Do not rerun the command.";
   if (changedCount > 0) {
     const command = suggestVerify(profile);
     return command ? `verify(${JSON.stringify({ commands: [command] })}) \u2014 dirty files exist with no receipt yet` : 'verify({"commands":["<your command>"]}) \u2014 dirty files exist with no receipt yet';
@@ -31539,12 +31856,14 @@ async function explorePipeline(ctx, input = {}) {
   const index = new ModuleIndex({ projectRoot });
   index.bootstrapIfEmpty();
   index.ensure([...paths, ...dirty].slice(0, 12));
+  const focus = await resolveExploreFocus({ caps, index, intent, identifiers });
+  index.ensure(focus.paths.slice(0, 40));
   const resolvedPaths = [];
   for (const target of paths) {
     const fullPath = path11.join(projectRoot, target);
     if (!fs11.existsSync(fullPath)) continue;
     if (fs11.statSync(fullPath).isDirectory()) {
-      for (const file of index.entries.keys()) {
+      for (const file of focus.discoveredFiles) {
         if (file.startsWith(`${target.replace(/\/+$/, "")}/`) && !file.includes("node_modules")) {
           resolvedPaths.push(file);
         }
@@ -31553,12 +31872,17 @@ async function explorePipeline(ctx, input = {}) {
       resolvedPaths.push(target);
     }
   }
+  for (const file of focus.paths) {
+    if (!resolvedPaths.includes(file) && fs11.existsSync(path11.join(projectRoot, file))) {
+      resolvedPaths.push(file);
+    }
+  }
   const modules = index.lookup(`${intent} ${paths.join(" ")}`);
   for (const module2 of modules) {
     const files = module2.files.slice(0, 2).map((file) => `\`${file}\``).join(", ");
     const remaining = module2.files.length > 2 ? " (+" + (module2.files.length - 2) + ")" : "";
     whereLines.push("- " + (module2.directory || "workspace") + " \u2014 " + files + remaining + " (derived navigation only; not Block ownership)");
-    if (resolvedPaths.length < 6) {
+    if (!focus.paths.length || resolvedPaths.length < 6) {
       for (const f of module2.files) {
         if (!resolvedPaths.includes(f)) resolvedPaths.push(f);
       }
@@ -31572,12 +31896,33 @@ async function explorePipeline(ctx, input = {}) {
       resolvedPaths.push(f);
     }
   }
-  const filePaths = Array.from(new Set(resolvedPaths)).slice(0, input.depth === "deep" ? 4 : 2);
+  const bundleCandidates = Array.from(index.entries.keys()).filter((file) => !file.includes("node_modules")).filter((file) => !file.startsWith(".contextos/") && !file.startsWith("dist/")).filter((file) => /\.(?:mjs|cjs|js|jsx|ts|tsx|py|go|rs|java|rb|php|swift|kt|cs|cpp|c|h)$/i.test(file) || /^(?:package\.json|pyproject\.toml|Cargo\.toml|go\.mod|pom\.xml|build\.gradle)$/i.test(file)).filter((file) => /^(?:package\.json|pyproject\.toml|Cargo\.toml|go\.mod|pom\.xml|build\.gradle)$/i.test(file) || /^(?:src|lib|app|packages|test|tests|__tests__)\//.test(file) || /(?:^|\/)(?:test|tests|__tests__)\//.test(file) || /\.(?:test|spec)\.[^/]+$/i.test(file));
+  let bundleChars = 0;
+  for (const file of bundleCandidates) {
+    try {
+      bundleChars += fs11.statSync(path11.join(projectRoot, file)).size;
+    } catch (_) {
+    }
+  }
+  const smallWorkspaceBundle = bundleCandidates.length > 0 && bundleCandidates.length <= SMALL_WORKSPACE_MAX_FILES && bundleChars <= SMALL_WORKSPACE_MAX_CHARS;
+  if (smallWorkspaceBundle) {
+    for (const file of bundleCandidates) {
+      if (!resolvedPaths.includes(file)) resolvedPaths.push(file);
+    }
+  }
+  const filePaths = Array.from(new Set(resolvedPaths)).slice(
+    0,
+    smallWorkspaceBundle ? SMALL_WORKSPACE_CRITICAL_MAX_FILES : input.depth === "deep" || focus.paths.length ? 10 : 6
+  );
+  const outlineByPath = /* @__PURE__ */ new Map();
   if (filePaths.length) {
-    for (const target of filePaths) {
+    for (const [fileIndex, target] of filePaths.entries()) {
       const outline = await caps.code({ action: "outline", path: target });
       if (outline.ok) {
-        if (input.depth === "deep") {
+        outlineByPath.set(target, outline.data);
+        if (smallWorkspaceBundle) {
+          if (fileIndex < 6) whereLines.push(`- \`${target}\` ${compactOutlineData(outline.data)}`);
+        } else if (input.depth === "deep") {
           whereLines.push(`- \`${target}\`
 ${clip3(outline.data, OUTLINE_CLIP)}`);
         } else {
@@ -31588,6 +31933,156 @@ ${clip3(outline.data, OUTLINE_CLIP)}`);
       }
     }
     tracer.step("outline", { paths: filePaths });
+  }
+  if (smallWorkspaceBundle) {
+    const readme = filePaths.find((file) => /(^|\/)readme(?:_[^/]*)?\.md$/i.test(file));
+    whereLines.push(
+      `- Small workspace bundle (${filePaths.length} files, ${bundleChars} chars): ` + filePaths.map((file) => `\`${file}\``).join(", ") + ". All source/test bodies are inlined below; do not list or reread the repository."
+    );
+    whereLines.push(readme ? `- Project documentation: \`${readme}\` is included in the bundle.` : "- Project documentation: no README.md is present in this workspace.");
+  }
+  const criticalCandidates = [];
+  const intentTokens = tokenize(intent);
+  for (const target of filePaths) {
+    let fileChars = 0;
+    try {
+      const stat = fs11.statSync(path11.join(projectRoot, target));
+      if (stat.isFile()) fileChars = stat.size;
+    } catch (_) {
+    }
+    const focusIndex = focus.paths.indexOf(target);
+    const focusTarget = focusIndex >= 0;
+    const maxInlineChars = smallWorkspaceBundle ? SMALL_WORKSPACE_MAX_CHARS : focusTarget ? DECISION_SOURCE_FILE_MAX_CHARS : INSPECT_INLINE_MAX_CHARS;
+    if (fileChars === 0 || fileChars > maxInlineChars) continue;
+    const relevance = overlapScore(intentTokens, `${target} ${outlineByPath.get(target) || ""}`);
+    const read = smallWorkspaceBundle || focusTarget ? await caps.code({ action: "read", path: target, fullFile: true }) : await caps.code({ action: "read", path: target, startLine: 1, endLine: 200 });
+    if (!read.ok || !read.data) continue;
+    const stub = /not implemented|not yet implemented|unimplemented|todo|fixme/i.test(read.data);
+    const isTest = isTestPath(target);
+    criticalCandidates.push({ target, fileChars, read: read.data, relevance, stub, isTest, focusTarget, focusIndex });
+  }
+  criticalCandidates.sort((left, right) => Number(right.focusTarget) - Number(left.focusTarget) || Number(right.stub) - Number(left.stub) || Number(right.isTest) - Number(left.isTest) || right.relevance - left.relevance || left.fileChars - right.fileChars);
+  const criticalLines = [];
+  const focusSliceLines = [];
+  const includedFocusSliceTargets = /* @__PURE__ */ new Set();
+  const criticalLimit = smallWorkspaceBundle ? SMALL_WORKSPACE_CRITICAL_MAX_FILES : 8;
+  const includedCriticalTargets = /* @__PURE__ */ new Set();
+  let criticalChars = 0;
+  let focusSliceChars = 0;
+  for (const candidate of criticalCandidates.slice(0, criticalLimit)) {
+    const { target, fileChars, read, stub, focusTarget } = candidate;
+    const nextCriticalChars = criticalChars + String(read).length;
+    if (!smallWorkspaceBundle && criticalLines.length > 0 && nextCriticalChars > DECISION_SOURCE_TOTAL_MAX_CHARS) {
+      continue;
+    }
+    const fence = path11.extname(target).slice(1) || "text";
+    const readLimit = smallWorkspaceBundle ? Math.max(fileChars + 256, INSPECT_INLINE_MAX_CHARS) : focusTarget ? DECISION_SOURCE_FILE_MAX_CHARS : INSPECT_INLINE_MAX_CHARS;
+    criticalLines.push(
+      `- \`${target}\` (${fileChars} chars${stub ? ", implementation stub" : ""})
+\`\`\`${fence}
+${clip3(stripOuterCodeFence(read), readLimit)}
+\`\`\``
+    );
+    includedCriticalTargets.add(target);
+    criticalChars = nextCriticalChars;
+  }
+  if (criticalLines.length) tracer.step("critical_slices", { count: criticalLines.length });
+  for (const target of filePaths) {
+    const focusIndex = focus.paths.indexOf(target);
+    if (focusIndex < 0 || !isImplementationSource(target)) continue;
+    let fileChars = 0;
+    try {
+      const stat = fs11.statSync(path11.join(projectRoot, target));
+      if (stat.isFile()) fileChars = stat.size;
+    } catch (_) {
+    }
+    if (fileChars === 0 || fileChars <= DECISION_SOURCE_FILE_MAX_CHARS) continue;
+    const selected = selectFocusSymbols(outlineByPath.get(target), {
+      identifiers,
+      tokens: intentTokens
+    });
+    if (!selected.symbols.length) continue;
+    const slices = [];
+    let fileSliceChars = 0;
+    let fileComplete = true;
+    for (const symbol of selected.symbols) {
+      if (focusSliceChars + fileSliceChars >= DECISION_SOURCE_TOTAL_MAX_CHARS) {
+        fileComplete = false;
+        break;
+      }
+      const read = await caps.code({
+        action: "read",
+        path: target,
+        symbol: symbol.name
+      });
+      if (!read.ok || !read.data) {
+        fileComplete = false;
+        continue;
+      }
+      const rawBody = stripOuterCodeFence(read.data);
+      const bodyLimit = DECISION_SOURCE_FILE_MAX_CHARS - 256;
+      const complete = rawBody.length <= bodyLimit;
+      const body2 = complete ? rawBody : clip3(rawBody, bodyLimit, { withHint: true });
+      if (fileSliceChars + body2.length > DECISION_SOURCE_FILE_MAX_CHARS) {
+        fileComplete = false;
+        continue;
+      }
+      slices.push({ symbol, body: body2, complete });
+      if (!complete) fileComplete = false;
+      fileSliceChars += body2.length;
+    }
+    if (!slices.length) continue;
+    const partialSymbols = slices.filter((slice) => !slice.complete).map((slice) => slice.symbol.name);
+    focusSliceLines.push(
+      `- \`${target}\` (${fileChars} chars; focused symbols: ${slices.map((slice) => `\`${slice.symbol.name}\``).join(", ")}${partialSymbols.length ? `; partial: ${partialSymbols.map((name2) => `\`${name2}\``).join(", ")}` : ""}${selected.matched ? "" : "; fallback outline order"})
+` + slices.map((slice) => {
+        const fence = path11.extname(target).slice(1) || "text";
+        return `\`\`\`${fence}
+${slice.body}
+\`\`\``;
+      }).join("\n\n")
+    );
+    if (fileComplete) includedFocusSliceTargets.add(target);
+    focusSliceChars += fileSliceChars;
+  }
+  if (focusSliceLines.length) {
+    tracer.step("focus_slices", {
+      count: focusSliceLines.length,
+      chars: focusSliceChars
+    });
+  }
+  const closure = collectExploreClosure(projectRoot, filePaths, index, {
+    maxDependencies: 6,
+    maxCallers: 4,
+    maxTests: 2
+  });
+  if (closure.dependencies.length || closure.callers.length || closure.tests.length) {
+    const closureLines = [];
+    if (closure.dependencies.length) {
+      closureLines.push(`- Direct imports: ${closure.dependencies.map((file) => `\`${file}\``).join(", ")}`);
+    }
+    if (closure.callers.length) {
+      closureLines.push(`- Direct callers: ${closure.callers.map((file) => `\`${file}\``).join(", ")}`);
+    }
+    if (closure.tests.length) {
+      closureLines.push(`- Test entry: ${closure.tests.map((file) => `\`${file}\``).join(", ")}`);
+      for (const testFile of closure.tests.slice(0, 2)) {
+        const testRead = await caps.code({ action: "read", path: testFile, startLine: 1, endLine: 80 });
+        if (testRead.ok && testRead.data) {
+          closureLines.push(`- Test contract \`${testFile}\`: ${compactTestContract(testRead.data)}`);
+        }
+      }
+    }
+    for (const dependency of closure.dependencies.slice(0, 2)) {
+      const outline = await caps.code({ action: "outline", path: dependency });
+      if (outline.ok) closureLines.push(`- Import symbols \`${dependency}\`: ${compactOutlineData(outline.data)}`);
+    }
+    whereLines.push(...closureLines);
+    tracer.step("dependency_closure", {
+      dependencies: closure.dependencies.length,
+      callers: closure.callers.length,
+      tests: closure.tests.length
+    });
   }
   const isQuery = /[?？]/.test(intent) || /(在哪|谁在调用|为什么|怎么实现|在哪里)/.test(intent) || /^(where|who|why|how)\b/i.test(intent.trim());
   const sliceLines = [];
@@ -31658,24 +32153,62 @@ ${clip3(read.data, 240)}
     const headings = decisionHeadings(projectRoot);
     if (headings.length) memoryLines.push(headings[0]);
   }
+  const implementationFocus = focus.paths.filter((filePath) => isImplementationSource(filePath));
+  const missingDecisionPaths = implementationFocus.filter((filePath) => !includedCriticalTargets.has(filePath) && !includedFocusSliceTargets.has(filePath));
+  const decisionComplete = smallWorkspaceBundle || implementationFocus.length > 0 && missingDecisionPaths.length === 0;
   const nextLines = [`\u{1F449} ${computeNext({ session, changedCount: dirty.length, profile, stage: "explore", intent })}`];
-  const budget = resolveBudget(input.depth, ctx.profile?.budget);
+  if (smallWorkspaceBundle) {
+    nextLines.push("The complete small-workspace source/test bundle is already in this response. Go directly to change/work; do not run `rg --files`, `cat`, `sed`, or per-file inspect first.");
+  } else if (!decisionComplete && missingDecisionPaths.length) {
+    nextLines.push(
+      `Decision package is partial: the exact source for ${missingDecisionPaths.slice(0, 3).map((file) => `\`${file}\``).join(", ")} is not inlined. Use one bounded \`inspect({path, full:true})\` recovery read for the named file, then mutate; do not scan unrelated modules.`
+    );
+  } else if (decisionComplete) {
+    nextLines.push("The focused implementation source is already in this response. Go directly to change/work; do not reconstruct it with per-file reads.");
+  }
+  const stubTargets = criticalCandidates.filter((candidate) => candidate.stub).map((candidate) => `\`${candidate.target}\``);
+  if (stubTargets.length) {
+    nextLines.push(`Exact implementation stubs are already included: ${stubTargets.join(", ")}. Build \`change\` directly; do not dump source with native \`rg\`/\`cat\`.`);
+  }
+  const requestedBudget = Number(input.maxChars);
+  const budget = smallWorkspaceBundle ? Math.max(resolveBudget(input.depth, ctx.profile?.budget), PIPELINE_EXPLORE_OUTPUT_CLIP) : Number.isFinite(requestedBudget) && requestedBudget > 0 ? Math.min(Math.floor(requestedBudget), PIPELINE_EXPLORE_OUTPUT_CLIP) : resolveBudget(input.depth, ctx.profile?.budget);
+  const decisionLines = [
+    `- read_complete=${decisionComplete ? "true" : "false"}`,
+    `- do_not_reread=${decisionComplete ? "true" : "false"}`,
+    `- files=${filePaths.length}`,
+    decisionComplete ? "- next=change({edits,verify,architecture})" : "- next=inspect({path,full:true}) for the named missing target, then change({edits,verify})"
+  ];
+  if (!decisionComplete && missingDecisionPaths.length) {
+    decisionLines.push(`- missing=${missingDecisionPaths.slice(0, 4).join(",")}`);
+  }
   const sections = [
-    { key: "next", title: "Next", priority: 0, lines: nextLines },
-    { key: "now", title: "Now", priority: 1, lines: nowLines }
+    {
+      key: "decision",
+      title: "Decision Package",
+      priority: -1,
+      lines: decisionLines
+    },
+    { key: "next", title: "Next", priority: 1, lines: nextLines },
+    { key: "now", title: "Now", priority: 2, lines: nowLines }
   ];
   if (slotLines.length) {
-    sections.push({ key: "slots", title: "Available Action Slots (Pick a slot or pass directly)", priority: 2, lines: slotLines });
+    sections.push({ key: "slots", title: "Available Action Slots (Pick a slot or pass directly)", priority: 3, lines: slotLines });
+  }
+  if (criticalLines.length) {
+    sections.push({ key: "critical", title: "Critical slices (bounded)", priority: 0, lines: criticalLines });
+  }
+  if (focusSliceLines.length) {
+    sections.push({ key: "focus-slices", title: "Focused symbol slices (bounded)", priority: 0, lines: focusSliceLines });
   }
   sections.push(
-    { key: "where", title: "Where to look", priority: 3, lines: whereLines }
+    { key: "where", title: "Where to look", priority: 4, lines: whereLines }
   );
   if (sliceLines.length) {
-    sections.push({ key: "slices", title: "Code Slices (Direct Preview)", priority: 4, lines: sliceLines });
+    sections.push({ key: "slices", title: "Code Slices (Direct Preview)", priority: 5, lines: sliceLines });
   }
   sections.push(
-    { key: "rules", title: "Applicable rules", priority: 5, lines: rulesLines },
-    { key: "memory", title: "Memory", priority: 6, lines: memoryLines }
+    { key: "rules", title: "Applicable rules", priority: 6, lines: rulesLines },
+    { key: "memory", title: "Memory", priority: 7, lines: memoryLines }
   );
   const { text, meta: meta2 } = fitSections(sections, { maxChars: budget });
   tracer.step("explore.response", { budget, ...meta2 });
@@ -31700,9 +32233,20 @@ function blockCoversGraphPath(block, filePath) {
     return ref.anchorKind === "tree" ? normalized === binding || normalized.startsWith(binding + "/") : normalized === binding;
   });
 }
+function graphBindingsOverlap(left, right) {
+  const a = normalizeGraphPath(left);
+  const b = normalizeGraphPath(right);
+  return Boolean(a && b) && (a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`));
+}
+function isReservedStatePath2(filePath) {
+  const normalized = normalizeGraphPath(filePath);
+  const root = normalized.split("/")[0] || "";
+  return root === ".contextos" || root.startsWith(".contextos-") || root.startsWith(".contextos.");
+}
 function isCuratedArchitecturePath(filePath) {
   const normalized = normalizeGraphPath(filePath);
   if (!normalized) return false;
+  if (isReservedStatePath2(normalized)) return false;
   if (NON_ARCHITECTURE_PREFIXES.some((prefix2) => normalized.startsWith(prefix2))) return false;
   if (NON_ARCHITECTURE_EXTENSIONS.has(path11.posix.extname(normalized).toLowerCase())) return false;
   if ((/* @__PURE__ */ new Set(["LICENSE", "CHANGELOG"])).has(path11.posix.basename(normalized).toUpperCase())) return false;
@@ -31811,6 +32355,31 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
     delete chainData.replaceMembers;
     preparedChains.push({ chainData, replaceMembers: spec.replaceMembers === true });
   }
+  const explicitOwners = /* @__PURE__ */ new Map();
+  const conflictKeys = /* @__PURE__ */ new Set();
+  for (const block of preparedBlocks) {
+    for (const rawPath of block.paths) {
+      const normalized = normalizeGraphPath(rawPath);
+      if (!normalized) continue;
+      const existingOwner = explicitOwners.get(normalized);
+      if (existingOwner && existingOwner !== block.id) {
+        const key = `${existingOwner}:${block.id}:${normalized}`;
+        if (!conflictKeys.has(key)) {
+          errors.push(`path ${normalized} is assigned to multiple Blocks: ${existingOwner}, ${block.id}`);
+          conflictKeys.add(key);
+        }
+      } else {
+        explicitOwners.set(normalized, block.id);
+      }
+      const existingConflicts = initialBlocks.filter((existing) => existing.id !== block.id && isCuratedArchitectureBlock(existing) && (existing.artifactRefs || []).some((ref) => graphBindingsOverlap(ref.path, normalized)));
+      for (const existing of existingConflicts) {
+        const key = `${existing.id}:${block.id}:${normalized}`;
+        if (conflictKeys.has(key)) continue;
+        errors.push(`path ${normalized} is already owned by Block ${existing.id}`);
+        conflictKeys.add(key);
+      }
+    }
+  }
   const blocksAfterPreparation = new Map(initialBlocks.map((block) => [block.id, block]));
   for (const block of preparedBlocks) {
     blocksAfterPreparation.set(block.id, { id: block.id, ...block.blockData });
@@ -31912,6 +32481,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture) {
 }
 async function changePipeline(ctx, input = {}) {
   const { caps, store, tracer, profile } = ctx;
+  const shipRequest = input.ship === true ? {} : typeof input.ship === "string" ? { summary: input.ship } : input.ship && typeof input.ship === "object" && !Array.isArray(input.ship) ? input.ship : null;
   const creates = Array.isArray(input.create) ? [...input.create] : [];
   const rawEdits = Array.isArray(input.edits) ? [...input.edits] : [];
   const rawDeletes = Array.isArray(input.delete) ? [...input.delete] : Array.isArray(input.deletes) ? [...input.deletes] : [];
@@ -32028,6 +32598,31 @@ async function changePipeline(ctx, input = {}) {
 ${text2}`;
   }
   if (!creates.length && !edits.length && !deletes.length) {
+    if (input.architecture && typeof input.architecture === "object" && !Array.isArray(input.architecture)) {
+      const architectureResult = await bindChangedArchitecture(caps, [], input.architecture);
+      tracer.step("architecture_state_only", {
+        ok: architectureResult.ok,
+        bound: architectureResult.bound,
+        composed: architectureResult.composed,
+        refreshed: architectureResult.refreshed,
+        gaps: architectureResult.gaps?.length || 0
+      });
+      const lines = [
+        "- Architecture: " + architectureResult.refreshed + " existing Block(s) refreshed, " + architectureResult.bound + " curated Block(s) bound, " + architectureResult.composed + " Chain(s) composed."
+      ];
+      if (architectureResult.error) lines.push("- Architecture update needs attention: " + clip3(architectureResult.error, 300));
+      for (const gap of (architectureResult.gaps || []).slice(0, 6)) lines.push(formatArchitectureGap(gap));
+      if ((architectureResult.gaps || []).length > 6) lines.push("- (" + (architectureResult.gaps.length - 6) + " more architecture gap(s))");
+      return [
+        "# ContextOS change",
+        "",
+        "## Next",
+        architectureResult.ok ? "done: architecture state is bound; continue with code edits or verification only if required." : "\u{1F449} fix the architecture contract error, then retry the same change call.",
+        "",
+        "## Result",
+        ...lines
+      ].join("\n");
+    }
     const targets = (Array.isArray(input.paths) && input.paths.length ? input.paths : extractPaths(input.intent || "")).slice(0, 2);
     const previewLines = [];
     for (const target of targets) {
@@ -32136,6 +32731,7 @@ ${text2}`;
         const res = await caps.run({
           command: cmd,
           cwd: input.cwd,
+          maxLogBytes: input.maxLogBytes,
           timeoutMs: input.timeoutMs ?? profile.timeoutMs
         });
         if (!res.ok) {
@@ -32201,7 +32797,22 @@ ${diag}`);
       resultLines.push("- (" + (architectureResult.gaps.length - 6) + " more architecture gap(s))");
     }
   }
-  const nextLines = verifyCommands.length ? verifyPassed ? ["done: verified; report the result and keep the session open unless this is final closure"] : [`\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to repair and verify again`] : [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
+  if (shipRequest) {
+    if (!verifyCommands.length) {
+      resultLines.push("- Ship skipped: provide verify in the same change call.");
+    } else if (!verifyPassed) {
+      resultLines.push("- Ship skipped because verification failed.");
+    } else {
+      try {
+        const shipped = await shipPipeline(ctx, { ...shipRequest });
+        const closure = String(shipped).split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 4).join(" | ");
+        resultLines.push(`- Ship: ${clip3(closure, 600)}`);
+      } catch (error2) {
+        resultLines.push(`- Ship blocked: ${clip3(error2.message, 300)}`);
+      }
+    }
+  }
+  const nextLines = verifyCommands.length ? verifyPassed ? ["done: verified and shipped; finalize now. Do not make speculative follow-up edits without a failing check or unmet requirement."] : [`\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to repair and verify again`] : [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
   const touchedLines = touched.slice(-8).map((filePath) => `- \`${filePath}\` (edit)`);
   const sections = [
     { key: "next", title: "Next", priority: 0, lines: nextLines },
@@ -32290,9 +32901,37 @@ function readReceiptStillValid(projectRoot, relativePath, receipt) {
     return false;
   }
 }
+function numberCodeLines(text, fallbackStartLine = 1) {
+  const lines = String(text ?? "").split("\n");
+  const headerIndex = lines.findIndex((line) => /\[L(\d+)-L(\d+)\]/.test(line));
+  const header = headerIndex >= 0 ? lines[headerIndex] : "";
+  const match = /\[L(\d+)-L(\d+)\]/.exec(header);
+  const startLine = match ? Number(match[1]) : fallbackStartLine;
+  const bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
+  const closingFence = lines.lastIndexOf("```");
+  const bodyEnd = closingFence > bodyStart ? closingFence : lines.length;
+  const prefix2 = headerIndex >= 0 ? lines.slice(0, headerIndex + 1) : [];
+  const body2 = lines.slice(bodyStart, bodyEnd);
+  const suffix = lines.slice(bodyEnd);
+  const numbered = body2.map((line, index) => `${String(startLine + index).padStart(4, " ")} | ${line}`).join("\n");
+  return [...prefix2, numbered, ...suffix].filter((line, index, values) => line !== "" || index === values.length - 1).join("\n");
+}
 async function inspectPipeline(ctx, input = {}) {
   if (input.inspect && typeof input.inspect === "object" && !Array.isArray(input.inspect)) {
     input = { ...input.inspect, ...input };
+  }
+  if (Array.isArray(input.inspect)) {
+    const specs = input.inspect.map((entry) => typeof entry === "string" ? { path: entry } : entry).filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry));
+    const arrayPaths = uniquePaths(specs.map((entry) => entry.path));
+    const arrayRanges = specs.filter((entry) => entry.path && Array.isArray(entry.ranges) && entry.ranges.length).map((entry) => ({ path: entry.path, ranges: entry.ranges }));
+    const singleSymbol = specs.length === 1 ? specs[0].symbol : void 0;
+    input = {
+      ...input,
+      paths: input.paths?.length ? input.paths : arrayPaths,
+      ranges: input.ranges?.length ? input.ranges : arrayRanges,
+      symbol: input.symbol || singleSymbol,
+      inspect: void 0
+    };
   }
   const { caps, store } = ctx;
   let targetPath = input.path;
@@ -32305,40 +32944,147 @@ async function inspectPipeline(ctx, input = {}) {
     }
   }
   const requestedBudget = input.budget || input.depth;
-  const isFull = requestedBudget === "full";
-  const explicitMaxChars = typeof input.maxChars === "number" && input.maxChars > 0 ? input.maxChars : null;
-  const contentMaxChars = isFull ? Infinity : explicitMaxChars ?? 8e3;
   const paths = Array.isArray(input.paths) && input.paths.length ? input.paths : targetPath ? [targetPath] : [];
   const globPaths = expandInspectGlobs(ctx.projectRoot, input.globs);
-  const requestedPaths = [...paths, ...globPaths];
+  let requestedPaths = [...paths, ...globPaths];
+  let symbolCandidates = [];
+  if (!requestedPaths.length && symbol) {
+    const search = await caps.code({
+      action: "search",
+      query: symbol,
+      format: "json",
+      limit: 6
+    });
+    if (search.ok && search.data && typeof search.data === "object") {
+      symbolCandidates = uniquePaths([
+        ...Array.isArray(search.data.symbols) ? search.data.symbols.map((entry) => entry?.path) : [],
+        ...Array.isArray(search.data.text) ? search.data.text.map((entry) => entry?.path) : []
+      ]).slice(0, 3);
+      requestedPaths = symbolCandidates.slice(0, 1);
+    }
+  }
+  const queryRangeEntries = [];
+  if (!symbol && typeof input.query === "string" && input.query.trim() && requestedPaths.length) {
+    for (const target of uniquePaths(requestedPaths).slice(0, 4)) {
+      const search = await caps.codeJson({
+        action: "search",
+        query: input.query,
+        root: target,
+        limit: 12
+      });
+      if (!search.ok || !search.data || typeof search.data !== "object") continue;
+      const ranges = (Array.isArray(search.data.symbols) ? search.data.symbols : []).filter((entry) => entry?.path === target).map((entry) => ({
+        startLine: Number(entry.startLine),
+        endLine: Number(entry.endLine)
+      })).filter((range) => Number.isFinite(range.startLine) && Number.isFinite(range.endLine));
+      if (ranges.length) queryRangeEntries.push({ path: target, ranges });
+    }
+  }
+  const inspectPaths = requestedPaths.flatMap((target) => expandInspectTargets(ctx.projectRoot, target));
+  const inspectFileChars = inspectPaths.map((target) => {
+    try {
+      const stat = fs11.statSync(path11.join(ctx.projectRoot, target));
+      return stat.isFile() ? stat.size : 0;
+    } catch (_) {
+      return 0;
+    }
+  });
+  const normalizeRanges = (values) => (Array.isArray(values) ? values : []).flatMap((range) => {
+    const start2 = Array.isArray(range) ? Number(range[0]) : Number(range?.startLine ?? range?.start);
+    const end = Array.isArray(range) ? Number(range[1]) : Number(range?.endLine ?? range?.end);
+    return Number.isFinite(start2) && Number.isFinite(end) && end >= start2 ? [{ startLine: start2, endLine: end }] : [];
+  });
+  const perPathRanges = /* @__PURE__ */ new Map();
+  for (const entry of Array.isArray(input.ranges) ? input.ranges : []) {
+    if (!entry || typeof entry !== "object" || typeof entry.path !== "string") continue;
+    const normalized = normalizeRanges(entry.ranges);
+    if (normalized.length) perPathRanges.set(entry.path.replace(/^\.\//, ""), normalized);
+  }
+  for (const entry of queryRangeEntries) {
+    const normalized = normalizeRanges(entry.ranges);
+    if (!normalized.length) continue;
+    const existing = perPathRanges.get(entry.path) || [];
+    perPathRanges.set(entry.path, [...existing, ...normalized]);
+  }
+  const hasPerPathRanges = perPathRanges.size > 0;
+  const directRanges = hasPerPathRanges ? [] : normalizeRanges(input.ranges);
+  const allRanges = hasPerPathRanges ? [...perPathRanges.values()].flat() : directRanges;
+  const totalInspectChars = inspectFileChars.reduce((sum, chars) => sum + chars, 0);
+  const batchRead = inspectPaths.length > 1;
+  const smallBatchRead = batchRead && inspectPaths.length <= INSPECT_BATCH_INLINE_MAX_FILES && inspectFileChars.every((chars) => chars > 0 && chars <= INSPECT_INLINE_MAX_CHARS) && totalInspectChars <= INSPECT_BATCH_INLINE_MAX_CHARS;
+  const smallRangeFile = !batchRead && inspectFileChars.length === 1 && inspectFileChars[0] > 0 && inspectFileChars[0] <= INSPECT_INLINE_MAX_CHARS;
+  const hasExplicitTarget = Boolean(symbol) || input.startLine !== void 0 || input.endLine !== void 0 || allRanges.length > 0;
+  const requestedFull = (input.full === true || requestedBudget === "full" || input.fullFile === true) && (!batchRead || smallBatchRead);
+  const readPolicy = typeof store?.readPolicy === "function" ? store.readPolicy() : store?.current?.readPolicy || null;
+  const requestedRangeLines = (() => {
+    let maxLines = 0;
+    for (const range of allRanges) {
+      const start3 = Number(range?.startLine);
+      const end2 = Number(range?.endLine);
+      if (Number.isFinite(start3) && Number.isFinite(end2) && end2 >= start3) {
+        maxLines = Math.max(maxLines, end2 - start3 + 1);
+      }
+    }
+    const start2 = Number(input.startLine);
+    const end = Number(input.endLine);
+    if (Number.isFinite(start2) && Number.isFinite(end) && end >= start2) {
+      maxLines = Math.max(maxLines, end - start2 + 1);
+    }
+    return maxLines;
+  })();
+  const postDecision = ctx.internal !== true && readPolicy?.decisionPackageSeen === true;
+  const boundedSmallRead = smallBatchRead || smallRangeFile;
+  const oversizedRange = postDecision && !symbol && requestedRangeLines > MAX_INSPECT_RANGE_LINES && !(smallRangeFile || smallBatchRead);
+  const directedExpansion = postDecision && hasExplicitTarget;
+  const expansionBudgetGated = directedExpansion && !smallBatchRead && !smallRangeFile && (Number(readPolicy?.directedExpansions) || 0) >= MAX_DIRECTED_EXPANSIONS;
+  const firstInspectPath = uniquePaths(inspectPaths)[0] || null;
+  const fullExpansionPaths = Array.isArray(readPolicy?.fullExpansionPaths) ? readPolicy.fullExpansionPaths : [];
+  const repeatedFullExpansion = requestedFull && postDecision && !hasExplicitTarget && firstInspectPath && fullExpansionPaths.includes(firstInspectPath);
+  const decisionGated = repeatedFullExpansion || oversizedRange || expansionBudgetGated;
+  const isFull = requestedFull && !decisionGated;
+  const explicitMaxChars = typeof input.maxChars === "number" && input.maxChars > 0 ? input.maxChars : null;
+  const contentMaxChars = isFull ? Math.min(
+    explicitMaxChars ?? INSPECT_RECOVERY_OUTPUT_MAX_CHARS,
+    INSPECT_RECOVERY_OUTPUT_MAX_CHARS
+  ) : Math.min(explicitMaxChars ?? RESPONSE_BUDGETS.inspect, RESPONSE_BUDGETS.inspect);
   if (!requestedPaths.length) {
-    const globHint = Array.isArray(input.globs) && input.globs.length ? `No files matched globs: ${input.globs.join(", ")}.` : 'No target path provided. Pass `path`, `paths`, `globs`, or `slot` (e.g. `slot: "S1"`).';
+    const globHint = Array.isArray(input.globs) && input.globs.length ? `No files matched globs: ${input.globs.join(", ")}.` : symbol ? `No declaration or text match found for symbol \`${symbol}\`. Pass a path or a broader symbol query.` : 'No target path provided. Pass `path`, `paths`, `globs`, or `slot` (e.g. `slot: "S1"`).';
     return `# ContextOS inspect
 
 ${globHint}`;
   }
   const isOutline = input.mode === "outline" || Boolean(input.outline);
   const outLines = [];
-  const inspectPaths = requestedPaths.flatMap((target) => expandInspectTargets(ctx.projectRoot, target));
+  let fullExpansionPath = null;
+  let directedExpansionPath = null;
   for (let p of inspectPaths) {
     const fullP = path11.join(ctx.projectRoot, p);
     if (!fs11.existsSync(fullP) && fs11.existsSync(`${fullP}.log`)) {
       p = `${p}.log`;
     }
-    const hasExplicitTarget = Boolean(symbol) || input.startLine !== void 0 || input.endLine !== void 0 || Array.isArray(input.ranges) && input.ranges.length > 0;
     let fileChars = 0;
     try {
       const stat = fs11.statSync(fullP);
       if (stat.isFile()) fileChars = stat.size;
     } catch (_) {
     }
-    const preferOutline = !isOutline && !hasExplicitTarget && !isFull && !explicitMaxChars && !input.fullFile && fileChars > INSPECT_INLINE_MAX_CHARS;
+    const effectiveRanges = hasPerPathRanges ? perPathRanges.get(p) || perPathRanges.get(p.replace(/^\.\//, "")) || null : directRanges.length ? directRanges : null;
+    const effectiveStartLine = hasPerPathRanges ? void 0 : input.startLine;
+    const effectiveEndLine = hasPerPathRanges ? void 0 : input.endLine;
+    const forceOutline = requestedBudget === "shallow" || batchRead && !smallBatchRead || decisionGated;
+    const preferOutline = !isOutline && !isFull && (forceOutline || !input.fullFile && !hasExplicitTarget && !explicitMaxChars && fileChars > INSPECT_INLINE_MAX_CHARS);
     let outlineHandled = false;
     if (isOutline || preferOutline) {
-      const outline = await caps.code({
-        action: "outline",
-        path: p
-      });
+      const outlineKey = `outline:${p}`;
+      let outlinePromise = ctx.turnMemo instanceof Map ? ctx.turnMemo.get(outlineKey) : null;
+      if (!outlinePromise) {
+        outlinePromise = caps.code({
+          action: "outline",
+          path: p
+        });
+        if (ctx.turnMemo instanceof Map) ctx.turnMemo.set(outlineKey, outlinePromise);
+      }
+      const outline = await outlinePromise;
       if (outline.ok) {
         const outlineCap = preferOutline ? Math.min(contentMaxChars, OUTLINE_CLIP) : contentMaxChars;
         const locator = preferOutline ? `
@@ -32356,7 +33102,7 @@ ${clip3(outline.data, outlineCap, { withHint: true })}${locator}`);
         input.budget || input.maxChars || input.fullFile || input.depth && input.depth !== "normal"
       );
       const allowReadReuse = input.dedupeReads !== false && input.refresh !== true && !requestsFullOutput(input) && !explicitReadBudget;
-      const range = input.ranges ? JSON.stringify(input.ranges) : { startLine: input.startLine, endLine: input.endLine };
+      const range = effectiveRanges ? JSON.stringify(effectiveRanges) : { startLine: effectiveStartLine, endLine: effectiveEndLine };
       const priorByStat = allowReadReuse && typeof store?.findLatestReadReceipt === "function" ? store.findLatestReadReceipt({ path: p, range, symbol }) : null;
       if (priorByStat && readReceiptStillValid(ctx.projectRoot, p, priorByStat)) {
         const hash = String(priorByStat.hash || "").slice(0, 12);
@@ -32366,9 +33112,9 @@ ${clip3(outline.data, outlineCap, { withHint: true })}${locator}`);
       const readKey = allowReadReuse ? JSON.stringify({
         path: p,
         symbol: symbol || null,
-        startLine: input.startLine ?? null,
-        endLine: input.endLine ?? null,
-        ranges: input.ranges || null,
+        startLine: effectiveStartLine ?? null,
+        endLine: effectiveEndLine ?? null,
+        ranges: effectiveRanges || null,
         budget: input.budget || null,
         maxChars: input.maxChars ?? null,
         fullFile: isFull || input.fullFile || false
@@ -32379,10 +33125,10 @@ ${clip3(outline.data, outlineCap, { withHint: true })}${locator}`);
           action: "read",
           path: p,
           symbol: symbol || void 0,
-          startLine: input.startLine,
-          endLine: input.endLine,
-          ranges: input.ranges,
-          budget: input.budget,
+          startLine: effectiveStartLine,
+          endLine: effectiveEndLine,
+          ranges: effectiveRanges || void 0,
+          budget: isFull ? "full" : input.budget,
           maxChars: input.maxChars,
           fullFile: isFull || input.fullFile || false
         });
@@ -32390,13 +33136,15 @@ ${clip3(outline.data, outlineCap, { withHint: true })}${locator}`);
       }
       const read = await readPromise;
       if (read.ok) {
+        if (isFull) fullExpansionPath = p;
+        if (directedExpansion && !decisionGated) directedExpansionPath = p;
         const hash = crypto6.createHash("sha256").update(String(read.data ?? "")).digest("hex");
         const prior = allowReadReuse && typeof store?.findReadReceipt === "function" ? store.findReadReceipt({ path: p, hash, range, symbol }) : null;
         if (prior) {
           outLines.push(`### \`${p}\` unchanged (hash: ${hash.slice(0, 12)}; reuse prior result${prior.receiptId ? ` from ${prior.receiptId}` : ""})`);
         } else {
           outLines.push(`### \`${p}\`${symbol ? ` (${symbol})` : ""}
-${clip3(read.data, contentMaxChars, { withHint: true })}`);
+${clip3(numberCodeLines(read.data, effectiveRanges?.[0]?.startLine || effectiveStartLine || 1), contentMaxChars, { withHint: true })}`);
           if (typeof store?.recordReadReceipt === "function") {
             let fileStat = null;
             try {
@@ -32420,18 +33168,44 @@ ${clip3(read.data, contentMaxChars, { withHint: true })}`);
       }
     }
   }
-  const budget = isFull ? Infinity : explicitMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget);
+  if (decisionGated && typeof store?.recordPathOnlyFullDenied === "function") {
+    try {
+      const reason = expansionBudgetGated ? "directed-expansion-budget" : oversizedRange ? "oversized-range" : repeatedFullExpansion ? "repeated-full-expansion" : "path-only-full";
+      store.recordPathOnlyFullDenied({ path: inspectPaths[0] || null, reason });
+    } catch (_) {
+    }
+  }
+  if (fullExpansionPath && typeof store?.recordFullExpansion === "function") {
+    try {
+      store.recordFullExpansion({ path: fullExpansionPath });
+    } catch (_) {
+    }
+  }
+  if (directedExpansionPath && typeof store?.recordDirectedExpansion === "function") {
+    try {
+      store.recordDirectedExpansion({ path: directedExpansionPath });
+    } catch (_) {
+    }
+  }
+  const budget = isFull ? Infinity : Math.min(explicitMaxChars ?? resolveBudget(requestedBudget, ctx.profile?.budget), RESPONSE_BUDGETS.inspect);
   const { text } = fitSections(
     [{ key: "inspect", title: "Inspection Result", priority: 0, lines: outLines }],
     { maxChars: budget }
   );
+  const gateReason = expansionBudgetGated ? `the ${MAX_DIRECTED_EXPANSIONS} directed expansion slots after the decision package are exhausted` : oversizedRange ? `the requested range spans ${requestedRangeLines} lines (limit ${MAX_INSPECT_RANGE_LINES})` : "this file was already expanded in full after the decision package; reuse the prior result or inspect a narrower symbol/range";
+  const gateNotice = decisionGated ? [
+    `> Read policy: ${gateReason}; the request was downgraded to an outline.`,
+    "> Use `symbol` or a bounded `ranges` slice for inspection. Whole-file replacement belongs in `change`/`work` edit payloads, not in an inspect read; then continue with `change`/`work`."
+  ].join("\n") : "";
   return `# ContextOS inspect
 
-${text}`;
+${gateNotice ? `${gateNotice}
+
+` : ""}${text}`;
 }
 async function verifyPipeline(ctx, input = {}) {
   const { caps, store, tracer, profile } = ctx;
-  const mode = input.mode || "once";
+  const mode = input.mode === "summary" ? "once" : input.mode || "once";
   const isFull = input.full === true || mode === "full" || input.budget === "full";
   if (mode === "logs" && input.id && /^[A-Za-z0-9._-]+$/.test(input.id)) {
     const logPath = path11.join(ctx.projectRoot, ".contextos", "logs", `${input.id}.log`);
@@ -32458,7 +33232,8 @@ ${selected.join("\n")}
       command: input.command || (input.commands || [])[0],
       id: input.id,
       lines: input.lines ?? 50,
-      grep: input.grep
+      grep: input.grep,
+      maxLogBytes: input.maxLogBytes
     });
     const body2 = res.ok ? stringify(res.data) : `\u2717 ${res.error}`;
     tracer.step("process", { mode, ok: res.ok });
@@ -32491,6 +33266,7 @@ ${clip3(body2, resolveBudget(input.depth, ctx.profile?.budget))}`;
       command,
       cwd: input.cwd,
       maxChars: input.maxChars ?? profile.maxChars,
+      maxLogBytes: input.maxLogBytes,
       timeoutMs: input.timeoutMs ?? profile.timeoutMs
     });
     if (!res.ok) {
@@ -32513,7 +33289,9 @@ ${diag}`);
   }
   const triageLines = [];
   const failureEvidence = failureLines.join("\n\n");
-  const autoTriage = input.autoTriage === false ? false : input.autoTriage === true || profile?.autoTriage === true || failureEvidence.length > MICRO_TRIAGE_MIN_CHARS;
+  const obviousRootCause = /(?:not implemented|unimplemented|syntaxerror|cannot find module|module_not_found)/i.test(failureEvidence);
+  const triageRequested = input.autoTriage === true || profile?.autoTriage === true;
+  const autoTriage = input.autoTriage === false ? false : triageRequested || !obviousRootCause && !isFull && failureEvidence.length > MICRO_TRIAGE_MIN_CHARS;
   if (autoTriage && !passed && failureLines.length && profile?.micro?.url && profile?.micro?.model && typeof caps?.micro === "function") {
     try {
       const triageRes = await caps.micro(
@@ -32545,7 +33323,7 @@ ${diag}`);
   }
   const session = store.current;
   const nextLines = [
-    passed ? "done: verified; do not rerun this command, and keep the session open unless this is final closure" : `\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to fix, then verify again`
+    passed ? "done: verified; finalize now unless a concrete requirement or failing check still needs work. Do not rerun this command." : `\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to fix, then verify again`
   ];
   const verifySections = [
     { key: "next", title: "Next", priority: 0, lines: nextLines },
@@ -32666,12 +33444,25 @@ ${text2}`;
   const superseded = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === "superseded");
   const unresolved = (session.receipts || []).filter((receipt) => receiptStatus(receipt) === "unresolved");
   const unverified = green.length === 0 && unresolved.length === 0;
-  if (profile.strict && (unverified || unresolved.length > 0)) {
+  const allowUnverified = input.allowUnverified === true || input.force === true;
+  const hasWork = (session.touchedFiles || []).length > 0 || (session.receipts || []).length > 0;
+  if (profile.strict && !allowUnverified && (unverified || unresolved.length > 0)) {
     return [
       "# ContextOS ship \u2014 BLOCKED (strict profile)",
       "",
       unverified ? "- No passing receipt in this session." : `- ${unresolved.length} unresolved failing receipt(s) remain in this session.`,
-      `- Run \`verify({ commands: [...] })\` until the relevant command passes, or relax \`strict\` in \`.contextos/profile.json\`.`,
+      "- Run `verify({ commands: [...] })` until the relevant command passes, or relax `strict` in `.contextos/profile.json`.",
+      "- The session remains open for repair.",
+      ...extraLines.length ? ["", "## Attempted", ...extraLines] : []
+    ].join("\n");
+  }
+  if (!allowUnverified && hasWork && (unverified || unresolved.length > 0)) {
+    return [
+      "# ContextOS ship \u2014 BLOCKED (verification evidence)",
+      "",
+      unverified ? "- No passing receipt in this session; the session remains open." : `- ${unresolved.length} unresolved failing receipt(s) remain in this session; the session remains open.`,
+      '- Next: run `verify({ commands: ["<test command>"] })` before closure.',
+      "- If closure is intentionally unverified, pass `allowUnverified: true` explicitly.",
       ...extraLines.length ? ["", "## Attempted", ...extraLines] : []
     ].join("\n");
   }
@@ -32811,7 +33602,7 @@ function normalizeAction(action, projectRoot) {
     } else if (suppliedArgs && typeof suppliedArgs === "object") {
       args2 = { ...suppliedArgs };
     } else if (typeof suppliedArgs === "string") {
-      args2 = tool === "verify" ? { command: suppliedArgs } : { path: suppliedArgs, intent: suppliedArgs };
+      args2 = tool === "verify" ? { command: suppliedArgs } : tool === "search" ? { query: suppliedArgs } : { path: suppliedArgs, intent: suppliedArgs };
     } else {
       args2 = {};
     }
@@ -32900,6 +33691,15 @@ function normalizeAction(action, projectRoot) {
     tool = "ops";
     args2 = { capability: "run_command", ...commandArgs };
   }
+  if (tool === "search") {
+    const searchArgs = args2 && typeof args2 === "object" && !Array.isArray(args2) ? args2 : {};
+    tool = "ops";
+    args2 = {
+      capability: "code",
+      action: "search",
+      args: searchArgs
+    };
+  }
   if (!tool) {
     const keys = Object.keys(action).slice(0, 8).join(",") || "none";
     throw new Error(`Could not determine tool. Use {action:"inspect",args:{...}} or {tool:"ops",args:{capability,...}}. Supported shorthand keys: inspect, change, verify, ship, run, search, block, chain, plan, task, ops, explore. Got keys: ${keys}`);
@@ -32912,10 +33712,78 @@ function normalizeAction(action, projectRoot) {
     }
   };
 }
+function applyPipelineControls(normalized, input = {}) {
+  if (!normalized?.input || typeof normalized.input !== "object") return normalized;
+  for (const key of ["refresh", "dedupeReads"]) {
+    if (input[key] !== void 0 && normalized.input[key] === void 0) {
+      normalized.input[key] = input[key];
+    }
+  }
+  return normalized;
+}
+function collectPipelineActionSpecs(steps, output = []) {
+  const visit = (step) => {
+    if (!step) return;
+    if (Array.isArray(step)) {
+      for (const item of step) visit(item);
+      return;
+    }
+    if (Array.isArray(step.parallel)) {
+      for (const item of step.parallel) visit(item);
+      return;
+    }
+    if (Array.isArray(step.chain)) {
+      for (const item of step.chain) visit(item);
+      return;
+    }
+    output.push(step);
+  };
+  visit(steps);
+  return output;
+}
+function countPipelineTool(steps, toolName, projectRoot) {
+  return collectPipelineActionSpecs(steps).reduce((count, step) => {
+    try {
+      return count + (normalizeAction(step, projectRoot).tool === toolName ? 1 : 0);
+    } catch (_) {
+      return count;
+    }
+  }, 0);
+}
+function guardBatchInspectAction(normalized, enabled) {
+  if (!enabled || normalized?.tool !== "inspect" || !normalized.input || typeof normalized.input !== "object") {
+    return normalized;
+  }
+  const requestedMax = Number(normalized.input.maxChars);
+  return {
+    ...normalized,
+    input: {
+      ...normalized.input,
+      budget: "shallow",
+      full: false,
+      maxChars: Math.min(
+        Number.isFinite(requestedMax) && requestedMax > 0 ? Math.floor(requestedMax) : RESPONSE_BUDGETS.inspect,
+        RESPONSE_BUDGETS.inspect
+      )
+    }
+  };
+}
+function applyDecisionPackageControls(normalized, enabled) {
+  if (!enabled || !normalized?.input || typeof normalized.input !== "object") return normalized;
+  const input = { ...normalized.input };
+  if (normalized.tool === "explore" && input.maxChars === void 0) {
+    input.maxChars = PIPELINE_EXPLORE_OUTPUT_CLIP;
+  }
+  if (normalized.tool === "inspect" && input.maxChars === void 0) {
+    input.maxChars = PIPELINE_MAX_OUTPUT_CLIP;
+  }
+  input.allowWiden = true;
+  return { ...normalized, input };
+}
 async function workPipeline(ctx, input = {}) {
   const steps = [];
   const nestedFull = input.full === true;
-  const nestedMaxChars = Number.isFinite(input.maxChars) && input.maxChars > 0 ? Math.floor(input.maxChars) : null;
+  const nestedMaxChars2 = Number.isFinite(input.maxChars) && input.maxChars > 0 ? Math.floor(input.maxChars) : null;
   const preflight = [];
   const probes = input.inspect ?? input.read;
   if (probes !== void 0) {
@@ -32927,7 +33795,7 @@ async function workPipeline(ctx, input = {}) {
           args: {
             path: probe,
             ...nestedFull ? { full: true } : {},
-            ...nestedMaxChars ? { maxChars: nestedMaxChars } : {}
+            ...nestedMaxChars2 ? { maxChars: nestedMaxChars2 } : {}
           }
         };
       }
@@ -32939,7 +33807,7 @@ async function workPipeline(ctx, input = {}) {
         args: {
           ...probe,
           ...nestedFull && probe.full === void 0 ? { full: true } : {},
-          ...nestedMaxChars && probe.maxChars === void 0 ? { maxChars: nestedMaxChars } : {}
+          ...nestedMaxChars2 && probe.maxChars === void 0 ? { maxChars: nestedMaxChars2 } : {}
         }
       };
     }));
@@ -32951,9 +33819,21 @@ async function workPipeline(ctx, input = {}) {
       if (!spec || typeof spec.query !== "string" || !spec.query.trim()) {
         throw new Error("work.search entries must be query strings or search argument objects with a query");
       }
-      const searchAction = { search: spec };
-      if (nestedMaxChars) searchAction.maxChars = nestedMaxChars;
-      preflight.push(searchAction);
+      const requestedPaths = Array.isArray(spec.paths) ? spec.paths.filter((value) => typeof value === "string" && value.trim()) : typeof spec.paths === "string" && spec.paths.trim() ? [spec.paths] : [];
+      if (typeof spec.path === "string" && spec.path.trim() && spec.root === void 0) {
+        spec.root = spec.path;
+      }
+      delete spec.path;
+      delete spec.paths;
+      const roots = requestedPaths.length ? requestedPaths : [spec.root];
+      for (const root of roots) {
+        const searchSpec = { ...spec };
+        if (root !== void 0 && root !== null && String(root).trim()) searchSpec.root = root;
+        else delete searchSpec.root;
+        const searchAction = { search: searchSpec };
+        if (nestedMaxChars2) searchAction.maxChars = nestedMaxChars2;
+        preflight.push(searchAction);
+      }
     }
   }
   if (preflight.length) steps.push({ parallel: preflight });
@@ -33008,8 +33888,10 @@ async function pipelinePipeline(ctx, input = {}) {
   const nestedFull = requestsFullOutput(steps);
   const mode = input.mode || (explicitlyFull ? "full" : "summary");
   const receiptMode = isReceiptMode(mode);
+  const exploreActionCount = countPipelineTool(steps, "explore", ctx.projectRoot);
+  const decisionPackage = !receiptMode && exploreActionCount > 0 && input.decisionPackage !== false;
   const renderFull = !receiptMode && (mode === "full" || nestedFull && input.mode !== "summary");
-  const responseBudget = input.maxChars ?? (mode === "full" ? Infinity : receiptMode ? PIPELINE_RECEIPT_RESPONSE_BUDGET : RESPONSE_BUDGETS.pipeline);
+  const responseBudget = input.maxChars ?? (mode === "full" ? Infinity : receiptMode ? PIPELINE_RECEIPT_RESPONSE_BUDGET : decisionPackage ? PIPELINE_DECISION_RESPONSE_BUDGET : RESPONSE_BUDGETS.pipeline);
   const actionBudgetOptions = {
     mode: renderFull ? "full" : mode,
     aggregateBudget: renderFull && mode !== "full" ? Math.max(1, responseBudget - 256) : responseBudget
@@ -33020,7 +33902,9 @@ async function pipelinePipeline(ctx, input = {}) {
   let failureCount = 0;
   let executedActions = 0;
   const batchStartedAt = Date.now();
-  const continueOnFailure = input.continueOnFailure === true;
+  const batchInspectCount = countPipelineTool(steps, "inspect", ctx.projectRoot);
+  const forceBatchInspectOutline = batchInspectCount > 1;
+  const continueOnFailure = input.continueOnFailure === true || requestsContinueOnFailure(steps);
   const branches = Array.isArray(input.branches) ? input.branches : [];
   const batchBudget = input.budget && typeof input.budget === "object" && !Array.isArray(input.budget) ? input.budget : {};
   const maxActions = Number.isFinite(Number(batchBudget.maxActions)) ? Math.max(1, Math.floor(Number(batchBudget.maxActions))) : null;
@@ -33054,7 +33938,10 @@ async function pipelinePipeline(ctx, input = {}) {
       );
       const subResults = await mapWithConcurrency(items, parallelConcurrency, async (action, idx) => {
         try {
-          const normalized = normalizeAction(action, ctx.projectRoot);
+          const normalized = applyDecisionPackageControls(
+            guardBatchInspectAction(applyPipelineControls(normalizeAction(action, ctx.projectRoot), input), forceBatchInspectOutline),
+            decisionPackage
+          );
           const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
           const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
           return {
@@ -33100,7 +33987,10 @@ async function pipelinePipeline(ctx, input = {}) {
         }
         const action = items[j];
         try {
-          const normalized = normalizeAction(action, ctx.projectRoot);
+          const normalized = applyDecisionPackageControls(
+            guardBatchInspectAction(applyPipelineControls(normalizeAction(action, ctx.projectRoot), input), forceBatchInspectOutline),
+            decisionPackage
+          );
           const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
           executedActions += 1;
           const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
@@ -33139,7 +34029,7 @@ async function pipelinePipeline(ctx, input = {}) {
       continue;
     }
     try {
-      const normalized = normalizeAction(step, ctx.projectRoot);
+      const normalized = guardBatchInspectAction(applyPipelineControls(normalizeAction(step, ctx.projectRoot), input), forceBatchInspectOutline);
       const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
       executedActions += 1;
       const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
@@ -33218,7 +34108,10 @@ async function pipelinePipeline(ctx, input = {}) {
         break;
       }
       try {
-        const normalized = normalizeAction(action, ctx.projectRoot);
+        const normalized = applyDecisionPackageControls(
+          guardBatchInspectAction(applyPipelineControls(normalizeAction(action, ctx.projectRoot), input), forceBatchInspectOutline),
+          decisionPackage
+        );
         const res = await ctx.orchestrator.dispatch(normalized.tool, normalized.input);
         executedActions += 1;
         const isFail = actionFailed(normalized, res, ctx.store?.current?.receipts);
@@ -33262,12 +34155,47 @@ async function pipelinePipeline(ctx, input = {}) {
     return sum + 1;
   }, 0) + branchResults.reduce((sum, result) => sum + result.items.length, 0);
   const totalSteps = steps.length + branchResults.reduce((sum, result) => sum + result.items.length, 0);
-  const summaryActionBudget = Number.isFinite(responseBudget) ? Math.max(140, Math.min(260, Math.floor(responseBudget / Math.max(2, totalActions + 1)))) : PIPELINE_DEFAULT_OUTPUT_CLIP;
+  const weightedActionUnits = totalActions + exploreActionCount * 4;
+  const summaryUnitBudget = Number.isFinite(responseBudget) ? responseBudget < 800 ? Math.max(140, Math.min(260, Math.floor(responseBudget / Math.max(2, weightedActionUnits + 1)))) : Math.max(400, Math.min(
+    PIPELINE_MAX_OUTPUT_CLIP,
+    Math.floor(responseBudget / Math.max(1, weightedActionUnits))
+  )) : PIPELINE_DEFAULT_OUTPUT_CLIP;
+  const summaryBudgetFor = (toolName) => Math.max(
+    400,
+    Math.min(
+      toolName === "explore" ? PIPELINE_EXPLORE_OUTPUT_CLIP : PIPELINE_MAX_OUTPUT_CLIP,
+      summaryUnitBudget * (toolName === "explore" ? 5 : 1)
+    )
+  );
   function artifactRef(output) {
     const match = String(output || "").match(/(?:artifact=|os-response[^\n]*artifact=)([A-Za-z0-9._-]+)/);
     return match ? ` artifact=${match[1]}` : "";
   }
-  function formatReceiptOutput(output) {
+  function compactReceiptText(text2, maxChars) {
+    const lines2 = String(text2).split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    const selected = [];
+    let capture = false;
+    for (const line of lines2) {
+      if (/^##\s+(?:Next|Where to look|Result|Verify|Touched|Now)/i.test(line)) {
+        capture = true;
+        selected.push(line);
+        continue;
+      }
+      if (/^##\s+/.test(line)) {
+        capture = false;
+        continue;
+      }
+      if (capture && (/^[-*]/.test(line) || /^(?:change\(|👉)/.test(line))) {
+        selected.push(line);
+        continue;
+      }
+      if (/^(?:👉|Next:|verify:|receipt=|artifact=|done:|edited\s|Architecture:|Ship:)/i.test(line)) {
+        selected.push(line);
+      }
+    }
+    return clip3(selected.join(" | ") || lines2.slice(0, 4).join(" | "), Math.min(maxChars, 320));
+  }
+  function formatReceiptOutput(output, budget = PIPELINE_RECEIPT_OUTPUT_CLIP) {
     const text2 = typeof output === "string" ? output : typeof output === "object" && output !== null ? output.text || output.summary || JSON.stringify(output) : String(output ?? "");
     const receipt = text2.match(/\breceipt[ =:-]+([A-Za-z0-9._-]+)/i);
     const artifact = text2.match(/\bartifact[ =:-]+([A-Za-z0-9._-]+)/i);
@@ -33284,11 +34212,13 @@ async function pipelinePipeline(ctx, input = {}) {
     if (architectureGaps) parts2.push(`architectureGaps=${architectureGaps[1]}`);
     if (missingBlocks) parts2.push(`missingBlocks=${missingBlocks[1]}`);
     if (missingChains) parts2.push(`missingChains=${missingChains[1]}`);
-    return parts2.length ? parts2.join(" ") : "ok";
+    const locatorSummary = compactReceiptText(text2, budget);
+    if (parts2.length) return clip3(`${parts2.join(" ")} | ${locatorSummary}`, budget);
+    return locatorSummary;
   }
-  function formatPipelineOutput(output, budget = summaryActionBudget) {
+  function formatPipelineOutput(output, budget = summaryBudgetFor("inspect")) {
     if (!output) return "";
-    if (receiptMode) return formatReceiptOutput(output);
+    if (receiptMode) return formatReceiptOutput(output, budget);
     if (renderFull) {
       if (typeof output === "string") return clip3(output, budget);
       if (typeof output === "object") {
@@ -33299,68 +34229,95 @@ async function pipelinePipeline(ctx, input = {}) {
       return clip3(String(output), budget);
     }
     const summary = summarizeActionResult(output, {
-      maxChars: Math.min(budget, summaryActionBudget),
+      maxChars: budget,
       includeDiagnostics: true
     });
     return `${artifactRef(output)}${summary}`.trim();
+  }
+  function renderPipelineActionDetail(item) {
+    const budget = renderFull ? item.maxChars ?? responseBudget ?? PIPELINE_MAX_OUTPUT_CLIP : Math.min(
+      item.maxChars ?? PIPELINE_MAX_OUTPUT_CLIP,
+      summaryBudgetFor(item.tool)
+    );
+    const detail = formatPipelineOutput(item.output, budget);
+    if (!detail) return "";
+    if (item.tool === "explore" || item.tool === "inspect") return `
+${detail}`;
+    return detail.replace(/\r?\n/g, " | ");
   }
   function formatPipelineFailure(item) {
     const output = typeof item?.output === "string" ? item.output : "";
     const source = item?.error || output || "verification/gate";
     const lines2 = String(source).split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     const header = lines2.find((value) => /(?:Verdict|Verify):\s*FAIL/i.test(value));
-    const detail = lines2.find((value) => /AssertionError|(?:Error|Expected):|Expected\s+/i.test(value)) || lines2.find((value) => /not ok|exit\s+[1-9]/i.test(value));
+    const evidence = extractFailureEvidence(source);
+    const detail = evidence.cause || evidence.stackFrame || lines2.find((value) => /AssertionError|(?:Error|Expected):|Expected\s+/i.test(value)) || lines2.find((value) => /not ok|exit\s+[1-9]/i.test(value));
     const triage = extractMicroTriage(source);
     const receipt = String(source).match(/\breceipt(?:\s+|[=:~-])([A-Za-z0-9._-]+)/i)?.[1];
     const artifact = String(source).match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1];
+    const next = lines2.find((value) => /change\(|next:\s/i.test(value));
     const sessionReceipts = Array.isArray(ctx.store?.current?.receipts) ? ctx.store.current.receipts : [];
     const fallbackReceipts = sessionReceipts.filter((entry) => Number(entry?.exitCode) !== 0 && entry?.id).slice(-3).map((entry) => `receipt=${entry.id}`);
     const references = [
       receipt ? `receipt=${receipt}` : null,
       artifact ? `artifact=${artifact}` : null,
+      next ? `next=${clip3(next, 180)}` : null,
       ...receipt ? [] : fallbackReceipts
     ];
-    const body2 = triage ? `Micro-Triage: ${triage}` : detail;
+    const body2 = triage ? `Micro-Triage: ${triage}` : [detail, evidence.stackFrame].filter(Boolean).filter((line, index, values) => values.indexOf(line) === index).join(" | ");
     return clip3([header, body2, ...references].filter(Boolean).join(" | ") || source, triage ? 900 : 500);
   }
   const recovered = branchResults.some((branch) => branch.ok);
-  const pipelineStatus = halted ? "HALTED" : failureCount ? recovered ? "RECOVERED" : "FAIL" : "OK";
+  const pipelineStatus = halted ? "HALTED" : failureCount ? recovered ? "RECOVERED" : continueOnFailure ? "PARTIAL" : "FAIL" : "OK";
   const lines = [`pipeline=${pipelineStatus} actions=${totalActions}/${totalSteps}${receiptMode ? " mode=receipt" : ""}`];
   if (halted && haltReason) lines.push(`stop=${haltReason}`);
   for (const r of results) {
     if (r.kind === "parallel") {
       const body2 = r.items.map((item) => {
-        const detail = item.ok ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, " | ") : `FAIL: ${formatPipelineFailure(item)}`;
+        const detail = item.ok ? renderPipelineActionDetail(item) : ` FAIL: ${formatPipelineFailure(item)}`;
         return `${item.tool}=${item.ok ? "OK" : "FAIL"}${detail ? ` ${detail}` : ""}`;
       }).join(" ; ");
       lines.push(`parallel#${r.step} ${r.ok ? "OK" : "FAIL"} :: ${body2}`);
     } else if (r.kind === "chain") {
       const body2 = r.items.map((item) => {
-        const detail = item.ok ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, " | ") : `FAIL: ${formatPipelineFailure(item)}`;
+        const detail = item.ok ? renderPipelineActionDetail(item) : ` FAIL: ${formatPipelineFailure(item)}`;
         return `${item.tool}=${item.ok ? "OK" : "FAIL"}${detail ? ` ${detail}` : ""}`;
       }).join(" -> ");
       lines.push(`chain#${r.step} ${r.ok ? "OK" : halted ? "HALTED" : "FAIL"} :: ${body2}`);
     } else {
-      const detail = r.ok ? halted ? "" : formatPipelineOutput(r.output, r.maxChars).replace(/\r?\n/g, " | ") : `FAIL: ${formatPipelineFailure(r)}`;
+      const detail = r.ok ? halted ? "" : renderPipelineActionDetail(r) : ` FAIL: ${formatPipelineFailure(r)}`;
       lines.push(`step#${r.step} ${r.tool}=${r.ok ? "OK" : "FAIL"}${detail ? ` ${detail}` : ""}`);
     }
   }
   for (const r of branchResults) {
     const body2 = r.items.map((item) => {
-      const detail = item.ok ? formatPipelineOutput(item.output, item.maxChars).replace(/\r?\n/g, " | ") : `FAIL: ${formatPipelineFailure(item)}`;
+      const detail = item.ok ? renderPipelineActionDetail(item) : ` FAIL: ${formatPipelineFailure(item)}`;
       return `${item.tool}=${item.ok ? "OK" : "FAIL"}${detail ? ` ${detail}` : ""}`;
     }).join(" -> ");
     lines.push(`branch#${r.index} ${r.ok ? "OK" : "FAIL"} :: ${body2}`);
   }
-  const raw = lines.join("\n");
   const summaryTruncated = !renderFull && results.some((result) => {
     const items = result.items || [result];
     return items.some((item) => {
       if (!item?.ok) return false;
-      const limit = Math.min(item.maxChars ?? Infinity, summaryActionBudget);
+      if (/\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? ""))) return true;
+      const limit = Math.min(item.maxChars ?? Infinity, summaryBudgetFor(item.tool));
       return outputLength(item.output) > limit;
     });
   });
+  const exploreIncomplete = results.some((result) => {
+    const items = result.items || [result];
+    return items.some((item) => item?.tool === "explore" && /read_complete=false\b/.test(String(item.output || "")));
+  });
+  const decisionReady = decisionPackage && !exploreIncomplete && !summaryTruncated && lines.join("\n").length <= responseBudget;
+  if (decisionReady) {
+    lines[0] += " decision=complete";
+    lines.push("decision=complete read_complete=true do_not_reread=true next=change({edits,verify,architecture}); after_pass=finalize_without_speculative_edits");
+  } else if (decisionPackage && exploreIncomplete) {
+    lines[0] += " decision=partial";
+    lines.push("decision=partial read_complete=false; perform the named bounded recovery read, then mutate or verify.");
+  }
+  const raw = lines.join("\n");
   const artifactContent = {
     status: pipelineStatus,
     totalActions,
@@ -33372,6 +34329,7 @@ async function pipelinePipeline(ctx, input = {}) {
     tool: "pipeline",
     maxChars: responseBudget,
     full: mode === "full" && !Number.isFinite(responseBudget),
+    allowWiden: (explicitlyFull || decisionPackage) && !receiptMode,
     forceArtifact: input.forceArtifact === true || summaryTruncated,
     artifactContent
   });
@@ -33379,7 +34337,7 @@ async function pipelinePipeline(ctx, input = {}) {
 
 <!-- os-budget ${meta2.chars} chars ~${meta2.estimatedTokens} tokens${meta2.truncated ? " truncated" : ""}${receiptMode ? " mode=receipt" : ""} -->`;
 }
-var OUTLINE_CLIP, INSPECT_INLINE_MAX_CHARS, SEARCH_CLIP, PIPELINE_DEFAULT_OUTPUT_CLIP, PIPELINE_MAX_OUTPUT_CLIP, PIPELINE_RECEIPT_OUTPUT_CLIP, PIPELINE_RECEIPT_RESPONSE_BUDGET, PIPELINE_DEFAULT_PARALLEL_CONCURRENCY, PIPELINE_MAX_PARALLEL_CONCURRENCY, MICRO_TRIAGE_MIN_CHARS, PROCESS_VERIFY_MODES, NON_ARCHITECTURE_PREFIXES, NON_ARCHITECTURE_EXTENSIONS, INSPECT_SKIP_DIRS;
+var OUTLINE_CLIP, INSPECT_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_FILES, SMALL_WORKSPACE_MAX_CHARS, SMALL_WORKSPACE_MAX_FILES, SMALL_WORKSPACE_CRITICAL_MAX_FILES, DECISION_SOURCE_FILE_MAX_CHARS, DECISION_SOURCE_TOTAL_MAX_CHARS, INSPECT_RECOVERY_OUTPUT_MAX_CHARS, MAX_INSPECT_RANGE_LINES, MAX_DIRECTED_EXPANSIONS, MAX_FOCUS_SEARCH_IDENTIFIERS, MAX_FOCUS_PATH_CANDIDATES, MAX_FOCUS_SLICE_SYMBOLS, SEARCH_CLIP, PIPELINE_DEFAULT_OUTPUT_CLIP, PIPELINE_EXPLORE_OUTPUT_CLIP, PIPELINE_MAX_OUTPUT_CLIP, PIPELINE_RECEIPT_OUTPUT_CLIP, PIPELINE_RECEIPT_RESPONSE_BUDGET, PIPELINE_DECISION_RESPONSE_BUDGET, PIPELINE_DEFAULT_PARALLEL_CONCURRENCY, PIPELINE_MAX_PARALLEL_CONCURRENCY, MICRO_TRIAGE_MIN_CHARS, PROCESS_VERIFY_MODES, INDEX_IMPORT_EXTENSIONS, NON_ARCHITECTURE_PREFIXES, NON_ARCHITECTURE_EXTENSIONS, INSPECT_SKIP_DIRS;
 var init_pipelines = __esm({
   async "packages/orchestrator/src/pipelines.mjs"() {
     init_context_budget();
@@ -33392,17 +34350,32 @@ var init_pipelines = __esm({
     await init_code_tools();
     OUTLINE_CLIP = 1200;
     INSPECT_INLINE_MAX_CHARS = 2500;
+    INSPECT_BATCH_INLINE_MAX_CHARS = 12e3;
+    INSPECT_BATCH_INLINE_MAX_FILES = 8;
+    SMALL_WORKSPACE_MAX_CHARS = 16e3;
+    SMALL_WORKSPACE_MAX_FILES = 24;
+    SMALL_WORKSPACE_CRITICAL_MAX_FILES = 16;
+    DECISION_SOURCE_FILE_MAX_CHARS = 8e3;
+    DECISION_SOURCE_TOTAL_MAX_CHARS = 18e3;
+    INSPECT_RECOVERY_OUTPUT_MAX_CHARS = 32e3;
+    MAX_INSPECT_RANGE_LINES = 240;
+    MAX_DIRECTED_EXPANSIONS = 8;
+    MAX_FOCUS_SEARCH_IDENTIFIERS = 4;
+    MAX_FOCUS_PATH_CANDIDATES = 16;
+    MAX_FOCUS_SLICE_SYMBOLS = 4;
     SEARCH_CLIP = 360;
-    PIPELINE_DEFAULT_OUTPUT_CLIP = 400;
+    PIPELINE_DEFAULT_OUTPUT_CLIP = 2800;
+    PIPELINE_EXPLORE_OUTPUT_CLIP = 18e3;
     PIPELINE_MAX_OUTPUT_CLIP = 4e3;
-    PIPELINE_RECEIPT_OUTPUT_CLIP = 180;
-    PIPELINE_RECEIPT_RESPONSE_BUDGET = 900;
+    PIPELINE_RECEIPT_OUTPUT_CLIP = 2600;
+    PIPELINE_RECEIPT_RESPONSE_BUDGET = 4e3;
+    PIPELINE_DECISION_RESPONSE_BUDGET = 24e3;
     PIPELINE_DEFAULT_PARALLEL_CONCURRENCY = 4;
     PIPELINE_MAX_PARALLEL_CONCURRENCY = 8;
     MICRO_TRIAGE_MIN_CHARS = 2e3;
     PROCESS_VERIFY_MODES = /* @__PURE__ */ new Set(["serve", "list", "status", "logs", "stop", "clear", "query"]);
+    INDEX_IMPORT_EXTENSIONS = [".mjs", ".js", ".cjs", ".ts", ".tsx", ".jsx", ".json"];
     NON_ARCHITECTURE_PREFIXES = [
-      ".contextos/",
       "dist/",
       "plugins/contextos/server/"
     ];
@@ -33709,7 +34682,7 @@ async function runMicroPreload(ctx, raw = {}) {
       forceArtifact: true
     });
     const pipelineText = String(pipelineOutput).trim();
-    const statusMatch = pipelineText.match(/^pipeline=(OK|FAIL|HALTED)\b/m);
+    const statusMatch = pipelineText.match(/^pipeline=(OK|PARTIAL|RECOVERED|FAIL|HALTED)\b/m);
     const pipelineStatus = statusMatch?.[1] || "ERROR";
     const pipelineArtifactMatches = [...pipelineText.matchAll(/<!--\s*os-response tool=pipeline artifact=([A-Za-z0-9._-]+)/g)];
     artifactId = pipelineArtifactMatches.at(-1)?.[1] || null;
@@ -34284,12 +35257,13 @@ function resolveMicroInput(options = {}, { projectRoot = process.cwd(), maxInput
     }
     return finish(fs13.readFileSync(path13.join(projectRoot, ".contextos", "logs", `${receiptId}.log`), "utf8"), "receipt");
   }
-  if (options.inputArtifact) {
-    const artifact = readArtifact(projectRoot, options.inputArtifact, {
+  const artifactId = options.inputArtifact || options.artifactId || options.artifact;
+  if (artifactId) {
+    const artifact = readArtifact(projectRoot, artifactId, {
       maxChars: limit,
       lineNumbers: false
     });
-    if (!artifact) throw new Error(`Micro input artifact not found: ${options.inputArtifact}`);
+    if (!artifact) throw new Error(`Micro input artifact not found: ${artifactId}`);
     return finish(artifact.text, "artifact");
   }
   if (!options.inputRef) return { input: "", source: null, truncated: false };
@@ -34451,7 +35425,7 @@ async function runMicroTask(config2 = {}, options = {}) {
   const invocation = normalizeMicroInvocation(config2, options, presetKey || "custom", {
     hasPreload: Boolean(preloadContext)
   });
-  const deliveryPrompt = options.delivery === "auto" ? presetKey === "evidence" ? "\nFor host routing, include needsHost as a boolean and hostReason as a short string in the JSON. Set needsHost=true only when the host agent needs your answer to decide or perform the requested work; set it false when a success receipt or an error is sufficient. When false, keep answer, evidenceRefs, and unknowns empty and hostReason very short." : '\nFor auto delivery, return only JSON with shape {"needsHost":boolean,"hostReason":string,"answer":string or a JSON value}. Keep answer concise and in the requested preset format: text/code as a string, JSON as a native JSON value. Set needsHost=true when the host needs the result on its next action; ContextOS will defer it for the next top-level OS call. Set needsHost=false only when a success receipt or error is sufficient; use an empty string or null for answer. Do not add prose outside the JSON.' : options.delivery === "errors-only" ? '\nThe requested curated graph writes are the deliverable. Ignore the preset response format. Only after at least one successful Block bind_auto or additive Chain compose, return "OK". If a write fails or you cannot complete that graph chore, return only the concise error and the action that failed; do not claim success without a successful write.' : options.delivery === "defer" ? "\nYour answer will be restored by ContextOS on a later call. Return only the concise result the host will need then." : "";
+  const deliveryPrompt = options.delivery === "auto" ? presetKey === "evidence" ? "\nFor host routing, include needsHost as a boolean and hostReason as a short string in the JSON. Set needsHost=true only when the host agent needs your answer to decide or perform the requested work; set it false when a success receipt or an error is sufficient. When false, keep answer, evidenceRefs, and unknowns empty and hostReason very short." : '\nFor auto delivery, return only JSON with shape {"needsHost":boolean,"hostReason":string,"answer":string or a JSON value}. Keep answer concise and in the requested preset format: text/code as a string, JSON as a native JSON value. Set needsHost=true when the host needs the result on its next action; ContextOS will defer it for the next top-level OS call. Set needsHost=false only when a success receipt or error is sufficient; use an empty string or null for answer. Do not add prose outside the JSON.' : options.delivery === "errors-only" ? "\nThe host will not see a successful answer; it only needs an error if an assigned tool call fails. Complete the work and return a concise final answer. Do not claim success when a tool call failed." : options.delivery === "defer" ? "\nYour answer will be restored by ContextOS on a later call. Return only the concise result the host will need then." : "";
   const toolAvailabilityPrompt = invocation.toolsEnabled ? "" : "\nNo tools are available in this run. Do not emit tool calls, function-call syntax, XML tool tags, or a plan to inspect files; answer directly from the provided input.";
   const systemPrompt = `${options.system || preset?.system || config2.system || ""}${deliveryPrompt}${toolAvailabilityPrompt}`;
   const resolvedInput = resolveMicroInput(options, {
@@ -34471,16 +35445,6 @@ async function runMicroTask(config2 = {}, options = {}) {
   } : null;
   const requireBulkInput = options.requireBulkInput ?? config2.requireBulkInput ?? false;
   const allowBoundedOS = Boolean(invocation.toolsEnabled && (options.caps || options.projectRoot));
-  if (options.delivery === "errors-only" && !(options.withOS && typeof options.caps?.block === "function" && typeof options.caps?.chain === "function")) {
-    return {
-      ok: false,
-      error: "Micro delivery errors-only requires withOS:true and ContextOS Block/Chain capabilities.",
-      durationMs: Date.now() - start2,
-      model,
-      preset: presetKey || null,
-      delivery: "errors-only"
-    };
-  }
   if (requireBulkInput && !["inputRef", "inputArtifact", "inputReceipt"].includes(resolvedInput.source) && !preloadText && !allowBoundedOS) {
     return {
       ok: false,
@@ -52613,6 +53577,7 @@ var OPS_CAPABILITIES = [
   "task",
   "block",
   "chain",
+  "architecture",
   "code",
   "run_command",
   "process",
@@ -52714,7 +53679,7 @@ function shouldEnableMicroOS(args2 = {}) {
   const toolsEnabled = args2.invocation?.tools?.enabled;
   if (explicit === false || toolsEnabled === false) return false;
   if (explicit === true || toolsEnabled === true) return true;
-  const hasAttachedEvidence = args2.pipeline != null || args2.preload != null;
+  const hasAttachedEvidence = args2.pipeline != null || args2.preload != null || args2.inputArtifact != null || args2.artifactId != null || args2.artifact != null;
   if (hasAttachedEvidence) return false;
   const maxRequests = args2.invocation?.provider?.maxRequests ?? args2.maxRequests;
   return maxRequests == null || Number(maxRequests) >= 2;
@@ -52771,6 +53736,26 @@ function isUnproductiveDiscovery(tool, input = {}) {
     "profile"
   ].includes(input.capability) && !["create", "update", "complete", "delete", "archive", "start", "finish", "close", "set", "bind", "bind_auto", "compose", "link", "unlink", "evict", "edit", "changeset"].includes(String(input.action || ""));
 }
+function decisionPackageMetadata(tool, result) {
+  const text = typeof result === "string" ? result : "";
+  if (!text) return null;
+  const pipelineStatus = text.match(/^(?:pipeline|work)=([A-Z]+)/m)?.[1] || null;
+  const readComplete = text.match(/\bread_complete=(true|false)\b/)?.[1] || null;
+  if (pipelineStatus) {
+    const artifactId = text.match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1] || null;
+    const receiptId = text.match(/\breceipt(?:\s+|[=:~-])([A-Za-z0-9._-]+)/i)?.[1] || null;
+    return {
+      status: readComplete === "false" ? "partial" : pipelineStatus,
+      artifactId,
+      receiptId
+    };
+  }
+  if (tool === "explore" && /##\s+Where to look/i.test(text) && /##\s+Critical slices/i.test(text)) {
+    const artifactId = text.match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1] || null;
+    return { status: "OK", artifactId, receiptId: null };
+  }
+  return null;
+}
 function convergenceHint(projectRoot, sessionId, tool, input, semanticReceipt) {
   if (semanticReceipt || !isUnproductiveDiscovery(tool, input)) return null;
   if (input.refresh === true || input.dedupeReads === false || input.full === true || input.budget === "full") return null;
@@ -52779,6 +53764,32 @@ function convergenceHint(projectRoot, sessionId, tool, input, semanticReceipt) {
   const count = recentUnproductiveCalls(projectRoot, sessionId);
   if (count < CONVERGENCE_DISCOVERY_LIMIT) return null;
   return `${count} discovery/diagnostic calls since the last mutation or verification; converge with one bounded work/change/verify or a dependent pipeline. Result returned in full.`;
+}
+function shouldAutoVerifyExplore(input = {}) {
+  if (input.autoVerify === false || input.verify === false) return false;
+  const intent = String(input.intent || "");
+  const repairIntent = /(?:修复|失败|报错|缺陷|故障|诊断|fix(?:ing)?|fail(?:ing|ure)?|error|bug|debug|repair|diagnos(?:e|is|tic)|regression)/i.test(intent);
+  const implementationIntent = /(?:实现|开发|修改|重构|implement(?:ation|ing|s)?|develop(?:ment|ing)?|feature|refactor(?:ing)?|modify|modification|update|build)/i.test(intent);
+  const verificationIntent = /(?:测试|验证|校验|test(?:s|ing)?|spec(?:s)?|verify|verification|failure(?:s)?|error(?:s)?)/i.test(intent);
+  return repairIntent || implementationIntent && verificationIntent;
+}
+function exploreBaselineCommands(input = {}, profile = {}) {
+  if (input.verify === true) {
+    return Array.isArray(profile.verify) ? profile.verify.filter(Boolean) : [];
+  }
+  if (typeof input.verify === "string") return input.verify.trim() ? [input.verify.trim()] : [];
+  if (Array.isArray(input.verify)) {
+    return input.verify.filter((command) => typeof command === "string" && command.trim());
+  }
+  if (input.verify && typeof input.verify === "object") {
+    if (Array.isArray(input.verify.commands)) {
+      return input.verify.commands.filter((command) => typeof command === "string" && command.trim());
+    }
+    if (typeof input.verify.command === "string" && input.verify.command.trim()) {
+      return [input.verify.command.trim()];
+    }
+  }
+  return [];
 }
 function semanticOpsMemoSpec(input = {}) {
   if (input.capability === "telemetry") return null;
@@ -52833,6 +53844,28 @@ function compactPipelineArtifactPreview(projectRoot, artifact, maxChars = 1400) 
   } catch (_) {
     return null;
   }
+}
+function readReceiptLogExcerpt(projectRoot, receiptId, { maxChars = 1800 } = {}) {
+  const id = String(receiptId || "").trim();
+  if (!/^[A-Za-z0-9._-]+$/.test(id)) {
+    return { id, error: "invalid-receipt-id" };
+  }
+  const filePath = path18.join(projectRoot, ".contextos", "logs", `${id}.log`);
+  if (!fs18.existsSync(filePath) || !fs18.statSync(filePath).isFile()) {
+    return { id, error: "not-found" };
+  }
+  const content = fs18.readFileSync(filePath, "utf8");
+  const evidence = extractFailureEvidence(content);
+  const selected = [evidence.test, evidence.cause, evidence.stackFrame].filter(Boolean).filter((line, index, values) => values.indexOf(line) === index);
+  const fallback = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 12);
+  const body2 = (selected.length ? selected : fallback).join("\n");
+  const text = clipText(body2, maxChars, { label: "receipt excerpt" });
+  return {
+    id,
+    text,
+    fullChars: content.length,
+    truncated: text.length < body2.length
+  };
 }
 function applyDottedProfileValues(target, values) {
   if (!values || typeof values !== "object" || Array.isArray(values)) return target;
@@ -53112,6 +54145,37 @@ function isJsonValueString(value) {
     return false;
   }
 }
+function nestedResponseRequests(input = {}) {
+  const values = [];
+  const visit = (value) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value !== "object") return;
+    values.push(value);
+    if (value.args && typeof value.args === "object") visit(value.args);
+    for (const key of ["inspect", "verify", "change", "ship", "ops", "run", "search"]) {
+      if (value[key] && typeof value[key] === "object") visit(value[key]);
+    }
+  };
+  visit(input);
+  return values;
+}
+function nestedFullRequest(values = []) {
+  return values.some((value) => value.full === true || value.fullFile === true || value.budget === "full" || value.mode === "full");
+}
+function nestedMaxChars(values = []) {
+  let maxChars = null;
+  for (const value of values) {
+    const candidate = Number(value.maxChars);
+    if (Number.isFinite(candidate) && candidate > 0) {
+      maxChars = maxChars === null ? candidate : Math.max(maxChars, candidate);
+    }
+  }
+  return maxChars;
+}
 function canonicalize2(value) {
   if (Array.isArray(value)) return value.map(canonicalize2);
   if (!value || typeof value !== "object") return value;
@@ -53325,7 +54389,7 @@ var Orchestrator = class {
       this.healed = null;
     }
   }
-  _context(tracer, { turnMemo = /* @__PURE__ */ new Map() } = {}) {
+  _context(tracer, { turnMemo = /* @__PURE__ */ new Map(), internal = false } = {}) {
     return {
       service: this.service,
       caps: createCapabilities({ service: this.service, projectRoot: this.projectRoot, projectId: this.projectId }),
@@ -53336,6 +54400,7 @@ var Orchestrator = class {
       projectId: this.projectId,
       sessionId: tracer?.sessionId || null,
       turnMemo,
+      internal,
       // Pipeline children are internal work. Only the top-level host request
       // restores deferred Micro results, once, after its own action completes.
       orchestrator: {
@@ -53364,7 +54429,7 @@ var Orchestrator = class {
       if (turnMemo instanceof Map) turnMemo.clear();
     }
     const tracer = new Tracer({ projectRoot: this.projectRoot, sessionId: seed.id });
-    const ctx = this._context(tracer, { turnMemo: turnMemo || /* @__PURE__ */ new Map() });
+    const ctx = this._context(tracer, { turnMemo: turnMemo || /* @__PURE__ */ new Map(), internal });
     if (this.healed) tracer.step("heal", this.healed);
     const startedAt = Date.now();
     const routingHint = internal ? null : this._routingHint(seed.id, tool, input);
@@ -53394,9 +54459,24 @@ var Orchestrator = class {
         result = semanticOpsReuse(semanticMemo, semanticReceipt);
       } else {
         switch (tool) {
-          case "explore":
-            result = exploreReceipt ? renderExploreReuse(exploreReceipt, input.format) : await explorePipeline(ctx, input);
+          case "explore": {
+            const baselineCommands = exploreBaselineCommands(input, ctx.profile);
+            const inferredCommands = baselineCommands.length ? baselineCommands : Array.isArray(ctx.profile?.verify) ? ctx.profile.verify.filter(Boolean) : [];
+            if (!internal && !exploreReceipt && shouldAutoVerifyExplore(input) && inferredCommands.length) {
+              result = await pipelinePipeline(ctx, {
+                steps: [
+                  { tool: "explore", args: { ...input, autoVerify: false } },
+                  { tool: "verify", args: { commands: inferredCommands } }
+                ],
+                continueOnFailure: true,
+                decisionPackage: true,
+                maxChars: RESPONSE_BUDGETS.pipelineDecision
+              });
+            } else {
+              result = exploreReceipt ? renderExploreReuse(exploreReceipt, input.format) : await explorePipeline(ctx, input);
+            }
             break;
+          }
           case "inspect":
             result = await inspectPipeline(ctx, input);
             break;
@@ -53461,13 +54541,31 @@ var Orchestrator = class {
         attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
         hostHint
       );
+      let decisionPackage = null;
+      if (!internal) {
+        decisionPackage = decisionPackageMetadata(tool, result);
+        if (decisionPackage && typeof this.store.markDecisionPackage === "function") {
+          this.store.markDecisionPackage({
+            tool,
+            status: decisionPackage.status,
+            artifactId: decisionPackage.artifactId,
+            receiptId: decisionPackage.receiptId
+          });
+        }
+      }
       const responseArgs = input.args && typeof input.args === "object" && !Array.isArray(input.args) ? input.args : {};
-      const responseMaxChars = typeof input.maxChars === "number" ? input.maxChars : typeof responseArgs.maxChars === "number" ? responseArgs.maxChars : void 0;
-      const full = input.full === true || input.budget === "full" || input.mode === "full" || responseArgs.full === true || responseArgs.budget === "full";
+      const nestedRequests = nestedResponseRequests(input);
+      const requestedMaxChars = nestedMaxChars(nestedRequests);
+      const responseMaxChars = typeof input.maxChars === "number" ? input.maxChars : typeof responseArgs.maxChars === "number" ? responseArgs.maxChars : requestedMaxChars ?? void 0;
+      const decisionPackageBudget = decisionPackage && responseMaxChars === void 0 ? RESPONSE_BUDGETS.pipelineDecision : responseMaxChars;
+      const nestedFull = nestedFullRequest(nestedRequests);
+      const allowWiden = input.allowWiden === true || responseArgs.allowWiden === true || nestedFull || Boolean(decisionPackage);
+      const full = input.full === true || input.budget === "full" || input.mode === "full" || responseArgs.full === true || responseArgs.budget === "full" || nestedFull || tool === "ops" && responseArgs.format === "json" || isJsonValueString(response);
       const finalized = finalizeResponse(response, {
         projectRoot: this.projectRoot,
         tool,
-        maxChars: responseMaxChars,
+        maxChars: decisionPackageBudget,
+        allowWiden,
         full,
         routingHint: isJsonValueString(response) ? null : hostHint
       });
@@ -53530,7 +54628,14 @@ var Orchestrator = class {
     return null;
   }
   async _ops(ctx, input = {}) {
-    const { capability, action, args: nestedArgs = {}, projectRoot: _projectRoot, ...directArgs } = input;
+    let { capability, action, args: nestedArgs = {}, projectRoot: _projectRoot, ...directArgs } = input;
+    if (!capability && typeof action === "string" && action.includes(".")) {
+      const separator = action.indexOf(".");
+      capability = action.slice(0, separator);
+      action = action.slice(separator + 1);
+    }
+    if (capability === "block" && ["get", "inspect", "show"].includes(action)) action = "open";
+    if (capability === "chain" && ["get", "inspect", "show"].includes(action)) action = "open";
     const args2 = {
       ...directArgs,
       ...nestedArgs && typeof nestedArgs === "object" && !Array.isArray(nestedArgs) ? nestedArgs : {}
@@ -53544,6 +54649,60 @@ var Orchestrator = class {
         return render(await service.plan({ ...args2, action }));
       case "task":
         return render(await service.task({ ...args2, action }));
+      case "architecture": {
+        const architectureAction = action || "list";
+        if (architectureAction === "bind_auto") {
+          return render(await service.block({ ...args2, action: "bind_auto" }));
+        }
+        if (architectureAction === "compose") {
+          return render(await service.chain({ ...args2, action: "compose" }));
+        }
+        if (architectureAction === "open" || architectureAction === "get" || architectureAction === "inspect") {
+          const id = args2.id || args2.blockId || args2.chainId;
+          if (!id) throw new Error("architecture.open requires 'id' (or blockId/chainId).");
+          try {
+            return render({ block: await service.block({ action: "open", id, format: "json" }) });
+          } catch (blockError) {
+            try {
+              return render({ chain: await service.chain({ action: "open", id, format: "json" }) });
+            } catch (_) {
+              throw new Error(`Architecture entity '${id}' was not found as a Block or Chain.`);
+            }
+          }
+        }
+        if (architectureAction === "search") {
+          const query = String(args2.query || "").toLowerCase();
+          const [blocks, chains] = await Promise.all([
+            service.block({ action: "search", query: args2.query || "", format: "json" }),
+            service.chain({ action: "list", format: "json", includeMembers: false, limit: 25 })
+          ]);
+          const chainItems = Array.isArray(chains?.items) ? chains.items : [];
+          return render({
+            blocks: Array.isArray(blocks) ? blocks : [],
+            chains: chainItems.filter((chain) => String(chain.id || "").toLowerCase().includes(query) || String(chain.title || "").toLowerCase().includes(query))
+          });
+        }
+        if (architectureAction === "list" || architectureAction === "summary") {
+          const [blocks, chains] = await Promise.all([
+            service.block({
+              action: "list",
+              format: "json",
+              includeRefs: args2.includeRefs === true,
+              limit: args2.limit,
+              offset: args2.offset
+            }),
+            service.chain({
+              action: "list",
+              format: "json",
+              includeMembers: args2.includeMembers === true,
+              limit: args2.limit,
+              offset: args2.offset
+            })
+          ]);
+          return render({ blocks, chains });
+        }
+        throw new Error(`Unknown architecture action '${architectureAction}'. Available: list, open, search, bind_auto, compose`);
+      }
       case "block":
         return render(await service.block({ ...args2, action }));
       case "chain":
@@ -53598,6 +54757,46 @@ var Orchestrator = class {
         if (action === "resume") {
           const session = store.current;
           if (!session) return render({ status: "no-open-session" });
+          const artifactId = args2.artifact || args2.artifactId || null;
+          const receiptId = args2.receipt || args2.receiptId || null;
+          if (artifactId || receiptId) {
+            const diagnostic = {
+              id: session.id,
+              status: session.status
+            };
+            if (artifactId) {
+              const artifactStat = statArtifact(this.projectRoot, artifactId);
+              if (artifactStat?.kind === "response:pipeline") {
+                const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 900);
+                diagnostic.artifact = {
+                  id: artifactId,
+                  kind: artifactStat.kind,
+                  preview: preview || "Pipeline artifact is not previewable.",
+                  truncated: true,
+                  fullChars: artifactStat.contentChars || 0,
+                  rawReplay: false,
+                  hint: "Resume returns a bounded decision preview. Use ops artifact.read full:true only for an intentional audit."
+                };
+              } else {
+                const artifact = readArtifact(this.projectRoot, artifactId, {
+                  maxChars: Math.min(Math.max(Number(args2.maxChars) || 1800, 200), 4e3)
+                });
+                diagnostic.artifact = artifact ? {
+                  id: artifact.id,
+                  kind: artifact.kind || null,
+                  text: artifact.text,
+                  truncated: artifact.truncated,
+                  fullChars: artifact.contentChars || artifact.text.length
+                } : { id: artifactId, error: "not-found" };
+              }
+            }
+            if (receiptId) {
+              diagnostic.receipt = readReceiptLogExcerpt(this.projectRoot, receiptId, {
+                maxChars: Math.min(Math.max(Number(args2.maxChars) || 1800, 200), 4e3)
+              });
+            }
+            return render(diagnostic);
+          }
           return render({
             id: session.id,
             status: session.status,
@@ -53623,23 +54822,30 @@ var Orchestrator = class {
       }
       case "artifact": {
         if (action === "read") {
-          const fullArtifact = args2.full === true || args2.budget === "full";
+          const artifactId = args2.id || args2.artifactId || args2.artifact;
+          const artifactStat = statArtifact(this.projectRoot, artifactId);
+          const pipelineArtifact = artifactStat?.kind === "response:pipeline";
+          const auditReason = typeof args2.auditReason === "string" ? args2.auditReason.trim() : "";
+          const rawPipelineRequested = args2.allowRawPipeline === true;
+          const allowRawPipeline = rawPipelineRequested && auditReason.length > 0;
+          const fullArtifact = (args2.full === true || args2.budget === "full") && (!pipelineArtifact || allowRawPipeline);
           const requestedArtifactChars = Number(args2.maxChars);
           const artifactReadArgs = {
             ...args2,
+            id: artifactId,
             maxChars: fullArtifact ? Infinity : Number.isFinite(requestedArtifactChars) && requestedArtifactChars > 0 ? Math.min(Math.floor(requestedArtifactChars), 1400) : 1400
           };
-          const artifact = readArtifact(this.projectRoot, args2.id, artifactReadArgs);
+          const artifact = readArtifact(this.projectRoot, artifactId, artifactReadArgs);
           if (!artifact) return `# ContextOS artifact
-- Not found: \`${args2.id || "(missing)"}\``;
-          const artifactStat = statArtifact(this.projectRoot, args2.id);
-          const canPreviewPipeline = !fullArtifact && !args2.grep && args2.startLine === void 0 && args2.endLine === void 0 && artifactStat?.kind === "response:pipeline";
+- Not found: \`${artifactId || "(missing)"}\``;
+          const canPreviewPipeline = pipelineArtifact && !allowRawPipeline && !args2.grep && args2.startLine === void 0 && args2.endLine === void 0;
           if (canPreviewPipeline) {
             const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 1400);
             if (preview) {
               return [
                 `# ContextOS artifact ${artifact.id}`,
-                `- Pipeline preview; fullChars=${artifactStat.contentChars}; use \`full:true\` for the raw artifact.`,
+                `- Pipeline preview (decision package); fullChars=${artifactStat.contentChars}.`,
+                "- Next: use `change`/`work` directly; raw Pipeline replay requires `allowRawPipeline:true` plus a non-empty `auditReason` for an intentional audit.",
                 "",
                 "```text",
                 preview,
@@ -57867,6 +59073,104 @@ import path26 from "node:path";
 var DEFAULT_MAX_FILES = 500;
 var DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
 var DEFAULT_MAX_AGE_MS2 = 30 * 24 * 60 * 60 * 1e3;
+var MIN_MAX_LOG_BYTES = 64;
+var LOG_TRUNCATION_MARKER = "[contextos:log-truncated]\n";
+var LOG_TRUNCATION_MARKER_BYTES = Buffer.from(LOG_TRUNCATION_MARKER, "utf8");
+function normalizeMaxLogBytes(maxLogBytes) {
+  if (maxLogBytes === void 0) return null;
+  if (!Number.isInteger(maxLogBytes) || maxLogBytes < MIN_MAX_LOG_BYTES) {
+    throw new RangeError(`maxLogBytes must be a positive integer of at least ${MIN_MAX_LOG_BYTES} bytes`);
+  }
+  return maxLogBytes;
+}
+function writeAllAtStart(fd, buffer) {
+  let offset = 0;
+  while (offset < buffer.length) {
+    offset += fs26.writeSync(fd, buffer, offset, buffer.length - offset, offset);
+  }
+  fs26.ftruncateSync(fd, buffer.length);
+}
+function createBoundedLogSink(filePath, maxBytes) {
+  const fd = fs26.openSync(filePath, "w", 384);
+  secureLogFile(filePath);
+  const retentionBytes = maxBytes - LOG_TRUNCATION_MARKER_BYTES.length;
+  let retained = Buffer.alloc(0);
+  let truncated = false;
+  let closed = false;
+  const state = () => ({ logBytes: retained.length, logTruncated: truncated });
+  return {
+    write(chunk) {
+      if (closed) throw new Error("Cannot write to a closed log sink");
+      const incoming = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8");
+      if (truncated) {
+        const existing = retained.subarray(LOG_TRUNCATION_MARKER_BYTES.length);
+        if (incoming.length >= retentionBytes) {
+          retained = Buffer.from(incoming.subarray(incoming.length - retentionBytes));
+        } else {
+          const combined = Buffer.concat([existing, incoming]);
+          retained = Buffer.from(combined.subarray(Math.max(0, combined.length - retentionBytes)));
+        }
+        retained = Buffer.concat([LOG_TRUNCATION_MARKER_BYTES, retained]);
+      } else if (retained.length + incoming.length > maxBytes) {
+        const combined = Buffer.concat([retained, incoming]);
+        truncated = true;
+        retained = Buffer.concat([
+          LOG_TRUNCATION_MARKER_BYTES,
+          Buffer.from(combined.subarray(Math.max(0, combined.length - retentionBytes)))
+        ]);
+      } else {
+        retained = retained.length === 0 ? Buffer.from(incoming) : Buffer.concat([retained, incoming]);
+      }
+      writeAllAtStart(fd, retained);
+      return state();
+    },
+    end() {
+      if (!closed) {
+        try {
+          writeAllAtStart(fd, retained);
+        } finally {
+          closed = true;
+          fs26.closeSync(fd);
+        }
+      }
+      return state();
+    }
+  };
+}
+function createStreamingLogSink(filePath) {
+  const stream = fs26.createWriteStream(filePath, { flags: "a", mode: 384 });
+  stream.on("open", () => secureLogFile(filePath));
+  stream.on("error", () => {
+  });
+  let bytes = 0;
+  let endPromise = null;
+  return {
+    write(chunk) {
+      bytes += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk), "utf8");
+      stream.write(chunk);
+      return { logBytes: bytes, logTruncated: false };
+    },
+    end() {
+      if (!endPromise) {
+        endPromise = new Promise((resolve) => {
+          stream.end(() => {
+            let logBytes = bytes;
+            try {
+              logBytes = fs26.statSync(filePath).size;
+            } catch (_) {
+            }
+            resolve({ logBytes, logTruncated: false });
+          });
+        });
+      }
+      return endPromise;
+    }
+  };
+}
+function createLogSink(filePath, { maxLogBytes } = {}) {
+  const limit = normalizeMaxLogBytes(maxLogBytes);
+  return limit === null ? createStreamingLogSink(filePath) : createBoundedLogSink(filePath, limit);
+}
 function ensureLogDir(projectRoot) {
   const logDir = path26.join(projectRoot, ".contextos", "logs");
   fs26.mkdirSync(logDir, { recursive: true, mode: 448 });
@@ -57930,22 +59234,33 @@ async function runCommand({
   cwd = process.cwd(),
   env = process.env,
   maxChars = 1500,
+  maxLogBytes,
   timeoutMs = 6e4,
   projectRoot = cwd,
   raw = false,
   mode = "auto"
 }) {
+  const maxLogBytesLimit = normalizeMaxLogBytes(maxLogBytes);
   const receiptId = `receipt-${Date.now()}-${crypto15.randomBytes(3).toString("hex")}`;
   const startTime = Date.now();
   const logDir = ensureLogDir(projectRoot);
   const logFile = path27.join(logDir, `${receiptId}.log`);
   pruneLogDir(logDir);
+  const boundedLog = maxLogBytesLimit === null ? null : createLogSink(logFile, { maxLogBytes: maxLogBytesLimit });
   const maxCaptureChars = 1e7;
   return new Promise((resolve) => {
     let stdoutData = "";
     let stderrData = "";
     let captureTruncated = false;
     let killedByTimeout = false;
+    let logBytes = 0;
+    let logTruncated = false;
+    let settled = false;
+    const finish = (receipt) => {
+      if (settled) return;
+      settled = true;
+      resolve(receipt);
+    };
     const safeCommand = typeof command === "string" ? command : "";
     const isWin = process.platform === "win32";
     const shell = isWin ? process.env.ComSpec || "cmd.exe" : "/bin/sh";
@@ -57975,33 +59290,56 @@ async function runCommand({
       }
     }, timeoutMs);
     child.stdout.on("data", (chunk) => {
+      const text = chunk.toString("utf8");
+      if (boundedLog) {
+        const logState = boundedLog.write(redactSecrets(text));
+        logBytes = logState.logBytes;
+        logTruncated = logState.logTruncated;
+      }
       if (stdoutData.length >= maxCaptureChars) {
         captureTruncated = true;
         return;
       }
-      stdoutData += chunk.toString("utf8").slice(0, maxCaptureChars - stdoutData.length);
+      stdoutData += text.slice(0, maxCaptureChars - stdoutData.length);
     });
     child.stderr.on("data", (chunk) => {
+      const text = chunk.toString("utf8");
+      if (boundedLog) {
+        const logState = boundedLog.write(redactSecrets(text));
+        logBytes = logState.logBytes;
+        logTruncated = logState.logTruncated;
+      }
       if (stderrData.length >= maxCaptureChars) {
         captureTruncated = true;
         return;
       }
-      stderrData += chunk.toString("utf8").slice(0, maxCaptureChars - stderrData.length);
+      stderrData += text.slice(0, maxCaptureChars - stderrData.length);
     });
-    child.on("close", (code2) => {
+    child.on("close", async (code2) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
       const rawOutput = stdoutData + (stderrData ? `
 --- STDERR ---
 ${stderrData}` : "") + (captureTruncated ? "\n--- CAPTURE TRUNCATED ---\n" : "");
-      try {
-        writeSecureLog(logFile, redactSecrets(rawOutput));
-      } catch (_) {
+      const redactedOutput = redactSecrets(rawOutput);
+      if (boundedLog) {
+        try {
+          const logState = await boundedLog.end();
+          logBytes = logState.logBytes;
+          logTruncated = logState.logTruncated;
+        } catch (_) {
+        }
+      } else {
+        try {
+          writeSecureLog(logFile, redactedOutput);
+          logBytes = Buffer.byteLength(redactedOutput, "utf8");
+        } catch (_) {
+        }
       }
       const exitCode = killedByTimeout ? 124 : code2 !== null ? code2 : 1;
       const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars, raw, mode, command: safeCommand });
       const relativeLogHandle = path27.relative(projectRoot, logFile);
-      resolve({
+      finish({
         id: receiptId,
         command: redactSecrets(command),
         cwd,
@@ -58013,13 +59351,23 @@ ${stderrData}` : "") + (captureTruncated ? "\n--- CAPTURE TRUNCATED ---\n" : "")
         diagnostics: sanitized.diagnostics || [],
         warnings: sanitized.warnings,
         logHandle: relativeLogHandle,
+        logBytes,
+        logTruncated,
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       });
     });
-    child.on("error", (err2) => {
+    child.on("error", async (err2) => {
       clearTimeout(timer);
       const durationMs = Date.now() - startTime;
-      resolve({
+      if (boundedLog) {
+        try {
+          const logState = await boundedLog.end();
+          logBytes = logState.logBytes;
+          logTruncated = logState.logTruncated;
+        } catch (_) {
+        }
+      }
+      finish({
         id: receiptId,
         command: redactSecrets(command),
         cwd,
@@ -58029,7 +59377,9 @@ ${stderrData}` : "") + (captureTruncated ? "\n--- CAPTURE TRUNCATED ---\n" : "")
         text: `Error: ${err2.message}`,
         errors: [err2.message],
         warnings: [],
-        logHandle: null,
+        logHandle: boundedLog ? path27.relative(projectRoot, logFile) : null,
+        logBytes,
+        logTruncated,
         createdAt: (/* @__PURE__ */ new Date()).toISOString()
       });
     });
@@ -58080,6 +59430,9 @@ var ProcessManager = class {
             port: item.port || null,
             url: item.url || null,
             logFile: item.logFile || path28.join(this.projectRoot, ".contextos", "logs", `${item.id}.log`),
+            logBytes: item.logBytes ?? 0,
+            logTruncated: Boolean(item.logTruncated),
+            maxLogBytes: item.maxLogBytes ?? null,
             child: null
           });
         } else {
@@ -58098,8 +59451,10 @@ var ProcessManager = class {
     cwd = this.projectRoot,
     env = process.env,
     readyRegex = null,
-    portRegex = null
+    portRegex = null,
+    maxLogBytes
   }) {
+    const maxLogBytesLimit = normalizeMaxLogBytes(maxLogBytes);
     const sessionId = id || `proc-${Date.now()}-${crypto16.randomBytes(3).toString("hex")}`;
     if (this.sessions.has(sessionId)) {
       throw new Error(`Process session '${sessionId}' already exists`);
@@ -58107,8 +59462,9 @@ var ProcessManager = class {
     const logDir = ensureLogDir(this.projectRoot);
     pruneLogDir(logDir);
     const logFile = path28.join(logDir, `${sessionId}.log`);
-    const logStream = fs27.createWriteStream(logFile, { flags: "a", mode: 384 });
-    logStream.on("open", () => secureLogFile(logFile));
+    const logSink = createLogSink(logFile, {
+      maxLogBytes: maxLogBytesLimit === null ? void 0 : maxLogBytesLimit
+    });
     const isWin = process.platform === "win32";
     const shell = isWin ? process.env.ComSpec || "cmd.exe" : "/bin/sh";
     const shellArgs = isWin ? ["/d", "/s", "/c", command] : ["-c", command];
@@ -58132,12 +59488,28 @@ var ProcessManager = class {
       port: null,
       url: null,
       logFile,
+      logBytes: 0,
+      logTruncated: false,
+      maxLogBytes: maxLogBytesLimit,
       child
     };
     this.sessions.set(sessionId, session);
+    let logEndPromise = null;
+    const finalizeLog = () => {
+      if (!logEndPromise) {
+        logEndPromise = Promise.resolve(logSink.end()).then((logState) => {
+          session.logBytes = logState.logBytes;
+          session.logTruncated = logState.logTruncated;
+        }).catch(() => {
+        });
+      }
+      return logEndPromise;
+    };
     child.stdout.on("data", (chunk) => {
+      const logState = logSink.write(chunk);
+      session.logBytes = logState.logBytes;
+      session.logTruncated = logState.logTruncated;
       const text = chunk.toString("utf8");
-      logStream.write(chunk);
       if (portRegex && !session.port) {
         const match = text.match(new RegExp(portRegex));
         if (match && match[1]) session.port = parseInt(match[1], 10);
@@ -58151,20 +59523,22 @@ var ProcessManager = class {
       }
     });
     child.stderr.on("data", (chunk) => {
-      logStream.write(chunk);
+      const logState = logSink.write(chunk);
+      session.logBytes = logState.logBytes;
+      session.logTruncated = logState.logTruncated;
     });
-    child.on("close", (code2) => {
+    child.on("close", async (code2) => {
+      await finalizeLog();
       session.status = "stopped";
       session.exitCode = code2;
       session.stoppedAt = (/* @__PURE__ */ new Date()).toISOString();
-      logStream.end();
       this._persistProcesses();
     });
-    child.on("error", (err2) => {
+    child.on("error", async (err2) => {
+      await finalizeLog();
       session.status = "error";
       session.error = err2.message;
       session.stoppedAt = (/* @__PURE__ */ new Date()).toISOString();
-      logStream.end();
       this._persistProcesses();
     });
     await new Promise((r) => setTimeout(r, 200));
@@ -58192,10 +59566,20 @@ var ProcessManager = class {
   getLogs(sessionId, { lines = 100, grep = null, startLine = null, endLine = null } = {}) {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Process session '${sessionId}' not found`);
+    const relativeLogFile = path28.relative(this.projectRoot, session.logFile);
     if (!fs27.existsSync(session.logFile)) {
-      return { lines: [], total: 0 };
+      return {
+        sessionId,
+        lines: [],
+        total: 0,
+        logBytes: 0,
+        logTruncated: false,
+        logFile: relativeLogFile
+      };
     }
     const content = fs27.readFileSync(session.logFile, "utf8");
+    const logBytes = fs27.statSync(session.logFile).size;
+    const logTruncated = Boolean(session.logTruncated) || content.startsWith(LOG_TRUNCATION_MARKER);
     let allLines = content.split(/\r?\n/);
     if (grep) {
       const query = grep.toLowerCase();
@@ -58212,7 +59596,9 @@ var ProcessManager = class {
       sessionId,
       lines: allLines,
       total: allLines.length,
-      logFile: path28.relative(this.projectRoot, session.logFile)
+      logBytes,
+      logTruncated,
+      logFile: relativeLogFile
     };
   }
   async stopProcess(sessionId, { graceMs = 2e3 } = {}) {
@@ -58306,7 +59692,9 @@ var ProcessManager = class {
       exitCode: s.exitCode,
       port: s.port,
       url: s.url,
-      logFile: s.logFile
+      logFile: s.logFile,
+      logBytes: s.logBytes ?? 0,
+      logTruncated: Boolean(s.logTruncated)
     };
   }
 };
@@ -60206,18 +61594,30 @@ Members: ${chain.memberIds.join(", ")}`;
           allFiles.add(ref.path);
         }
       }
-      const results = CodeTools.searchWorkspace(this.projectRoot, query || "", Array.from(allFiles));
       const wanted = Number(limit || maxResults || 8);
       const runText = (needle) => CodeTools.searchText(this.projectRoot, needle, {
-        limit: Math.max(1, wanted - results.length),
+        limit: Math.max(wanted, 40),
         root
       });
       let text = runText(query || "");
+      if (rootIsFile) allFiles.add(rootRelative);
+      for (const hit of text.hits) {
+        if (hit?.path) allFiles.add(hit.path);
+      }
+      if (!allFiles.size) {
+        for (const file of CodeTools.listWorkspaceFiles(this.projectRoot, { root, maxFiles: 800 })) {
+          allFiles.add(file);
+        }
+      }
+      const results = CodeTools.searchWorkspace(this.projectRoot, query || "", Array.from(allFiles));
       let retriedWith = null;
       if (!results.length && !text.hits.length && /\s/.test(String(query || "").trim())) {
         const token = String(query).split(/[\s,，、]+/).filter(Boolean).sort((a, b) => b.length - a.length)[0];
         if (token) {
-          const retry = runText(token);
+          const retry = CodeTools.searchText(this.projectRoot, token, {
+            limit: Math.max(wanted, 40),
+            root
+          });
           if (retry.hits.length) {
             text = retry;
             retriedWith = token;
@@ -60225,7 +61625,13 @@ Members: ${chain.memberIds.join(", ")}`;
         }
       }
       if (format === "json") {
-        return { symbols: results, text: text.hits, scannedFiles: text.scanned, truncated: text.truncated, retriedWith };
+        return {
+          symbols: results,
+          text: text.hits.slice(0, wanted),
+          scannedFiles: text.scanned,
+          truncated: text.truncated,
+          retriedWith
+        };
       }
       const lines = [`# Search: \`${query}\`${root ? ` (root: \`${root}\`)` : ""}`];
       if (results.length > 0) {
@@ -60238,7 +61644,7 @@ Members: ${chain.memberIds.join(", ")}`;
       if (text.hits.length > 0) {
         lines.push(`
 ## Textual matches${retriedWith ? ` (retried with \`${retriedWith}\`)` : ""}`);
-        for (const hit of text.hits) {
+        for (const hit of text.hits.slice(0, wanted)) {
           lines.push(`- \`${hit.path}\`:L${hit.line}: \`${hit.content}\``);
         }
       }
@@ -60388,6 +61794,7 @@ ${code2}
     command,
     cwd,
     maxChars = 1500,
+    maxLogBytes,
     timeoutMs = 6e4,
     raw = false,
     mode = "auto"
@@ -60397,6 +61804,7 @@ ${code2}
       command,
       cwd: targetCwd,
       maxChars,
+      maxLogBytes,
       timeoutMs,
       projectRoot: this.projectRoot,
       raw,
@@ -60411,10 +61819,10 @@ ${code2}
   async process(input) {
     return this._withWriteLock("process", () => this._process(input));
   }
-  async _process({ action, command, id, lines = 50, grep }) {
+  async _process({ action, command, id, lines = 50, grep, maxLogBytes }) {
     switch (action) {
       case "start":
-        return this.processManager.startProcess({ id, command });
+        return this.processManager.startProcess({ id, command, maxLogBytes });
       case "list":
         return this.processManager.listProcesses();
       case "status":
@@ -61480,6 +62888,7 @@ function projectDbPath(projectRoot) {
 
 // packages/mcp/src/system-tools.mjs
 import fs33 from "node:fs";
+import os3 from "node:os";
 import path34 from "node:path";
 
 // package.json
@@ -61547,8 +62956,10 @@ var package_default = {
     "dist:smoke": "node scripts/distribution-smoke.mjs",
     "acceptance:real": "node scripts/p7-real-acceptance.mjs",
     "acceptance:micro": "node scripts/micro-direct-pipeline-acceptance.mjs",
+    "acceptance:micro:executor": "node scripts/micro-executor-acceptance.mjs",
     "preplugin:install": "npm run version:sync",
     "plugin:install": "npm run plugin:build && node scripts/install-plugin.mjs",
+    "plugin:install:check": "node scripts/install-plugin.mjs --check",
     "predesktop:build": "npm run version:sync",
     "desktop:build": "swift build --package-path apps/desktop",
     "desktop:run": "swift run --package-path apps/desktop contextos-desktop",
@@ -61659,6 +63070,8 @@ async function runDoctor(input) {
     }
   }
   const platforms = detectInstalledPlatforms();
+  const contextosHome = process.env.CONTEXTOS_HOME || path34.join(os3.homedir(), ".contextos");
+  const globalProfilePath2 = path34.join(contextosHome, "profile.json");
   const editorStatuses = platforms.map((p) => `  - **${p.name}**: ${p.isInstalled ? "Installed" : "Not detected"} (\`${p.configPath}\`)`).join("\n");
   return [
     `# ContextOS Doctor Report`,
@@ -61666,6 +63079,8 @@ async function runDoctor(input) {
     `- **Project Root**: \`${root}\``,
     `- **Project ID**: \`${projectId}\``,
     `- **Active Storage Mode**: \`${mode}\``,
+    `- **ContextOS Home**: \`${contextosHome}\``,
+    `- **Global Profile**: \`${globalProfilePath2}\` (${fs33.existsSync(globalProfilePath2) ? "present" : "missing"})`,
     `- **Cloud Hub URL**: \`${cloudUrl}\``,
     `- **Global Cloud Config**: ${globalCloud ? `Configured (\`${globalCloud.cloudUrl}\`)` : "None"}`,
     `- **Cloud Hub Connectivity**: ${cloudHealth}`,
@@ -61786,8 +63201,25 @@ var editSpec = object2({
   endLine: number2().optional(),
   fullFile: boolean2().optional().describe("When true, replaces entire file content with replacement.")
 });
-var architectureSpec = record(any()).describe(
-  "Optional curated Block/Chain ownership to apply in the same mutation or closure; derived mod-* module identities are rejected."
+var architectureSpec = object2({
+  blocks: array(object2({
+    id: string2(),
+    title: string2().optional(),
+    kind: string2().optional(),
+    paths: array(string2()).optional(),
+    path: string2().optional(),
+    summary: string2().optional(),
+    symbols: array(string2()).optional()
+  }).passthrough()).optional(),
+  chains: array(object2({
+    id: string2(),
+    title: string2().optional(),
+    memberIds: array(string2()).optional(),
+    member_ids: array(string2()).optional(),
+    replaceMembers: boolean2().optional()
+  }).passthrough()).optional()
+}).passthrough().describe(
+  "Curated Block/Chain ownership applied atomically with the same mutation or closure; mod-* ModuleIndex identities are rejected."
 );
 function createV3Server({
   surface = process.env.CONTEXTOS_LEAN_SURFACE === "0" ? "legacy" : "lean"
@@ -61814,7 +63246,7 @@ function createV3Server({
     server.registerTool(
       "contextos",
       {
-        description: "Repository execution for one decision per call. Use action=work for {search,inspect,create,edits,verify}; use pipeline for known parallel or dependent batches directly; inspect/change/verify cover focused operations; micro handles bulky evidence and delivery. Returns compact receipts and locators; expand with full/maxChars only when needed.",
+        description: "Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; micro=bulky evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.",
         inputSchema: {
           action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops"]),
           args: record(any()).optional(),
@@ -61823,13 +63255,52 @@ function createV3Server({
           dedupeReads: boolean2().optional().describe("Set false to bypass read deduplication."),
           full: boolean2().optional().describe("Request the full, unbounded payload."),
           budget: string2().optional().describe('Named output budget, e.g. "full".'),
-          maxChars: number2().optional().describe("Explicit output character cap.")
+          maxChars: number2().optional().describe("Explicit output character cap."),
+          intent: string2().optional(),
+          verify: union([string2(), array(string2()), record(any())]).optional(),
+          commands: array(string2()).optional(),
+          architecture: architectureSpec.optional(),
+          edits: array(record(any())).optional(),
+          create: array(record(any())).optional(),
+          delete: array(record(any())).optional(),
+          ship: union([boolean2(), string2(), record(any())]).optional(),
+          maxLogBytes: number2().optional().describe("Bound persisted command/process log bytes; keeps the tail and marks truncation."),
+          search: union([string2(), record(any()), array(any())]).optional(),
+          inspect: union([string2(), record(any()), array(any())]).optional(),
+          path: string2().optional(),
+          paths: array(string2()).optional(),
+          symbol: string2().optional(),
+          query: string2().optional(),
+          ranges: array(record(any())).optional(),
+          startLine: number2().optional(),
+          endLine: number2().optional()
         }
       },
       async (input) => {
         const args2 = { ...input.args || {} };
-        for (const control of ["refresh", "dedupeReads", "full", "budget", "maxChars"]) {
+        for (const control of ["refresh", "dedupeReads", "full", "budget", "maxChars", "maxLogBytes"]) {
           if (input[control] !== void 0) args2[control] = input[control];
+        }
+        for (const field of [
+          "intent",
+          "verify",
+          "commands",
+          "architecture",
+          "edits",
+          "create",
+          "delete",
+          "ship",
+          "search",
+          "inspect",
+          "path",
+          "paths",
+          "symbol",
+          "query",
+          "ranges",
+          "startLine",
+          "endLine"
+        ]) {
+          if (input[field] !== void 0) args2[field] = input[field];
         }
         const payload = { ...args2, projectRoot: input.projectRoot };
         if (input.action === "micro") {
@@ -61915,6 +63386,7 @@ function createV3Server({
           object2({ command: string2().optional(), commands: array(string2()).optional(), timeoutMs: number2().optional() })
         ]).optional().describe("Run verification immediately after writing files in the same turn."),
         autoRevert: boolean2().optional().describe("true to automatically revert files on disk if verification fails."),
+        maxLogBytes: number2().optional().describe("Bound persisted verification log bytes; keeps the tail and marks truncation."),
         architecture: architectureSpec.optional(),
         dryRun: boolean2().optional().describe("true to preview edits without writing files, touching the session, or running verification."),
         paths: array(string2()).optional().describe("Used for a read-only preview when no edits are supplied."),
@@ -61940,6 +63412,7 @@ function createV3Server({
         grep: string2().optional(),
         cwd: string2().optional(),
         maxChars: number2().optional(),
+        maxLogBytes: number2().optional().describe("Bound persisted verification log bytes; keeps the tail and marks truncation."),
         timeoutMs: number2().optional(),
         autoTriage: boolean2().optional().describe("Opt in to micro diagnosis on failure."),
         full: boolean2().optional().describe("Return full output instead of artifact-backed summaries."),
@@ -61973,7 +63446,7 @@ function createV3Server({
   server.registerTool(
     "ops",
     {
-      description: "Advanced capability passthrough. Reads reuse compact semantic receipts and stay bounded; use refresh:true or full:true only when a fresh/full diagnostic is required.",
+      description: "Advanced capability passthrough. Reads reuse compact semantic receipts and stay bounded; use refresh:true or full:true only when a fresh/full diagnostic is required. Capabilities: os_context, plan, task, block, chain, architecture, code, run_command, process, knowledge, session, system, profile, micro, artifact, telemetry.",
       inputSchema: {
         capability: _enum(OPS_CAPABILITIES),
         action: string2().optional(),

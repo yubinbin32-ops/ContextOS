@@ -724,12 +724,13 @@ export function resolveMicroInput(options = {}, { projectRoot = process.cwd(), m
     return finish(fs.readFileSync(path.join(projectRoot, '.contextos', 'logs', `${receiptId}.log`), 'utf8'), 'receipt');
   }
 
-  if (options.inputArtifact) {
-    const artifact = readArtifact(projectRoot, options.inputArtifact, {
+  const artifactId = options.inputArtifact || options.artifactId || options.artifact;
+  if (artifactId) {
+    const artifact = readArtifact(projectRoot, artifactId, {
       maxChars: limit,
       lineNumbers: false,
     });
-    if (!artifact) throw new Error(`Micro input artifact not found: ${options.inputArtifact}`);
+    if (!artifact) throw new Error(`Micro input artifact not found: ${artifactId}`);
     return finish(artifact.text, 'artifact');
   }
 
@@ -929,7 +930,7 @@ export async function runMicroTask(config = {}, options = {}) {
         ? '\nFor host routing, include needsHost as a boolean and hostReason as a short string in the JSON. Set needsHost=true only when the host agent needs your answer to decide or perform the requested work; set it false when a success receipt or an error is sufficient. When false, keep answer, evidenceRefs, and unknowns empty and hostReason very short.'
         : '\nFor auto delivery, return only JSON with shape {"needsHost":boolean,"hostReason":string,"answer":string or a JSON value}. Keep answer concise and in the requested preset format: text/code as a string, JSON as a native JSON value. Set needsHost=true when the host needs the result on its next action; ContextOS will defer it for the next top-level OS call. Set needsHost=false only when a success receipt or error is sufficient; use an empty string or null for answer. Do not add prose outside the JSON.')
     : (options.delivery === 'errors-only'
-        ? '\nThe requested curated graph writes are the deliverable. Ignore the preset response format. Only after at least one successful Block bind_auto or additive Chain compose, return "OK". If a write fails or you cannot complete that graph chore, return only the concise error and the action that failed; do not claim success without a successful write.'
+        ? '\nThe host will not see a successful answer; it only needs an error if an assigned tool call fails. Complete the work and return a concise final answer. Do not claim success when a tool call failed.'
         : (options.delivery === 'defer'
             ? '\nYour answer will be restored by ContextOS on a later call. Return only the concise result the host will need then.'
             : ''));
@@ -959,17 +960,6 @@ export async function runMicroTask(config = {}, options = {}) {
     : null;
   const requireBulkInput = options.requireBulkInput ?? config.requireBulkInput ?? false;
   const allowBoundedOS = Boolean(invocation.toolsEnabled && (options.caps || options.projectRoot));
-  if (options.delivery === 'errors-only'
-    && !(options.withOS && typeof options.caps?.block === 'function' && typeof options.caps?.chain === 'function')) {
-    return {
-      ok: false,
-      error: 'Micro delivery errors-only requires withOS:true and ContextOS Block/Chain capabilities.',
-      durationMs: Date.now() - start,
-      model,
-      preset: presetKey || null,
-      delivery: 'errors-only',
-    };
-  }
   if (requireBulkInput && !['inputRef', 'inputArtifact', 'inputReceipt'].includes(resolvedInput.source) && !preloadText && !allowBoundedOS) {
     return {
       ok: false,

@@ -2,7 +2,7 @@ import { spawn, execSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { ensureLogDir, pruneLogDir, secureLogFile } from './log-store.mjs';
+import { LOG_TRUNCATION_MARKER, createLogSink, ensureLogDir, normalizeMaxLogBytes, pruneLogDir } from './log-store.mjs';
 
 export class ProcessManager {
   constructor({ projectRoot = process.cwd() } = {}) {
@@ -46,6 +46,9 @@ export class ProcessManager {
             port: item.port || null,
             url: item.url || null,
             logFile: item.logFile || path.join(this.projectRoot, '.contextos', 'logs', `${item.id}.log`),
+            logBytes: item.logBytes ?? 0,
+            logTruncated: Boolean(item.logTruncated),
+            maxLogBytes: item.maxLogBytes ?? null,
             child: null,
           });
         } else {
@@ -66,7 +69,9 @@ export class ProcessManager {
     env = process.env,
     readyRegex = null,
     portRegex = null,
+    maxLogBytes,
   }) {
+    const maxLogBytesLimit = normalizeMaxLogBytes(maxLogBytes);
     const sessionId = id || `proc-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
     if (this.sessions.has(sessionId)) {
       throw new Error(`Process session '${sessionId}' already exists`);
@@ -74,8 +79,9 @@ export class ProcessManager {
     const logDir = ensureLogDir(this.projectRoot);
     pruneLogDir(logDir);
     const logFile = path.join(logDir, `${sessionId}.log`);
-    const logStream = fs.createWriteStream(logFile, { flags: 'a', mode: 0o600 });
-    logStream.on('open', () => secureLogFile(logFile));
+    const logSink = createLogSink(logFile, {
+      maxLogBytes: maxLogBytesLimit === null ? undefined : maxLogBytesLimit,
+    });
 
     const isWin = process.platform === 'win32';
     const shell = isWin ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
@@ -102,14 +108,32 @@ export class ProcessManager {
       port: null,
       url: null,
       logFile,
+      logBytes: 0,
+      logTruncated: false,
+      maxLogBytes: maxLogBytesLimit,
       child,
     };
 
     this.sessions.set(sessionId, session);
 
+    let logEndPromise = null;
+    const finalizeLog = () => {
+      if (!logEndPromise) {
+        logEndPromise = Promise.resolve(logSink.end())
+          .then((logState) => {
+            session.logBytes = logState.logBytes;
+            session.logTruncated = logState.logTruncated;
+          })
+          .catch(() => {});
+      }
+      return logEndPromise;
+    };
+
     child.stdout.on('data', (chunk) => {
+      const logState = logSink.write(chunk);
+      session.logBytes = logState.logBytes;
+      session.logTruncated = logState.logTruncated;
       const text = chunk.toString('utf8');
-      logStream.write(chunk);
 
       if (portRegex && !session.port) {
         const match = text.match(new RegExp(portRegex));
@@ -125,22 +149,24 @@ export class ProcessManager {
     });
 
     child.stderr.on('data', (chunk) => {
-      logStream.write(chunk);
+      const logState = logSink.write(chunk);
+      session.logBytes = logState.logBytes;
+      session.logTruncated = logState.logTruncated;
     });
 
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
+      await finalizeLog();
       session.status = 'stopped';
       session.exitCode = code;
       session.stoppedAt = new Date().toISOString();
-      logStream.end();
       this._persistProcesses();
     });
 
-    child.on('error', (err) => {
+    child.on('error', async (err) => {
+      await finalizeLog();
       session.status = 'error';
       session.error = err.message;
       session.stoppedAt = new Date().toISOString();
-      logStream.end();
       this._persistProcesses();
     });
 
@@ -175,11 +201,21 @@ export class ProcessManager {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Process session '${sessionId}' not found`);
 
+    const relativeLogFile = path.relative(this.projectRoot, session.logFile);
     if (!fs.existsSync(session.logFile)) {
-      return { lines: [], total: 0 };
+      return {
+        sessionId,
+        lines: [],
+        total: 0,
+        logBytes: 0,
+        logTruncated: false,
+        logFile: relativeLogFile,
+      };
     }
 
     const content = fs.readFileSync(session.logFile, 'utf8');
+    const logBytes = fs.statSync(session.logFile).size;
+    const logTruncated = Boolean(session.logTruncated) || content.startsWith(LOG_TRUNCATION_MARKER);
     let allLines = content.split(/\r?\n/);
 
     if (grep) {
@@ -199,7 +235,9 @@ export class ProcessManager {
       sessionId,
       lines: allLines,
       total: allLines.length,
-      logFile: path.relative(this.projectRoot, session.logFile),
+      logBytes,
+      logTruncated,
+      logFile: relativeLogFile,
     };
   }
 
@@ -302,6 +340,8 @@ export class ProcessManager {
       port: s.port,
       url: s.url,
       logFile: s.logFile,
+      logBytes: s.logBytes ?? 0,
+      logTruncated: Boolean(s.logTruncated),
     };
   }
 }

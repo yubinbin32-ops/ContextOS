@@ -347,7 +347,7 @@ export async function runMicroPreload(ctx, raw = {}) {
       forceArtifact: true,
     });
     const pipelineText = String(pipelineOutput).trim();
-    const statusMatch = pipelineText.match(/^pipeline=(OK|FAIL|HALTED)\b/m);
+    const statusMatch = pipelineText.match(/^pipeline=(OK|PARTIAL|RECOVERED|FAIL|HALTED)\b/m);
     const pipelineStatus = statusMatch?.[1] || 'ERROR';
     const pipelineArtifactMatches = [...pipelineText.matchAll(/<!--\s*os-response tool=pipeline artifact=([A-Za-z0-9._-]+)/g)];
     artifactId = pipelineArtifactMatches.at(-1)?.[1] || null;

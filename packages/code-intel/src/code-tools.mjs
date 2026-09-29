@@ -42,6 +42,8 @@ function matchesSearchQuery(value, query, matcher) {
   return text.toLowerCase().includes(String(query || '').trim().toLowerCase());
 }
 
+const SEARCHABLE_SOURCE_EXTENSIONS = /\.(?:mjs|cjs|js|jsx|ts|tsx|py|swift|go|rs|java|kt|rb|php|c|h|cpp|cs)$/i;
+
 export class CodeTools {
   /**
    * 1. Outline: Progressive L1 structure view
@@ -481,6 +483,52 @@ export class CodeTools {
   /**
    * 5. Workspace Search: find symbols/methods across project files (VS Code Cmd+T).
    */
+  static listWorkspaceFiles(repoRoot, { root = null, maxFiles = 800 } = {}) {
+    const skipDirs = new Set([
+      'node_modules', '.git', 'dist', 'build', '.next', '.nuxt', 'coverage', '.contextos',
+      '.cache', '.wrangler', 'DerivedData', '.build', 'vendor', 'Pods', 'target', '.venv',
+    ]);
+    const rootPath = root ? path.resolve(repoRoot, String(root)) : null;
+    const rootRelative = rootPath
+      ? path.relative(repoRoot, rootPath).split(path.sep).join('/').replace(/^\.\//, '').replace(/\/+$/, '')
+      : '';
+    const rootOutsideProject = rootPath
+      ? rootRelative.startsWith('..') || path.isAbsolute(rootRelative)
+      : false;
+    const rootIsFile = Boolean(rootPath && !rootOutsideProject && fs.existsSync(rootPath) && fs.statSync(rootPath).isFile());
+    const files = [];
+    const startDir = rootPath && !rootOutsideProject && !rootIsFile
+      ? rootPath
+      : repoRoot;
+    const walk = (dir) => {
+      if (files.length >= maxFiles) return;
+      let entries = [];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch (_) {
+        return;
+      }
+      for (const entry of entries) {
+        if (files.length >= maxFiles) return;
+        if (entry.isDirectory()) {
+          if (skipDirs.has(entry.name) || entry.name.startsWith('.')) continue;
+          walk(path.join(dir, entry.name));
+          continue;
+        }
+        if (!entry.isFile()) continue;
+        const relative = path.relative(repoRoot, path.join(dir, entry.name)).split(path.sep).join('/');
+        if (!SEARCHABLE_SOURCE_EXTENSIONS.test(relative)) continue;
+        files.push(relative);
+      }
+    };
+    if (rootIsFile) {
+      files.push(rootRelative);
+    } else if (!rootOutsideProject) {
+      walk(startDir);
+    }
+    return Array.from(new Set(files)).slice(0, maxFiles);
+  }
+
   static searchWorkspace(repoRoot, query, candidateFiles = []) {
     const matcher = createSearchMatcher(query);
     const results = [];

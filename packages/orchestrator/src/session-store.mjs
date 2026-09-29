@@ -10,6 +10,8 @@ const MAX_READ_RECEIPTS = 200;
 const MAX_SEARCH_RECEIPTS = 100;
 const MAX_EXPLORE_RECEIPTS = 50;
 const MAX_SEMANTIC_RECEIPTS = 80;
+const MAX_FULL_EXPANSION_PATHS = 12;
+const MAX_DIRECTED_EXPANSION_PATHS = 12;
 const DEFAULT_HISTORY_LIMIT = 3;
 const MAX_HISTORY_LIMIT = 10;
 const HISTORY_INTENT_CHARS = 120;
@@ -92,6 +94,12 @@ function compactSessionState(session) {
   };
 }
 
+function isReservedStatePath(filePath) {
+  const value = String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  const root = value.split('/')[0] || '';
+  return root === '.contextos' || root.startsWith('.contextos-') || root.startsWith('.contextos.');
+}
+
 function fallbackWorkspaceFingerprint(projectRoot) {
   const root = path.resolve(projectRoot);
   const hash = crypto.createHash('sha256');
@@ -114,6 +122,8 @@ function fallbackWorkspaceFingerprint(projectRoot) {
     }
     for (const entry of entries) {
       const relative = relativeDirectory ? path.join(relativeDirectory, entry.name) : entry.name;
+      const normalizedRelative = relative.split(path.sep).join('/');
+      if (isReservedStatePath(normalizedRelative)) continue;
       if (entry.isDirectory() && FALLBACK_IGNORED_DIRECTORIES.has(entry.name)) continue;
       const fullPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
@@ -161,6 +171,18 @@ function emptySession(projectId, intent, workspaceRoot) {
     searchReceipts: [],
     exploreReceipts: [],
     semanticReceipts: [],
+    readPolicy: {
+      decisionPackageSeen: false,
+      decisionPackageTool: null,
+      decisionPackageAt: null,
+      decisionPackageCount: 0,
+      fullExpansions: 0,
+      fullExpansionPaths: [],
+      directedExpansions: 0,
+      directedExpansionPaths: [],
+      pathOnlyFullDenied: 0,
+      lastPathOnlyFullDeniedAt: null,
+    },
     notes: [],
     slots: {},
     startedAt: now,
@@ -189,7 +211,7 @@ export function workspaceFingerprint(projectRoot) {
     .filter(Boolean)
     .filter((line) => {
       const paths = line.slice(3).trim().split(' -> ').map((value) => value.trim());
-      return paths.every((value) => value !== '.contextos' && !value.startsWith('.contextos/'));
+      return paths.every((value) => !isReservedStatePath(value));
     })
     .join('\n');
   hash.update(sourceStatus);
@@ -204,7 +226,7 @@ export function workspaceFingerprint(projectRoot) {
   for (const line of status.split(/\r?\n/)) {
     if (!line.startsWith('?? ')) continue;
     const relative = line.slice(3).trim();
-    if (!relative || relative.startsWith('.contextos/')) continue;
+    if (!relative || isReservedStatePath(relative)) continue;
     const fullPath = path.join(projectRoot, relative);
     try {
       const stat = fs.statSync(fullPath);
@@ -421,6 +443,79 @@ export class SessionStore {
     if (session.readReceipts.length > MAX_READ_RECEIPTS) {
       session.readReceipts = session.readReceipts.slice(-MAX_READ_RECEIPTS);
     }
+    return this.save(session);
+  }
+
+  readPolicy() {
+    const session = this.current;
+    return session?.readPolicy || {
+      decisionPackageSeen: false,
+      decisionPackageTool: null,
+      decisionPackageAt: null,
+      decisionPackageCount: 0,
+      fullExpansions: 0,
+      fullExpansionPaths: [],
+      directedExpansions: 0,
+      directedExpansionPaths: [],
+      pathOnlyFullDenied: 0,
+      lastPathOnlyFullDeniedAt: null,
+    };
+  }
+
+  markDecisionPackage({ tool = null, status = null, artifactId = null, receiptId = null } = {}) {
+    const session = this.ensureSession();
+    const current = session.readPolicy || {};
+    session.readPolicy = {
+      ...current,
+      decisionPackageSeen: true,
+      decisionPackageTool: tool || current.decisionPackageTool || null,
+      decisionPackageAt: new Date().toISOString(),
+      decisionPackageCount: (Number(current.decisionPackageCount) || 0) + 1,
+      decisionPackageStatus: status || current.decisionPackageStatus || null,
+      decisionPackageArtifactId: artifactId || current.decisionPackageArtifactId || null,
+      decisionPackageReceiptId: receiptId || current.decisionPackageReceiptId || null,
+    };
+    return this.save(session);
+  }
+
+  recordFullExpansion({ path: filePath = null } = {}) {
+    const session = this.ensureSession();
+    const current = session.readPolicy || {};
+    const paths = Array.isArray(current.fullExpansionPaths) ? current.fullExpansionPaths : [];
+    session.readPolicy = {
+      ...current,
+      fullExpansions: (Number(current.fullExpansions) || 0) + 1,
+      fullExpansionPaths: filePath
+        ? [...paths, String(filePath)].slice(-MAX_FULL_EXPANSION_PATHS)
+        : paths,
+    };
+    return this.save(session);
+  }
+
+  recordDirectedExpansion({ path: filePath = null } = {}) {
+    const session = this.ensureSession();
+    const current = session.readPolicy || {};
+    const paths = Array.isArray(current.directedExpansionPaths) ? current.directedExpansionPaths : [];
+    session.readPolicy = {
+      ...current,
+      directedExpansions: (Number(current.directedExpansions) || 0) + 1,
+      directedExpansionPaths: filePath
+        ? [...paths, String(filePath)].slice(-MAX_DIRECTED_EXPANSION_PATHS)
+        : paths,
+    };
+    return this.save(session);
+  }
+
+  recordPathOnlyFullDenied({ path: filePath = null, reason = null } = {}) {
+    const session = this.ensureSession();
+    const current = session.readPolicy || {};
+    session.readPolicy = {
+      ...current,
+      pathOnlyFullDenied: (Number(current.pathOnlyFullDenied) || 0) + 1,
+      lastPathOnlyFullDeniedAt: new Date().toISOString(),
+      lastPathOnlyFullDeniedPath: filePath ? String(filePath) : current.lastPathOnlyFullDeniedPath || null,
+      lastPathOnlyFullDeniedReason: reason || current.lastPathOnlyFullDeniedReason || null,
+    };
     return this.save(session);
   }
 

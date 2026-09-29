@@ -13,6 +13,7 @@ import { fitSections } from '../src/context-budget.mjs';
 import { ModuleIndex } from '../src/module-index.mjs';
 import { SessionStore, workspaceFingerprint } from '../src/session-store.mjs';
 import { storeArtifact } from '../src/artifact-store.mjs';
+import { RESPONSE_BUDGETS } from '../src/response-budget.mjs';
 import { ContextOSV2Service } from '../../mcp/src/v2-service.mjs';
 
 function makeTempProject() {
@@ -136,6 +137,120 @@ test('artifact eviction returns a compact requested-id receipt', async () => {
   assert.ok(response.length < 700);
 });
 
+test('session resume returns bounded artifact and receipt diagnostics when requested', async () => {
+  const projectRoot = makeTempProject();
+  storeArtifact(projectRoot, 'artifact diagnostic body', { id: 'art-resume-diagnostic' });
+  const logDirectory = path.join(projectRoot, '.contextos', 'logs');
+  fs.mkdirSync(logDirectory, { recursive: true });
+  fs.writeFileSync(
+    path.join(logDirectory, 'receipt-resume-diagnostic.log'),
+    [
+      'TAP version 13',
+      'not ok 1 - batch replay preserves idempotency',
+      '  ---',
+      '  error: |-',
+      '    batch replay is not implemented',
+      `    ${'noise '.repeat(600)}`,
+      '  stack: |-',
+      '    replayBatch (file:///tmp/repo/src/batch-replay.mjs:3:9)',
+      '  ...',
+    ].join('\n'),
+    'utf8'
+  );
+  const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
+
+  const response = await orchestrator.dispatch('ops', {
+    capability: 'session',
+    action: 'resume',
+    args: {
+      artifact: 'art-resume-diagnostic',
+      receipt: 'receipt-resume-diagnostic',
+      maxChars: 700,
+    },
+  });
+  const parsed = JSON.parse(response);
+
+  assert.equal(parsed.artifact.id, 'art-resume-diagnostic');
+  assert.match(parsed.artifact.text, /artifact diagnostic body/);
+  assert.equal(parsed.receipt.id, 'receipt-resume-diagnostic');
+  assert.match(parsed.receipt.text, /batch replay is not implemented/);
+  assert.match(parsed.receipt.text, /replayBatch/);
+  assert.ok(parsed.receipt.fullChars > parsed.receipt.text.length);
+  assert.ok(response.length < 2200, `diagnostic resume must stay bounded, got ${response.length}`);
+});
+
+test('session resume compacts pipeline artifacts instead of replaying raw steps', async () => {
+  const projectRoot = makeTempProject();
+  const artifact = storeArtifact(projectRoot, {
+    status: 'PARTIAL',
+    totalActions: 2,
+    steps: [{
+      step: 1,
+      kind: 'parallel',
+      items: [
+        { index: 1, tool: 'explore', ok: true, output: '# ContextOS explore\n## Where to look\n- src/batch-replay.mjs' },
+        { index: 2, tool: 'verify', ok: false, output: `# ContextOS verify\n## Verdict: FAIL\nMicro-Triage: replayBatch is a stub\n${'raw evidence '.repeat(1000)}` },
+      ],
+    }],
+  }, { kind: 'response:pipeline' });
+  const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
+
+  const response = await orchestrator.dispatch('ops', {
+    capability: 'session',
+    action: 'resume',
+    args: { artifact: artifact.id, full: true, maxChars: 30000 },
+  });
+  const parsed = JSON.parse(response);
+
+  assert.equal(parsed.artifact.id, artifact.id);
+  assert.equal(parsed.artifact.rawReplay, false);
+  assert.match(parsed.artifact.preview, /status=PARTIAL/);
+  assert.match(parsed.artifact.preview, /tool=verify FAIL/);
+  assert.match(parsed.artifact.preview, /replayBatch is a stub/);
+  assert.ok(response.length < 2200, `pipeline resume preview must stay bounded, got ${response.length}`);
+});
+
+test('pipeline artifacts reject raw replay without an explicit audit override', async () => {
+  const projectRoot = makeTempProject();
+  const artifact = storeArtifact(projectRoot, {
+    status: 'PARTIAL',
+    totalActions: 1,
+    steps: [{ step: 1, kind: 'single', tool: 'verify', ok: false, output: `raw pipeline marker\n${'evidence '.repeat(4000)}` }],
+  }, { kind: 'response:pipeline' });
+  const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
+
+  const guarded = await orchestrator.dispatch('ops', {
+    action: 'artifact.read',
+    artifact: artifact.id,
+    full: true,
+    maxChars: 30000,
+  });
+  assert.match(guarded, /Pipeline preview/);
+  assert.match(guarded, /allowRawPipeline:true/);
+  assert.match(guarded, /auditReason/);
+  assert.ok(guarded.length < 2200, 'raw Pipeline replay must stay a bounded preview without an audit override');
+
+  const missingReason = await orchestrator.dispatch('ops', {
+    capability: 'artifact',
+    action: 'read',
+    artifact: artifact.id,
+    full: true,
+    allowRawPipeline: true,
+  });
+  assert.match(missingReason, /Pipeline preview/);
+  assert.match(missingReason, /auditReason/);
+
+  const audited = await orchestrator.dispatch('ops', {
+    capability: 'artifact',
+    action: 'read',
+    artifact: artifact.id,
+    full: true,
+    allowRawPipeline: true,
+    auditReason: 'verify raw Pipeline retention during an intentional audit',
+  });
+  assert.match(audited, /raw pipeline marker/);
+});
+
 test('session status stays compact even when the durable session is large', async () => {
   const projectRoot = makeTempProject();
   const store = new SessionStore({ projectRoot, projectId: 'fixture' });
@@ -199,8 +314,17 @@ function fakeService({ exitCode = 0, exitCodes = null } = {}) {
       if (args.action === 'search') return '- **function** `add` [`src/math.mjs`:L1-L3]';
       return 'ok';
     },
-    async block() {
+    async block(args = {}) {
+      calls.push({ capability: 'block', args });
+      if (args.action === 'list') return [{ id: 'block-math', title: 'Math helpers', summary: 'add()', artifactRefs: [{ path: 'src/math.mjs' }] }];
+      if (args.action === 'bind_auto') return { id: args.id || 'block-math', artifactRefs: [] };
       return [{ id: 'block-math', title: 'Math helpers', summary: 'add()', artifactRefs: [{ path: 'src/math.mjs' }] }];
+    },
+    async chain(args = {}) {
+      calls.push({ capability: 'chain', args });
+      if (args.action === 'list') return [];
+      if (args.action === 'compose') return { id: args.chainData?.id || 'chain-fixture' };
+      return [];
     },
     async knowledge() {
       return [{ id: 'rule-surgical-code-editing', title: 'Surgical code editing', category: 'code_style', summary: 'Never read whole files' }];
@@ -291,6 +415,77 @@ test('orchestrator runs explore -> change -> verify -> ship in one round trip ea
   });
   assert.match(shippedWithGraph, /graph\.json exported/);
   assert.equal(service.graphExports, 1);
+});
+
+test('change can verify and ship in the same host decision', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const changed = await orchestrator.dispatch('change', {
+    intent: '修改 add 并完成收尾',
+    edits: [{ path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 1;' }],
+    verify: ['node -e "0"'],
+    ship: { summary: 'change and ship in one call' },
+  });
+
+  assert.match(changed, /Verify: PASS/);
+  assert.match(changed, /Ship:/);
+  assert.match(changed, /closed/);
+  const session = JSON.parse(fs.readFileSync(path.join(projectRoot, '.contextos', 'session.json'), 'utf8'));
+  assert.equal(session.status, 'closed');
+  assert.equal(session.receipts.length, 1);
+});
+
+test('explore auto-verifies failure-oriented tasks in one decision package', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('explore', {
+    intent: '修复失败测试并定位根因',
+  });
+
+  assert.match(result, /^pipeline=OK/m);
+  assert.match(result, /decision=complete/);
+  assert.match(result, /npm run test/);
+  assert.equal(
+    service.calls.filter((call) => call.capability === 'run').length,
+    1,
+    'explore must carry the baseline verify in the same host decision'
+  );
+});
+
+test('explore auto-verifies implementation and test mapping intent in one decision package', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService();
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('explore', {
+    intent: 'Map repository structure, package test scripts, and locate batch replay and audit report implementation and tests.',
+  });
+
+  assert.match(result, /^pipeline=OK/m);
+  assert.match(result, /decision=complete/);
+  assert.match(result, /npm run test/);
+  assert.equal(
+    service.calls.filter((call) => call.capability === 'run').length,
+    1,
+    'implementation-plus-test exploration must carry baseline verify in the same host decision'
+  );
+});
+
+test('verify accepts summary as an output mode instead of process control', async () => {
+  const projectRoot = makeTempProject();
+  const orchestrator = new Orchestrator({ service: fakeService(), projectRoot, projectId: 'fixture' });
+
+  const verified = await orchestrator.dispatch('verify', {
+    commands: ['node -e "0"'],
+    mode: 'summary',
+  });
+
+  assert.match(verified, /Verdict: PASS/);
+  assert.doesNotMatch(verified, /Unknown process action/);
 });
 
 test('repeated semantic capability reads reuse a compact receipt until a mutation invalidates it', async () => {
@@ -392,15 +587,268 @@ test('pipeline artifact reads return a compact preview unless raw output is expl
   assert.match(preview, /Pipeline preview/);
   assert.match(preview, /tool=inspect OK/);
   assert.match(preview, /tool=verify FAIL/);
-  assert.match(preview, /full:true/);
+  assert.match(preview, /auditReason/);
 
   const raw = await orchestrator.dispatch('ops', {
     capability: 'artifact',
     action: 'read',
-    args: { id: artifact.id, full: true },
+    args: { id: artifact.id, full: true, allowRawPipeline: true, auditReason: 'inspect normalized Pipeline artifact retention' },
   });
   assert.match(raw, /\"totalActions\": 2/);
   assert.match(raw, /\"steps\":/);
+});
+
+test('decision packages gate path-only full reads while preserving directed expansion', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'math.mjs'),
+    'export function add(a, b) {\n  return `${a + b} BODY_MARKER`;\n}\n'
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'large.mjs'),
+    `export const large = '${'x'.repeat(4000)}';\nexport const marker = 'LARGE_MARKER';\n`
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const decisionPackage = await orchestrator.dispatch('pipeline', {
+    steps: [{ inspect: { path: 'src/math.mjs', budget: 'shallow' } }],
+  });
+  assert.match(decisionPackage, /pipeline=OK/);
+
+  const smallFull = await orchestrator.dispatch('inspect', {
+    path: 'src/math.mjs',
+    full: true,
+    maxChars: 10000,
+  });
+  assert.match(smallFull, /BODY_MARKER/);
+  assert.match(smallFull, /1 \| export function add/);
+  assert.doesNotMatch(smallFull, /Read policy/);
+
+  const largeFull = await orchestrator.dispatch('inspect', {
+    path: 'src/large.mjs',
+    full: true,
+    maxChars: 10000,
+  });
+  assert.match(largeFull, /LARGE_MARKER/);
+  assert.doesNotMatch(largeFull, /Read policy/);
+
+  const gated = await orchestrator.dispatch('inspect', {
+    path: 'src/large.mjs',
+    full: true,
+    maxChars: 10000,
+  });
+  assert.match(gated, /Read policy/);
+  assert.match(gated, /AST Outline/);
+  assert.ok(!gated.includes('LARGE_MARKER'), 'a repeated path-only full read must not replay a large file after a decision package');
+
+  const directed = await orchestrator.dispatch('inspect', {
+    path: 'src/math.mjs',
+    symbol: 'add',
+    full: true,
+    maxChars: 10000,
+  });
+  assert.match(directed, /BODY_MARKER/);
+
+  const smallRange = await orchestrator.dispatch('inspect', {
+    path: 'src/math.mjs',
+    ranges: [{ startLine: 1, endLine: 400 }],
+    maxChars: 10000,
+  });
+  assert.match(smallRange, /BODY_MARKER/);
+  assert.doesNotMatch(smallRange, /Read policy/);
+
+  const fullFile = await orchestrator.dispatch('inspect', {
+    path: 'src/large.mjs',
+    full: true,
+    fullFile: true,
+    maxChars: 10000,
+  });
+  assert.match(fullFile, /Read policy/);
+  assert.match(fullFile, /AST Outline/);
+  assert.ok(!fullFile.includes('LARGE_MARKER'), 'fullFile must not bypass decision-package read policy for large files');
+
+  const searchAlias = await orchestrator.dispatch('pipeline', {
+    mode: 'full',
+    steps: [{ tool: 'search', args: { query: 'add', root: 'src' } }],
+  });
+  assert.match(searchAlias, /pipeline=OK/);
+  assert.doesNotMatch(searchAlias, /Unknown orchestrator tool/);
+  assert.match(searchAlias, /src\/math\.mjs/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('decision packages bound oversized ranges and cap directed expansion rounds', async () => {
+  const projectRoot = makeTempProject();
+  const longFile = Array.from({ length: 300 }, (_, index) => `export const line${index + 1} = ${index + 1};`).join('\n') + '\n';
+  fs.writeFileSync(path.join(projectRoot, 'src', 'long.mjs'), longFile);
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  await orchestrator.dispatch('pipeline', {
+    steps: [{ inspect: { path: 'src/long.mjs', budget: 'shallow' } }],
+  });
+
+  const oversized = await orchestrator.dispatch('inspect', {
+    path: 'src/long.mjs',
+    ranges: [{ startLine: 1, endLine: 300 }],
+  });
+  assert.match(oversized, /Read policy/);
+  assert.match(oversized, /limit 240/);
+  assert.match(oversized, /AST Outline/);
+
+  const bounded = await orchestrator.dispatch('inspect', {
+    path: 'src/long.mjs',
+    ranges: [{ startLine: 1, endLine: 120 }],
+  });
+  assert.match(bounded, /line1 = 1/);
+  assert.doesNotMatch(bounded, /Read policy/);
+
+  for (const [startLine, endLine] of [[1, 20], [21, 40], [41, 60], [61, 80], [81, 100], [101, 120], [121, 140]]) {
+    const allowed = await orchestrator.dispatch('inspect', {
+      path: 'src/long.mjs',
+      ranges: [{ startLine, endLine }],
+    });
+    assert.match(allowed, new RegExp(`line${startLine}`));
+    assert.doesNotMatch(allowed, /directed expansion slots/);
+  }
+
+  const budgeted = await orchestrator.dispatch('inspect', {
+    path: 'src/long.mjs',
+    ranges: [{ startLine: 141, endLine: 160 }],
+  });
+  assert.match(budgeted, /Read policy/);
+  assert.match(budgeted, /8 directed expansion slots/);
+  assert.match(budgeted, /AST Outline/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('large cold workspaces focus explore on intent paths beyond the bootstrap slice', async () => {
+  const projectRoot = makeTempProject();
+  fs.mkdirSync(path.join(projectRoot, 'aaa-noise'), { recursive: true });
+  for (let index = 0; index < 80; index += 1) {
+    fs.writeFileSync(
+      path.join(projectRoot, 'aaa-noise', `noise-${String(index).padStart(3, '0')}.mjs`),
+      `export const noise${index} = ${index};\n`
+    );
+  }
+  const targetPath = 'packages/process-host/src/runner.mjs';
+  const managerPath = 'packages/process-host/src/process-manager.mjs';
+  fs.mkdirSync(path.dirname(path.join(projectRoot, targetPath)), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, targetPath),
+    [
+      'export function runCommand(command) {',
+      "  return { command, marker: 'PACKAGES_PROCESS_HOST_RUNNER_MARKER' };",
+      '}',
+      '',
+    ].join('\n')
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, managerPath),
+    [
+      'export class ProcessManager {',
+      "  getLogs() { return 'PACKAGES_PROCESS_HOST_MANAGER_MARKER'; }",
+      '}',
+      '',
+    ].join('\n')
+  );
+
+  const coldIndex = new ModuleIndex({ projectRoot });
+  coldIndex.bootstrapIfEmpty();
+  assert.equal(coldIndex.entries.has(targetPath), false, 'target must begin outside the 60-file bootstrap slice');
+
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  const result = await orchestrator.dispatch('pipeline', {
+    parallel: [{
+      tool: 'explore',
+      args: {
+        intent: 'implement bounded log retention for process host runCommand ProcessManager getLogs',
+      },
+    }],
+  });
+
+  assert.match(result, new RegExp(targetPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(result, /PACKAGES_PROCESS_HOST_RUNNER_MARKER/);
+  assert.match(result, /PACKAGES_PROCESS_HOST_MANAGER_MARKER/);
+  assert.match(result, /read_complete=true/);
+  assert.match(result, /decision=complete/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('explore stays partial when focused implementation source cannot be inlined', async () => {
+  const projectRoot = makeTempProject();
+  const targetPath = 'packages/process-host/src/runner.mjs';
+  fs.mkdirSync(path.dirname(path.join(projectRoot, targetPath)), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, targetPath),
+    [
+      'export function runCommand() {',
+      `  return '${'x'.repeat(9000)}';`,
+      '}',
+      '',
+    ].join('\n')
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'large-context.mjs'),
+    `export const context = '${'y'.repeat(9000)}';\n`
+  );
+
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  const result = await orchestrator.dispatch('pipeline', {
+    parallel: [{
+      tool: 'explore',
+      args: {
+        intent: 'implement bounded log retention for process host runCommand',
+      },
+    }],
+  });
+
+  assert.match(result, /read_complete=false/);
+  assert.match(result, /decision=partial/);
+  assert.doesNotMatch(result, /decision=complete/);
+  assert.match(result, /missing=packages\/process-host\/src\/runner\.mjs/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('inspect symbol without a path locates a global declaration', async () => {
+  const projectRoot = makeTempProject();
+  const targetPath = 'packages/process-host/src/process-manager.mjs';
+  fs.mkdirSync(path.dirname(path.join(projectRoot, targetPath)), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, targetPath),
+    [
+      'export class ProcessManager {',
+      "  getLogs() { return 'GLOBAL_SYMBOL_BODY_MARKER'; }",
+      '}',
+      '',
+    ].join('\n')
+  );
+
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  const result = await orchestrator.dispatch('inspect', {
+    symbol: 'ProcessManager',
+    full: true,
+    maxChars: 10000,
+  });
+
+  assert.match(result, /packages\/process-host\/src\/process-manager\.mjs/);
+  assert.match(result, /GLOBAL_SYMBOL_BODY_MARKER/);
+  assert.doesNotMatch(result, /No target path provided/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
 });
 
 test('profile set accepts dotted values and does not persist transport projectRoot', async () => {
@@ -463,21 +911,22 @@ test('change dry run previews edits without writing, touching the session, or ve
   );
 });
 
-test('change without edits warns that architecture was not applied', async () => {
+test('change without edits binds architecture in the same call', async () => {
   const projectRoot = makeTempProject();
   const service = fakeService();
   const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
 
-  const preview = await orchestrator.dispatch('change', {
+  const result = await orchestrator.dispatch('change', {
     architecture: {
-      blocks: [{ id: 'block-api', title: 'API boundary', kind: 'service', paths: ['src/math.mjs'] }],
+      blocks: [{ id: 'block-api', title: 'API boundary', kind: 'service', paths: ['src/api.mjs'] }],
       chains: [{ id: 'chain-api', title: 'API flow', memberIds: ['block-api'] }],
     },
   });
 
-  assert.match(preview, /# ContextOS change \(propose\)/);
-  assert.match(preview, /NOT applied/);
-  assert.match(preview, /bind_auto/);
+  assert.match(result, /# ContextOS change/);
+  assert.match(result, /1 curated Block\(s\) bound/);
+  assert.match(result, /1 Chain\(s\) composed/);
+  assert.doesNotMatch(result, /NOT applied/);
   assert.equal(
     service.calls.some((call) => call.capability === 'code' && ['create', 'edit'].includes(call.args.action)),
     false
@@ -493,11 +942,15 @@ test('ship on an unverified reopened session points at receipt re-attachment', a
     intent: 'unverified edit',
     edits: [{ path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 0;' }],
   });
-  const shipped = await orchestrator.dispatch('ship', { summary: 'close without verify' });
+  const blocked = await orchestrator.dispatch('ship', { summary: 'close without verify' });
 
-  assert.match(shipped, /Passing receipts: 0/);
-  assert.match(shipped, /No passing receipt in this session/);
-  assert.match(shipped, /receiptIds/);
+  assert.match(blocked, /BLOCKED \(verification evidence\)/);
+  assert.match(blocked, /session remains open/);
+  assert.equal(orchestrator.store.current?.status, 'open');
+  const verified = await orchestrator.dispatch('verify', { commands: ['node -e "0"'] });
+  assert.match(verified, /Verdict: PASS/);
+  const shipped = await orchestrator.dispatch('ship', { summary: 'close after verify' });
+  assert.match(shipped, /Passing receipts: 1/);
 });
 
 test('failed receipts are superseded only by the same command and remain explicit in ship output', async () => {
@@ -512,7 +965,12 @@ test('failed receipts are superseded only by the same command and remain explici
   const unresolved = await orchestrator.dispatch('verify', { command: 'node --test unrelated.test.mjs' });
   assert.match(unresolved, /Verdict: FAIL/);
 
-  const shipped = await orchestrator.dispatch('ship', { summary: 'retry verification semantics' });
+  const blocked = await orchestrator.dispatch('ship', { summary: 'retry verification semantics' });
+  assert.match(blocked, /BLOCKED \(verification evidence\)/);
+  const shipped = await orchestrator.dispatch('ship', {
+    summary: 'retry verification semantics',
+    allowUnverified: true,
+  });
   assert.match(shipped, /Superseded failures: 1/);
   assert.match(shipped, /Unresolved failures: 1/);
   assert.match(shipped, /\[SUPERSEDED\]/);
@@ -789,6 +1247,35 @@ test('inspect supports ranges, budget: full, and truncation hints', async () => 
   service.close();
 });
 
+test('inspect accepts the compact batch alias and keeps nested full reads unclipped', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const batch = await orchestrator.dispatch('inspect', {
+    inspect: [{
+      path: 'src/math.mjs',
+      ranges: [{ startLine: 1, endLine: 2 }],
+    }],
+  });
+  assert.match(batch, /export function add/);
+  assert.doesNotMatch(batch, /No target path provided/);
+
+  const tailMarker = 'const nestedFullTailMarker = true;\n';
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'large-full.mjs'),
+    `${'// filler\n'.repeat(1500)}${tailMarker}`
+  );
+  const full = await orchestrator.dispatch('inspect', {
+    inspect: { path: 'src/large-full.mjs', full: true },
+    maxChars: 40000,
+  });
+  assert.ok(full.length > 20000, 'nested full request must not be clipped by the outer inspect budget');
+  assert.match(full, /nestedFullTailMarker/);
+
+  service.close();
+});
+
 test('inspect expands directory and glob targets without EISDIR failures', async () => {
   const projectRoot = makeTempProject();
   const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
@@ -816,6 +1303,43 @@ test('explore accepts directory focus paths without indexing directories as file
   });
   assert.doesNotMatch(result, /EISDIR/);
   assert.match(result, /src\/math\.mjs/);
+
+  service.close();
+});
+
+test('explore cold-start search slices large focus files by identifier', async () => {
+  const projectRoot = makeTempProject();
+  const runnerFiller = Array.from(
+    { length: 900 },
+    (_, index) => `export function runnerHelper${index}() { return ${index}; }`
+  ).join('\n');
+  const serviceFiller = Array.from(
+    { length: 900 },
+    (_, index) => `  serviceHelper${index}() { return ${index}; }`
+  ).join('\n');
+  fs.mkdirSync(path.join(projectRoot, 'packages', 'process-host', 'src'), { recursive: true });
+  fs.mkdirSync(path.join(projectRoot, 'packages', 'mcp', 'src'), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, 'packages', 'process-host', 'src', 'runner.mjs'),
+    `${runnerFiller}\nexport async function runCommand() { return 'runner'; }\n`
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'packages', 'mcp', 'src', 'v2-service.mjs'),
+    `export class ContextOSV2Service {\n${serviceFiller}\n  runCommand() { return 'service'; }\n}\n`
+  );
+  fs.rmSync(path.join(projectRoot, '.contextos', 'module-index.json'), { force: true });
+
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  const result = await orchestrator.dispatch('explore', {
+    intent: 'process-host runCommand ProcessManager log persistence',
+    maxChars: 18000,
+  });
+
+  assert.match(result, /read_complete=true/);
+  assert.match(result, /Focused symbol slices/);
+  assert.match(result, /packages\/process-host\/src\/runner\.mjs/);
+  assert.match(result, /packages\/mcp\/src\/v2-service\.mjs/);
 
   service.close();
 });
@@ -865,6 +1389,36 @@ test('architecture payload preflight prevents partial Block writes when a Chain 
   assert.equal(fs.readFileSync(path.join(projectRoot, 'src', 'math.mjs'), 'utf8'), 'export const PI = 3.14;\n');
   const blocks = await service.block({ action: 'list', includeRefs: true, limit: 100, offset: 0, format: 'json' });
   assert.equal(blocks.items.some((block) => block.id === 'block-math'), false);
+
+  service.close();
+});
+
+test('architecture payload preflight rejects duplicate path owners before writing Blocks', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('change', {
+    path: 'src/math.mjs',
+    content: 'export const PI = 3.14;\n',
+    overwrite: true,
+    architecture: {
+      blocks: [
+        { id: 'block-math-a', title: 'Math A', kind: 'service', paths: ['src/math.mjs'] },
+        { id: 'block-math-b', title: 'Math B', kind: 'service', paths: ['src/math.mjs'] },
+      ],
+      chains: [{
+        id: 'chain-math',
+        title: 'Math flow',
+        memberIds: ['block-math-a', 'block-math-b'],
+      }],
+    },
+  });
+
+  assert.match(result, /Architecture update needs attention/);
+  assert.match(result, /assigned to multiple Blocks/);
+  const blocks = await service.block({ action: 'list', includeRefs: true, limit: 100, offset: 0, format: 'json' });
+  assert.equal(blocks.items.some((block) => block.id === 'block-math-a' || block.id === 'block-math-b'), false);
 
   service.close();
 });
@@ -1034,6 +1588,258 @@ test('path-only inspect returns whole small files and outlines large ones', asyn
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('inspect shallow mode returns outlines instead of multi-file bodies', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('inspect', { path: 'src', budget: 'shallow' });
+  assert.match(result, /AST Outline/);
+  assert.doesNotMatch(result, /return a \+ b/);
+  assert.match(result, /body not inlined/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('inspect full on multiple paths or a directory stays an outline batch', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'large.mjs'),
+    `export const payload = '${'x'.repeat(6000)}';\nexport function helper() { return 1; }\n`
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('inspect', {
+    paths: ['src/math.mjs', 'src/large.mjs'],
+    budget: 'full',
+  });
+  assert.match(result, /AST Outline/);
+  assert.match(result, /body not inlined/);
+  assert.doesNotMatch(result, /return a \+ b/);
+  assert.doesNotMatch(result, /x{200}/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('inspect full on a bounded small-file batch inlines the batch once', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'math.mjs'),
+    'export function add(a, b) { return `${a + b} BODY_MARKER`; }\n'
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'helper.mjs'),
+    'export function helper() { return `HELPER_MARKER`; }\n'
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('inspect', {
+    paths: ['src/math.mjs', 'src/helper.mjs'],
+    budget: 'full',
+  });
+  assert.match(result, /BODY_MARKER/);
+  assert.match(result, /HELPER_MARKER/);
+  assert.doesNotMatch(result, /body not inlined/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('inspect accepts per-path ranges for a bounded batch', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'math.mjs'),
+    'export function add(a, b) { return `${a + b} BODY_MARKER`; }\n'
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'helper.mjs'),
+    'export function helper() { return `HELPER_MARKER`; }\n'
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('inspect', {
+    paths: ['src/math.mjs', 'src/helper.mjs'],
+    ranges: [
+      { path: 'src/math.mjs', ranges: [[1, 2]] },
+      { path: 'src/helper.mjs', ranges: [[1, 1]] },
+    ],
+  });
+  assert.match(result, /BODY_MARKER/);
+  assert.match(result, /HELPER_MARKER/);
+  assert.doesNotMatch(result, /AST Outline/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('work search accepts paths aliases without falling back to native rg', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  const searchArgs = [];
+  const originalCode = service.code.bind(service);
+  service.code = async (args) => {
+    if (args.action === 'search') searchArgs.push(args);
+    return originalCode(args);
+  };
+
+  const result = await orchestrator.dispatch('work', {
+    search: { query: 'add', paths: ['src'] },
+  });
+  assert.match(result, /work=OK/);
+  assert.ok(searchArgs.some((args) => args.root === 'src'), 'work.search.paths must map to the search root');
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('explore returns direct imports, callers, and test entries with the map', async () => {
+  const projectRoot = makeTempProject();
+  fs.mkdirSync(path.join(projectRoot, 'test'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, 'src', 'helper.mjs'), 'export function helper() { return 1; }\n');
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'math.mjs'),
+    'import { helper } from "./helper.mjs";\nexport function add(a, b) { return helper(a, b); }\n'
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'test', 'math.test.mjs'),
+    'import assert from "node:assert/strict";\nimport { add } from "../src/math.mjs";\nassert.equal(add(1, 2), 3);\n'
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('explore', { intent: 'update add behavior', paths: ['src/math.mjs'] });
+  assert.match(result, /Direct imports:.*src\/helper\.mjs/);
+  assert.match(result, /Test entry:.*test\/math\.test\.mjs/);
+  assert.match(result, /Test contract.*assert\./);
+  assert.match(result, /Critical slices/);
+  assert.match(result, /export function add/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('explore inlines every bounded implementation stub in the first decision package', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'batch.mjs'),
+    'export function replayBatch() {\n  throw new Error("batch replay is not implemented");\n}\n'
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'audit.mjs'),
+    'export function buildAuditReport() {\n  throw new Error("audit report is not implemented");\n}\n'
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('explore', {
+    intent: 'implement batch replay and audit report',
+    paths: ['src/batch.mjs', 'src/audit.mjs'],
+  });
+  assert.match(result, /src\/batch\.mjs.*implementation stub/);
+  assert.match(result, /src\/audit\.mjs.*implementation stub/);
+  assert.match(result, /Exact implementation stubs are already included/);
+  assert.match(result, /do not dump source with native/);
+  assert.match(result, /throw new Error\("batch replay is not implemented"\)/);
+  assert.match(result, /throw new Error\("audit report is not implemented"\)/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('pipeline summary keeps bounded explore implementation stubs in the first decision package', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'batch.mjs'),
+    'export function replayBatch() {\n  throw new Error("batch replay is not implemented");\n}\n'
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'audit.mjs'),
+    'export function buildAuditReport() {\n  throw new Error("audit report is not implemented");\n}\n'
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'context.mjs'),
+    `export const contextMarker = '${'x'.repeat(700)}CONTEXT_TAIL';\n`
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    parallel: [{
+      tool: 'explore',
+      args: {
+        intent: 'implement batch replay and audit report',
+        paths: ['src/batch.mjs', 'src/audit.mjs', 'src/context.mjs'],
+      },
+    }],
+  });
+  assert.match(result, /batch replay is not implemented/);
+  assert.match(result, /audit report is not implemented/);
+  assert.match(result, /CONTEXT_TAIL/);
+  assert.doesNotMatch(result, /action output truncated/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('pipeline explore decision package inlines a small workspace without duplicate fences', async () => {
+  const projectRoot = makeTempProject();
+  fs.mkdirSync(path.join(projectRoot, 'test'), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'batch.mjs'),
+    `export function replayBatch() {\n  throw new Error('batch replay is not implemented');\n}\n// BATCH_TAIL_MARKER\n`
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'src', 'context.mjs'),
+    `export const context = '${'x'.repeat(5200)}CONTEXT_TAIL_MARKER';\n`
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'test', 'batch.test.mjs'),
+    `import assert from 'node:assert/strict';\nimport { replayBatch } from '../src/batch.mjs';\nassert.equal(typeof replayBatch, 'function');\n// TEST_TAIL_MARKER\n`
+  );
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    parallel: [
+      { tool: 'explore', args: { intent: 'implement batch replay', paths: ['src/batch.mjs'] } },
+      { verify: 'node --check src/batch.mjs' },
+    ],
+  });
+
+  assert.match(result, /BATCH_TAIL_MARKER/);
+  assert.match(result, /CONTEXT_TAIL_MARKER/);
+  assert.match(result, /TEST_TAIL_MARKER/);
+  assert.match(result, /decision=complete/);
+  assert.match(result, /read_complete=true/);
+  assert.ok(result.length > 4000, `decision package should widen past the generic pipeline budget, got ${result.length}`);
+  assert.doesNotMatch(result, /```(?:mjs|js)\n```(?:mjs|js)/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('inspect explicit maxChars cannot widen past the inspect budget', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(path.join(projectRoot, 'src', 'wide.mjs'), `export const wide = '${'w'.repeat(9000)}';\n`);
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('inspect', {
+    path: 'src/wide.mjs',
+    maxChars: 30000,
+  });
+  assert.ok(result.length <= RESPONSE_BUDGETS.inspect + 120, `inspect widened to ${result.length} chars`);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
 test('work batches search, inspect, create, and verify into one host transaction', async () => {
   const dir = makeTempProject();
   const service = new ContextOSV2Service({ projectRoot: dir, projectId: 'fixture' });
@@ -1075,13 +1881,16 @@ test('pipeline bounds parallel fan-out while preserving every action result', as
     }
   };
   const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+  for (let index = 0; index < 5; index += 1) {
+    fs.writeFileSync(path.join(dir, 'src', `concurrent-${index}.mjs`), `export const value${index} = ${index};\n`);
+  }
 
   const result = await orchestrator.dispatch('pipeline', {
     parallelConcurrency: 2,
     steps: [{
       parallel: Array.from({ length: 5 }, (_, index) => ({
         action: 'inspect',
-        args: { path: 'src/math.mjs', symbol: `add-${index}` },
+        args: { path: `src/concurrent-${index}.mjs` },
       })),
     }],
   });
@@ -1156,6 +1965,30 @@ test('change strips ContextOS inspect metadata headers from edit targets', async
   service.close();
 });
 
+test('pipeline forces multi-inspect batches to outline even when full is requested', async () => {
+  const projectRoot = makeTempProject();
+  fs.writeFileSync(path.join(projectRoot, 'src', 'large.txt'), `BEGIN\n${'x'.repeat(12000)}\nEND_MARKER\n`);
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    budget: 'full',
+    maxChars: 50000,
+    steps: [{
+      parallel: [
+        { inspect: { path: 'src/large.txt', ranges: [{ startLine: 1, endLine: 20 }], budget: 'full' } },
+        { inspect: { path: 'src/math.mjs', budget: 'full' } },
+      ],
+    }],
+  });
+  assert.match(result, /AST Outline/);
+  assert.ok(!result.includes('END_MARKER'), 'multi-inspect Pipeline must not inline the raw body');
+  assert.ok(result.length < 5000, `multi-inspect Pipeline must stay bounded, got ${result.length}`);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
 test('pipeline preserves nested action output budgets', async () => {
   const dir = makeTempProject();
   const largeFile = path.join(dir, 'src', 'large.txt');
@@ -1227,7 +2060,7 @@ test('pipeline receipt mode returns only status references and stays bounded', a
   });
 
   assert.match(result, /mode=receipt/);
-  assert.match(result, /inspect=OK ok/);
+  assert.match(result, /inspect=OK/);
   assert.ok(!result.includes('END_MARKER'));
   assert.ok(result.length < 1000, `receipt mode should stay compact, got ${result.length}`);
   service.close();
@@ -1438,8 +2271,8 @@ test('ops supports micro capability and verify triggers micro triage on failure'
     const microUsage = fs.readFileSync(microUsagePath, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
     assert.ok(microUsage.some((entry) => entry.preset === 'triage' && entry.hostSessionId === orchestrator.store.current.id));
 
-    // 5. Large failure evidence auto-routes to Micro even without autoTriage:true,
-    // and mode:"full" remains an output mode instead of a process action.
+    // 5. Full failure output is an explicit raw-evidence mode, so it must not
+    // spend a redundant Micro provider request summarizing the same log.
     service.runCommand = async (args) => ({
       id: 'receipt-large-failure',
       command: args.command,
@@ -1454,8 +2287,8 @@ test('ops supports micro capability and verify triggers micro triage on failure'
       mode: 'full',
     });
     assert.match(verifyLarge, /Verdict: FAIL/);
-    assert.match(verifyLarge, /👉 Micro-Triage \(工程诊断小脑\)/);
-    assert.match(verifyLarge, /出错文件: test\.mjs/);
+    assert.match(verifyLarge, /failure evidence failure evidence/);
+    assert.doesNotMatch(verifyLarge, /👉 Micro-Triage \(工程诊断小脑\)/);
 
     // 6. Default (non-full) failure output keeps the diagnosis and a locator
     // instead of re-sending the raw log Micro already summarized.
@@ -1482,6 +2315,41 @@ test('ops supports micro capability and verify triggers micro triage on failure'
     assert.equal(typeof ctx.caps.inspect, 'function');
   } finally {
     await new Promise((resolve) => mockServer.close(resolve));
+  }
+});
+
+test('default verify triage skips obvious implementation stubs', async () => {
+  const projectRoot = makeTempProject();
+  fs.mkdirSync(path.join(projectRoot, '.contextos'), { recursive: true });
+  fs.writeFileSync(
+    path.join(projectRoot, '.contextos', 'profile.json'),
+    JSON.stringify({ micro: { url: 'http://127.0.0.1:1', model: 'mock-model' } }, null, 2),
+  );
+  const service = fakeService();
+  let microCalls = 0;
+  service.micro = async () => {
+    microCalls += 1;
+    return { ok: true, content: 'unexpected triage' };
+  };
+  service.runCommand = async (args) => ({
+    id: 'receipt-obvious-stub',
+    command: args.command,
+    cwd: null,
+    exitCode: 1,
+    durationMs: 3,
+    errors: [],
+    diagnostics: [`Error: batch replay is not implemented\n${'failure evidence '.repeat(180)}`],
+    summary: 'failed',
+  });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  try {
+    const result = await orchestrator.dispatch('verify', { commands: ['npm test'] });
+    assert.match(result, /Verdict: FAIL/);
+    assert.match(result, /not implemented/);
+    assert.doesNotMatch(result, /Micro-Triage/);
+    assert.equal(microCalls, 0, 'an explicit not-implemented root cause must not spend a Micro request');
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
 

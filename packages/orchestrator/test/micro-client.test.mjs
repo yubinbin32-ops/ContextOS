@@ -102,6 +102,9 @@ test('resolveMicroInput accepts artifact references without inlining caller cont
     const result = resolveMicroInput({ inputArtifact: 'art-input' }, { projectRoot: root });
     assert.equal(result.source, 'artifact');
     assert.equal(result.input, 'artifact payload');
+    const alias = resolveMicroInput({ artifactId: 'art-input' }, { projectRoot: root });
+    assert.equal(alias.source, 'artifact');
+    assert.equal(alias.input, 'artifact payload');
     assert.throws(
       () => resolveMicroInput({ inputRef: '../escape' }, { projectRoot: root }),
       /inside the project root/

@@ -5,12 +5,12 @@ import { SessionStore, workspaceFingerprint } from './session-store.mjs';
 import { Tracer } from './tracer.mjs';
 import { createCapabilities } from './capabilities.mjs';
 import { globalProfilePath, loadProfile, saveProfile } from './profile.mjs';
-import { changePipeline, explorePipeline, inspectPipeline, pipelinePipeline, shipPipeline, verifyPipeline, workPipeline } from './pipelines.mjs';
+import { changePipeline, explorePipeline, extractFailureEvidence, inspectPipeline, pipelinePipeline, shipPipeline, verifyPipeline, workPipeline } from './pipelines.mjs';
 import { MICRO_PRESETS, runMicroTask, runMicroTasksParallel } from './micro-client.mjs';
 import { microPreloadReceipt, runMicroPreload } from './micro-preload.mjs';
 import { buildMicroHistory, closeMicroSession, completeMicroTurn, createMicroSession, deleteMicroSession, failMicroTurn, listMicroSessions, microSessionSnapshot, readMicroSession, startMicroTurn } from './micro-session.mjs';
 import { evictArtifacts, listArtifacts, readArtifact, statArtifact, storeArtifact } from './artifact-store.mjs';
-import { compactJson, finalizeResponse, projectMicroResult, summarizeMicroUsage } from './response-budget.mjs';
+import { RESPONSE_BUDGETS, clipText, compactJson, finalizeResponse, projectMicroResult, summarizeMicroUsage } from './response-budget.mjs';
 import { parseRolloutTelemetry } from './rollout-telemetry.mjs';
 import { compareTelemetry, recordTelemetry, summarizeTelemetry } from './telemetry.mjs';
 import { auditRouting } from './routing-audit.mjs';
@@ -35,6 +35,7 @@ export const OPS_CAPABILITIES = [
   'task',
   'block',
   'chain',
+  'architecture',
   'code',
   'run_command',
   'process',
@@ -113,7 +114,11 @@ function shouldEnableMicroOS(args = {}) {
   const toolsEnabled = args.invocation?.tools?.enabled;
   if (explicit === false || toolsEnabled === false) return false;
   if (explicit === true || toolsEnabled === true) return true;
-  const hasAttachedEvidence = args.pipeline != null || args.preload != null;
+  const hasAttachedEvidence = args.pipeline != null
+    || args.preload != null
+    || args.inputArtifact != null
+    || args.artifactId != null
+    || args.artifact != null;
   if (hasAttachedEvidence) return false;
   const maxRequests = args.invocation?.provider?.maxRequests ?? args.maxRequests;
   return maxRequests == null || Number(maxRequests) >= 2;
@@ -170,6 +175,29 @@ function isUnproductiveDiscovery(tool, input = {}) {
     && !['create', 'update', 'complete', 'delete', 'archive', 'start', 'finish', 'close', 'set', 'bind', 'bind_auto', 'compose', 'link', 'unlink', 'evict', 'edit', 'changeset'].includes(String(input.action || ''));
 }
 
+function decisionPackageMetadata(tool, result) {
+  const text = typeof result === 'string' ? result : '';
+  if (!text) return null;
+  const pipelineStatus = text.match(/^(?:pipeline|work)=([A-Z]+)/m)?.[1] || null;
+  const readComplete = text.match(/\bread_complete=(true|false)\b/)?.[1] || null;
+  if (pipelineStatus) {
+    const artifactId = text.match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1] || null;
+    const receiptId = text.match(/\breceipt(?:\s+|[=:~-])([A-Za-z0-9._-]+)/i)?.[1] || null;
+    return {
+      status: readComplete === 'false' ? 'partial' : pipelineStatus,
+      artifactId,
+      receiptId,
+    };
+  }
+  if (tool === 'explore'
+    && /##\s+Where to look/i.test(text)
+    && /##\s+Critical slices/i.test(text)) {
+    const artifactId = text.match(/\bartifact\s*[=:]\s*([A-Za-z0-9._-]+)/i)?.[1] || null;
+    return { status: 'OK', artifactId, receiptId: null };
+  }
+  return null;
+}
+
 // Discovery calls are never refused: a caller that asked for new information
 // cannot tell "nothing matched" from "the guard ate the result", and native
 // tools never refuse a read. Over-limit sessions get a bounded convergence
@@ -184,6 +212,34 @@ function convergenceHint(projectRoot, sessionId, tool, input, semanticReceipt) {
   const count = recentUnproductiveCalls(projectRoot, sessionId);
   if (count < CONVERGENCE_DISCOVERY_LIMIT) return null;
   return `${count} discovery/diagnostic calls since the last mutation or verification; converge with one bounded work/change/verify or a dependent pipeline. Result returned in full.`;
+}
+
+function shouldAutoVerifyExplore(input = {}) {
+  if (input.autoVerify === false || input.verify === false) return false;
+  const intent = String(input.intent || '');
+  const repairIntent = /(?:修复|失败|报错|缺陷|故障|诊断|fix(?:ing)?|fail(?:ing|ure)?|error|bug|debug|repair|diagnos(?:e|is|tic)|regression)/i.test(intent);
+  const implementationIntent = /(?:实现|开发|修改|重构|implement(?:ation|ing|s)?|develop(?:ment|ing)?|feature|refactor(?:ing)?|modify|modification|update|build)/i.test(intent);
+  const verificationIntent = /(?:测试|验证|校验|test(?:s|ing)?|spec(?:s)?|verify|verification|failure(?:s)?|error(?:s)?)/i.test(intent);
+  return repairIntent || (implementationIntent && verificationIntent);
+}
+
+function exploreBaselineCommands(input = {}, profile = {}) {
+  if (input.verify === true) {
+    return Array.isArray(profile.verify) ? profile.verify.filter(Boolean) : [];
+  }
+  if (typeof input.verify === 'string') return input.verify.trim() ? [input.verify.trim()] : [];
+  if (Array.isArray(input.verify)) {
+    return input.verify.filter((command) => typeof command === 'string' && command.trim());
+  }
+  if (input.verify && typeof input.verify === 'object') {
+    if (Array.isArray(input.verify.commands)) {
+      return input.verify.commands.filter((command) => typeof command === 'string' && command.trim());
+    }
+    if (typeof input.verify.command === 'string' && input.verify.command.trim()) {
+      return [input.verify.command.trim()];
+    }
+  }
+  return [];
 }
 
 function semanticOpsMemoSpec(input = {}) {
@@ -247,6 +303,35 @@ function compactPipelineArtifactPreview(projectRoot, artifact, maxChars = 1400) 
   } catch (_) {
     return null;
   }
+}
+
+function readReceiptLogExcerpt(projectRoot, receiptId, { maxChars = 1800 } = {}) {
+  const id = String(receiptId || '').trim();
+  if (!/^[A-Za-z0-9._-]+$/.test(id)) {
+    return { id, error: 'invalid-receipt-id' };
+  }
+  const filePath = path.join(projectRoot, '.contextos', 'logs', `${id}.log`);
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    return { id, error: 'not-found' };
+  }
+  const content = fs.readFileSync(filePath, 'utf8');
+  const evidence = extractFailureEvidence(content);
+  const selected = [evidence.test, evidence.cause, evidence.stackFrame]
+    .filter(Boolean)
+    .filter((line, index, values) => values.indexOf(line) === index);
+  const fallback = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  const body = (selected.length ? selected : fallback).join('\n');
+  const text = clipText(body, maxChars, { label: 'receipt excerpt' });
+  return {
+    id,
+    text,
+    fullChars: content.length,
+    truncated: text.length < body.length,
+  };
 }
 
 function applyDottedProfileValues(target, values) {
@@ -548,6 +633,45 @@ function isJsonValueString(value) {
   }
 }
 
+function nestedResponseRequests(input = {}) {
+  const values = [];
+  const visit = (value) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value !== 'object') return;
+    values.push(value);
+    if (value.args && typeof value.args === 'object') visit(value.args);
+    for (const key of ['inspect', 'verify', 'change', 'ship', 'ops', 'run', 'search']) {
+      if (value[key] && typeof value[key] === 'object') visit(value[key]);
+    }
+  };
+  visit(input);
+  return values;
+}
+
+function nestedFullRequest(values = []) {
+  return values.some((value) => (
+    value.full === true
+    || value.fullFile === true
+    || value.budget === 'full'
+    || value.mode === 'full'
+  ));
+}
+
+function nestedMaxChars(values = []) {
+  let maxChars = null;
+  for (const value of values) {
+    const candidate = Number(value.maxChars);
+    if (Number.isFinite(candidate) && candidate > 0) {
+      maxChars = maxChars === null ? candidate : Math.max(maxChars, candidate);
+    }
+  }
+  return maxChars;
+}
+
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (!value || typeof value !== 'object') return value;
@@ -796,7 +920,7 @@ export class Orchestrator {
     }
   }
 
-  _context(tracer, { turnMemo = new Map() } = {}) {
+  _context(tracer, { turnMemo = new Map(), internal = false } = {}) {
     return {
       service: this.service,
       caps: createCapabilities({ service: this.service, projectRoot: this.projectRoot, projectId: this.projectId }),
@@ -807,6 +931,7 @@ export class Orchestrator {
       projectId: this.projectId,
       sessionId: tracer?.sessionId || null,
       turnMemo,
+      internal,
       // Pipeline children are internal work. Only the top-level host request
       // restores deferred Micro results, once, after its own action completes.
       orchestrator: {
@@ -842,7 +967,7 @@ export class Orchestrator {
       if (turnMemo instanceof Map) turnMemo.clear();
     }
     const tracer = new Tracer({ projectRoot: this.projectRoot, sessionId: seed.id });
-    const ctx = this._context(tracer, { turnMemo: turnMemo || new Map() });
+    const ctx = this._context(tracer, { turnMemo: turnMemo || new Map(), internal });
     if (this.healed) tracer.step('heal', this.healed);
     const startedAt = Date.now();
     const routingHint = internal ? null : this._routingHint(seed.id, tool, input);
@@ -879,11 +1004,31 @@ export class Orchestrator {
         result = semanticOpsReuse(semanticMemo, semanticReceipt);
       } else {
         switch (tool) {
-          case 'explore':
-            result = exploreReceipt
-              ? renderExploreReuse(exploreReceipt, input.format)
-              : await explorePipeline(ctx, input);
+          case 'explore': {
+            const baselineCommands = exploreBaselineCommands(input, ctx.profile);
+            const inferredCommands = baselineCommands.length
+              ? baselineCommands
+              : (Array.isArray(ctx.profile?.verify) ? ctx.profile.verify.filter(Boolean) : []);
+            if (!internal
+              && !exploreReceipt
+              && shouldAutoVerifyExplore(input)
+              && inferredCommands.length) {
+              result = await pipelinePipeline(ctx, {
+                steps: [
+                  { tool: 'explore', args: { ...input, autoVerify: false } },
+                  { tool: 'verify', args: { commands: inferredCommands } },
+                ],
+                continueOnFailure: true,
+                decisionPackage: true,
+                maxChars: RESPONSE_BUDGETS.pipelineDecision,
+              });
+            } else {
+              result = exploreReceipt
+                ? renderExploreReuse(exploreReceipt, input.format)
+                : await explorePipeline(ctx, input);
+            }
             break;
+          }
           case 'inspect':
             result = await inspectPipeline(ctx, input);
             break;
@@ -948,18 +1093,46 @@ export class Orchestrator {
         attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
         hostHint
       );
+      let decisionPackage = null;
+      if (!internal) {
+        decisionPackage = decisionPackageMetadata(tool, result);
+        if (decisionPackage && typeof this.store.markDecisionPackage === 'function') {
+          this.store.markDecisionPackage({
+            tool,
+            status: decisionPackage.status,
+            artifactId: decisionPackage.artifactId,
+            receiptId: decisionPackage.receiptId,
+          });
+        }
+      }
       const responseArgs = input.args && typeof input.args === 'object' && !Array.isArray(input.args)
         ? input.args
         : {};
+      const nestedRequests = nestedResponseRequests(input);
+      const requestedMaxChars = nestedMaxChars(nestedRequests);
       const responseMaxChars = typeof input.maxChars === 'number'
         ? input.maxChars
-        : (typeof responseArgs.maxChars === 'number' ? responseArgs.maxChars : undefined);
+        : (typeof responseArgs.maxChars === 'number'
+            ? responseArgs.maxChars
+            : (requestedMaxChars ?? undefined));
+      const decisionPackageBudget = decisionPackage && responseMaxChars === undefined
+        ? RESPONSE_BUDGETS.pipelineDecision
+        : responseMaxChars;
+      const nestedFull = nestedFullRequest(nestedRequests);
+      const allowWiden = input.allowWiden === true
+        || responseArgs.allowWiden === true
+        || nestedFull
+        || Boolean(decisionPackage);
       const full = input.full === true || input.budget === 'full' || input.mode === 'full'
-        || responseArgs.full === true || responseArgs.budget === 'full';
+        || responseArgs.full === true || responseArgs.budget === 'full'
+        || nestedFull
+        || (tool === 'ops' && responseArgs.format === 'json')
+        || isJsonValueString(response);
       const finalized = finalizeResponse(response, {
         projectRoot: this.projectRoot,
         tool,
-        maxChars: responseMaxChars,
+        maxChars: decisionPackageBudget,
+        allowWiden,
         full,
         routingHint: isJsonValueString(response) ? null : hostHint,
       });
@@ -1023,7 +1196,17 @@ export class Orchestrator {
   }
 
   async _ops(ctx, input = {}) {
-    const { capability, action, args: nestedArgs = {}, projectRoot: _projectRoot, ...directArgs } = input;
+    let { capability, action, args: nestedArgs = {}, projectRoot: _projectRoot, ...directArgs } = input;
+    // Accept the natural `ops({ action: "artifact.read", ... })` spelling as
+    // well as the canonical capability/action pair. This avoids a full host
+    // round spent discovering that a dot was the only schema difference.
+    if (!capability && typeof action === 'string' && action.includes('.')) {
+      const separator = action.indexOf('.');
+      capability = action.slice(0, separator);
+      action = action.slice(separator + 1);
+    }
+    if (capability === 'block' && ['get', 'inspect', 'show'].includes(action)) action = 'open';
+    if (capability === 'chain' && ['get', 'inspect', 'show'].includes(action)) action = 'open';
     const args = {
       ...directArgs,
       ...(nestedArgs && typeof nestedArgs === 'object' && !Array.isArray(nestedArgs) ? nestedArgs : {}),
@@ -1038,6 +1221,63 @@ export class Orchestrator {
         return render(await service.plan({ ...args, action }));
       case 'task':
         return render(await service.task({ ...args, action }));
+      case 'architecture': {
+        const architectureAction = action || 'list';
+        if (architectureAction === 'bind_auto') {
+          return render(await service.block({ ...args, action: 'bind_auto' }));
+        }
+        if (architectureAction === 'compose') {
+          return render(await service.chain({ ...args, action: 'compose' }));
+        }
+        if (architectureAction === 'open' || architectureAction === 'get' || architectureAction === 'inspect') {
+          const id = args.id || args.blockId || args.chainId;
+          if (!id) throw new Error("architecture.open requires 'id' (or blockId/chainId).");
+          try {
+            return render({ block: await service.block({ action: 'open', id, format: 'json' }) });
+          } catch (blockError) {
+            try {
+              return render({ chain: await service.chain({ action: 'open', id, format: 'json' }) });
+            } catch (_) {
+              throw new Error(`Architecture entity '${id}' was not found as a Block or Chain.`);
+            }
+          }
+        }
+        if (architectureAction === 'search') {
+          const query = String(args.query || '').toLowerCase();
+          const [blocks, chains] = await Promise.all([
+            service.block({ action: 'search', query: args.query || '', format: 'json' }),
+            service.chain({ action: 'list', format: 'json', includeMembers: false, limit: 25 }),
+          ]);
+          const chainItems = Array.isArray(chains?.items) ? chains.items : [];
+          return render({
+            blocks: Array.isArray(blocks) ? blocks : [],
+            chains: chainItems.filter((chain) => (
+              String(chain.id || '').toLowerCase().includes(query)
+              || String(chain.title || '').toLowerCase().includes(query)
+            )),
+          });
+        }
+        if (architectureAction === 'list' || architectureAction === 'summary') {
+          const [blocks, chains] = await Promise.all([
+            service.block({
+              action: 'list',
+              format: 'json',
+              includeRefs: args.includeRefs === true,
+              limit: args.limit,
+              offset: args.offset,
+            }),
+            service.chain({
+              action: 'list',
+              format: 'json',
+              includeMembers: args.includeMembers === true,
+              limit: args.limit,
+              offset: args.offset,
+            }),
+          ]);
+          return render({ blocks, chains });
+        }
+        throw new Error(`Unknown architecture action '${architectureAction}'. Available: list, open, search, bind_auto, compose`);
+      }
       case 'block':
         return render(await service.block({ ...args, action }));
       case 'chain':
@@ -1092,6 +1332,48 @@ export class Orchestrator {
         if (action === 'resume') {
           const session = store.current;
           if (!session) return render({ status: 'no-open-session' });
+          const artifactId = args.artifact || args.artifactId || null;
+          const receiptId = args.receipt || args.receiptId || null;
+          if (artifactId || receiptId) {
+            const diagnostic = {
+              id: session.id,
+              status: session.status,
+            };
+            if (artifactId) {
+              const artifactStat = statArtifact(this.projectRoot, artifactId);
+              if (artifactStat?.kind === 'response:pipeline') {
+                const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 900);
+                diagnostic.artifact = {
+                  id: artifactId,
+                  kind: artifactStat.kind,
+                  preview: preview || 'Pipeline artifact is not previewable.',
+                  truncated: true,
+                  fullChars: artifactStat.contentChars || 0,
+                  rawReplay: false,
+                  hint: 'Resume returns a bounded decision preview. Use ops artifact.read full:true only for an intentional audit.',
+                };
+              } else {
+                const artifact = readArtifact(this.projectRoot, artifactId, {
+                  maxChars: Math.min(Math.max(Number(args.maxChars) || 1800, 200), 4000),
+                });
+                diagnostic.artifact = artifact
+                  ? {
+                      id: artifact.id,
+                      kind: artifact.kind || null,
+                      text: artifact.text,
+                      truncated: artifact.truncated,
+                      fullChars: artifact.contentChars || artifact.text.length,
+                    }
+                  : { id: artifactId, error: 'not-found' };
+              }
+            }
+            if (receiptId) {
+              diagnostic.receipt = readReceiptLogExcerpt(this.projectRoot, receiptId, {
+                maxChars: Math.min(Math.max(Number(args.maxChars) || 1800, 200), 4000),
+              });
+            }
+            return render(diagnostic);
+          }
           return render({
             id: session.id,
             status: session.status,
@@ -1117,33 +1399,41 @@ export class Orchestrator {
       }
       case 'artifact': {
         if (action === 'read') {
-          // A diagnostic artifact can itself contain a Pipeline or prior
-          // response artifact. Keep nested replay tiny by default; the model
-          // can request `full:true` for a deliberate source/log slice.
-          const fullArtifact = args.full === true || args.budget === 'full';
+          const artifactId = args.id || args.artifactId || args.artifact;
+          const artifactStat = statArtifact(this.projectRoot, artifactId);
+          const pipelineArtifact = artifactStat?.kind === 'response:pipeline';
+          const auditReason = typeof args.auditReason === 'string' ? args.auditReason.trim() : '';
+          const rawPipelineRequested = args.allowRawPipeline === true;
+          const allowRawPipeline = rawPipelineRequested && auditReason.length > 0;
+          // Pipeline artifacts are decision packages, not source files. A
+          // `full:true` request on one must not replay the raw transcript that
+          // the bounded pipeline response was designed to replace.
+          const fullArtifact = (args.full === true || args.budget === 'full')
+            && (!pipelineArtifact || allowRawPipeline);
           const requestedArtifactChars = Number(args.maxChars);
           const artifactReadArgs = {
             ...args,
+            id: artifactId,
             maxChars: fullArtifact
               ? Infinity
               : (Number.isFinite(requestedArtifactChars) && requestedArtifactChars > 0
                   ? Math.min(Math.floor(requestedArtifactChars), 1400)
                   : 1400),
           };
-          const artifact = readArtifact(this.projectRoot, args.id, artifactReadArgs);
-          if (!artifact) return `# ContextOS artifact\n- Not found: \`${args.id || '(missing)'}\``;
-          const artifactStat = statArtifact(this.projectRoot, args.id);
-          const canPreviewPipeline = !fullArtifact
+          const artifact = readArtifact(this.projectRoot, artifactId, artifactReadArgs);
+          if (!artifact) return `# ContextOS artifact\n- Not found: \`${artifactId || '(missing)'}\``;
+          const canPreviewPipeline = pipelineArtifact
+            && !allowRawPipeline
             && !args.grep
             && args.startLine === undefined
-            && args.endLine === undefined
-            && artifactStat?.kind === 'response:pipeline';
+            && args.endLine === undefined;
           if (canPreviewPipeline) {
             const preview = compactPipelineArtifactPreview(this.projectRoot, artifactStat, 1400);
             if (preview) {
               return [
                 `# ContextOS artifact ${artifact.id}`,
-                `- Pipeline preview; fullChars=${artifactStat.contentChars}; use \`full:true\` for the raw artifact.`,
+                `- Pipeline preview (decision package); fullChars=${artifactStat.contentChars}.`,
+                '- Next: use `change`/`work` directly; raw Pipeline replay requires `allowRawPipeline:true` plus a non-empty `auditReason` for an intentional audit.',
                 '',
                 '```text',
                 preview,

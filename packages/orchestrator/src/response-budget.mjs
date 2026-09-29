@@ -32,21 +32,28 @@ function preloadCharCount(preload) {
 }
 
 export const RESPONSE_BUDGETS = Object.freeze({
-  default: 4000,
-  explore: 3000,
+  default: 2000,
+  explore: 3200,
   // Source bodies stay in artifacts; default host output should be a slice,
   // not an accidental file dump. Callers can request full:true explicitly.
-  inspect: 8000,
-  work: 8000,
-  change: 2500,
-  verify: 5000,
-  ship: 1600,
-  pipeline: 2800,
+  inspect: 2400,
+  work: 2400,
+  change: 2000,
+  verify: 2400,
+  ship: 1200,
+  // The first pipeline is the decision package: it must carry all bounded
+  // stubs and locators needed for the next mutation. Clipping it to the same
+  // size as a single read forces the host into a second discovery loop.
+  // Generic pipelines stay compact. A pipeline containing explore is a
+  // decision package and opts into pipelineDecision below so its bounded
+  // source/test contract is not clipped by the outer response finalizer.
+  pipeline: 4000,
+  pipelineDecision: 24000,
   // Advanced capability calls are diagnostic plumbing, not a second transcript.
   // Keep the default small; callers that truly need the body can opt into
   // full:true and fetch the artifact explicitly.
-  ops: 2000,
-  micro: 1600,
+  ops: 1200,
+  micro: 1200,
 });
 
 export function estimateTokens(value) {
@@ -95,6 +102,7 @@ export function finalizeResponse(text, {
   tool = 'default',
   maxChars,
   full = false,
+  allowWiden = false,
   forceArtifact = false,
   artifactContent = null,
   receiptId = null,
@@ -108,7 +116,9 @@ export function finalizeResponse(text, {
   // Custom budgets may tighten a response, but widening it requires the explicit
   // full escape hatch. This prevents an optimistic caller from turning an OS
   // call into an unbounded transcript copy.
-  const budget = full ? Infinity : Math.min(requested, toolBudget);
+  const budget = full
+    ? Infinity
+    : (allowWiden ? requested : Math.min(requested, toolBudget));
   const hintText = routingHint && budget !== Infinity
     ? `\n[ContextOS route hint: ${String(routingHint).slice(0, 180)}]`
     : '';
@@ -495,7 +505,21 @@ function graphToolCalls(result) {
       const isMutation = (call.name === 'block' && args.action === 'bind_auto')
         || (call.name === 'chain' && args.action === 'compose');
       return { call, args, output, isMutation, error: call.error || output?.error || (call.ok === false ? 'OS reported failure' : null) };
-    })
+    });
+}
+
+function failedToolCall(result) {
+  const call = (Array.isArray(result?.toolCalls) ? result.toolCalls : []).find((entry) => {
+    let output = {};
+    try { output = typeof entry.preview === 'string' ? JSON.parse(entry.preview) : (entry.preview || {}); } catch (_) {}
+    return entry?.error || output?.error || entry?.ok === false;
+  });
+  if (!call) return null;
+  let args = {};
+  let output = {};
+  try { args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : (call.arguments || {}); } catch (_) {}
+  try { output = typeof call.preview === 'string' ? JSON.parse(call.preview) : (call.preview || {}); } catch (_) {}
+  return { call, args, error: call.error || output?.error || 'OS reported failure' };
 }
 
 export function projectMicroResult(result, { projectRoot, hostSessionId = null, full = false, maxChars = RESPONSE_BUDGETS.micro } = {}) {
@@ -542,29 +566,19 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
   const content = evidenceAnswer || (result.content || '');
 
   if (requestedDelivery === 'errors-only') {
-    const graphCalls = graphToolCalls(result);
-    const failedCall = graphCalls.find((entry) => entry.error || entry.output?.ok === false);
+    const failedCall = failedToolCall(result);
     if (failedCall) {
+      const action = failedCall.args && typeof failedCall.args === 'object'
+        ? failedCall.args.action
+        : null;
+      const label = action ? `${failedCall.call.name} ${action}` : failedCall.call.name;
       const projected = {
         ok: false,
         delivery: 'error',
         receiptId,
         artifactId,
         ...projectProviderUsage(result),
-        error: clipText(`Micro ${failedCall.call.name} ${failedCall.args.action} failed: ${failedCall.error || 'OS reported failure'}`, maxChars, { label: 'micro error' }),
-      };
-      recordOutcome('error', false);
-      return projected;
-    }
-    if (!graphCalls.some((entry) => entry.isMutation)) {
-      const projected = {
-        ok: false,
-        delivery: 'error',
-        receiptId,
-        artifactId,
-        ...projectProviderUsage(result),
-        error: `errors-only requires at least one curated Block bind or additive Chain composition.${artifactId ? ` Micro result is available in artifact ${artifactId}.` : ' No result artifact could be persisted.'}`,
-        ...(!artifactId && content ? { content: clipText(content, maxChars, { label: 'micro answer', keepTail: false }) } : {}),
+        error: clipText(`Micro ${label} failed: ${failedCall.error || 'OS reported failure'}`, maxChars, { label: 'micro error' }),
       };
       recordOutcome('error', false);
       return projected;

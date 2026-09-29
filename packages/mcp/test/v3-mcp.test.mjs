@@ -86,6 +86,22 @@ test("V3 default surface exposes one compact transport tool", async () => {
   assert.ok(!work.isError, workText);
   assert.match(workText, /work=OK/);
   assert.match(fixture.read("src/lean-work.mjs"), /value = 1/);
+
+  const siblingFields = await client.callTool({
+    name: "contextos",
+    arguments: {
+      action: "change",
+      intent: "edit and verify in one compact call",
+      edits: [{ path: "src/lean-work.mjs", target: "value = 1", replacement: "value = 2" }],
+      verify: ["node --check src/lean-work.mjs"],
+      projectRoot: fixture.root,
+    },
+  });
+  const siblingText = (siblingFields.content || []).map((chunk) => chunk.text ?? "").join("\n");
+  assert.ok(!siblingFields.isError, siblingText);
+  assert.match(siblingText, /ContextOS change/);
+  assert.match(siblingText, /done: verified/i);
+  assert.match(fixture.read("src/lean-work.mjs"), /value = 2/);
   await client.close();
   fixture.cleanup();
 });
@@ -735,4 +751,62 @@ test("V3 inspect resolves globs and pipeline accepts receipt plus run aliases", 
 
   await client.close();
   fixture.cleanup();
+});
+
+test("V3 compact surface exposes architecture aliases and bounded command logs", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-architecture-contract" });
+  const server = createV3Server();
+  const client = new Client({ name: "contextos-v3-architecture-contract", version: packageVersion });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+  const call = async (args) => {
+    const result = await client.callTool({ name: "contextos", arguments: { ...args, projectRoot: fixture.root } });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!result.isError, text);
+    return text;
+  };
+
+  try {
+    const changed = await call({
+      action: "change",
+      args: {
+        architecture: {
+          blocks: [{ id: "block-math-api", title: "Math API", kind: "api", paths: ["src/math.mjs"] }],
+          chains: [{ id: "chain-math-flow", title: "Math flow", memberIds: ["block-math-api"] }],
+        },
+      },
+    });
+    assert.match(changed, /1 curated Block\(s\) bound/);
+    assert.match(changed, /1 Chain\(s\) composed/);
+
+    const architecture = JSON.parse(await call({
+      action: "ops",
+      args: { capability: "architecture", action: "list", args: { format: "json" } },
+    }));
+    assert.ok(Array.isArray(architecture.blocks?.items));
+    assert.ok(Array.isArray(architecture.chains?.items));
+
+    const opened = JSON.parse(await call({
+      action: "ops",
+      args: { capability: "block", action: "get", args: { id: "block-math-api", format: "json" } },
+    }));
+    assert.equal(opened.id, "block-math-api");
+
+    const receipt = JSON.parse(await call({
+      action: "ops",
+      args: {
+        capability: "run_command",
+        args: {
+          command: "node -e \"process.stdout.write('x'.repeat(200))\"",
+          maxLogBytes: 64,
+        },
+      },
+    }));
+    assert.equal(receipt.logBytes, 64);
+    assert.equal(receipt.logTruncated, true);
+  } finally {
+    await client.close();
+    fixture.cleanup();
+  }
 });

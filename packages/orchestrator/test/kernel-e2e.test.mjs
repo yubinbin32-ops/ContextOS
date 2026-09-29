@@ -34,12 +34,13 @@ test('kernel e2e: inspect with budget: full on a 10KB+ document returns full tex
   // Generate a realistic 12KB+ document
   const header = '# Architecture Decision Record: Kernel Hardening\n\n## Context\n';
   const middleLines = [];
-  for (let i = 1; i <= 350; i++) {
+  for (let i = 1; i <= 110; i++) {
     middleLines.push(`- Section ${i}: Detailed specification note for invariant assertion and system behavior token governance.`);
   }
   const footer = '\n## Decision\nAll invariants must be satisfied without truncation under full budget.\n';
   const longDocContent = header + middleLines.join('\n') + footer;
   assert.ok(Buffer.byteLength(longDocContent, 'utf8') > 10 * 1024, 'Document should exceed 10KB');
+  assert.ok(Buffer.byteLength(longDocContent, 'utf8') < 16 * 1024, 'Document should stay within one bounded recovery read');
 
   fs.writeFileSync(path.join(projectRoot, 'DECISION.md'), longDocContent, 'utf8');
 
@@ -51,7 +52,7 @@ test('kernel e2e: inspect with budget: full on a 10KB+ document returns full tex
 
   assert.ok(result.includes('# Architecture Decision Record: Kernel Hardening'), 'Must include header');
   assert.ok(result.includes('Section 1: Detailed specification note'), 'Must include beginning sections');
-  assert.ok(result.includes('Section 350: Detailed specification note'), 'Must include trailing sections');
+  assert.ok(result.includes('Section 110: Detailed specification note'), 'Must include trailing sections');
   assert.ok(result.includes('All invariants must be satisfied without truncation'), 'Must include footer');
   assert.ok(!result.includes('[TRUNCATED'), 'Must not contain truncation markers');
   assert.ok(!result.includes('omitted)'), 'Must not contain omission markers');

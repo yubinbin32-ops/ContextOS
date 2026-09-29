@@ -37,8 +37,25 @@ const editSpec = z.object({
   fullFile: z.boolean().optional().describe('When true, replaces entire file content with replacement.'),
 });
 
-const architectureSpec = z.record(z.any()).describe(
-  'Optional curated Block/Chain ownership to apply in the same mutation or closure; derived mod-* module identities are rejected.'
+const architectureSpec = z.object({
+  blocks: z.array(z.object({
+    id: z.string(),
+    title: z.string().optional(),
+    kind: z.string().optional(),
+    paths: z.array(z.string()).optional(),
+    path: z.string().optional(),
+    summary: z.string().optional(),
+    symbols: z.array(z.string()).optional(),
+  }).passthrough()).optional(),
+  chains: z.array(z.object({
+    id: z.string(),
+    title: z.string().optional(),
+    memberIds: z.array(z.string()).optional(),
+    member_ids: z.array(z.string()).optional(),
+    replaceMembers: z.boolean().optional(),
+  }).passthrough()).optional(),
+}).passthrough().describe(
+  'Curated Block/Chain ownership applied atomically with the same mutation or closure; mod-* ModuleIndex identities are rejected.'
 );
 
 /**
@@ -74,7 +91,7 @@ export function createV3Server({
     server.registerTool(
       'contextos',
       {
-        description: 'Repository execution for one decision per call. Use action=work for {search,inspect,create,edits,verify}; use pipeline for known parallel or dependent batches directly; inspect/change/verify cover focused operations; micro handles bulky evidence and delivery. Returns compact receipts and locators; expand with full/maxChars only when needed.',
+        description: 'Repository execution: one host decision per call. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; micro=bulky evidence/delivery. Use pipeline for known batches directly. ops only for capabilities: os_context,plan,task,block,chain,architecture,code,run_command,process,knowledge,session,system,profile,micro,artifact,telemetry; block.get/inspect alias open. Expand only with full/maxChars.',
         inputSchema: {
           action: z.enum(['explore', 'inspect', 'change', 'verify', 'ship', 'pipeline', 'work', 'micro', 'resume', 'ops']),
           args: z.record(z.any()).optional(),
@@ -84,12 +101,36 @@ export function createV3Server({
           full: z.boolean().optional().describe('Request the full, unbounded payload.'),
           budget: z.string().optional().describe('Named output budget, e.g. "full".'),
           maxChars: z.number().optional().describe('Explicit output character cap.'),
+          intent: z.string().optional(),
+          verify: z.union([z.string(), z.array(z.string()), z.record(z.any())]).optional(),
+          commands: z.array(z.string()).optional(),
+          architecture: architectureSpec.optional(),
+          edits: z.array(z.record(z.any())).optional(),
+          create: z.array(z.record(z.any())).optional(),
+          delete: z.array(z.record(z.any())).optional(),
+          ship: z.union([z.boolean(), z.string(), z.record(z.any())]).optional(),
+          maxLogBytes: z.number().optional().describe('Bound persisted command/process log bytes; keeps the tail and marks truncation.'),
+          search: z.union([z.string(), z.record(z.any()), z.array(z.any())]).optional(),
+          inspect: z.union([z.string(), z.record(z.any()), z.array(z.any())]).optional(),
+          path: z.string().optional(),
+          paths: z.array(z.string()).optional(),
+          symbol: z.string().optional(),
+          query: z.string().optional(),
+          ranges: z.array(z.record(z.any())).optional(),
+          startLine: z.number().optional(),
+          endLine: z.number().optional(),
         },
       },
       async (input) => {
         const args = { ...(input.args || {}) };
-        for (const control of ['refresh', 'dedupeReads', 'full', 'budget', 'maxChars']) {
+        for (const control of ['refresh', 'dedupeReads', 'full', 'budget', 'maxChars', 'maxLogBytes']) {
           if (input[control] !== undefined) args[control] = input[control];
+        }
+        for (const field of [
+          'intent', 'verify', 'commands', 'architecture', 'edits', 'create', 'delete', 'ship',
+          'search', 'inspect', 'path', 'paths', 'symbol', 'query', 'ranges', 'startLine', 'endLine',
+        ]) {
+          if (input[field] !== undefined) args[field] = input[field];
         }
         const payload = { ...args, projectRoot: input.projectRoot };
         if (input.action === 'micro') {
@@ -178,6 +219,7 @@ export function createV3Server({
           z.object({ command: z.string().optional(), commands: z.array(z.string()).optional(), timeoutMs: z.number().optional() }),
         ]).optional().describe('Run verification immediately after writing files in the same turn.'),
         autoRevert: z.boolean().optional().describe('true to automatically revert files on disk if verification fails.'),
+        maxLogBytes: z.number().optional().describe('Bound persisted verification log bytes; keeps the tail and marks truncation.'),
         architecture: architectureSpec.optional(),
         dryRun: z.boolean().optional().describe('true to preview edits without writing files, touching the session, or running verification.'),
         paths: z.array(z.string()).optional().describe('Used for a read-only preview when no edits are supplied.'),
@@ -204,6 +246,7 @@ export function createV3Server({
         grep: z.string().optional(),
         cwd: z.string().optional(),
         maxChars: z.number().optional(),
+        maxLogBytes: z.number().optional().describe('Bound persisted verification log bytes; keeps the tail and marks truncation.'),
         timeoutMs: z.number().optional(),
         autoTriage: z.boolean().optional().describe('Opt in to micro diagnosis on failure.'),
         full: z.boolean().optional().describe('Return full output instead of artifact-backed summaries.'),
@@ -239,7 +282,7 @@ export function createV3Server({
   server.registerTool(
     'ops',
     {
-      description: 'Advanced capability passthrough. Reads reuse compact semantic receipts and stay bounded; use refresh:true or full:true only when a fresh/full diagnostic is required.',
+      description: 'Advanced capability passthrough. Reads reuse compact semantic receipts and stay bounded; use refresh:true or full:true only when a fresh/full diagnostic is required. Capabilities: os_context, plan, task, block, chain, architecture, code, run_command, process, knowledge, session, system, profile, micro, artifact, telemetry.',
       inputSchema: {
         capability: z.enum(OPS_CAPABILITIES),
         action: z.string().optional(),

@@ -850,3 +850,264 @@ budget: { maxActions, maxFailures, maxDurationMs }
 ```
 
 OS 只匹配宿主写下的条件并执行对应分支，不自行判断修法。分支成功时状态为 `RECOVERED`；预算耗尽时熔断为 `HALTED` 并返回具体预算字段。这样“验证失败则 triage”可以发生在同一次宿主决策里，而不是等宿主看到失败后再发起一轮。
+
+## 30. R7：决策对齐后的首轮真实复验
+
+R7 使用三个独立 worktree、三个独立 `CODEX_HOME`、三个独立 MCP 进程，统一模型 `deepseek-v4.1-flash`、`xhigh`、权限与提示。任务是在一个真实 job-system fixture 中修复批量回放、幂等冲突、任务终态、重试次数和审计事件顺序，并运行完整 `npm test`。三组都修改了生产代码，均通过完整测试，未修改测试文件。
+
+### 30.1 原始指标
+
+| 指标 | A7 native | B7 OS | C7 OS+Micro |
+| --- | ---: | ---: | ---: |
+| 总请求数 | 20 | 14 | 18 |
+| 工具调用数 | 41 | 13 | 17 |
+| ContextOS 调用 | 0 | 10 | 12 |
+| Micro 调用 | 0 | 0 | 0 |
+| 输入 token | 628,293 | 326,315 | 374,845 |
+| 缓存输入 token | 583,296 | 292,096 | 344,704 |
+| 输出 token | 23,336 | 11,097 | 10,408 |
+| reasoning token | 11,079 | 6,690 | 5,974 |
+| 总 token | 651,629 | 337,412 | 385,253 |
+| 峰值输入 token | 48,297 | 35,003 | 29,939 |
+| 机械轮 | 4 | 8 | 12 |
+| 决策轮 | 6 | 5 | 5 |
+| 最大批宽 | 4 | 1 | 1 |
+| 上下文增长 | 39,531 | 25,499 | 20,435 |
+
+相对 A7，B7 总 token 降低 48.2%、请求降低 30%、峰值输入降低 27.5%；C7 总 token 降低 40.9%、请求降低 10%、峰值输入降低 38.0%。
+
+### 30.2 有效性与测试污染
+
+C7 第一次 `ship` 被阻止，原因不是生产代码缺架构归属，而是测试准备时把 smoke 状态放进了工作区：`.contextos-smoke/*` 被架构门控当成源文件。宿主因此重试 `ship`，多出一个请求。该请求不计入 C 方案的有效负收益。
+
+按逐轮证据移除该重复收尾请求后，C7 约为 17 请求、346K 输入、355K 总 token，仍比 B7 多 3 个请求、约 6% 输入。剩余差异来自宿主行为，而不是 Micro provider：
+
+- 两次宿主 `update_plan` 纯簿记轮，B7 为 0；
+- 一次 ContextOS 读取未与前一决策完全合并；
+- C7 使用原生 `apply_patch` 后另起 `verify`，没有采用 `change(edits + verify)`。
+
+因此，这一轮不能证明 Micro 有收益，也不能证明 Micro 有负收益：C7 全程 `micro=0`，原始测试输出已被 OS triage 压到预算内，没有出现必须进入宿主的大块证据。Micro 的真实收益必须由后续专门制造大日志/堆栈且要求宿主诊断的任务验证。
+
+### 30.3 R7 发现的工具缺陷
+
+1. `contextos-ab-metrics.mjs` 只认旧的 `response_item/event_msg`，对当前 `codex exec --json` 的 `item.completed/turn.completed` 输出全部计为零。现在传入 exec stream 时可用 `--codex-home <dir>` 自动解析对应 `sessions/**/rollout-*.jsonl`；找不到逐请求 usage 会直接失败，不再返回假零值。
+2. `.contextos-smoke`、`.contextos.tmp` 等保留状态路径会污染工作区指纹和架构门控。现在统一按 `.contextos`、`.contextos-*`、`.contextos.*` 忽略。
+3. Skill 已明确禁止宿主在 OS 生命周期内额外调用 `update_plan`，并禁止把非平凡编辑拆成原生 `apply_patch` 后另起 verify。
+
+### 30.4 下一轮验收条件
+
+R8 必须从干净 worktree 开始，smoke 目录只能放在工作区外。除 R7 的功能任务外，另加一个“需要处理超过 2,000 字符原始失败证据”的任务，检查 C 是否按需触发 Micro，且把 Micro provider token 计入总成本。门槛仍是：机械轮 ≤4、最大批宽 ≥2、决策轮不高于 native，并且功能正确性全部通过。
+
+## 31. R12：安装门禁缺失导致无效样本
+
+R12 的三组都只配置了 marketplace/可见性，没有执行 `codex plugin add`。正式 rollout 中 ContextOS MCP 调用为 0，因此它实际上是三个 native 会话，不能用于收益判断。
+
+结论：
+
+- marketplace 配置只让插件可发现，不等于插件已安装并启用。
+- 有效测试必须在启动前检查 `codex plugin list --json` 中存在 installed + enabled 的 ContextOS 插件。
+- 修复：`scripts/install-plugin.mjs` 现在把安装状态作为硬门禁，新增 `npm run plugin:install:check`，并支持 `CODEX_HOME` 与 `CONTEXTOS_HOME` 隔离目录。
+
+## 32. R13：有效 A/B/C 与仍未达到目标的证据
+
+R13 使用同一提交、同一任务文本、同一模型和 full-access 条件。B/C 均实际调用 ContextOS 8 次，bundle 哈希一致。
+
+| 指标 | A Native | B OS | C OS+Micro |
+| --- | ---: | ---: | ---: |
+| 请求 | 15 | 12 | 13 |
+| 工具调用 | 23 | 14 | 12 |
+| ContextOS 调用 | 0 | 8 | 8 |
+| Micro 调用 | 0 | 0 | 2 |
+| 主模型输入 token | 298,229 | 210,192 | 240,907 |
+| 缓存输入 token | 272,000 | 187,136 | 218,496 |
+| 主模型输出 token | 14,969 | 11,566 | 8,425 |
+| reasoning token | 8,896 | 7,432 | 5,089 |
+| 主模型总 token | 313,198 | 221,758 | 249,332 |
+| 正式任务 Micro token | 0 | 0 | 755 |
+| 合计总 token | 313,198 | 221,758 | 250,087 |
+| 峰值输入 token | 30,094 | 29,376 | 28,851 |
+| 决策轮 | 6 | 4 | 2 |
+| 机械轮 | 6 | 7 | 10 |
+
+相对 A：
+
+- B 主模型总 token 下降约 29.2%。
+- C 主模型总 token 下降约 20.2%；把正式 Micro provider token 计入后仍下降约 20.2%。
+- C 的 `micro-usage.jsonl` 还包含一次预检调用 95 token；正式成本必须排除它，预检也不能复用正式 `.contextos` session。
+
+三组都完成生产代码修改并通过 3/3 测试，测试文件未被修改。
+
+## 33. R13 核心调用链与根因
+
+C 的调用链：
+
+1. 首次 `pipeline(explore + verify)` 返回 `PARTIAL`，已经包含 Micro-Triage、根因、首个栈帧和 receipt。
+2. 宿主仍调用 `resume` 两次：第一次请求 `full:true` 和 `maxChars:30000`，第二次只传 artifact。
+3. 宿主随后执行 3 次 `inspect`，其中包括 `budget:"shallow"` 扫描 `src`/`test`，以及显式 `maxChars:30000` 的多文件读取。
+4. 宿主穿插原生 `rg --files` 和 `rg -n`。
+5. 最后 `change(edits + verify + architecture + ship)` 一次成功，`npm test` PASS。
+
+根因不是 Micro provider，而是决策包在宿主侧不可用：
+
+- Pipeline receipt 模式把每个成功动作压成 `ok`，丢掉 `Where to look` 和 `Next`，导致宿主必须 resume。
+- `inspect` 的显式 `maxChars` 可以绕过默认预算，把多文件正文重新灌回主上下文。
+- `budget:"shallow"` 对小于阈值的文件仍返回完整正文，没有兑现“outline only”。
+- `CONTEXTOS_HOME` 没有进入插件 `env_vars`，预检读取了全局 profile，隔离证据不成立。
+- 当前会话仍可能运行旧 bundle，源码已修的 convergence hint 在安装版本中仍表现为 gate；因此任何修复都必须 rebuild + reinstall + 新会话复验。
+- R13 的两次 Micro 都是 summarizer-only，`toolRounds=0`，没有证明执行型 Micro 的收益。
+
+## 34. R13 后已落地的修复
+
+1. `pipeline` receipt 模式从 180 字符状态码升级为 700 字符决策包，保留 `Next`、`Where to look`、失败根因、receipt 和下一步动作；总 response budget 仍限制在 1200 字符。
+2. Pipeline failure projection 增加 `next=change(...)`，让宿主看到根因后直接进入修改，不再为了恢复证据额外 resume。
+3. `resume` 遇到 `response:pipeline` 时不再 raw replay，只返回有界 preview；原始 artifact 读取必须显式走 `ops artifact.read full:true`。
+4. `inspect` 的 `budget:"shallow"` 强制返回 AST Outline；显式 `maxChars` 不能再突破 inspect 默认上限。
+5. 默认响应预算整体收紧：inspect/work 2400，pipeline 1600，ops 1200，micro 1200；显式 `format:"json"` 的 ops 仍保持完整 JSON 契约。
+6. `.mcp.json` 的 `env_vars` 增加 `CONTEXTOS_HOME`；system doctor 同时显示 ContextOS Home 与 global profile 路径。
+7. `scripts/install-plugin.mjs` 增加安装门禁、`CODEX_HOME`/`CONTEXTOS_HOME` 隔离支持与 `--check` 模式；未安装时拒绝继续同步旧 bundle。
+8. Skill 明确禁止通过 shell 重读自身、禁止在已有 Pipeline 决策包后 resume，并给出执行型 Micro 的显式参数与验收字段。
+
+## 35. R14 启动条件
+
+R14 必须满足：
+
+1. A/B/C 各自使用全新 worktree、`CODEX_HOME`、`CONTEXTOS_HOME` 和 MCP 进程。
+2. 每个 OS 组先执行 `npm run plugin:install:check`，并确认插件 installed + enabled。
+3. 预检使用独立 `CONTEXTOS_HOME`，正式 rollout 不得继承预检 session、delivery 或 Micro usage。
+4. B/C bundle 哈希必须与仓库 build 一致；C 的 Micro provider probe 返回 `PONG`。
+5. C 额外执行一次执行型 Micro probe：`withOS:true`、`invocation.tools.enabled:true`、`allowCommands:true`、`provider.maxRequests >= 3`，要求 `toolRounds >= 2`、`toolCalls >= 1`，并单独记录 provider token。
+6. 首个 Pipeline 返回决策包后，宿主不得调用 `resume`，不得在 OS 调用之间穿插 `rg`/`cat`/`npm test`，编辑与验证必须走同一次 `change`/`work`。
+7. 验收指标仍为正确性、请求数、工具调用、ContextOS/Micro 调用、决策轮、机械轮、峰值输入、主模型 token 和 Micro provider token。
+
+R14 的最低机械轮目标：机械轮 ≤4，最大批宽 ≥2，决策轮不高于 native，总 token 相对 native 至少下降 40%；随后再向多步骤任务 70% 目标迭代。
+
+## 36. R14-C：修复后复测前的架构门禁
+
+R14-C 使用隔离的 `codex-home`、`contextos-home` 和仓库快照，正式 rollout 指标为：18 请求、18 工具调用、11 次 ContextOS、1 次 Micro；主模型总 token 421,377，峰值输入 33,744；Micro 851 token 且 `toolRounds=0`、`summarizer-only`。调用中仍然出现 4 次 `inspect`、3 次只读 `work`、原生 `rg`、原生 `apply_patch`，以及先 `ship` 关闭 session、再 `verify`、再开新 session `ship` 的顺序。
+
+本轮确认的架构缺陷：
+
+1. 多文件或目录 `inspect({ budget:"full", paths:[...] })` 仍可能把批量正文灌回宿主；现在批量请求强制 AST outline/locator，`full` 只对单文件或单符号展开。
+2. `work.search` 不接受模型自然产生的 `{ query, paths:[...] }` / `{ query, path }`，导致搜索结果为空后回退原生 `rg`；现在归一化为搜索根目录，并保留多根目录的有界展开。
+3. `explore` 只给两三个文件 outline，没有直接 import、反向 caller、test entry；现在在同一响应预算内追加一跳依赖闭包与关键符号，使下一次宿主决策可以直接进入编辑。
+4. 无 passing receipt 的 `ship` 会关闭 session，迫使宿主在 verify 后重新开启 session；现在非严格模式也会以 `BLOCKED (verification evidence)` 阻断并保持 session，只有显式 `allowUnverified:true` 才允许未验证关闭。
+5. Skill 已同步 `work.search` 别名、批量 outline、依赖闭包和无证据 ship 规则；插件构建与安装状态必须通过 `npm run plugin:install:check` 后才能做正式 R14 复测。
+
+新增回归覆盖：批量 full inspect 不返回正文、`work.search.paths` 映射、`explore` 返回 direct import/test entry、无证据 ship 阻断与验证后关闭。`npm test`、`npm run plugin:verify`、`npm run plugin:install` 均已通过。
+
+R14-C 的下一轮有效门槛保持为：零 `resume`、机械轮 ≤4、最大批宽 ≥2、OS 内编辑、无多文件 full dump、独立 home 预检、bundle 哈希一致；主指标继续记录请求数、工具调用数、OS/Micro 调用、决策/机械轮、峰值输入、主模型 token 和 Micro provider token。
+
+## 37. R34：工具不可见与决策包不完整的复合负收益
+
+R34 使用三个独立 worktree、三个独立 `CODEX_HOME`、三个独立 `CONTEXTOS_HOME` 和三个独立 MCP 进程，执行同一项真实多文件开发任务。三组生产代码均完成，完整测试均通过，测试文件未修改；因此这轮是有效功能样本，但仍不是有效收益样本。
+
+### 37.1 指标
+
+| 组 | 请求 | 工具 | ContextOS | Micro | 峰值 input | 总 token | 相对 A |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A Native | 32 | 47 | 0 | 0 | 120,866 | 2,459,609 | baseline |
+| B OS | 59 | 76 | 0 | 0 | 134,289 | 5,094,714 | +107.1% |
+| C OS+Micro | 40 | 79 | 17 | 0 | 129,267 | 3,466,406 | +40.9% |
+
+B 和 C 的总 token 都高于 native。C 的 17 次 ContextOS 调用没有把请求数压到 native 以下，反而叠加了恢复读取；Micro 全程为 0，不能声称执行器收益。
+
+### 37.2 根因一：B 没有跨过 `tool_search` 发现门槛
+
+当前 Codex 0.150.1 会把插件提供的 MCP 工具延迟到 `tool_search` 后才加入可见目录。`tool_search_always_defer_mcp_tools` 已进入 `removed` 状态，配置 `false` 或 `--disable` 都不能恢复首轮可见性。R34-B 没有执行这次发现，所以 59 次请求和 76 次工具调用实际上仍是 native 轨迹，只是多了 Skill 与协议噪声。
+
+修复：安装脚本不再声称关闭旧 flag 后工具会首轮可见，而是显式报告 `tool_search` discovery mode；Skill 要求非平凡任务在原生探索前先执行一次 `tool_search`；隔离 A/B/C 的 B/C 启动提示必须包含同一步。隔离 launcher 还必须直接导出 `CONTEXTOS_HOME`，因为插件配置里的 `env` 不会覆盖 MCP 进程环境，`.mcp.json` 只会转发调用方已有的环境变量。
+
+### 37.3 根因二：C 的首包不可直接执行
+
+C 的实际形状是 `1 pipeline + 7 inspect + native fallback`，不是目标形状 `pipeline(explore + inspect + verify) -> change(edits + verify + ship)`。首个决策包 `read_complete=false`，遗漏 `process-manager.mjs`、`v2-service.mjs`、`sanitizer.mjs`；宿主随后用多次单文件读取和原生探索补回，恢复了被 OS 压缩掉的全部上下文成本。
+
+已定位并修复的具体缺陷：
+
+1. 冷启动全局 symbol search 只搜索已有 Block 中的文件；没有 Block 时无法发现 `v2-service.mjs`。现在先做 bounded textual search，再把命中文件加入 symbol search candidate，无命中时回退 workspace source files。
+2. 大文件 focus 只标记 missing，没有按 intent identifier 做 AST symbol 切片。现在对超过 8000 字符的实现文件返回最多 4 个匹配 symbol 的 bounded slice；只有完整切片才计入 `read_complete=true`，超大符号仍保持 partial。
+3. 嵌套 `inspect.full:true` / `budget:"full"` / `maxChars` 被外层 response finalizer 二次截断到 inspect 2400 字符预算。现在嵌套请求会向外层 finalizer 透传 widening，单次 full recovery 的上限为 32000 字符。
+4. compact inspect 对 `inspect: [...]` 数组别名返回 `No target path provided`。现在数组、对象、path、paths、symbol、query、ranges 都能归一化。
+5. `ship` 架构预检在部分 Block 已持久化后才因同路径多 owner 失败。现在所有 path owner / existing Block owner 冲突在写入前预检，失败不留下部分所有权。
+6. Skill 原文件约 10.5KB，B 还用 shell 重读一次，固定协议成本随每轮重放。现在 Skill 压缩到约 4.8KB，明确禁止重读，并给出两次 OS 调用的目标形状。
+
+### 37.4 为什么 OS 会输给 native
+
+这不是“OS 没有搜索功能”这么简单，而是四个层次同时失配：
+
+- **可见性失配**：插件 MCP 工具不在首轮目录里，宿主必须执行一次 `tool_search` 发现；若跳过该步骤，模型自然先走 native。Skill 已加载不等于 MCP 工具已进入当前工具目录。
+- **决策包失配**：OS 返回了 `read_complete=false`，却没有把下一步真正需要的精确切片放入同一次响应，宿主只能再次探索。
+- **生命周期失配**：宿主把 `explore`、`inspect`、`verify`、`change`、`ship` 拆成多轮，OS 的会话和 artifact 没有成为可替代的执行面，反而成为额外重放层。
+- **心智失配**：在 native 工具始终可用且 OS 有额外协议开销时，模型会优先选择熟悉路径；OS 必须通过首轮可见、首包可执行、失败可恢复来主动替代 native，而不是等待模型自发迁移。
+
+OS 不是智能体，只是宿主智能体的外骨骼。外骨骼不能替宿主决定改什么，但必须把宿主已经决定的机械工作一次完成、只返回执行所需的精确信息，并在失败时给出可继续的 bounded recovery。R34 的负收益来自外骨骼没有接上，而不是宿主必须替外骨骼思考。
+
+### 37.5 修复后的验证状态
+
+- `node --test packages/orchestrator/test/orchestrator.test.mjs`：81/81 PASS。
+- `npm test`：369/369 PASS。
+- `npm run plugin:verify`：构建、V3 工具面、命令脱敏、Knowledge/Architecture passthrough PASS。
+- 新增回归覆盖：数组 inspect 别名、嵌套 full 不二次截断、冷启动大文件符号切片、超大符号保持 partial、架构 owner 冲突预检。
+
+### 37.6 R35 有效样本门槛
+
+1. A/B/C 使用全新 worktree、`CODEX_HOME`、`CONTEXTOS_HOME`、marketplace 和 MCP 进程；正式 rollout 不继承预检 session、delivery 或 Micro usage。
+2. B/C 在原生探索前先执行一次 `tool_search`，query 固定为 `ContextOS compact repository tool`；确认随后出现并实际调用 `mcp__contextos__contextos`，而不是再次退化成 native。启动进程必须显式导出各自的 `CONTEXTOS_HOME`。
+3. 首个决策包必须 `read_complete=true`；允许 0 至 2 次 recovery inspect，不允许源码探索类 native `cat`/`sed`/`rg`，不允许重读 Skill。
+4. C 必须在需要超过 2KB 原始失败证据的任务中实际调用 Micro；检查 `providerRequests`、`toolRounds`、`toolCalls`、`executionMode`，并单独记录 Micro provider token。
+5. 指标仍同时报告请求数、工具调用数、ContextOS/Micro 调用、峰值 input、主模型 token、Micro provider token 和总 token。最低门槛先让 B/C 总 token 低于 A，再继续逼近多步骤真实开发任务下降 70%。
+
+## 38. R35：有效但未达目标的 A/B/C 与工具自描述缺陷
+
+R35 使用快照 `836ecded66e20280f5be280bfd297d04fdf7a909`，A/B/C 各自使用独立 worktree、`CODEX_HOME`、`CONTEXTOS_HOME` 和 MCP 进程，执行同一项真实多文件开发任务。B/C 都实际调用了 compact ContextOS；三组功能均完成，B/C 的 `npm test` 由主控在会话结束后独立复跑并退出 0。
+
+### 38.1 指标
+
+| 组 | 请求 | 工具 | ContextOS | Micro | 输入 token | 输出 token | 总 token | 峰值 input | context growth | 失败 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A Native | 44 | 66 | 0 | 0 | 3,882,551 | 49,621 | 3,932,172 | 142,652 | 133,670 | 2 |
+| B OS | 40 | 39 | 30 | 0 | 2,014,985 | 43,211 | 2,058,196 | 82,868 | 72,960 | 0 |
+| C OS+Micro | 46 | 47 | 43 | 0 | 2,241,071 | 41,246 | 2,282,317 | 85,267 | 75,359 | 4 |
+
+相对 A：B 总 token 下降 47.7%，C 下降 41.9%。B 比 C 少 224,121 total token，约 9.8%。B 的 ContextOS actions 为 `pipeline 2, work 4, inspect 9, change 3, ops 9, verify 2, ship 1`；C 为 `pipeline 5, inspect 12, work 7, ops 11, change 5, verify 2, ship 1`。
+
+结论：B 已是当前最好组，但远未达到 70% 目标；C 的负差主要来自更多请求、更多 OS 调用和 MCP contract 失败，不是 Micro provider 成本。
+
+### 38.2 C 的 4 次 MCP 失败
+
+1. 尝试 `ops({ capability: "architecture" })`，但 capability 未公开。
+2. 尝试 `ops({ capability: "block", action: "get" })`，实际只接受 `open`。
+3. 尝试 `block.inspect`，实际只接受 `open`。
+4. 尝试未经 schema 自描述的 `change` edit 和 chain compose 形状，宿主只能靠错误响应重新试。
+
+B 之所以没有这些失败，是因为它用 native `cat/rg/sed` 读取了 Skill、capability 文档和工具实现。这说明 OS 自身文档与错误预检不合格，不能用“B 没失败”掩盖协议缺陷。
+
+### 38.3 已落地修复
+
+1. 合并 B 的 bounded-log 实现：`run_command` 和 `process` 支持 `maxLogBytes`，日志只保留尾部并写入精确 `[contextos:log-truncated]` 标记；receipt 返回 `logBytes` 与 `logTruncated`。
+2. 补上 C 的 MCP 透传：`run_command`、`process`、`verify` 和 `change` 验证路径都能把 `maxLogBytes` 传到 runner/process manager。
+3. compact tool 描述现在自描述 `work/change/inspect` 形状和全部合法 `ops` capabilities；`architecture` 成为公开 capability，`block.get`/`block.inspect` 自动 alias 到 `block.open`。
+4. `change({ architecture })` 现在是合法的 state-only 原子写入，直接复用 `bindChangedArchitecture` 的全量预检和 Block/Chain 写入，不再先返回“NOT applied”再要求第二次 `bind_auto/compose`。
+5. `architecture` capability 提供 `list/open/search/bind_auto/compose` 的 compact 发现路径；Block/Chain 发现不再依赖 shell 读 capability 文档。
+6. Micro `errors-only` 从“只允许 curated Block/Chain 写入”改为通用 fire-and-forget：成功结果写入 artifact/receipt 并从宿主响应隐藏，任何失败的 tool call 仍返回错误。`delivery:"defer"` 继续在后续顶层 OS 调用恢复。
+7. Skill 不再要求 shell 重读 capability reference；明确列出合法 capabilities、state-only architecture、`maxLogBytes` 和通用 `errors-only` 语义。
+
+### 38.4 修复后的本地证据
+
+- `npm test`：374/374 PASS。
+- `npm run plugin:verify`：PASS。
+- `npm run acceptance:micro`：PASS。
+- `npm run dist:smoke`：PASS。
+- `node scripts/micro-executor-acceptance.mjs`：PASS，输出为 `providerRequests=3, toolRounds=2, toolCalls=2, executionMode=executor, totalTokens=101, errorsOnlyDelivery=success-hidden`。该验收不是 A/B/C benchmark，只用于验证 Micro 生命周期和执行型证据；A/B/C 仍必须用真实会话手动运行。
+
+### 38.5 为什么 Micro 轮数没有自动下降
+
+Micro 不是“把脏对话丢出去”就会自动省轮次。当前架构中它只减少宿主可见的中间证据，不减少宿主必须做出的决策；如果宿主没有把足够证据绑定在第一次 Micro 调用上，或者任务本身没有超过 2KB 的证据，Micro 就不会被路由。R35 的 C 组 Micro=0 是因为基线直接通过，按当前 Skill 路由规则确实不应触发；这不等于 Micro 生命周期已验证。R36 必须用专门的 C-only 大失败证据任务检查 `providerRequests/toolRounds/toolCalls/executionMode`，不能把 summarizer-only 或未触发当成收益。
+
+### 38.6 R36 门槛
+
+1. A/B/C 仍使用同快照、同模型、同提示、独立 worktree、独立 home、独立 MCP 进程，不并行运行。
+2. B/C 在正式任务中 MCP schema/discoverability 失败必须为 0；不得用 native `cat/sed/rg` 重读 Skill、capability 或工具实现。
+3. 首包必须让宿主在最多一次 bounded recovery 后进入修改；多文件 inspect 只能返回 outline/locator，不能把多文件正文灌回宿主。
+4. C 必须有一个超过 2KB 的真实失败证据任务，第一次 Micro 调用直接携带 pipeline evidence，并至少出现 `toolRounds>=2`、`toolCalls>=1`、`executionMode!=summarizer-only`；Micro provider token 计入总成本。
+5. 记录总请求、工具调用、ContextOS/Micro 调用、峰值 input、主模型 token、Micro provider token、总 token 和正确性；正确性不通过时收益无效。
+6. 最终目标仍是多步骤真实开发任务总 token 相对 native 下降 ≥70%；未达到时必须给出可复现瓶颈，不能把缺失 usage 或主线程省 token 当作收益。
