@@ -24,7 +24,6 @@ const DECISION_SOURCE_TOTAL_MAX_CHARS = 18000;
 const INSPECT_RECOVERY_MAX_CHARS = 16000;
 const INSPECT_RECOVERY_OUTPUT_MAX_CHARS = 32000;
 const MAX_INSPECT_RANGE_LINES = 240;
-const MAX_DIRECTED_EXPANSIONS = 8;
 const MAX_FOCUS_SEARCH_IDENTIFIERS = 4;
 const MAX_FOCUS_PATH_CANDIDATES = 16;
 const MAX_FOCUS_SLICE_SYMBOLS = 4;
@@ -2223,10 +2222,13 @@ function numberCodeLines(text, fallbackStartLine = 1) {
   const header = headerIndex >= 0 ? lines[headerIndex] : '';
   const match = /\[L(\d+)-L(\d+)\]/.exec(header);
   const startLine = match ? Number(match[1]) : fallbackStartLine;
-  const bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
+  let bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
+  if (bodyStart < lines.length && /^\/\/ \[L\d+-L\d+\]$/.test(lines[bodyStart].trim())) {
+    bodyStart += 1;
+  }
   const closingFence = lines.lastIndexOf('```');
   const bodyEnd = closingFence > bodyStart ? closingFence : lines.length;
-  const prefix = headerIndex >= 0 ? lines.slice(0, headerIndex + 1) : [];
+  const prefix = headerIndex >= 0 ? lines.slice(0, bodyStart) : [];
   const body = lines.slice(bodyStart, bodyEnd);
   const suffix = lines.slice(bodyEnd);
   const numbered = body
@@ -2401,10 +2403,6 @@ export async function inspectPipeline(ctx, input = {}) {
     && requestedRangeLines > MAX_INSPECT_RANGE_LINES
     && !(smallRangeFile || smallBatchRead);
   const directedExpansion = postDecision && hasExplicitTarget;
-  const expansionBudgetGated = directedExpansion
-    && !smallBatchRead
-    && !smallRangeFile
-    && (Number(readPolicy?.directedExpansions) || 0) >= MAX_DIRECTED_EXPANSIONS;
   const firstInspectPath = uniquePaths(inspectPaths)[0] || null;
   const fullExpansionPaths = Array.isArray(readPolicy?.fullExpansionPaths)
     ? readPolicy.fullExpansionPaths
@@ -2418,9 +2416,7 @@ export async function inspectPipeline(ctx, input = {}) {
   // if exploration missed the edit surface, one bounded full read is cheaper
   // than forcing the host through many 80-line slices. Repeated full reads of
   // the same path are still refused so the OS does not become a replay loop.
-  const decisionGated = (
-    repeatedFullExpansion
-  ) || oversizedRange || expansionBudgetGated;
+  const decisionGated = repeatedFullExpansion || oversizedRange;
   const isFull = requestedFull && !decisionGated;
   const explicitMaxChars = typeof input.maxChars === 'number' && input.maxChars > 0 ? input.maxChars : null;
   const explicitInspectMaxChars = explicitMaxChars
@@ -2462,7 +2458,9 @@ export async function inspectPipeline(ctx, input = {}) {
       : (directRanges.length ? directRanges : null);
     const effectiveStartLine = hasPerPathRanges ? undefined : input.startLine;
     const effectiveEndLine = hasPerPathRanges ? undefined : input.endLine;
-    const forceOutline = requestedBudget === 'shallow' || (batchRead && !smallBatchRead) || decisionGated;
+    const forceOutline = requestedBudget === 'shallow'
+      || (batchRead && !smallBatchRead && !hasExplicitTarget)
+      || decisionGated;
     const preferOutline = !isOutline
       && !isFull
       && (forceOutline || (!input.fullFile && !hasExplicitTarget && !explicitMaxChars && fileChars > INSPECT_INLINE_MAX_CHARS));
@@ -2578,11 +2576,9 @@ export async function inspectPipeline(ctx, input = {}) {
 
   if (decisionGated && typeof store?.recordPathOnlyFullDenied === 'function') {
     try {
-      const reason = expansionBudgetGated
-        ? 'directed-expansion-budget'
-        : (oversizedRange
-            ? 'oversized-range'
-            : (repeatedFullExpansion ? 'repeated-full-expansion' : 'path-only-full'));
+      const reason = oversizedRange
+        ? 'oversized-range'
+        : (repeatedFullExpansion ? 'repeated-full-expansion' : 'path-only-full');
       store.recordPathOnlyFullDenied({ path: inspectPaths[0] || null, reason });
     } catch (_) {}
   }
@@ -2604,11 +2600,9 @@ export async function inspectPipeline(ctx, input = {}) {
     [{ key: 'inspect', title: 'Inspection Result', priority: 0, lines: outLines }],
     { maxChars: budget }
   );
-  const gateReason = expansionBudgetGated
-    ? `the ${MAX_DIRECTED_EXPANSIONS} directed expansion slots after the decision package are exhausted`
-    : (oversizedRange
-        ? `the requested range spans ${requestedRangeLines} lines (limit ${MAX_INSPECT_RANGE_LINES})`
-        : 'this file was already expanded in full after the decision package; reuse the prior result or inspect a narrower symbol/range');
+  const gateReason = oversizedRange
+    ? `the requested range spans ${requestedRangeLines} lines (limit ${MAX_INSPECT_RANGE_LINES})`
+    : 'this file was already expanded in full after the decision package; reuse the prior result or inspect a narrower symbol/range';
   const gateNotice = decisionGated
     ? [
         `> Read policy: ${gateReason}; the request was downgraded to an outline.`,
@@ -2915,30 +2909,34 @@ export async function shipPipeline(ctx, input = {}) {
   const green = sessionReceipts.filter((receipt) => receipt.exitCode === 0);
   const superseded = sessionReceipts.filter((receipt) => effectiveReceiptStatus(receipt, sessionReceipts) === 'superseded');
   const unresolved = sessionReceipts.filter((receipt) => effectiveReceiptStatus(receipt, sessionReceipts) === 'unresolved');
+  const lastPassIndex = sessionReceipts.reduce((last, receipt, index) => receipt.exitCode === 0 ? index : last, -1);
+  const blockingUnresolved = sessionReceipts.filter((receipt, index) =>
+    index > lastPassIndex && effectiveReceiptStatus(receipt, sessionReceipts) === 'unresolved'
+  );
   const unverified = green.length === 0 && unresolved.length === 0;
   const allowUnverified = input.allowUnverified === true || input.force === true;
   const hasWork = (session.touchedFiles || []).length > 0 || (session.receipts || []).length > 0;
 
-  if (profile.strict && !allowUnverified && (unverified || unresolved.length > 0)) {
+  if (profile.strict && !allowUnverified && (unverified || blockingUnresolved.length > 0)) {
     return [
       '# ContextOS ship — BLOCKED (strict profile)',
       '',
       unverified
         ? '- No passing receipt in this session.'
-        : `- ${unresolved.length} unresolved failing receipt(s) remain in this session.`,
+        : `- ${blockingUnresolved.length} unresolved failing receipt(s) remain in this session.`,
       '- Run `verify({ commands: [...] })` until the relevant command passes, or relax `strict` in `.contextos/profile.json`.',
       '- The session remains open for repair.',
       ...(extraLines.length ? ['', '## Attempted', ...extraLines] : []),
     ].join('\n');
   }
 
-  if (!allowUnverified && hasWork && (unverified || unresolved.length > 0)) {
+  if (!allowUnverified && hasWork && (unverified || blockingUnresolved.length > 0)) {
     return [
       '# ContextOS ship — BLOCKED (verification evidence)',
       '',
       unverified
         ? '- No passing receipt in this session; the session remains open.'
-        : `- ${unresolved.length} unresolved failing receipt(s) remain in this session; the session remains open.`,
+        : `- ${blockingUnresolved.length} unresolved failing receipt(s) remain in this session; the session remains open.`,
       '- Next: run `verify({ commands: ["<test command>"] })` before closure.',
       '- If closure is intentionally unverified, pass `allowUnverified: true` explicitly.',
       ...(extraLines.length ? ['', '## Attempted', ...extraLines] : []),
@@ -3075,7 +3073,7 @@ export async function shipPipeline(ctx, input = {}) {
   const summaryLines = [
     `- Session: \`${closed.id}\` closed`,
     `- Touched: ${closed.touchedFiles.length} | Passing receipts: ${green.length}${unverified ? ' (unverified, advisory mode)' : ''}`,
-    `- Superseded failures: ${superseded.length} | Unresolved failures: ${unresolved.length}`,
+    `- Superseded failures: ${superseded.length} | Unresolved failures: ${blockingUnresolved.length}`,
     '- Curated architecture: ' + (architectureUnavailable ? 'Block/Chain graph unavailable' : architectureGaps.length + ' gap(s) across ' + architecturePaths.length + ' changed file(s)'),
   ];
   // A reopened session starts with no receipts even when the same workspace was

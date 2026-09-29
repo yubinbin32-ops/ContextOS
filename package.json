@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.6.1",
+  "version": "2.7.0",
   "description": "ContextOS is a context-governance MCP runtime for AI coding agents, with bounded repository I/O, receipt-first verification, and a multi-turn Micro subagent.",
   "license": "MIT",
   "type": "module",

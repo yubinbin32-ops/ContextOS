@@ -1238,3 +1238,59 @@ C 在协议合规的 R47/R48/R50 三次都落在 84.0k-84.6k、5 请求、4 工�
 - 最终 bundle hash：`bf7e617eac9e34564c6bc4cfc0361c437734a6082d01c5b409b50a149ad5008c`。
 - 严格隔离样本：`/private/tmp/contextos-ab/ab-r47-isolated-*`、`ab-r48-isolated-*`、`ab-r49-isolated-*`、`ab-r50-isolated-*`、`ab-r51-isolated-*`。
 - 早期 R43 的 74% 结果保留为历史记录，但在严格隔离口径下不再作为主证据。
+
+## 41. 最终 bundle 复验、Micro 执行证据与 2.7.0 发布门禁
+
+### 41.1 本轮修复
+
+1. **移除 decision package 后的 directed-expansion 硬门禁**：显式 `symbol` 或 bounded `ranges` 不再因为 8 次扩展计数被降级成 outline。计数器仍保留为 telemetry，但读取始终返回数据；第 9 次以后的有界读取也按真实内容返回。
+2. **批量 inspect 尊重显式 ranges**：batch 中只要目标带显式 ranges/symbol，即使同批存在大文件，也不再强制全部降级为 outline。同时修复 `numberCodeLines` 把 `// [Lx-Ly]` 元数据当正文导致的行号偏移。
+3. **ship 阻塞语义修正**：只阻塞“最后一次通过验证之后”的失败。更早的 timeout、脱敏探针或同命令旧 FAIL 不会污染最终收口；同命令 PASS 仍会 supersede 旧 FAIL，失败之后没有新 PASS 仍然阻塞。
+4. **A/B/C 隔离装置修正**：harness 现在显式执行 `codex plugin add contextos@contextos-development`，并写入 `[plugins."contextos@contextos-development"] enabled=true`。此前只配置 marketplace 会让 B/C 实际退化为 native；R52-B 和 R53-B 样本因此作废。
+
+### 41.2 真实执行型 Micro 证据
+
+在独立 fixture 中，首次 Micro 调用直接携带 Pipeline，Pipeline 包含 `npm test` 失败证据和 `src/queue.mjs` 的有界 inspect。Micro 任务明确要求先执行 `run`、再执行 `inspect`，并返回实际工具调用。
+
+实测结果：
+
+- `executionMode=executor`
+- `providerRequests=3`
+- `toolRounds=2`
+- `pipelineRuns=1`
+- `evidenceMode=pipeline`
+- `providerUsage.totalTokens=9628`
+- `usageSource=provider`
+- `preload.status=PARTIAL`
+
+该调用不是 summarizer-only：Micro 实际执行了 `run({command:"npm test"})` 和 `inspect({path:"src/queue.mjs"})`，并返回了根因与最小修复方向。该证据只证明执行路径可用，不与 A/B/C 的宿主 token 混算。
+
+### 41.3 最终 A/B/C
+
+| 运行 | 请求/工具/峰值 input/总 token | ContextOS 调用 | Micro | 可见测试 | 隐藏质量 |
+| --- | --- | --- | --- | --- | --- |
+| A R52 native | 16 / 28 / 32,709 / 360,361 | 0 | 0 | PASS | PASS |
+| B R54 OS | 5 / 4 / 25,741 / 87,969 | 2（pipeline、change） | 0 | PASS | PASS |
+| C R54 OS+Micro profile | 5 / 4 / 26,571 / 89,554 | 2（pipeline、change） | 0 | PASS | PASS |
+
+说明：
+
+- B/C 相对 A 的总 token 降幅约为 75.6% / 75.2%；请求从 16 降到 5，工具从 28 降到 4。
+- 峰值 input 只降低约 19% / 21%，主要节省来自请求与工具调用坍缩，而不是单次上下文极限压缩。
+- C 的 Micro=0 是正确路由：Pipeline 已经把 2KB+ 失败证据 triage 到决策所需根因，继续调用 Micro 只会增加 provider token。Micro 执行能力由 41.2 的独立真实调用证明，不把该 C 样本计入 Micro 节省。
+- B/C 都走了 `pipeline -> change(edits+architecture+verify+ship)`，没有 native fallback，没有拆分事务。
+- 隐藏质量检查由 `/private/tmp/contextos-ab/ab-r52-hidden-check.mjs` 执行，覆盖幂等键、冲突、终态、重试次数、有序 `eventLog`/sequence 和 `src/index.mjs` 公共入口闭包。
+
+### 41.4 最终验证与发布状态
+
+- `npm test`：PASS。
+- `npm run plugin:verify`：PASS。
+- `npm run acceptance:real`：PASS。
+- `npm run acceptance:micro`：PASS。
+- `npm run acceptance:micro:executor`：PASS。
+- `npm run dist:smoke`：PASS。
+- `npm run desktop:build`：PASS。
+- `git diff --check`：PASS。
+- 版本：`2.7.0`。
+- 最终 bundle hash：`e17b2f4930f2ff9c2d759bf7b8f8f5873bef010e69ee636f6ecaffca37fac617`。
+- 宿主绕过仍不可完全禁止；当前合格标准是 OS 路径本身不产生负收益、契约错误为零、复杂任务正确性通过，并在协议合规会话中形成可复现的正收益。

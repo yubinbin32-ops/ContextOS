@@ -12,7 +12,7 @@
 
   <br/>
 
-  <p><strong>Current Version: <span id="contextos-version">2.6.1</span></strong> · Native multi-host integration · Official macOS & Windows Desktop Apps · Micro Dual-Brain</p>
+  <p><strong>Current Version: <span id="contextos-version">2.7.0</span></strong> · Native multi-host integration · Official macOS & Windows Desktop Apps · Micro Dual-Brain</p>
 
   [**Download Desktop App**](https://github.com/yubinbin32-ops/ContextOS/releases/latest) · [**Quick Setup Guide**](#quick-start--setup-options) · [**AI Auto-Setup Specification**](AI_SETUP.md) · [**中文文档**](README_zh.md)
 </div>

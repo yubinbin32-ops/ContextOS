@@ -728,7 +728,7 @@ test('decision packages gate path-only full reads while preserving directed expa
   fs.rmSync(projectRoot, { recursive: true, force: true });
 });
 
-test('decision packages bound oversized ranges and cap directed expansion rounds', async () => {
+test('decision packages bound oversized ranges without blocking bounded directed reads', async () => {
   const projectRoot = makeTempProject();
   const longFile = Array.from({ length: 300 }, (_, index) => `export const line${index + 1} = ${index + 1};`).join('\n') + '\n';
   fs.writeFileSync(path.join(projectRoot, 'src', 'long.mjs'), longFile);
@@ -754,7 +754,7 @@ test('decision packages bound oversized ranges and cap directed expansion rounds
   assert.match(bounded, /line1 = 1/);
   assert.doesNotMatch(bounded, /Read policy/);
 
-  for (const [startLine, endLine] of [[1, 20], [21, 40], [41, 60], [61, 80], [81, 100], [101, 120], [121, 140]]) {
+  for (const [startLine, endLine] of [[1, 20], [21, 40], [41, 60], [61, 80], [81, 100], [101, 120], [121, 140], [141, 160], [161, 180]]) {
     const allowed = await orchestrator.dispatch('inspect', {
       path: 'src/long.mjs',
       ranges: [{ startLine, endLine }],
@@ -763,21 +763,49 @@ test('decision packages bound oversized ranges and cap directed expansion rounds
     assert.doesNotMatch(allowed, /directed expansion slots/);
   }
 
-  const budgeted = await orchestrator.dispatch('inspect', {
+  const beyondOldBudget = await orchestrator.dispatch('inspect', {
     path: 'src/long.mjs',
-    ranges: [{ startLine: 141, endLine: 160 }],
+    ranges: [{ startLine: 181, endLine: 200 }],
   });
-  assert.match(budgeted, /Read policy/);
-  assert.match(budgeted, /8 directed expansion slots/);
-  assert.match(budgeted, /AST Outline/);
+  assert.match(beyondOldBudget, /line181 = 181/);
+  assert.doesNotMatch(beyondOldBudget, /Read policy/);
 
   await orchestrator.dispatch('verify', { commands: ['node -e "0"'] });
   const afterVerify = await orchestrator.dispatch('inspect', {
     path: 'src/long.mjs',
-    ranges: [{ startLine: 161, endLine: 180 }],
+    ranges: [{ startLine: 201, endLine: 220 }],
   });
-  assert.match(afterVerify, /line161/);
-  assert.doesNotMatch(afterVerify, /directed expansion slots/);
+  assert.match(afterVerify, /line201 = 201/);
+  assert.doesNotMatch(afterVerify, /Read policy/);
+
+  service.close();
+  fs.rmSync(projectRoot, { recursive: true, force: true });
+});
+
+test('batch inspect honors per-path ranges when one file is large', async () => {
+  const projectRoot = makeTempProject();
+  const largeLines = Array.from({ length: 200 }, (_, index) => `export const large${index + 1} = ${index + 1};`);
+  largeLines.push("export const marker = 'BATCH_RANGE_MARKER';");
+  fs.writeFileSync(path.join(projectRoot, 'src', 'large.mjs'), `${largeLines.join('\n')}\n`);
+  fs.writeFileSync(path.join(projectRoot, 'src', 'small.mjs'), 'export const small = true;\n');
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  const result = await orchestrator.dispatch('pipeline', {
+    steps: [{
+      inspect: {
+        paths: ['src/large.mjs', 'src/small.mjs'],
+        ranges: [
+          { path: 'src/large.mjs', ranges: [{ startLine: 201, endLine: 201 }] },
+          { path: 'src/small.mjs', ranges: [{ startLine: 1, endLine: 1 }] },
+        ],
+      },
+    }],
+  });
+  assert.match(result, /BATCH_RANGE_MARKER/);
+  assert.match(result, /201 \| export const marker/);
+  assert.match(result, /small = true/);
+  assert.doesNotMatch(result, /AST Outline/);
 
   service.close();
   fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -1143,6 +1171,23 @@ test('failed receipts are superseded only by the same command and remain explici
   assert.match(shipped, /Unresolved failures: 1/);
   assert.match(shipped, /\[SUPERSEDED\]/);
   assert.match(shipped, /\[UNRESOLVED\]/);
+});
+
+test('a later passing verification closes earlier diagnostic failures', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService({ exitCodes: [1, 1, 1, 0] });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+
+  await orchestrator.dispatch('verify', { command: 'node --test timeout-probe.mjs' });
+  await orchestrator.dispatch('verify', { command: 'node --test secret-probe.mjs' });
+  await orchestrator.dispatch('verify', { command: 'node --test retry.test.mjs' });
+  const passed = await orchestrator.dispatch('verify', { command: 'node --test retry.test.mjs' });
+  assert.match(passed, /Verdict: PASS/);
+
+  const shipped = await orchestrator.dispatch('ship', { summary: 'later pass closes earlier probes' });
+  assert.match(shipped, /Superseded failures: 1/);
+  assert.match(shipped, /Unresolved failures: 0/);
+  assert.doesNotMatch(shipped, /BLOCKED/);
 });
 
 test('npm test and npm run test receipts share the same verification generation', async () => {

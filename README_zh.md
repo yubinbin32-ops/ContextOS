@@ -12,7 +12,7 @@
 
   <br/>
 
-  <p><strong>当前版本：<span id="contextos-version">2.6.1</span></strong> · 原生适配主流 AI 宿主 · 官方 macOS/Windows 双桌面端 · Micro 舱外小脑</p>
+  <p><strong>当前版本：<span id="contextos-version">2.7.0</span></strong> · 原生适配主流 AI 宿主 · 官方 macOS/Windows 双桌面端 · Micro 舱外小脑</p>
 
   [**下载桌面客户端**](https://github.com/yubinbin32-ops/ContextOS/releases/latest) · [**快速安装指南**](#快速上手与安装方式) · [**AI 自动配置规范**](AI_SETUP.md) · [**English Documentation**](README.md)
 </div>

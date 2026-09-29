@@ -33113,10 +33113,13 @@ function numberCodeLines(text, fallbackStartLine = 1) {
   const header = headerIndex >= 0 ? lines[headerIndex] : "";
   const match = /\[L(\d+)-L(\d+)\]/.exec(header);
   const startLine = match ? Number(match[1]) : fallbackStartLine;
-  const bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
+  let bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
+  if (bodyStart < lines.length && /^\/\/ \[L\d+-L\d+\]$/.test(lines[bodyStart].trim())) {
+    bodyStart += 1;
+  }
   const closingFence = lines.lastIndexOf("```");
   const bodyEnd = closingFence > bodyStart ? closingFence : lines.length;
-  const prefix2 = headerIndex >= 0 ? lines.slice(0, headerIndex + 1) : [];
+  const prefix2 = headerIndex >= 0 ? lines.slice(0, bodyStart) : [];
   const body2 = lines.slice(bodyStart, bodyEnd);
   const suffix = lines.slice(bodyEnd);
   const numbered = body2.map((line, index) => `${String(startLine + index).padStart(4, " ")} | ${line}`).join("\n");
@@ -33245,11 +33248,10 @@ async function inspectPipeline(ctx, input = {}) {
   const boundedSmallRead = smallBatchRead || smallRangeFile;
   const oversizedRange = postDecision && !symbol && requestedRangeLines > MAX_INSPECT_RANGE_LINES && !(smallRangeFile || smallBatchRead);
   const directedExpansion = postDecision && hasExplicitTarget;
-  const expansionBudgetGated = directedExpansion && !smallBatchRead && !smallRangeFile && (Number(readPolicy?.directedExpansions) || 0) >= MAX_DIRECTED_EXPANSIONS;
   const firstInspectPath = uniquePaths(inspectPaths)[0] || null;
   const fullExpansionPaths = Array.isArray(readPolicy?.fullExpansionPaths) ? readPolicy.fullExpansionPaths : [];
   const repeatedFullExpansion = requestedFull && postDecision && !hasExplicitTarget && firstInspectPath && fullExpansionPaths.includes(firstInspectPath);
-  const decisionGated = repeatedFullExpansion || oversizedRange || expansionBudgetGated;
+  const decisionGated = repeatedFullExpansion || oversizedRange;
   const isFull = requestedFull && !decisionGated;
   const explicitMaxChars = typeof input.maxChars === "number" && input.maxChars > 0 ? input.maxChars : null;
   const explicitInspectMaxChars = explicitMaxChars ? Math.min(explicitMaxChars, INSPECT_RECOVERY_OUTPUT_MAX_CHARS) : null;
@@ -33278,7 +33280,7 @@ ${globHint}`;
     const effectiveRanges = hasPerPathRanges ? perPathRanges.get(p) || perPathRanges.get(p.replace(/^\.\//, "")) || null : directRanges.length ? directRanges : null;
     const effectiveStartLine = hasPerPathRanges ? void 0 : input.startLine;
     const effectiveEndLine = hasPerPathRanges ? void 0 : input.endLine;
-    const forceOutline = requestedBudget === "shallow" || batchRead && !smallBatchRead || decisionGated;
+    const forceOutline = requestedBudget === "shallow" || batchRead && !smallBatchRead && !hasExplicitTarget || decisionGated;
     const preferOutline = !isOutline && !isFull && (forceOutline || !input.fullFile && !hasExplicitTarget && !explicitMaxChars && fileChars > INSPECT_INLINE_MAX_CHARS);
     let outlineHandled = false;
     if (isOutline || preferOutline) {
@@ -33377,7 +33379,7 @@ ${clip3(numberCodeLines(read.data, effectiveRanges?.[0]?.startLine || effectiveS
   }
   if (decisionGated && typeof store?.recordPathOnlyFullDenied === "function") {
     try {
-      const reason = expansionBudgetGated ? "directed-expansion-budget" : oversizedRange ? "oversized-range" : repeatedFullExpansion ? "repeated-full-expansion" : "path-only-full";
+      const reason = oversizedRange ? "oversized-range" : repeatedFullExpansion ? "repeated-full-expansion" : "path-only-full";
       store.recordPathOnlyFullDenied({ path: inspectPaths[0] || null, reason });
     } catch (_) {
     }
@@ -33399,7 +33401,7 @@ ${clip3(numberCodeLines(read.data, effectiveRanges?.[0]?.startLine || effectiveS
     [{ key: "inspect", title: "Inspection Result", priority: 0, lines: outLines }],
     { maxChars: budget }
   );
-  const gateReason = expansionBudgetGated ? `the ${MAX_DIRECTED_EXPANSIONS} directed expansion slots after the decision package are exhausted` : oversizedRange ? `the requested range spans ${requestedRangeLines} lines (limit ${MAX_INSPECT_RANGE_LINES})` : "this file was already expanded in full after the decision package; reuse the prior result or inspect a narrower symbol/range";
+  const gateReason = oversizedRange ? `the requested range spans ${requestedRangeLines} lines (limit ${MAX_INSPECT_RANGE_LINES})` : "this file was already expanded in full after the decision package; reuse the prior result or inspect a narrower symbol/range";
   const gateNotice = decisionGated ? [
     `> Read policy: ${gateReason}; the request was downgraded to an outline.`,
     "> Use `symbol` or a bounded `ranges` slice for inspection. Whole-file replacement belongs in `change`/`work` edit payloads, not in an inspect read; then continue with `change`/`work`."
@@ -33667,24 +33669,28 @@ ${text2}`;
   const green = sessionReceipts.filter((receipt) => receipt.exitCode === 0);
   const superseded = sessionReceipts.filter((receipt) => effectiveReceiptStatus(receipt, sessionReceipts) === "superseded");
   const unresolved = sessionReceipts.filter((receipt) => effectiveReceiptStatus(receipt, sessionReceipts) === "unresolved");
+  const lastPassIndex = sessionReceipts.reduce((last, receipt, index2) => receipt.exitCode === 0 ? index2 : last, -1);
+  const blockingUnresolved = sessionReceipts.filter(
+    (receipt, index2) => index2 > lastPassIndex && effectiveReceiptStatus(receipt, sessionReceipts) === "unresolved"
+  );
   const unverified = green.length === 0 && unresolved.length === 0;
   const allowUnverified = input.allowUnverified === true || input.force === true;
   const hasWork = (session.touchedFiles || []).length > 0 || (session.receipts || []).length > 0;
-  if (profile.strict && !allowUnverified && (unverified || unresolved.length > 0)) {
+  if (profile.strict && !allowUnverified && (unverified || blockingUnresolved.length > 0)) {
     return [
       "# ContextOS ship \u2014 BLOCKED (strict profile)",
       "",
-      unverified ? "- No passing receipt in this session." : `- ${unresolved.length} unresolved failing receipt(s) remain in this session.`,
+      unverified ? "- No passing receipt in this session." : `- ${blockingUnresolved.length} unresolved failing receipt(s) remain in this session.`,
       "- Run `verify({ commands: [...] })` until the relevant command passes, or relax `strict` in `.contextos/profile.json`.",
       "- The session remains open for repair.",
       ...extraLines.length ? ["", "## Attempted", ...extraLines] : []
     ].join("\n");
   }
-  if (!allowUnverified && hasWork && (unverified || unresolved.length > 0)) {
+  if (!allowUnverified && hasWork && (unverified || blockingUnresolved.length > 0)) {
     return [
       "# ContextOS ship \u2014 BLOCKED (verification evidence)",
       "",
-      unverified ? "- No passing receipt in this session; the session remains open." : `- ${unresolved.length} unresolved failing receipt(s) remain in this session; the session remains open.`,
+      unverified ? "- No passing receipt in this session; the session remains open." : `- ${blockingUnresolved.length} unresolved failing receipt(s) remain in this session; the session remains open.`,
       '- Next: run `verify({ commands: ["<test command>"] })` before closure.',
       "- If closure is intentionally unverified, pass `allowUnverified: true` explicitly.",
       ...extraLines.length ? ["", "## Attempted", ...extraLines] : []
@@ -33780,7 +33786,7 @@ ${text2}`;
   const summaryLines = [
     `- Session: \`${closed.id}\` closed`,
     `- Touched: ${closed.touchedFiles.length} | Passing receipts: ${green.length}${unverified ? " (unverified, advisory mode)" : ""}`,
-    `- Superseded failures: ${superseded.length} | Unresolved failures: ${unresolved.length}`,
+    `- Superseded failures: ${superseded.length} | Unresolved failures: ${blockingUnresolved.length}`,
     "- Curated architecture: " + (architectureUnavailable ? "Block/Chain graph unavailable" : architectureGaps.length + " gap(s) across " + architecturePaths.length + " changed file(s)")
   ];
   if (green.length === 0 && !input.receiptIds && !input.receiptId) {
@@ -34684,7 +34690,7 @@ ${detail}`;
 
 <!-- os-budget ${meta2.chars} chars ~${meta2.estimatedTokens} tokens${meta2.truncated ? " truncated" : ""}${receiptMode ? " mode=receipt" : ""} -->`;
 }
-var OUTLINE_CLIP, INSPECT_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_FILES, SMALL_WORKSPACE_MAX_CHARS, SMALL_WORKSPACE_MAX_FILES, SMALL_WORKSPACE_CRITICAL_MAX_FILES, DECISION_SOURCE_FILE_MAX_CHARS, DECISION_SOURCE_TOTAL_MAX_CHARS, INSPECT_RECOVERY_OUTPUT_MAX_CHARS, MAX_INSPECT_RANGE_LINES, MAX_DIRECTED_EXPANSIONS, MAX_FOCUS_SEARCH_IDENTIFIERS, MAX_FOCUS_PATH_CANDIDATES, MAX_FOCUS_SLICE_SYMBOLS, SEARCH_CLIP, PIPELINE_DEFAULT_OUTPUT_CLIP, PIPELINE_EXPLORE_OUTPUT_CLIP, PIPELINE_MAX_OUTPUT_CLIP, PIPELINE_RECEIPT_OUTPUT_CLIP, PIPELINE_RECEIPT_RESPONSE_BUDGET, PIPELINE_DECISION_RESPONSE_BUDGET, PIPELINE_DEFAULT_PARALLEL_CONCURRENCY, PIPELINE_MAX_PARALLEL_CONCURRENCY, MICRO_TRIAGE_MIN_CHARS, PROCESS_VERIFY_MODES, INDEX_IMPORT_EXTENSIONS, NON_ARCHITECTURE_PREFIXES, NON_ARCHITECTURE_EXTENSIONS, INSPECT_SKIP_DIRS;
+var OUTLINE_CLIP, INSPECT_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_FILES, SMALL_WORKSPACE_MAX_CHARS, SMALL_WORKSPACE_MAX_FILES, SMALL_WORKSPACE_CRITICAL_MAX_FILES, DECISION_SOURCE_FILE_MAX_CHARS, DECISION_SOURCE_TOTAL_MAX_CHARS, INSPECT_RECOVERY_OUTPUT_MAX_CHARS, MAX_INSPECT_RANGE_LINES, MAX_FOCUS_SEARCH_IDENTIFIERS, MAX_FOCUS_PATH_CANDIDATES, MAX_FOCUS_SLICE_SYMBOLS, SEARCH_CLIP, PIPELINE_DEFAULT_OUTPUT_CLIP, PIPELINE_EXPLORE_OUTPUT_CLIP, PIPELINE_MAX_OUTPUT_CLIP, PIPELINE_RECEIPT_OUTPUT_CLIP, PIPELINE_RECEIPT_RESPONSE_BUDGET, PIPELINE_DECISION_RESPONSE_BUDGET, PIPELINE_DEFAULT_PARALLEL_CONCURRENCY, PIPELINE_MAX_PARALLEL_CONCURRENCY, MICRO_TRIAGE_MIN_CHARS, PROCESS_VERIFY_MODES, INDEX_IMPORT_EXTENSIONS, NON_ARCHITECTURE_PREFIXES, NON_ARCHITECTURE_EXTENSIONS, INSPECT_SKIP_DIRS;
 var init_pipelines = __esm({
   async "packages/orchestrator/src/pipelines.mjs"() {
     init_context_budget();
@@ -34706,7 +34712,6 @@ var init_pipelines = __esm({
     DECISION_SOURCE_TOTAL_MAX_CHARS = 18e3;
     INSPECT_RECOVERY_OUTPUT_MAX_CHARS = 32e3;
     MAX_INSPECT_RANGE_LINES = 240;
-    MAX_DIRECTED_EXPANSIONS = 8;
     MAX_FOCUS_SEARCH_IDENTIFIERS = 4;
     MAX_FOCUS_PATH_CANDIDATES = 16;
     MAX_FOCUS_SLICE_SYMBOLS = 4;
@@ -63308,7 +63313,7 @@ import path34 from "node:path";
 // package.json
 var package_default = {
   name: "contextos",
-  version: "2.6.1",
+  version: "2.7.0",
   description: "ContextOS is a context-governance MCP runtime for AI coding agents, with bounded repository I/O, receipt-first verification, and a multi-turn Micro subagent.",
   license: "MIT",
   type: "module",
