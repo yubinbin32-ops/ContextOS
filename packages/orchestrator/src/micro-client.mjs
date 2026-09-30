@@ -1,10 +1,51 @@
+import { reportMicroJob } from './micro-delivery.mjs';
+import { receiveMicroMessages, waitForMicroMessages } from './micro-mailbox.mjs';
+import { scheduleMicro } from './micro-scheduler.mjs';
+import { microMutation } from './micro-worker.mjs';
+import { normalizeAgentReport } from './micro-agent-report.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { readArtifact } from './artifact-store.mjs';
-import { microPreloadPrompt } from './micro-preload.mjs';
+import { selectMicroProvider, microCostEstimate } from './micro-provider.mjs';
+import { runCliMicro } from './micro-cli.mjs';
+import { microPreloadPrompt, microPreloadReceipt } from './micro-preload.mjs';
+
+const HOST_CONTINUATION_MS = 290_000;
+const MICRO_SKILL_FILES = Object.freeze([
+  ['ContextOS skill guidance', 'contextos/SKILL.md'],
+  ['ContextOS operations skill guidance', 'contextos-ops/SKILL.md'],
+]);
+const microSkillGuidanceCache = new Map();
+
+export function loadMicroSkillGuidance({ projectRoot = process.cwd(), includeOps = true } = {}) {
+  const cacheKey = `${path.resolve(projectRoot)}::${includeOps ? 'all' : 'core'}`;
+  const cached = microSkillGuidanceCache.get(cacheKey);
+  if (cached) return cached;
+  const roots = [...new Set([
+    path.resolve(projectRoot, 'plugins/contextos/skills'),
+    fileURLToPath(new URL('../../../plugins/contextos/skills/', import.meta.url)),
+    fileURLToPath(new URL('../skills/', import.meta.url)),
+  ])];
+  for (const root of roots) {
+    try {
+      const files = includeOps ? MICRO_SKILL_FILES : MICRO_SKILL_FILES.slice(0, 1);
+      const sections = files.map(([title, relative]) => {
+        const file = path.join(root, relative);
+        return `## ${title}\n\n${fs.readFileSync(file, 'utf8').trim()}`;
+      });
+      const guidance = `\n\n${sections.join('\n\n')}`;
+      microSkillGuidanceCache.set(cacheKey, guidance);
+      return guidance;
+    } catch (_) {
+      // Try the next source/bundle-relative skill root.
+    }
+  }
+  throw new Error('ContextOS skill guidance is unavailable for Micro.');
+}
 
 export const MICRO_PRESETS = Object.freeze({
   triage: {
@@ -176,13 +217,17 @@ const MICRO_INPUT_LIMITS = Object.freeze({
   evidence: 12000,
 });
 
+// Answer mode bounds a Micro report, but the bound must not silently cut the
+// report the host asked for. These caps are ceilings, not targets: the model
+// stops when the report is complete, and a provider stop at the ceiling is
+// surfaced as `providerTruncated` so the host can continue the session.
 const MICRO_ANSWER_TOKENS = Object.freeze({
-  triage: 256,
-  contract: 512,
-  patch: 1024,
-  graph: 768,
-  custom: 512,
-  evidence: 768,
+  triage: 1024,
+  contract: 2048,
+  patch: 4096,
+  graph: 2048,
+  custom: 3072,
+  evidence: 3072,
 });
 
 const MICRO_PROVIDER_TOKEN_BUDGETS = Object.freeze({
@@ -195,7 +240,6 @@ const MICRO_PROVIDER_TOKEN_BUDGETS = Object.freeze({
 });
 
 const MICRO_BATCH_DEFAULT_CONCURRENCY = 4;
-const MICRO_BATCH_MAX_CONCURRENCY = 8;
 const MICRO_UNEXECUTED_TOOL_SYNTAX = Object.freeze([
   /\uFF5C\s*｜DSML｜\s*\uFF5C/i,
   /<\/?(?:tool_call|function_call)\b/i,
@@ -279,7 +323,20 @@ function normalizeUsage(usage = {}) {
   const promptTokens = Number(usage.prompt_tokens) || 0;
   const completionTokens = Number(usage.completion_tokens) || 0;
   const totalTokens = Number(usage.total_tokens) || promptTokens + completionTokens;
-  return { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: totalTokens };
+  // Providers report cache hits under different keys in the
+  // OpenAI-compatible responses this client consumes. The split matters
+  // because cached input is priced far below fresh input.
+  const reportedCache = Number(usage.prompt_tokens_details?.cached_tokens ?? usage.prompt_cache_hit_tokens);
+  const cachedTokens = Number.isFinite(reportedCache) && reportedCache > 0
+    ? Math.min(reportedCache, promptTokens)
+    : 0;
+  return {
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    total_tokens: totalTokens,
+    cached_input_tokens: cachedTokens,
+    uncached_input_tokens: Math.max(0, promptTokens - cachedTokens),
+  };
 }
 
 function addUsage(target, usage) {
@@ -287,6 +344,8 @@ function addUsage(target, usage) {
   target.prompt_tokens += normalized.prompt_tokens;
   target.completion_tokens += normalized.completion_tokens;
   target.total_tokens += normalized.total_tokens;
+  target.cached_input_tokens = (Number(target.cached_input_tokens) || 0) + normalized.cached_input_tokens;
+  target.uncached_input_tokens = (Number(target.uncached_input_tokens) || 0) + normalized.uncached_input_tokens;
 }
 
 export function estimateMicroTokens(value) {
@@ -294,7 +353,7 @@ export function estimateMicroTokens(value) {
   return Math.ceil(String(text).length / 4);
 }
 
-export function resolveMicroBudget(config = {}, options = {}, presetKey = 'custom') {
+export function resolveMicroBudget(config = {}, options = {}) {
   const invocation = options.invocation && typeof options.invocation === 'object'
     ? options.invocation
     : {};
@@ -309,22 +368,15 @@ export function resolveMicroBudget(config = {}, options = {}, presetKey = 'custo
     ...options,
     ...provider,
   };
-  const defaultTokenBudget = MICRO_PROVIDER_TOKEN_BUDGETS[presetKey] || MICRO_PROVIDER_TOKEN_BUDGETS.custom;
-  const toolsEnabled = options.withOS === true || tools.enabled === true;
-  const maxRequests = positiveInteger(
-    provider.maxRequests
-      ?? invocation.maxRequests
-      ?? options.maxRequests
-      ?? config.maxRequests,
-    null,
-  );
-  const multiRequestBudget = toolsEnabled && maxRequests > 1
-    ? Math.min(defaultTokenBudget * maxRequests, defaultTokenBudget * 4)
-    : defaultTokenBudget;
   return {
-    maxProviderTokens: positiveNumber(source.maxProviderTokens, multiRequestBudget),
+    // Provider token and time budgets are opt-in only. A default budget used to
+    // abort a legitimate multi-step task mid-flight, so no implicit limit kills
+    // a Micro run anymore. presetKey stays in the signature for callers that
+    // still pass a preset name.
+    maxProviderTokens: positiveNumber(source.maxProviderTokens, null),
     maxCostUsd: positiveNumber(source.maxCostUsd, null),
     inputUsdPerMillion: positiveNumber(source.inputUsdPerMillion, null),
+    cacheUsdPerMillion: positiveNumber(source.cacheUsdPerMillion, null),
     outputUsdPerMillion: positiveNumber(source.outputUsdPerMillion, null),
   };
 }
@@ -373,6 +425,11 @@ function summarizeMicroToolOutput(value) {
   }
 }
 
+export const MICRO_AGENT_TOOLS = [
+  { type: 'function', function: { name: 'os', description: 'Bounded repository work through ContextOS. inspect: {path, ranges:[[first,last]]} or {paths:[...]}; search: {query}; context: {}; artifact: {id}; change: {edits:[...], verify:[...]}; verify: {commands:[...]}; work: {inspect:[...], change:{...}, verify:{...}}; pipeline: {steps:[...]} or {parallel:[...]} for batching independent reads, searches and commands in one round; command stdout is included inline, so do not fetch the command receipt again unless the result says truncated; each step accepts {tool:"ask",args:{inspect:[{path,ranges:[[first,last]]}]}}, {tool:"inspect",args:{...}} or {type:"inspect",...}. Prefer pipeline or work whenever you already know three or more operations; never issue one inspect per file. Micro cannot delegate to micro or CLI agents.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['inspect', 'search', 'context', 'artifact', 'explore', 'work', 'change', 'verify', 'pipeline'] }, args: { type: 'object', description: 'Action payload. pipeline uses steps or parallel; work batches inspect/change/verify; change edits files within allowedPaths.' } }, required: ['action', 'args'] } } },
+  MICRO_OS_TOOLS.find((tool) => tool.function.name === 'run'),
+];
+
 const MICRO_READ_ONLY_TOOLS = new Set(['os', 'inspect', 'search_code', 'os_context', 'artifact']);
 
 function canonicalMicroValue(value) {
@@ -383,11 +440,139 @@ function canonicalMicroValue(value) {
 
 function microReadMemoKey(name, args) {
   if (!MICRO_READ_ONLY_TOOLS.has(name)) return null;
+  if (name === 'os' && !['inspect', 'search', 'context', 'artifact'].includes(args?.action)) return null;
   return `${name}:${JSON.stringify(canonicalMicroValue(args || {}))}`;
+}
+
+function parseMicroRangeSpec(value) {
+  const asRange = (start, end) => {
+    const first = Number(start);
+    const second = Number(end);
+    if (!Number.isSafeInteger(first) || !Number.isSafeInteger(second) || first < 1 || second < first) return null;
+    return [[first, second]];
+  };
+  if (typeof value === 'string') {
+    const parts = value.split(',').map((part) => part.trim()).filter(Boolean);
+    if (!parts.length) return null;
+    const parsed = [];
+    for (const part of parts) {
+      const match = /^L?\s*(\d+)\s*(?:-|:|\.\.|\s)\s*L?\s*(\d+)$/i.exec(part);
+      const one = match ? asRange(match[1], match[2]) : null;
+      if (!one) return null;
+      parsed.push(one[0]);
+    }
+    return parsed;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 2 && value.every((entry) => Number.isFinite(Number(entry)))) {
+      return asRange(value[0], value[1]);
+    }
+    const parsed = [];
+    for (const entry of value) {
+      const one = Array.isArray(entry) && entry.length >= 2
+        ? asRange(entry[0], entry[1])
+        : (entry && typeof entry === 'object' ? asRange(entry.startLine ?? entry.start, entry.endLine ?? entry.end) : null);
+      if (!one) return null;
+      parsed.push(one[0]);
+    }
+    return parsed.length ? parsed : null;
+  }
+  if (value && typeof value === 'object') {
+    return asRange(value.startLine ?? value.start, value.endLine ?? value.end);
+  }
+  return null;
+}
+
+function normalizeMicroInspectArgs(args = {}) {
+  const out = { ...args };
+  const hasRanges = Array.isArray(out.ranges) ? out.ranges.length > 0 : out.ranges !== undefined && out.ranges !== null;
+  const raw = hasRanges ? out.ranges : (out.lines ?? out.range);
+  if (raw !== undefined && raw !== null) {
+    const parsed = parseMicroRangeSpec(raw);
+    if (parsed) out.ranges = parsed;
+    else if (!hasRanges) out.ranges = raw;
+    delete out.lines;
+    delete out.range;
+  }
+  return out;
+}
+
+function microPipelineSteps(input = {}) {
+  if (Array.isArray(input.steps)) return input.steps;
+  if (Array.isArray(input.flow)) return input.flow;
+  if (Array.isArray(input.actions)) return input.actions;
+  if (Array.isArray(input.parallel)) return [{ parallel: input.parallel }];
+  if (Array.isArray(input.chain)) return [{ chain: input.chain }];
+  return [];
+}
+
+function microPipelineScan(input = {}, visit) {
+  const walk = (step) => {
+    if (Array.isArray(step)) {
+      for (const item of step) walk(item);
+      return;
+    }
+    if (!step || typeof step !== 'object') return;
+    visit(step);
+    for (const key of ['steps', 'flow', 'actions', 'parallel', 'chain']) {
+      if (Array.isArray(step[key])) walk(step[key]);
+    }
+  };
+  for (const step of microPipelineSteps(input)) walk(step);
+}
+
+function microPipelineMutationTargets(input = {}) {
+  const targets = [];
+  microPipelineScan(input, (step) => {
+    const candidates = [];
+    if (step.change && typeof step.change === 'object') candidates.push(step.change);
+    if (step.work && typeof step.work === 'object') candidates.push(step.work);
+    if (step.tool === 'change' || step.tool === 'work') candidates.push(step.args || {});
+    if (step.tool === 'ship' || step.ship) candidates.push(step.args || step);
+    for (const candidate of candidates) {
+      const action = step.tool === 'work' || step.work ? 'work' : 'change';
+      if (microMutation(action, candidate)) targets.push(...microMutationTargets(candidate));
+    }
+  });
+  return [...new Set(targets)];
+}
+
+function microPipelineNeedsCommands(input = {}) {
+  let needed = false;
+  microPipelineScan(input, (step) => {
+    if (step.tool === 'verify' || step.verify) needed = true;
+    if (step.tool === 'run' || step.run) needed = true;
+    if (step.tool === 'ops' && step.args?.capability === 'run_command') needed = true;
+    if (step.ops?.capability === 'run_command') needed = true;
+    if (step.work && typeof step.work === 'object'
+      && ['verify', 'command', 'commands'].some((key) => step.work[key] !== undefined)) needed = true;
+  });
+  return needed;
+}
+
+function microPipelineDelegates(input = {}) {
+  let delegated = false;
+  microPipelineScan(input, (step) => {
+    if (['agent', 'micro', 'integrate'].includes(step.tool)) delegated = true;
+    if (step.agent || step.micro || step.integrate) delegated = true;
+    if (step.ops?.capability === 'micro' || step.ops?.capability === 'agent') delegated = true;
+  });
+  return delegated;
 }
 
 function microDispatchRoute(name, args = {}) {
   if (name === 'os') {
+    if (['work', 'change', 'verify', 'explore'].includes(args.action)) {
+      const { action, ...input } = args;
+      return [action, input];
+    }
+    if (args.action === 'pipeline') {
+      const { action: _action, ...pipelineArgs } = args;
+      const hasExplicitOutputBudget = pipelineArgs.budget !== undefined
+        || pipelineArgs.mode !== undefined
+        || pipelineArgs.maxChars !== undefined;
+      return ['pipeline', hasExplicitOutputBudget ? pipelineArgs : { ...pipelineArgs, full: true }];
+    }
     if (args.action === 'search') {
       const { action: _action, ...searchArgs } = args;
       return ['ops', { capability: 'code', action: 'search', args: searchArgs }];
@@ -411,6 +596,181 @@ function microDispatchRoute(name, args = {}) {
   }
   if (name === 'artifact') return ['ops', { capability: 'artifact', action: 'read', args }];
   return null;
+}
+
+function microMutationTargets(args = {}) {
+  const list = (value) => value == null ? [] : Array.isArray(value) ? value : [value];
+  const collect = (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    return [
+      ...list(value.edits),
+      ...list(value.create),
+      ...list(value.delete),
+      ...list(value.deletes),
+      ...(value.path ? [value.path] : []),
+      ...(value.change ? collect(value.change) : []),
+      ...(value.work ? collect(value.work) : []),
+    ];
+  };
+  return collect(args)
+    .map((target) => typeof target === 'string' ? target : target?.path)
+    .filter((target) => typeof target === 'string' && target.trim());
+}
+
+function microPathAllowed(target, projectRoot, allowedPaths = []) {
+  const root = path.resolve(projectRoot || process.cwd());
+  const absolute = path.resolve(root, target);
+  const relative = path.relative(root, absolute).split(path.sep).join('/');
+  if (!relative || relative.startsWith('../') || path.isAbsolute(relative)) return false;
+  return allowedPaths.some((entry) => {
+    const raw = String(entry).replace(/\\/g, '/').replace(/^\.\//, '');
+    const allowed = raw.replace(/\/+$/, '');
+    return relative === allowed || (raw.endsWith('/') && relative.startsWith(`${allowed}/`));
+  });
+}
+
+const MICRO_CONTINUATION_VERSION = 1;
+const MICRO_FINGERPRINT_LIMIT = 2000;
+
+function continuationStatePath(projectRoot, sessionId) {
+  const id = crypto.createHash('sha256').update(String(sessionId || '')).digest('hex');
+  return path.join(path.resolve(projectRoot), '.contextos', 'micro-session-context', `${id}.json`);
+}
+
+function readContinuationState(projectRoot, sessionId) {
+  if (!sessionId) return null;
+  try {
+    const state = JSON.parse(fs.readFileSync(continuationStatePath(projectRoot, sessionId), 'utf8'));
+    return state?.version === MICRO_CONTINUATION_VERSION ? state : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function persistContinuationState(projectRoot, sessionId, options = {}) {
+  if (!sessionId) return null;
+  const hasHistory = Array.isArray(options.history) && options.history.length > 0;
+  const hasContext = options.context && Object.keys(options.context).length > 0;
+  const hasReusableState = Boolean(hasHistory || options.execution || hasContext);
+  if (!hasReusableState) return null;
+  const previous = readContinuationState(projectRoot, sessionId) || {};
+  const tools = options.invocation?.tools;
+  const state = {
+    version: MICRO_CONTINUATION_VERSION,
+    execution: options.execution || previous.execution || null,
+    withOS: options.withOS === undefined ? Boolean(previous.withOS) : Boolean(options.withOS),
+    context: {
+      ...(previous.context || {}),
+      ...(options.context || {}),
+      ...(options.context?.allowedPaths ? { allowedPaths: options.context.allowedPaths } : {}),
+      ...(options.context?.acceptance ? { acceptance: options.context.acceptance } : {}),
+    },
+    invocation: {
+      ...(previous.invocation || {}),
+      ...(tools ? { tools: { ...(previous.invocation?.tools || {}), ...tools } } : {}),
+    },
+  };
+  try {
+    const target = continuationStatePath(projectRoot, sessionId);
+    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+    const temporary = `${target}.${crypto.randomUUID()}.tmp`;
+    fs.writeFileSync(temporary, JSON.stringify(state), { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(temporary, target);
+    return state;
+  } catch (_) {
+    return null;
+  }
+}
+
+function hydrateContinuationState(projectRoot, options = {}) {
+  const prior = readContinuationState(projectRoot, options.sessionId);
+  if (!prior) return options;
+  const context = {
+    ...(prior.context || {}),
+    ...(options.context || {}),
+    ...(options.context?.allowedPaths ? { allowedPaths: options.context.allowedPaths } : {}),
+    ...(options.context?.acceptance ? { acceptance: options.context.acceptance } : {}),
+  };
+  const tools = options.invocation?.tools || prior.invocation?.tools;
+  return {
+    ...options,
+    ...(options.execution === undefined && prior.execution ? { execution: prior.execution } : {}),
+    ...(options.withOS === undefined && prior.withOS !== undefined ? { withOS: prior.withOS } : {}),
+    ...(Object.keys(context).length ? { context } : {}),
+    ...(tools ? { invocation: { ...(prior.invocation || {}), ...(options.invocation || {}), tools } } : {}),
+  };
+}
+
+function fingerprintFile(fullPath) {
+  try {
+    const stat = fs.statSync(fullPath);
+    if (!stat.isFile()) return null;
+    return `${stat.size}:${crypto.createHash('sha256').update(fs.readFileSync(fullPath)).digest('hex')}`;
+  } catch (error) {
+    return error.code === 'ENOENT' ? 'missing' : null;
+  }
+}
+
+function fingerprintImplementationPaths(projectRoot, allowedPaths = []) {
+  const root = path.resolve(projectRoot);
+  const files = new Map();
+  const visit = (absolute) => {
+    if (files.size >= MICRO_FINGERPRINT_LIMIT) return;
+    let stat;
+    try { stat = fs.statSync(absolute); } catch (error) {
+      const relative = path.relative(root, absolute).split(path.sep).join('/');
+      files.set(relative, 'missing');
+      return;
+    }
+    if (stat.isDirectory()) {
+      let entries = [];
+      try { entries = fs.readdirSync(absolute, { withFileTypes: true }); } catch (_) { return; }
+      for (const entry of entries) {
+        if (['.git', '.contextos', 'node_modules'].includes(entry.name)) continue;
+        visit(path.join(absolute, entry.name));
+      }
+      return;
+    }
+    const relative = path.relative(root, absolute).split(path.sep).join('/');
+    files.set(relative, fingerprintFile(absolute));
+  };
+  for (const entry of allowedPaths) {
+    if (typeof entry !== 'string' || !entry.trim()) continue;
+    const normalized = entry.replace(/\\/g, '/').replace(/^\.\//, '');
+    if (/[*?\[]/.test(normalized)) {
+      try {
+        for (const match of fs.globSync(normalized, { cwd: root })) visit(path.resolve(root, match));
+      } catch (_) {}
+      continue;
+    }
+    visit(path.resolve(root, normalized));
+  }
+  return files;
+}
+
+function implementationDiff(before, after) {
+  const changedPaths = new Set();
+  for (const file of new Set([...before.keys(), ...after.keys()])) {
+    if (before.get(file) !== after.get(file)) changedPaths.add(file);
+  }
+  return { changed: changedPaths.size > 0, changedPaths: [...changedPaths].sort() };
+}
+
+function changeReceiptEvidence(result) {
+  const text = typeof result === 'string' ? result : JSON.stringify(result || '');
+  let applied = false;
+  let receiptId = text.match(/\breceipt(?:\s+|[=:~-])([A-Za-z0-9._-]+)/i)?.[1] || null;
+  const status = text.match(/status=(\{[^\n]+\})/)?.[1];
+  if (status) {
+    try {
+      const parsed = JSON.parse(status);
+      applied = parsed.operation === 'change' && parsed.changed === true
+        && ['applied', 'verified'].includes(parsed.status);
+    } catch (_) {}
+  }
+  if (!applied && /(?:^|\n)# ContextOS change[\s\S]*?\n- (?:created|edited|deleted) `/.test(text)) applied = true;
+  if (!receiptId) receiptId = text.match(/\breceipt=(?:receipt-)?([A-Za-z0-9._-]+)/i)?.[1] || null;
+  return { applied, receiptId };
 }
 
 function expandMicroInspectGlobs(projectRoot, globs = []) {
@@ -440,7 +800,7 @@ function expandMicroInspectGlobs(projectRoot, globs = []) {
 /**
  * Safely execute an OS tool called by the micro model.
  */
-export async function executeMicroTool(name, rawArgs, { caps, projectRoot, dispatch, allowCommands = false } = {}) {
+export async function executeMicroTool(name, rawArgs, { caps, projectRoot, dispatch, allowCommands = false, allowedPaths = [], reportJobId = null, agentJobId = null, execution = 'analyze', signal = null } = {}) {
   let args = {};
   if (typeof rawArgs === 'string') {
     try {
@@ -451,8 +811,46 @@ export async function executeMicroTool(name, rawArgs, { caps, projectRoot, dispa
   } else if (rawArgs && typeof rawArgs === 'object') {
     args = rawArgs;
   }
+  if (name === 'os' && args.args && typeof args.args === 'object') args = { ...args.args, action: args.action };
+  if ((name === 'os' && args.action === 'inspect') || name === 'inspect') args = normalizeMicroInspectArgs(args);
 
   try {
+    if (name === 'os' && args.action === 'pipeline') {
+      if (microPipelineDelegates(args)) return JSON.stringify({ error: 'Micro pipeline cannot delegate to micro, CLI agents, or integration.' });
+      const pipelineTargets = microPipelineMutationTargets(args);
+      if (pipelineTargets.length && execution !== 'implement') {
+        return JSON.stringify({ error: 'Analysis tasks cannot run mutation steps inside a pipeline. Use os change directly for bounded edits.' });
+      }
+      if (pipelineTargets.length && !allowedPaths.length) {
+        return JSON.stringify({ error: 'Implementation pipeline mutations require allowedPaths.' });
+      }
+      if (pipelineTargets.some((target) => !microPathAllowed(target, projectRoot, allowedPaths))) {
+        return JSON.stringify({ error: `Change exceeds assigned allowedPaths: ${allowedPaths.join(', ')}` });
+      }
+      if (microPipelineNeedsCommands(args) && !allowCommands) {
+        return JSON.stringify({ error: 'Pipeline verification commands require invocation.tools.allowCommands:true.' });
+      }
+    }
+    if (name === 'os' && microMutation(args.action, args) && execution !== 'implement') return JSON.stringify({ error: 'Analysis tasks cannot edit files.' });
+    if (name === 'messages') {
+      if (!agentJobId) return JSON.stringify({ error: 'No assigned message channel.' });
+      return JSON.stringify({ messages: await waitForMicroMessages(projectRoot, agentJobId, { waitMs: args.waitMs, signal }) });
+    }
+    if (name === 'os' && (args.action === 'verify' || ['work', 'change'].includes(args.action) && ['verify', 'command', 'commands'].some((key) => args[key] !== undefined)) && !allowCommands) {
+      return JSON.stringify({ error: 'Verification commands require invocation.tools.allowCommands:true.' });
+    }
+    if (name === 'os' && microMutation(args.action, args) && execution === 'implement') {
+      if (!allowedPaths.length) return JSON.stringify({ error: 'Implementation changes require allowedPaths.' });
+      const targets = microMutationTargets(args);
+      if (!targets.length || targets.some((target) => !microPathAllowed(target, projectRoot, allowedPaths))) {
+        return JSON.stringify({ error: `Change exceeds assigned allowedPaths: ${allowedPaths.join(', ')}` });
+      }
+    }
+    if (name === 'os' && microMutation(args.action, args) && !allowCommands) args.verify = [];
+    if (name === 'report') {
+      if (!reportJobId) return JSON.stringify({ error: 'No assigned report channel.' });
+      return JSON.stringify(reportMicroJob(projectRoot, reportJobId, args.content));
+    }
     if (name === 'run') {
       if (!allowCommands) {
         return JSON.stringify({ error: 'Micro run tool requires invocation.tools.allowCommands:true.' });
@@ -749,7 +1147,8 @@ export function resolveMicroInput(options = {}, { projectRoot = process.cwd(), m
       lineNumbers: false,
     });
     if (!artifact) throw new Error(`Micro input artifact not found: ${artifactId}`);
-    return finish(artifact.text, 'artifact');
+    const resolved = finish(artifact.text, 'artifact');
+    return { ...resolved, truncated: resolved.truncated || artifact.truncated === true };
   }
 
   if (!options.inputRef) return { input: '', source: null, truncated: false };
@@ -763,7 +1162,7 @@ export function resolveMicroInput(options = {}, { projectRoot = process.cwd(), m
   return finish(fs.readFileSync(fullPath, 'utf8'), 'inputRef');
 }
 
-async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxResponseChars = 2_000_000) {
+async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxResponseChars = 2_000_000, signal = null) {
   const payload = JSON.stringify(payloadObj);
   const responseLimit = positiveNumber(maxResponseChars, 2_000_000);
   const reqHeaders = {
@@ -774,9 +1173,11 @@ async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxRes
 
   return new Promise((resolve) => {
     let settled = false;
+    const abort = () => { req.destroy(); finish({ ok: false, error: 'Micro task cancelled; interrupted provider usage is unknown.' }); };
     const finish = (value) => {
       if (settled) return;
       settled = true;
+      signal?.removeEventListener('abort', abort);
       resolve(value);
     };
     const req = transport.request(
@@ -844,6 +1245,7 @@ async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxRes
       req.destroy();
       finish({
         ok: false,
+        errorCode: 'MICRO_REQUEST_TIMEOUT',
         error: `Micro task timed out after ${timeoutMs}ms`,
       });
     });
@@ -855,6 +1257,8 @@ async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxRes
       });
     });
 
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { abort(); return; }
     req.write(payload);
     req.end();
   });
@@ -869,6 +1273,83 @@ async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxRes
  * @returns {Promise<object>} Result { ok, content, reasoning, usage, durationMs, withOS?, steps?, toolCalls?, error? }
  */
 export async function runMicroTask(config = {}, options = {}) {
+  if (process.env.CONTEXTOS_DISABLE_MICRO === '1') return { ok: false, errorCode: 'MICRO_DISABLED', error: 'Micro execution is disabled; no provider request was sent.', durationMs: 0, providerUsage: null };
+  const projectRoot = path.resolve(options.projectRoot || config.projectRoot || process.cwd());
+  options = hydrateContinuationState(projectRoot, options);
+  const route = selectMicroProvider(config, options);
+  if (!route.ok) return { ok: false, errorCode: 'MICRO_PROVIDER_INVALID', error: route.error, providerUsage: null };
+  const apiImplementation = route.provider === 'api' && options.execution === 'implement';
+  const apiToolsEnabled = options.withOS === true || options.invocation?.tools?.enabled === true;
+  const apiWorkspace = options.workspace ? path.resolve(options.workspace) : null;
+  const failApi = (errorCode, error) => {
+    const result = {
+      ok: false,
+      errorCode,
+      error,
+      durationMs: 0,
+      providerUsage: null,
+      invocation: { providerLaunches: 0, providerRequests: 0 },
+    };
+    if (options.agentJobId || options.reportFormat === 'structured') {
+      result.agentReport = normalizeAgentReport({ answer: error }, { jobId: options.agentJobId || null, status: 'failed' });
+    }
+    return { ...microCostEstimate(result, config), provider: route.provider, routing: route };
+  };
+  if (apiImplementation) {
+    if (!Array.isArray(options.context?.allowedPaths) || options.context.allowedPaths.length === 0) {
+      return failApi('API_MICRO_IMPLEMENTATION_SCOPE_REQUIRED', 'API Micro implementation requires context.allowedPaths; keep the change bounded.');
+    }
+    if (!apiToolsEnabled) return failApi('API_MICRO_TOOLS_REQUIRED', 'API Micro implementation requires OS tools; enable withOS or invocation.tools.enabled.');
+    if (!options.orchestrator?.dispatch) return failApi('API_MICRO_OS_DISPATCH_REQUIRED', 'API Micro implementation requires the host OS dispatcher.');
+    if (apiWorkspace && apiWorkspace !== projectRoot) return failApi('API_MICRO_WORKSPACE_UNSUPPORTED', 'API Micro edits the project root directly; a separate CLI workspace is not supported.');
+  }
+  const selected = route.provider === 'cli' ? { ...config, maxProviderTokens: config.cli?.maxProviderTokens ?? (config.url ? undefined : config.maxProviderTokens), ...config.cli?.settings } : { ...config };
+  // The caller selects the provider before dispatch; a failure never silently launches the other role.
+  const result = await scheduleMicro({ ...options, maxConcurrency: options.maxConcurrency ?? config.maxConcurrency }, async () => {
+    let launched = false;
+    try {
+      const preload = typeof options.preparePreload === 'function' ? await options.preparePreload() : options.preload;
+      if (preload && (preload.ok === false || preload.truncated)) return {
+        ok: false, errorCode: 'MICRO_PRELOAD_FAILED', error: preload.truncated ? 'Micro preload evidence was truncated; narrow the OS steps before dispatch.' : (preload.error || `Micro preload ended with ${preload.status}`),
+        budgetExceeded: Boolean(preload.truncated), inputSource:'preload',
+        providerUsage: null, usageSource:'unavailable', preload: microPreloadReceipt(preload), invocation: {providerLaunches:0},
+      };
+      launched = true;
+      const execution = await runSelectedMicroTask(selected, { ...options, preload, provider: route.provider });
+      if (!preload) return execution;
+      return {
+        ...execution,
+        preload: microPreloadReceipt(preload),
+        invocation: {
+          ...execution.invocation,
+          evidenceMode: 'pipeline',
+          evidenceCacheHit: Boolean(preload.cacheHit),
+          pipelineRuns: (Number(preload.pipelineRuns) || 0) + (Number(execution.invocation?.pipelineRuns) || 0),
+        },
+      };
+    } catch (error) {
+      return { ok: false, errorCode: launched ? 'MICRO_EXECUTION_FAILED' : 'MICRO_IMPLEMENTATION_SCOPE_REQUIRED', error: error.message, providerUsage: null, ...(launched ? { providerUsageComplete: false } : {}) };
+    }
+  });
+  if (options.agentJobId || options.execution === 'implement' || options.reportFormat === 'structured') {
+    result.agentReport = normalizeAgentReport({ ...(result.structured || {}), ...(typeof result.needsHost === 'boolean' ? { needsHost: result.needsHost } : {}), answer: result.structured?.answer ?? result.content ?? result.error }, { jobId: options.agentJobId || null, status: result.ok ? 'completed' : 'failed' });
+    if (result.ok) {
+      // An explicit `needsHost:false` from the worker is a real answer; only an
+      // absent routing decision is treated as needing host attention.
+      if (result.needsHost === undefined && !result.structured) result.agentReport.needsHost = true;
+      result.needsHost = result.agentReport.needsHost;
+    }
+  }
+  return { ...microCostEstimate(result, config), provider: route.provider, routing: route };
+}
+
+async function runSelectedMicroTask(config = {}, options = {}) {
+  if (process.env.CONTEXTOS_DISABLE_MICRO === '1') {
+    return { ok: false, errorCode: 'MICRO_DISABLED', error: 'Micro execution is disabled for this evaluation; no provider request was sent.', durationMs: 0, providerUsage: null };
+  }
+  if (options.provider || config.provider) {
+    if (!['api', 'cli'].includes(options.provider || config.provider)) return { ok: false, errorCode: 'MICRO_PROVIDER_INVALID', error: 'Micro provider must be api or cli; no provider was called.' };
+  }
   const start = Date.now();
   const requestedDelivery = ['immediate', 'defer', 'errors-only', 'auto'].includes(options.delivery)
     ? options.delivery
@@ -892,6 +1373,23 @@ export async function runMicroTask(config = {}, options = {}) {
       inputSource: 'preload',
       delivery: requestedDelivery,
     };
+  }
+
+  if ((options.provider || config.provider) === 'cli') {
+    const cliSkillGuidance = options.system ?? (
+      config.cli?.osInvocation && config.cli?.injectSkillGuidance !== false
+        ? loadMicroSkillGuidance({
+          projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
+        })
+        : undefined
+    );
+    const cliMaxInputChars = options.maxInputChars ?? config.maxInputChars ?? (cliSkillGuidance ? 32000 : 16000);
+    const resolved = resolveMicroInput(options, {
+      projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
+      maxInputChars: cliMaxInputChars,
+    });
+    return runCliMicro({ ...config, model: options.model || config.cli?.model || config.model }, { ...options, system: cliSkillGuidance, maxInputChars: cliMaxInputChars, resolvedInput: resolved.input,
+      inputSource: resolved.source, inputTruncated: resolved.truncated, preloadText });
   }
 
   const urlStr = resolveChatCompletionsUrl(options.url || config.url);
@@ -941,21 +1439,13 @@ export async function runMicroTask(config = {}, options = {}) {
   const invocation = normalizeMicroInvocation(config, options, presetKey || 'custom', {
     hasPreload: Boolean(preloadContext),
   });
+  invocation.pipelineRuns = 0;
 
-  // Resolve system prompt
-  const deliveryPrompt = options.delivery === 'auto'
-    ? (presetKey === 'evidence'
-        ? '\nFor host routing, include needsHost as a boolean and hostReason as a short string in the JSON. Set needsHost=true only when the host agent needs your answer to decide or perform the requested work; set it false when a success receipt or an error is sufficient. When false, keep answer, evidenceRefs, and unknowns empty and hostReason very short.'
-        : '\nFor auto delivery, return only JSON with shape {"needsHost":boolean,"hostReason":string,"answer":string or a JSON value}. Keep answer concise and in the requested preset format: text/code as a string, JSON as a native JSON value. Set needsHost=true when the host needs the result on its next action; ContextOS will defer it for the next top-level OS call. Set needsHost=false only when a success receipt or error is sufficient; use an empty string or null for answer. Do not add prose outside the JSON.')
-    : (options.delivery === 'errors-only'
-        ? '\nThe host will not see a successful answer; it only needs an error if an assigned tool call fails. Complete the work and return a concise final answer. Do not claim success when a tool call failed.'
-        : (options.delivery === 'defer'
-            ? '\nYour answer will be restored by ContextOS on a later call. Return only the concise result the host will need then.'
-            : ''));
-  const toolAvailabilityPrompt = invocation.toolsEnabled
-    ? ''
-    : '\nNo tools are available in this run. Do not emit tool calls, function-call syntax, XML tool tags, or a plan to inspect files; answer directly from the provided input.';
-  const systemPrompt = `${options.system || preset?.system || config.system || ''}${deliveryPrompt}${toolAvailabilityPrompt}`;
+  // Resolve system prompt: the ContextOS skill guidance is the sole background prompt.
+  const skillGuidance = loadMicroSkillGuidance({
+    projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
+  });
+  const systemPrompt = skillGuidance;
   const resolvedInput = resolveMicroInput(options, {
     projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
     maxInputChars: options.maxInputChars
@@ -963,6 +1453,21 @@ export async function runMicroTask(config = {}, options = {}) {
       ?? MICRO_INPUT_LIMITS[presetKey]
       ?? MICRO_INPUT_LIMITS.custom,
   });
+  const manifest = options.context ? {
+    objective: prompt ? 'Complete the current user task.' : (options.context.objective || ''),
+    workspace: path.resolve(options.workspace || options.projectRoot || config.projectRoot || process.cwd()),
+    execution: options.execution || 'analyze', allowedPaths: options.context.allowedPaths || [],
+    acceptance: options.context.acceptance || [], constraints: options.context.constraints || [],
+    state: options.context.state || null, baseRevision: options.context.baseRevision || null,
+    evidence: options.context.evidence || [],
+    ...(options.context.instructions ? { instructions: options.context.instructions } : {}),
+  } : null;
+  const manifestText = manifest ? `Task manifest: ${JSON.stringify(manifest)}\nComplete only this assignment. Injected source/preload is already available: do not reread unchanged covered ranges. Fetch only named missing or changed evidence. OS call: os({action:"work",args:{inspect:[{path,ranges:[[first,last]]}]}}); use os action "change" for bounded edits and "verify" or the run tool for commands when allowed. Code changes must go through change. Stay within allowedPaths. Do not delegate again. Return JSON with summary, changes, checks (actual outcomes), blockers, question, needsHost; omit execution history.` : '';
+  if (manifest && (resolvedInput.truncated || (manifestText.length + prompt.length + resolvedInput.input.length + preloadText.length) > (options.maxInputChars ?? config.maxInputChars ?? 16000))) return {
+    ok: false, errorCode: resolvedInput.truncated ? 'MICRO_INPUT_TRUNCATED' : 'MICRO_CONTEXT_TOO_LARGE',
+    error: 'The task context is incomplete or exceeds its limit; narrow the evidence before dispatch.',
+    durationMs: Date.now() - start, providerUsage: null,
+  };
   const inputSource = resolvedInput.source || (prompt ? 'task' : (preloadText ? 'preload' : 'none'));
   const preloadMeta = preloadContext
     ? {
@@ -999,13 +1504,15 @@ export async function runMicroTask(config = {}, options = {}) {
     custom: 'Analyze the following input and return only the requested result.',
   }[presetKey] || 'Analyze the following input and return only the requested result.';
   const effectivePrompt = prompt || (resolvedInput.input ? defaultInputInstruction : '');
+  const withOS = Boolean(invocation.toolsEnabled && (options.caps || options.projectRoot));
+  const effectiveSystemPrompt = systemPrompt;
 
   // Resolve messages
   let messages = [];
   if (Array.isArray(options.history) && options.history.length > 0) {
     messages = [...options.history];
-    if (systemPrompt && !messages.some((m) => m.role === 'system')) {
-      messages.unshift({ role: 'system', content: systemPrompt });
+    if (effectiveSystemPrompt && !messages.some((m) => m.role === 'system')) {
+      messages.unshift({ role: 'system', content: effectiveSystemPrompt });
     }
     if (preloadText) messages.push({ role: 'system', content: preloadText });
     if (effectivePrompt || resolvedInput.input) {
@@ -1015,8 +1522,8 @@ export async function runMicroTask(config = {}, options = {}) {
       messages.push({ role: 'user', content: userContent });
     }
   } else {
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
+    if (effectiveSystemPrompt) {
+      messages.push({ role: 'system', content: effectiveSystemPrompt });
     }
     if (preloadText) messages.push({ role: 'system', content: preloadText });
     const userContent = effectivePrompt
@@ -1025,14 +1532,18 @@ export async function runMicroTask(config = {}, options = {}) {
     if (userContent || !preloadText) messages.push({ role: 'user', content: userContent });
   }
 
+  if (manifestText) messages.push({ role: 'system', content: manifestText });
+
   // Parameters
-  const rawMaxTokens = invocation.maxOutputTokens ?? options.maxTokens ?? config.maxTokens ?? 1024;
-  const maxTokens = options.outputMode === 'answer'
-    ? Math.min(Number(rawMaxTokens) || 512, MICRO_ANSWER_TOKENS[presetKey] || 512)
-    : rawMaxTokens;
+  const rawMaxTokens = invocation.maxOutputTokens ?? options.maxTokens ?? config.maxTokens ?? null;
+  const answerTokenCeiling = Number(rawMaxTokens) > 0
+    ? Number(rawMaxTokens)
+    : (MICRO_ANSWER_TOKENS[presetKey] || 3072);
+  const maxTokens = options.outputMode === 'answer' ? answerTokenCeiling : rawMaxTokens;
   const temperature = options.temperature ?? config.temperature ?? 0.1;
   const thinking = options.thinking ?? config.thinking ?? 'low';
-  const timeoutMs = options.timeoutMs ?? config.timeoutMs ?? 30000;
+  const timeoutMs = options.timeoutMs ?? config.timeoutMs ?? 86_400_000;
+  const taskTimeoutMs = positiveNumber(options.taskTimeoutMs ?? config.taskTimeoutMs, HOST_CONTINUATION_MS);
   const budget = resolveMicroBudget(config, options, presetKey || 'custom');
 
   // Headers
@@ -1052,44 +1563,55 @@ export async function runMicroTask(config = {}, options = {}) {
     || (Array.isArray(options.history) && options.history.length > 0 ? config.sessionId : null)
     || `sess-micro-${crypto.randomUUID()}`;
   headers[sessionHeader] = sessionId;
+  persistContinuationState(options.projectRoot || process.cwd(), sessionId, options);
+  const implementationBefore = options.execution === 'implement'
+    ? fingerprintImplementationPaths(options.projectRoot, options.context?.allowedPaths || [])
+    : null;
 
   // Tool calling setup
-  const withOS = Boolean(invocation.toolsEnabled && (options.caps || options.projectRoot));
   const rawMaxSteps = Number(invocation.maxSteps);
-  const DEFAULT_MAX_STEPS = 2;
-  const SAFETY_MAX_STEPS = 4;
   const maxSteps = withOS
     ? (Number.isFinite(rawMaxSteps) && rawMaxSteps > 0
-        ? Math.min(Math.floor(rawMaxSteps), SAFETY_MAX_STEPS)
-        : DEFAULT_MAX_STEPS)
+        ? Math.floor(rawMaxSteps)
+        : Infinity)
     : 1;
 
   const tools = withOS
-    ? (options.tools || MICRO_OS_TOOLS.filter((tool) => (
+    ? (options.tools ? [...options.tools] : (options.toolSurface === 'legacy' ? MICRO_OS_TOOLS : MICRO_AGENT_TOOLS).filter((tool) => (
         tool.function?.name !== 'run' || invocation.allowCommands
       )))
     : undefined;
+  if (tools && (options.reportJobId || options.agentJobId)) tools.push({ type: 'function', function: { name: 'report', description: 'Report a material finding or blocker to the host on its next OS call. Skip routine progress.', parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] } } });
+  if (tools && options.agentJobId) tools.push({ type: 'function', function: { name: 'messages', description: 'After reporting a question, wait locally for a host reply without model polling. Regular OS results already include new messages.', parameters: { type: 'object', properties: { waitMs: { type: 'number', description: 'Optional reply wait, up to 60000ms.' } } } } });
   const toolExecutionTrace = [];
   let step = 0;
-  let aggregatedUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  let aggregatedUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cached_input_tokens: 0, uncached_input_tokens: 0 };
   let aggregatedCostUsd = 0;
-  const providerUsageTotals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-  const estimatedUsageTotals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  const providerUsageTotals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cached_input_tokens: 0, uncached_input_tokens: 0 };
+  const estimatedUsageTotals = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, cached_input_tokens: 0, uncached_input_tokens: 0 };
   let providerUsageCalls = 0;
   let estimatedUsageCalls = 0;
   let deduplicatedToolCallCount = 0;
   let providerRequestCount = 0;
   let finalChoice = null;
+  let lastFinishReason = null;
   let lastReasoning = '';
 
-  const estimateRequestCost = (promptTokens, outputTokens) => {
-    if (!budget.inputUsdPerMillion && !budget.outputUsdPerMillion) return 0;
-    return (promptTokens * (budget.inputUsdPerMillion || 0) + outputTokens * (budget.outputUsdPerMillion || 0)) / 1_000_000;
+  const estimateRequestCost = (promptTokens, outputTokens, cachedTokens = 0) => {
+    const inputRate = budget.inputUsdPerMillion || 0;
+    const outputRate = budget.outputUsdPerMillion || 0;
+    if (!inputRate && !outputRate) return 0;
+    const cacheRate = budget.cacheUsdPerMillion ?? inputRate;
+    const prompt = Math.max(0, Number(promptTokens) || 0);
+    const cached = Math.min(Math.max(0, Number(cachedTokens) || 0), prompt);
+    const uncached = prompt - cached;
+    return (uncached * inputRate + cached * cacheRate + (Number(outputTokens) || 0) * outputRate) / 1_000_000;
   };
   const costSummary = () => ({
     estimatedUsd: Number(aggregatedCostUsd.toFixed(6)),
     pricingConfigured: Boolean(budget.inputUsdPerMillion || budget.outputUsdPerMillion),
     inputUsdPerMillion: budget.inputUsdPerMillion || null,
+    cacheUsdPerMillion: budget.cacheUsdPerMillion ?? null,
     outputUsdPerMillion: budget.outputUsdPerMillion || null,
   });
   const usageDetails = () => ({
@@ -1127,8 +1649,51 @@ export async function runMicroTask(config = {}, options = {}) {
       addUsage(estimatedUsageTotals, fallbackUsage);
       estimatedUsageCalls += 1;
     }
-    aggregatedCostUsd += estimateRequestCost(effectiveUsage.prompt_tokens || 0, effectiveUsage.completion_tokens || 0);
+    aggregatedCostUsd += estimateRequestCost(
+      effectiveUsage.prompt_tokens || 0,
+      effectiveUsage.completion_tokens || 0,
+      normalizeUsage(effectiveUsage).cached_input_tokens
+    );
     return effectiveUsage;
+  };
+
+  const continuationFailure = (reason) => {
+    const partialContent = String(finalChoice?.message?.content || lastReasoning || '').trim();
+    const guidance = `Continue with micro({sessionAction:"send", sessionId:"${sessionId}", task:"Continue the previous task from its partial state."}) to refresh the 290s window.`;
+    return {
+      ok: false,
+      status: 'partial',
+      partial: true,
+      errorCode: 'MICRO_CONTINUATION_REQUIRED',
+      error: `Micro reached the host continuation window after ${Date.now() - start}ms (${reason}); partial work is retained.`,
+      content: partialContent,
+      guidance,
+      resume: { kind: 'micro', action: 'send', sessionId },
+      durationMs: Date.now() - start,
+      steps: step,
+      toolCalls: toolExecutionTrace,
+      ...usageDetails(),
+      cost: costSummary(),
+      budget,
+      preload: preloadMeta,
+      invocation: {
+        ...invocation,
+        providerRequests: providerRequestCount,
+        toolRounds: step,
+        shortCircuited: true,
+        shortCircuitReason: 'continuation',
+      },
+      delivery: requestedDelivery,
+      withOS,
+      executionMode: withOS ? (toolExecutionTrace.length > 0 ? 'executor' : 'executor-idle') : 'summarizer-only',
+      summarizerOnly: !withOS,
+      sessionId,
+      sessionMode: options.sessionMode || 'isolated',
+      model,
+      preset: presetKey || null,
+      inputSource,
+      inputTruncated: resolvedInput.truncated,
+    };
   };
 
   const budgetFailure = (kind, projected, limit) => ({
@@ -1140,6 +1705,8 @@ export async function runMicroTask(config = {}, options = {}) {
         : kind === 'inputTokens'
           ? `Micro provider input budget exceeded (projected ${projected} > ${limit}).`
           : `Micro provider token budget exceeded (projected ${projected} > ${limit}).`,
+    partial: true,
+    guidance: 'Partial findings are included in steps and toolCalls. Reuse them or raise the budget for the same task; do not repeat the work from scratch.',
     durationMs: Date.now() - start,
     steps: step,
     toolCalls: toolExecutionTrace,
@@ -1158,7 +1725,6 @@ export async function runMicroTask(config = {}, options = {}) {
     withOS,
     executionMode: withOS ? (toolExecutionTrace.length > 0 ? 'executor' : 'executor-idle') : 'summarizer-only',
     summarizerOnly: !withOS,
-    hostTurnsSaved: step,
     budgetExceeded: kind,
     budgetDecision: {
       action: kind === 'requests'
@@ -1183,6 +1749,7 @@ export async function runMicroTask(config = {}, options = {}) {
   });
 
   const gateRequest = (promptTokens, outputTokens, { bypassRequestLimit = false } = {}) => {
+    if (Date.now() - start >= taskTimeoutMs) return continuationFailure('elapsed');
     if (invocation.maxInputTokens && promptTokens > invocation.maxInputTokens) {
       return budgetFailure('inputTokens', promptTokens, invocation.maxInputTokens);
     }
@@ -1196,7 +1763,7 @@ export async function runMicroTask(config = {}, options = {}) {
     const rejected = gateRequest(promptTokens, outputTokens, { bypassRequestLimit });
     if (rejected) return { rejected };
     providerRequestCount += 1;
-    return { response: await sendMicroRequest(endpoint, payload, headers, timeoutMs, options.maxResponseChars ?? config.maxResponseChars) };
+    return { response: await sendMicroRequest(endpoint, payload, headers, Math.max(1, Math.min(timeoutMs, taskTimeoutMs - (Date.now() - start))), options.maxResponseChars ?? config.maxResponseChars, options.signal) };
   };
 
   const readToolResults = new Map();
@@ -1218,7 +1785,7 @@ export async function runMicroTask(config = {}, options = {}) {
     const payloadObj = {
       model,
       messages,
-      max_tokens: maxTokens,
+      ...(Number(maxTokens) > 0 ? { max_tokens: Math.floor(Number(maxTokens)) } : {}),
       temperature,
     };
 
@@ -1234,10 +1801,13 @@ export async function runMicroTask(config = {}, options = {}) {
     if (sent.rejected) return sent.rejected;
     const res = sent.response;
     if (!res.ok) {
+      if (res.errorCode === 'MICRO_REQUEST_TIMEOUT') return continuationFailure('provider-request');
+      const resError = res.error;
       return {
         ok: false,
         statusCode: res.statusCode,
-        error: res.error,
+        error: resError,
+        providerUsageComplete: false,
         durationMs: Date.now() - start,
         steps: step,
         toolCalls: toolExecutionTrace,
@@ -1253,7 +1823,6 @@ export async function runMicroTask(config = {}, options = {}) {
         withOS,
         executionMode: withOS ? (toolExecutionTrace.length > 0 ? 'executor' : 'executor-idle') : 'summarizer-only',
         summarizerOnly: !withOS,
-        hostTurnsSaved: step,
       };
     }
 
@@ -1265,6 +1834,7 @@ export async function runMicroTask(config = {}, options = {}) {
     });
 
     finalChoice = choice;
+    if (choice?.finish_reason) lastFinishReason = choice.finish_reason;
     if (choice?.message?.reasoning_content) {
       lastReasoning = choice.message.reasoning_content;
     }
@@ -1299,7 +1869,7 @@ export async function runMicroTask(config = {}, options = {}) {
         const finalRequest = await sendRequest({
           model,
           messages,
-          max_tokens: maxTokens,
+          ...(Number(maxTokens) > 0 ? { max_tokens: Math.floor(Number(maxTokens)) } : {}),
           temperature,
           reasoning_effort: 'none',
         }, finalPromptTokens, finalOutputTokens);
@@ -1307,6 +1877,7 @@ export async function runMicroTask(config = {}, options = {}) {
         const finalRes = finalRequest.response;
         if (finalRes.ok && finalRes.data?.choices?.[0]) {
           finalChoice = finalRes.data.choices[0];
+          if (finalChoice?.finish_reason) lastFinishReason = finalChoice.finish_reason;
           recordResponseUsage(finalRes.data.usage, {
             prompt_tokens: estimateMicroTokens(messages),
             completion_tokens: estimateMicroTokens(finalChoice.message?.content || ''),
@@ -1347,7 +1918,12 @@ export async function runMicroTask(config = {}, options = {}) {
         try {
           parsedToolArgs = typeof toolArgs === 'string' ? JSON.parse(toolArgs) : (toolArgs || {});
         } catch (_) {}
+        const osArgs = parsedToolArgs.args || parsedToolArgs;
+        const mutationCall = toolName === 'os' && (microMutation(parsedToolArgs.action, osArgs)
+          || parsedToolArgs.action === 'pipeline' && microPipelineMutationTargets(osArgs).length > 0);
         const memoKey = microReadMemoKey(toolName, parsedToolArgs);
+        const pipelineToolCall = toolName === 'os'
+          && (parsedToolArgs.action ?? parsedToolArgs.args?.action) === 'pipeline';
         let deduplicated = false;
         let resultStr;
         if (memoKey && readToolResults.has(memoKey)) {
@@ -1362,18 +1938,40 @@ export async function runMicroTask(config = {}, options = {}) {
           resultStr = await executeMicroTool(toolName, toolArgs, {
             caps: options.caps,
             projectRoot: options.projectRoot,
-            dispatch: options.orchestrator?.dispatch,
+            dispatch: options.orchestrator ? options.orchestrator.dispatch.bind(options.orchestrator) : undefined,
             allowCommands: invocation.allowCommands,
+            allowedPaths: options.context?.allowedPaths || [],
+            reportJobId: options.reportJobId || options.agentJobId,
+            agentJobId: options.agentJobId,
+            execution: options.execution,
+            signal: options.signal,
           });
+          const osArgs = parsedToolArgs.args || parsedToolArgs;
+          if (toolName === 'run' || toolName === 'os' && (microMutation(parsedToolArgs.action, osArgs)
+            || parsedToolArgs.action === 'verify' || parsedToolArgs.action === 'work' && ['verify', 'command', 'commands'].some((key) => osArgs[key] !== undefined))) readToolResults.clear();
           if (memoKey) readToolResults.set(memoKey, resultStr);
         }
+        if (options.agentJobId && toolName !== 'messages') {
+          try {
+            const messages = receiveMicroMessages(options.projectRoot, options.agentJobId);
+            if (messages.length) {
+              try { resultStr = JSON.stringify({ ...JSON.parse(resultStr), microMessages: messages }); }
+              catch { resultStr = JSON.stringify({ result: resultStr, microMessages: messages }); }
+            }
+          } catch {} // Preserve the action receipt when only mailbox access fails.
+        }
         const resultStatus = summarizeMicroToolOutput(resultStr);
+        const receipt = mutationCall ? changeReceiptEvidence(resultStr) : null;
+        if (pipelineToolCall && resultStatus.ok !== false) {
+          invocation.pipelineRuns = (Number(invocation.pipelineRuns) || 0) + 1;
+        }
         toolExecutionTrace.push({
           id: call.id,
           name: toolName,
           arguments: toolArgs,
           preview: resultStr.slice(0, 150),
           ...(deduplicated ? { deduplicated: true } : {}),
+          ...(mutationCall ? { mutation: true, applied: receipt?.applied === true, ...(receipt?.receiptId ? { changeReceiptId: receipt.receiptId } : {}) } : {}),
           ...resultStatus,
         });
         messages.push({
@@ -1390,6 +1988,9 @@ export async function runMicroTask(config = {}, options = {}) {
   }
 
   let content = String(finalChoice?.message?.content ?? '').trim();
+  const providerFinishReason = finalChoice?.finish_reason || lastFinishReason || null;
+  const providerTruncated = ['length', 'max_tokens', 'max_output_tokens']
+    .includes(String(providerFinishReason || '').toLowerCase());
   let fallbackError = null;
   let invalidOutputReason = !content
     ? 'empty'
@@ -1414,16 +2015,17 @@ export async function runMicroTask(config = {}, options = {}) {
         content: `${retryInstruction}${options.delivery === 'auto' ? deliveryPrompt : ''}`,
       },
     ];
-    const fallbackMaxTokens = Math.max(Number(maxTokens) || 0, 4096);
+    const fallbackMaxTokens = Number(maxTokens) > 0 ? Math.floor(Number(maxTokens)) : null;
+    const fallbackProjectionTokens = fallbackMaxTokens ?? 4096;
     const fallbackPromptTokens = estimateMicroTokens(fallbackMessages);
     const fallbackInputRejected = gateRequest(
       fallbackPromptTokens,
-      fallbackMaxTokens,
+      fallbackProjectionTokens,
       { bypassRequestLimit: true },
     );
     if (fallbackInputRejected) return fallbackInputRejected;
-    const fallbackProjectedTotal = aggregatedUsage.total_tokens + fallbackPromptTokens + fallbackMaxTokens;
-    const fallbackProjectedCost = aggregatedCostUsd + estimateRequestCost(fallbackPromptTokens, fallbackMaxTokens);
+    const fallbackProjectedTotal = aggregatedUsage.total_tokens + fallbackPromptTokens + fallbackProjectionTokens;
+    const fallbackProjectedCost = aggregatedCostUsd + estimateRequestCost(fallbackPromptTokens, fallbackProjectionTokens);
     if (budget.maxProviderTokens && fallbackProjectedTotal > budget.maxProviderTokens) {
       return budgetFailure('providerTokens', fallbackProjectedTotal, budget.maxProviderTokens);
     }
@@ -1434,15 +2036,16 @@ export async function runMicroTask(config = {}, options = {}) {
     const fallbackRequest = await sendRequest({
       model,
       messages: fallbackMessages,
-      max_tokens: fallbackMaxTokens,
+      ...(fallbackMaxTokens ? { max_tokens: fallbackMaxTokens } : {}),
       temperature,
       reasoning_effort: 'none',
-    }, fallbackPromptTokens, fallbackMaxTokens, { bypassRequestLimit: true });
+    }, fallbackPromptTokens, fallbackProjectionTokens, { bypassRequestLimit: true });
     if (fallbackRequest.rejected) return fallbackRequest.rejected;
     const fallbackRes = fallbackRequest.response;
 
     if (fallbackRes.ok && fallbackRes.data?.choices?.[0]) {
       finalChoice = fallbackRes.data.choices[0];
+      if (finalChoice?.finish_reason) lastFinishReason = finalChoice.finish_reason;
       recordResponseUsage(fallbackRes.data.usage, {
         prompt_tokens: fallbackPromptTokens,
         completion_tokens: estimateMicroTokens(finalChoice.message?.content || ''),
@@ -1472,6 +2075,8 @@ export async function runMicroTask(config = {}, options = {}) {
     return {
       ok: false,
       statusCode: 200,
+      providerTruncated,
+      finishReason: providerFinishReason,
       error: invalidOutputReason === 'tool_call_syntax'
         ? `Micro provider returned tool-call syntax while tools were disabled${fallbackError ? ` after final-answer retry: ${fallbackError}` : ''}.`
         : fallbackError
@@ -1549,11 +2154,31 @@ export async function runMicroTask(config = {}, options = {}) {
       ? structured.needsHost
       : null;
   const hostReason = typeof structured?.hostReason === 'string' ? structured.hostReason.slice(0, 400) : null;
+  const implementationAfter = implementationBefore
+    ? fingerprintImplementationPaths(options.projectRoot, options.context?.allowedPaths || [])
+    : null;
+  const implementationDiffResult = implementationBefore
+    ? implementationDiff(implementationBefore, implementationAfter || new Map())
+    : { changed: false, changedPaths: [] };
+  const appliedReceipts = toolExecutionTrace
+    .filter((call) => call.mutation === true && call.applied === true)
+    .map((call) => call.changeReceiptId || call.id)
+    .filter(Boolean);
+  const implementationEvidence = options.execution === 'implement'
+    ? {
+        applied: implementationDiffResult.changed,
+        source: implementationDiffResult.changed ? 'diff' : (appliedReceipts.length ? 'unverified-receipt' : 'none'),
+        changedPaths: implementationDiffResult.changedPaths,
+        receiptIds: appliedReceipts,
+      }
+    : null;
 
-  return {
+  const result = {
     ok: true,
     statusCode: 200,
     content,
+    providerTruncated,
+    finishReason: providerFinishReason,
     structured,
     evidenceRefs,
     confidence,
@@ -1561,6 +2186,7 @@ export async function runMicroTask(config = {}, options = {}) {
     needsHost,
     hostReason,
     reasoning: lastReasoning,
+    ...(implementationEvidence ? { implementationEvidence } : {}),
     ...usageDetails(),
     cost: costSummary(),
     budget,
@@ -1578,7 +2204,6 @@ export async function runMicroTask(config = {}, options = {}) {
     withOS,
     executionMode: withOS ? (toolExecutionTrace.length > 0 ? 'executor' : 'executor-idle') : 'summarizer-only',
     summarizerOnly: !withOS,
-    hostTurnsSaved: step,
     sessionId,
     sessionMode: options.sessionMode || 'isolated',
     batch: options.batch === true,
@@ -1588,6 +2213,16 @@ export async function runMicroTask(config = {}, options = {}) {
     preload: preloadMeta,
     toolCalls: toolExecutionTrace,
   };
+  if (implementationEvidence && !implementationEvidence.applied && !providerTruncated) {
+    return {
+      ...result,
+      ok: false,
+      statusCode: 409,
+      errorCode: 'MICRO_IMPLEMENTATION_NOT_APPLIED',
+      error: 'Implementation finished without an applied source change receipt or workspace diff.',
+    };
+  }
+  return result;
 }
 
 /**
@@ -1614,14 +2249,11 @@ export async function runMicroTasksParallel(config = {}, tasks = [], globalOptio
   // and durable artifact churn. Keep the batch complete, but bound in-flight
   // provider calls. `maxConcurrency` is a scheduler hint, not a per-task input.
   const requestedConcurrency = Number(globalOptions?.maxConcurrency);
-  const concurrency = Math.min(
-    MICRO_BATCH_MAX_CONCURRENCY,
-    Math.max(
+  const concurrency = Math.max(
       1,
       Number.isFinite(requestedConcurrency) && requestedConcurrency > 0
         ? Math.floor(requestedConcurrency)
         : MICRO_BATCH_DEFAULT_CONCURRENCY
-    )
   );
   const { maxConcurrency: _maxConcurrency, ...taskDefaults } = globalOptions || {};
   const results = new Array(tasks.length);

@@ -362,9 +362,6 @@ const ProjectHeader: React.FC<{ store: GraphStore }> = ({ store }) => {
   const totalCps = store.totalCheckpointsCount;
   const passedCps = store.passedCheckpointsCount;
   const pct = store.checkpointPassPercentage;
-  const isCloud =
-    store.snapshot.project.name.includes('(Cloud)') ||
-    store.projectRoot.includes('.contextos/cloud_projects');
 
   return (
     <div className="p-4 flex flex-col gap-2">
@@ -373,7 +370,7 @@ const ProjectHeader: React.FC<{ store: GraphStore }> = ({ store }) => {
           onClick={() => setDropdownOpen(!dropdownOpen)}
           className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200/80 transition-colors w-full text-left"
         >
-          <span className="text-blue-500 text-xs">{isCloud ? '☁' : '📁'}</span>
+          <span className="text-blue-500 text-xs">📁</span>
           <span className="text-[14px] font-semibold text-slate-800 truncate flex-1">
             {store.snapshot.project.name}
           </span>
@@ -729,6 +726,37 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
         <div className="flex-1 overflow-y-auto p-5 grid grid-cols-[330px_1fr] gap-4">
           {/* Left Column: Preferences + Software Update + Live Data */}
           <div className="flex flex-col gap-3.5">
+            <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs space-y-2">
+              <div className="font-semibold text-slate-800">{chinese ? 'API Micro（必需）' : 'API Micro (required)'}</div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '配置' : 'Configuration'}</span><span>{store.microRoles?.micro.status ?? (store.microRolesError ? 'Unknown' : 'Loading')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '有效配置来源' : 'Effective config source'}</span><span>{store.microRoles?.micro.configurationSource ?? 'Unknown'}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? 'Provider / 协议' : 'Provider / protocol'}</span><span>{[store.microRoles?.micro.provider, store.microRoles?.micro.transport].filter(Boolean).join(' / ') || (chinese ? '未指定' : 'Unspecified')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '模型' : 'Model'}</span><span>{store.microRoles?.micro.model ?? (chinese ? '未配置/未知' : 'Not configured / unknown')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '思考等级（请求→映射）' : 'Thinking (requested → mapped)'}</span><span>{store.microRoles?.micro.requestedThinking
+                ? `${store.microRoles.micro.requestedThinking}${store.microRoles.micro.effectiveThinking ? ` → ${store.microRoles.micro.effectiveThinking}` : ''}`
+                : (chinese ? '未指定' : 'Unspecified')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '映射等级' : 'Mapped levels'}</span><span>{store.microRoles?.micro.supportedThinking.length
+                ? store.microRoles.micro.supportedThinking.join(', ')
+                : (chinese ? '未知（未配置映射）' : 'Unknown (no mapping configured)')}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '凭据来源' : 'Credential source'}</span><span>{store.microRoles?.micro.credentialConfigured
+                ? (chinese ? '已配置（密钥不显示）' : 'Configured (secret hidden)')
+                : (chinese ? '未配置' : 'Not configured')}</span></div>
+              <div className="text-[11px] text-slate-500">{chinese ? '此页只读并脱敏展示全局/项目有效配置，不复制全局密钥；认证及任务就绪度未知，也不执行请求。' : 'This page reads and redacts effective global/project config without copying global secrets; authentication and task readiness remain unknown, and no request is made.'}</div>
+
+              <div className="border-t border-slate-100 pt-2 font-semibold text-slate-800">{chinese ? 'CLI Agent（可选 adapter）' : 'CLI Agent (optional adapter)'}</div>
+              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '默认 adapter' : 'Default adapter'}</span><span>{store.microRoles?.agents.default ?? (chinese ? '未配置' : 'Not configured')}</span></div>
+              {Object.entries(store.microRoles?.agents.adapters ?? {}).map(([name, adapter]) => (
+                <div key={name}>
+                  <div className="flex justify-between gap-3"><span>{name}</span><span className="text-slate-500">{adapter.command ?? (chinese ? '命令未知' : 'Command unknown')}</span></div>
+                  <div className="text-[10px] text-slate-500">{chinese
+                    ? '已安装：未知 · 已认证：未知 · 模型：未知 · analyze：未知 · implement：未知'
+                    : 'Installed: unknown · Auth: unknown · Model: unknown · Analyze: unknown · Implement: unknown'}</div>
+                </div>
+              ))}
+              <div className="text-[11px] text-slate-500">{chinese
+                ? '安装、登录、模型和 analyze/implement 状态均未探测；需要 AI 显式执行一次有界验证。'
+                : 'Install, login, model, and analyze/implement states are unprobed until the AI runs one explicit bounded check.'}</div>
+            </div>
             {/* 1. Preferences */}
             <div>
               {sectionHeader(chinese ? '偏好设置' : 'PREFERENCES')}
@@ -1257,4 +1285,3 @@ const EditorPlatformRow: React.FC<{ status: EditorPlatformStatus; store: GraphSt
     </div>
   );
 };
-

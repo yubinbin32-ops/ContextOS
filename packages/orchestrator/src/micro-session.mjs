@@ -4,10 +4,11 @@ import crypto from 'node:crypto';
 import { discardMicroDeliveriesForSession } from './micro-delivery.mjs';
 
 const SESSION_VERSION = 1;
-const DEFAULT_MAX_TURNS = 6;
-const MAX_TURNS = 12;
+const DEFAULT_MAX_TURNS = 24;
+const MAX_TURNS = 100;
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
+const MAX_RETAINED_SESSIONS = 5;
 const DEFAULT_MAX_CONTEXT_CHARS = 24000;
 const MIN_CONTEXT_CHARS = 4000;
 const MAX_CONTEXT_CHARS = 64000;
@@ -311,7 +312,9 @@ export function completeMicroTurn(projectRoot, sessionId, { result, receiptId = 
   session.updatedAt = new Date().toISOString();
   trimMessages(session);
   writeAtomic(sessionPath(projectRoot, session.id), session);
-  return microSessionSnapshot(session);
+  const snapshot = microSessionSnapshot(session);
+  pruneMicroSessions(projectRoot);
+  return snapshot;
   }, { timeoutMs: lockTimeoutMs, staleMs: lockStaleMs });
 }
 
@@ -366,4 +369,30 @@ export function deleteMicroSession(projectRoot, sessionId, options = {}) {
     fs.rmSync(filePath, { force: true });
     return true;
   }, { timeoutMs: options.lockTimeoutMs, staleMs: options.lockStaleMs });
+}
+
+// Completed micro conversations stay resumable so the host can continue a
+// coherent task, but only the five most recently used are retained. Older
+// sessions are evicted here so memory stays bounded without the host managing
+// retention explicitly.
+export function pruneMicroSessions(projectRoot, { keep = MAX_RETAINED_SESSIONS } = {}) {
+  const dir = sessionsDir(projectRoot);
+  if (!fs.existsSync(dir)) return [];
+  const keepCount = boundedInteger(keep, MAX_RETAINED_SESSIONS, 1, MAX_LIST_LIMIT);
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    .map((entry) => {
+      const filePath = path.join(dir, entry.name);
+      const session = readSessionFile(filePath, path.resolve(projectRoot));
+      return session ? { filePath, id: session.id, updatedAt: session.updatedAt || session.createdAt || '' } : null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  const evicted = [];
+  for (const stale of entries.slice(keepCount)) {
+    discardMicroDeliveriesForSession(projectRoot, stale.id);
+    fs.rmSync(stale.filePath, { force: true });
+    evicted.push(stale.id);
+  }
+  return evicted;
 }

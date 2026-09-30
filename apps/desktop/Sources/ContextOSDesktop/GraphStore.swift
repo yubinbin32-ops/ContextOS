@@ -4,6 +4,32 @@ import CSQLite
 import Foundation
 import SwiftUI
 
+struct MicroAdapterSummary: Identifiable {
+    let id: String
+    let command: String?
+}
+
+struct MicroRolesSummary {
+    let apiStatus: String
+    let configurationSource: String
+    let provider: String?
+    let transport: String?
+    let model: String?
+    let credentialConfigured: Bool
+    let requestedThinking: String?
+    let effectiveThinking: String?
+    let supportedThinking: [String]
+    let defaultAdapter: String?
+    let adapters: [MicroAdapterSummary]
+
+    static let empty = MicroRolesSummary(apiStatus: "unconfigured", configurationSource: "none", provider: nil, transport: nil, model: nil,
+        credentialConfigured: false, requestedThinking: nil, effectiveThinking: nil, supportedThinking: [],
+        defaultAdapter: nil, adapters: [])
+    static let unknown = MicroRolesSummary(apiStatus: "unknown", configurationSource: "unknown", provider: nil, transport: nil, model: nil,
+        credentialConfigured: false, requestedThinking: nil, effectiveThinking: nil, supportedThinking: [],
+        defaultAdapter: nil, adapters: [])
+}
+
 @MainActor
 final class GraphStore: ObservableObject {
     @Published private(set) var snapshot: GraphSnapshot
@@ -25,10 +51,12 @@ final class GraphStore: ObservableObject {
     @Published var settingsPresented = false {
         didSet {
             if settingsPresented {
+                refreshMicroRoles()
                 updater.checkOnSettingsOpen()
             }
         }
     }
+    @Published private(set) var microRolesSummary = MicroRolesSummary.empty
     @Published var updater = AppUpdater.shared
     @Published private(set) var pluginInstallStatus: PluginInstallStatus = .checking
     @Published private(set) var editorStatuses: [EditorPlatformStatus] = []
@@ -107,6 +135,110 @@ final class GraphStore: ObservableObject {
         updater.checkOnLaunch()
     }
 
+    func refreshMicroRoles() {
+        guard !projectRoot.isEmpty else { microRolesSummary = .unknown; return }
+        let projectFile = URL(fileURLWithPath: projectRoot).appending(path: ".contextos/profile.json")
+        let home = ProcessInfo.processInfo.environment["CONTEXTOS_HOME"] ?? URL(fileURLWithPath: NSHomeDirectory()).appending(path: ".contextos").path
+        let globalFile = URL(fileURLWithPath: home).appending(path: "profile.json")
+        let fileManager = FileManager.default
+        let projectExists = fileManager.fileExists(atPath: projectFile.path)
+        let globalExists = fileManager.fileExists(atPath: globalFile.path)
+        if !projectExists && !globalExists { microRolesSummary = .empty; return }
+        func readProfile(_ file: URL) -> [String: Any]? {
+            guard let data = try? Data(contentsOf: file) else { return nil }
+            return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        }
+        guard (!projectExists || readProfile(projectFile) != nil), (!globalExists || readProfile(globalFile) != nil) else {
+            microRolesSummary = .unknown
+            return
+        }
+        let global = globalExists ? (readProfile(globalFile) ?? [:]) : [:]
+        let project = projectExists ? (readProfile(projectFile) ?? [:]) : [:]
+        let profile = Self.effectiveProfile(global: global, project: project)
+        let globalHasRoleConfig = Self.hasMicroRoleConfig(global)
+        let projectHasRoleConfig = Self.hasMicroRoleConfig(project)
+        let source = globalHasRoleConfig && projectHasRoleConfig ? "global + project"
+            : (projectHasRoleConfig ? "project" : (globalHasRoleConfig ? "global" : "none"))
+        microRolesSummary = Self.summarizeMicroRoles(profile, configurationSource: source)
+    }
+
+    private static func mergeConfigRecord(_ base: Any?, _ override: Any?) -> Any? {
+        guard let override else { return base }
+        if override is NSNull { return NSNull() }
+        guard let project = override as? [String: Any] else { return override }
+        var merged = base as? [String: Any] ?? [:]
+        merged.merge(project) { _, projectValue in projectValue }
+        return merged
+    }
+
+    private static func mergeAgentConfig(_ base: Any?, _ override: Any?) -> Any? {
+        guard let override else { return base }
+        if override is NSNull { return NSNull() }
+        guard let project = override as? [String: Any] else { return override }
+        var merged = base as? [String: Any] ?? [:]
+        merged.merge(project) { _, projectValue in projectValue }
+        if let projectAdapters = project["adapters"] {
+            if projectAdapters is NSNull { merged["adapters"] = NSNull() }
+            else { merged["adapters"] = mergeConfigRecord(merged["adapters"], projectAdapters) }
+        }
+        return merged
+    }
+
+    private static func effectiveProfile(global: [String: Any], project: [String: Any]) -> [String: Any] {
+        var merged = global
+        for (key, value) in project where !["micro", "agents"].contains(key) {
+            merged[key] = value
+        }
+        if let value = project["micro"] { merged["micro"] = mergeConfigRecord(global["micro"], value) }
+        if let value = project["agents"] { merged["agents"] = mergeAgentConfig(global["agents"], value) }
+        return merged
+    }
+
+    private static func hasMicroRoleConfig(_ profile: [String: Any]) -> Bool {
+        let micro = profile["micro"] as? [String: Any] ?? [:]
+        let agents = profile["agents"] as? [String: Any] ?? [:]
+        return !micro.isEmpty || !agents.isEmpty
+    }
+
+    private static func summarizeMicroRoles(_ profile: [String: Any], configurationSource: String) -> MicroRolesSummary {
+        let api = profile["micro"] as? [String: Any] ?? [:]
+        let agents = profile["agents"] as? [String: Any] ?? [:]
+
+        let endpoint = api["baseUrl"] as? String ?? api["url"] as? String
+        let model = api["model"] as? String
+        let keyConfigured = ["apiKey", "key", "keyEnv"].contains { (api[$0] as? String)?.isEmpty == false }
+        let hasEndpoint = endpoint?.isEmpty == false
+        let apiStatus = hasEndpoint && model?.isEmpty == false ? "configured" : ((hasEndpoint || model?.isEmpty == false || keyConfigured) ? "partial" : "unconfigured")
+        let provider = api["provider"] as? String ?? api["vendor"] as? String ?? ((model?.lowercased().hasPrefix("deepseek-") == true) ? "deepseek" : nil)
+        let requestedTransport = api["transport"] as? String ?? api["protocol"] as? String ?? ((endpoint?.lowercased().hasSuffix("/responses") == true) ? "responses" : "chat")
+        let transport = ["responses", "response"].contains(requestedTransport.lowercased()) ? "responses" : "chat"
+        let thinkingValue = api["thinking"] ?? api["effort"]
+        let requestedThinking = thinkingValue as? String ?? (thinkingValue as? [String: Any])?["effort"] as? String
+            ?? (thinkingValue as? [String: Any])?["level"] as? String
+            ?? (thinkingValue as? [String: Any])?["mode"] as? String
+        let isDeepSeek = provider?.lowercased() == "deepseek" || model?.lowercased().hasPrefix("deepseek-") == true
+        let deepSeekMap = ["off": "none", "none": "none", "minimal": "low", "low": "low", "medium": "high", "high": "high", "xhigh": "high", "max": "max", "ultra": "max"]
+        let configuredMap = (api["thinkingMap"] as? [String: Any])?[transport] as? [String: Any] ?? [:]
+        let supported = isDeepSeek
+            ? ["off", "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
+            : configuredMap.filter { !($0.value is NSNull) && ($0.value as? Bool != false) }.map(\.key).sorted()
+        let effectiveThinking = requestedThinking.flatMap { isDeepSeek ? deepSeekMap[$0.lowercased()] : configuredMap[$0] as? String }
+
+        let adapters = agents["adapters"] as? [String: [String: Any]] ?? [:]
+        let defaultAdapter = agents["default"] as? String
+        let adapterSummaries = adapters.map { name, config -> MicroAdapterSummary in
+            let command: String?
+            if let raw = config["command"] as? String { command = raw.split(whereSeparator: \.isWhitespace).first.map(String.init) }
+            else if let args = config["command"] as? [String] { command = args.first }
+            else { command = nil }
+            return MicroAdapterSummary(id: name, command: command?.components(separatedBy: CharacterSet(charactersIn: "/\\")).last)
+        }.sorted { $0.id < $1.id }
+
+        return MicroRolesSummary(apiStatus: apiStatus, configurationSource: configurationSource, provider: provider, transport: transport, model: model,
+            credentialConfigured: keyConfigured, requestedThinking: requestedThinking, effectiveThinking: effectiveThinking,
+            supportedThinking: supported, defaultAdapter: defaultAdapter, adapters: adapterSummaries)
+    }
+
     func chooseProject() {
         let panel = NSOpenPanel()
         panel.title = text("openProject")
@@ -169,9 +301,6 @@ final class GraphStore: ObservableObject {
 
     func removeRecentProject(_ project: RecentProject) {
         ProjectLocation.forget(path: project.path)
-        if project.path.contains(".contextos/cloud_projects") {
-            try? FileManager.default.removeItem(atPath: project.path)
-        }
         self.recentProjects = ProjectLocation.recentProjects()
         if self.projectRoot == project.path {
             if let next = self.recentProjects.first {
@@ -189,262 +318,6 @@ final class GraphStore: ObservableObject {
 
     func refreshRecentProjects() {
         self.recentProjects = ProjectLocation.recentProjects()
-    }
-
-    func refreshCloudProject() async {
-        guard let location = self.location else { return }
-        let descriptorURL = location.root.appending(path: ".contextos/project.json")
-        guard let data = try? Data(contentsOf: descriptorURL),
-              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let isCloud = json["isCloud"] as? Bool, isCloud,
-              let cloudUrlStr = json["cloudUrl"] as? String,
-              let serverURL = URL(string: cloudUrlStr) else { return }
-
-        let projectId = json["id"] as? String ?? location.descriptor.id
-        var token: String?
-        let globalCloudURL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".contextos/cloud.json")
-        if let globalData = try? Data(contentsOf: globalCloudURL),
-           let globalJSON = (try? JSONSerialization.jsonObject(with: globalData)) as? [String: Any] {
-            token = globalJSON["token"] as? String
-        }
-
-        if var comps = URLComponents(url: serverURL.appending(path: "api/v2/snapshot"), resolvingAgainstBaseURL: false) {
-            comps.queryItems = [URLQueryItem(name: "projectId", value: projectId)]
-            if let snapshotReqURL = comps.url {
-                var req = URLRequest(url: snapshotReqURL)
-                req.timeoutInterval = 8
-                if let token, !token.isEmpty {
-                    req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                }
-                req.setValue("application/json", forHTTPHeaderField: "Accept")
-                if let (snapshotData, response) = try? await URLSession.shared.data(for: req),
-                   let httpRes = response as? HTTPURLResponse, httpRes.statusCode == 200 {
-                    let snapshotCacheURL = location.database.deletingLastPathComponent().appending(path: "snapshot.json")
-                    try? snapshotData.write(to: snapshotCacheURL)
-                    Self.importSnapshotIntoDatabase(at: location.database, snapshotData: snapshotData, projectId: projectId, projectName: location.descriptor.name)
-                    await MainActor.run {
-                        self.loadProject(at: location.root)
-                    }
-                }
-            }
-        }
-    }
-
-    private static func ensureCloudDatabaseSchema(at url: URL, projectId: String, repoRoot: String) {
-        var handle: OpaquePointer?
-        let status = sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil)
-        guard status == SQLITE_OK, let handle else { return }
-        defer { sqlite3_close(handle) }
-
-        let schema = """
-        PRAGMA journal_mode = WAL;
-        PRAGMA foreign_keys = ON;
-
-        CREATE TABLE IF NOT EXISTS projects (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL DEFAULT '',
-          repo_root TEXT NOT NULL,
-          graph_revision INTEGER NOT NULL DEFAULT 0,
-          exported_at TEXT,
-          updated_at TEXT,
-          schema_version INTEGER NOT NULL DEFAULT 2
-        );
-
-        CREATE TABLE IF NOT EXISTS plans (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          title TEXT NOT NULL,
-          priority TEXT NOT NULL DEFAULT 'normal',
-          status TEXT NOT NULL DEFAULT 'active',
-          summary TEXT NOT NULL DEFAULT '',
-          completed_summary TEXT,
-          history_ref TEXT,
-          rule_refs_json TEXT NOT NULL DEFAULT '[]',
-          decision_refs_json TEXT NOT NULL DEFAULT '[]',
-          dependency_refs_json TEXT NOT NULL DEFAULT '[]',
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS phases (
-          id TEXT NOT NULL,
-          plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-          phase_order INTEGER NOT NULL DEFAULT 0,
-          objective TEXT NOT NULL DEFAULT '',
-          scope TEXT NOT NULL DEFAULT '',
-          deliverables_json TEXT NOT NULL DEFAULT '[]',
-          status TEXT NOT NULL DEFAULT 'pending',
-          task_ids_json TEXT NOT NULL DEFAULT '[]',
-          acceptance_json TEXT NOT NULL DEFAULT '[]',
-          PRIMARY KEY (id, plan_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS checkpoints (
-          id TEXT PRIMARY KEY,
-          plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-          phase_id TEXT,
-          title TEXT NOT NULL,
-          criteria TEXT NOT NULL DEFAULT '',
-          status TEXT NOT NULL DEFAULT 'pending',
-          evidence_refs_json TEXT NOT NULL DEFAULT '[]',
-          completed_at TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS tasks (
-          id TEXT PRIMARY KEY,
-          plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
-          phase_id TEXT NOT NULL,
-          title TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'draft',
-          context_slice_json TEXT NOT NULL DEFAULT '{}',
-          working_set_json TEXT NOT NULL DEFAULT '{}',
-          references_json TEXT NOT NULL DEFAULT '{}',
-          baseline_json TEXT NOT NULL DEFAULT '{}',
-          notes_json TEXT NOT NULL DEFAULT '[]',
-          checks_json TEXT NOT NULL DEFAULT '[]',
-          sync_result_json TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS blocks (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          title TEXT NOT NULL,
-          kind TEXT NOT NULL DEFAULT 'service',
-          summary TEXT NOT NULL DEFAULT '',
-          details TEXT NOT NULL DEFAULT '',
-          history_json TEXT NOT NULL DEFAULT '[]',
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS artifact_refs (
-          id TEXT PRIMARY KEY,
-          block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
-          path TEXT NOT NULL,
-          symbol TEXT,
-          start_line INTEGER,
-          end_line INTEGER,
-          hash TEXT NOT NULL DEFAULT '',
-          role TEXT NOT NULL DEFAULT 'implementation',
-          anchor_kind TEXT NOT NULL DEFAULT 'symbol',
-          hash_mode TEXT,
-          manifest TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS chains (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          title TEXT NOT NULL,
-          summary TEXT NOT NULL DEFAULT '',
-          kind TEXT NOT NULL DEFAULT 'leaf',
-          member_ids_json TEXT NOT NULL DEFAULT '[]',
-          metadata_json TEXT NOT NULL DEFAULT '{}',
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS links (
-          id TEXT PRIMARY KEY,
-          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-          from_id TEXT NOT NULL DEFAULT '',
-          to_id TEXT NOT NULL DEFAULT '',
-          source_type TEXT NOT NULL DEFAULT 'block',
-          source_id TEXT NOT NULL DEFAULT '',
-          target_type TEXT NOT NULL DEFAULT 'block',
-          target_id TEXT NOT NULL DEFAULT '',
-          kind TEXT NOT NULL DEFAULT 'depends_on',
-          label TEXT NOT NULL DEFAULT '',
-          contract TEXT NOT NULL DEFAULT '',
-          health_state TEXT NOT NULL DEFAULT 'healthy',
-          current_revision INTEGER NOT NULL DEFAULT 1,
-          created_at TEXT NOT NULL DEFAULT ''
-        );
-
-        INSERT OR REPLACE INTO projects (id, name, repo_root, graph_revision, exported_at, schema_version)
-        VALUES ('\(projectId)', '\(projectId) (Cloud)', '\(repoRoot)', 0, datetime('now'), 2);
-        """
-
-        sqlite3_exec(handle, schema, nil, nil, nil)
-
-        // Run migrations for existing sqlite databases that missed from_id/to_id
-        sqlite3_exec(handle, "ALTER TABLE links ADD COLUMN from_id TEXT NOT NULL DEFAULT '';", nil, nil, nil)
-        sqlite3_exec(handle, "ALTER TABLE links ADD COLUMN to_id TEXT NOT NULL DEFAULT '';", nil, nil, nil)
-        sqlite3_exec(handle, "ALTER TABLE projects ADD COLUMN updated_at TEXT;", nil, nil, nil)
-        sqlite3_exec(handle, "ALTER TABLE projects ADD COLUMN name TEXT NOT NULL DEFAULT '';", nil, nil, nil)
-        sqlite3_exec(handle, "INSERT OR REPLACE INTO projects (id, name, repo_root, graph_revision, exported_at, schema_version) VALUES ('\(projectId)', '\(projectId) (Cloud)', '\(repoRoot)', 0, datetime('now'), 2);", nil, nil, nil)
-    }
-
-    private static func importSnapshotIntoDatabase(at url: URL, snapshotData: Data, projectId: String, projectName: String) {
-        var handle: OpaquePointer?
-        let status = sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil)
-        guard status == SQLITE_OK, let handle else { return }
-        defer { sqlite3_close(handle) }
-
-        guard let json = (try? JSONSerialization.jsonObject(with: snapshotData)) as? [String: Any] else { return }
-
-        sqlite3_exec(handle, "BEGIN TRANSACTION;", nil, nil, nil)
-
-        // Clear existing tables for this project
-        sqlite3_exec(handle, "DELETE FROM blocks WHERE project_id = '\(projectId)';", nil, nil, nil)
-        sqlite3_exec(handle, "DELETE FROM chains WHERE project_id = '\(projectId)';", nil, nil, nil)
-        sqlite3_exec(handle, "DELETE FROM links WHERE project_id = '\(projectId)';", nil, nil, nil)
-        sqlite3_exec(handle, "DELETE FROM plans WHERE project_id = '\(projectId)';", nil, nil, nil)
-
-        // Insert blocks
-        if let blocks = json["blocks"] as? [[String: Any]] {
-            for b in blocks {
-                let id = (b["id"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let title = (b["title"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let kind = (b["kind"] as? String ?? "service").replacingOccurrences(of: "'", with: "''")
-                let summary = (b["summary"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let body = (b["body"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let sql = "INSERT OR REPLACE INTO blocks (id, project_id, title, kind, summary, details, created_at, updated_at) VALUES ('\(id)', '\(projectId)', '\(title)', '\(kind)', '\(summary)', '\(body)', datetime('now'), datetime('now'));"
-                sqlite3_exec(handle, sql, nil, nil, nil)
-            }
-        }
-
-        // Insert chains
-        if let chains = json["chains"] as? [[String: Any]] {
-            for c in chains {
-                let id = (c["id"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let title = (c["title"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let kind = (c["chainType"] as? String ?? "leaf").replacingOccurrences(of: "'", with: "''")
-                let summary = (c["purpose"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let sql = "INSERT OR REPLACE INTO chains (id, project_id, title, summary, kind, member_ids_json, created_at, updated_at) VALUES ('\(id)', '\(projectId)', '\(title)', '\(summary)', '\(kind)', '[]', datetime('now'), datetime('now'));"
-                sqlite3_exec(handle, sql, nil, nil, nil)
-            }
-        }
-
-        // Insert links
-        if let links = json["links"] as? [[String: Any]] {
-            for l in links {
-                let id = (l["id"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let fromId = (l["sourceId"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let toId = (l["targetId"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let kind = (l["kind"] as? String ?? "depends_on").replacingOccurrences(of: "'", with: "''")
-                let sql = "INSERT OR REPLACE INTO links (id, project_id, from_id, to_id, source_id, target_id, kind, created_at) VALUES ('\(id)', '\(projectId)', '\(fromId)', '\(toId)', '\(fromId)', '\(toId)', '\(kind)', datetime('now'));"
-                sqlite3_exec(handle, sql, nil, nil, nil)
-            }
-        }
-
-        // Insert plans
-        if let plans = json["plans"] as? [[String: Any]] {
-            for p in plans {
-                let id = (p["id"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let title = (p["title"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let status = (p["status"] as? String ?? "active").replacingOccurrences(of: "'", with: "''")
-                let summary = (p["summary"] as? String ?? "").replacingOccurrences(of: "'", with: "''")
-                let sql = "INSERT OR REPLACE INTO plans (id, project_id, title, priority, status, summary, created_at, updated_at) VALUES ('\(id)', '\(projectId)', '\(title)', 'normal', '\(status)', '\(summary)', datetime('now'), datetime('now'));"
-                sqlite3_exec(handle, sql, nil, nil, nil)
-            }
-        }
-
-        // Update project revision
-        sqlite3_exec(handle, "INSERT OR REPLACE INTO projects (id, name, repo_root, graph_revision, exported_at, schema_version) VALUES ('\(projectId)', '\(projectName)', '', 1, datetime('now'), 2);", nil, nil, nil)
-
-        sqlite3_exec(handle, "COMMIT;", nil, nil, nil)
     }
 
     private func saveCurrentProjectViewState() {
@@ -1303,7 +1176,6 @@ final class GraphStore: ObservableObject {
             "upstream":"直接上游", "downstream":"直接下游", "memberships":"所在 Chain", "relatedPlans":"关联 Plan", "path":"路径", "revision":"版本",
             "fitNetwork":"适配全图", "focusMode":"聚焦", "exitFocus":"退出聚焦", "isolate":"仅显示关联", "projectRules":"项目规则", "decisions":"架构决策",
             "openProject":"打开项目", "changeProject":"切换项目", "recentProjects":"最近项目", "openProjectHelp":"请选择包含 .contextos/project.json 的项目目录。", "open":"打开",
-            "connectCloudProject":"连接到云端 MCP 项目…", "cloudUrl":"云端服务器地址", "projectId":"项目 ID", "authToken":"访问令牌 (可选)", "connectAndImport":"连接并导入图谱", "connecting":"正在连接云端…", "cloudProject":"云端项目",
             "all":"全部", "verification":"验证", "unassigned":"独立验证", "verified":"已验证", "checkpointsPassed":"检查点通过", "noCheckpoints":"0 检查点", "directBlockWork":"直接 Block 工作", "principle":"原则", "product":"产品", "requirement":"需求", "decision":"决策", "flow":"流程", "ui":"界面", "service":"服务", "function":"函数", "api":"API", "integration":"集成", "data":"数据", "database":"数据库", "risk":"风险", "test":"测试", "checkpoint":"检查点",
             "softwareUpdate":"软件更新", "currentVersion":"当前版本", "checkUpdate":"检查更新", "checkingUpdate":"正在检查更新…", "upToDate":"当前已是最新版本", "newVersionFound":"发现新版本", "updateNow":"立即更新", "updating":"正在处理更新…", "restartAndUpdate":"重启并完成更新", "viewReleaseNotes":"发行说明", "hideReleaseNotes":"收起说明", "selectEdition":"安装包规格", "fullEdition":"全功能版 (内置 Node 22 · 推荐)", "standardEdition":"轻量版 (依赖系统 Node)", "openInBrowser":"在浏览器中查看", "openReleasePage":"打开 GitHub Release 页面", "gitRepository":"Git 仓库", "selectVersion":"选择更新版本", "retry":"重试", "devModeUpdateNotice":"开发模式下已解压至缓存目录", "cancelDownload":"取消下载", "releaseNotes":"更新日志", "downloadingUpdate":"正在下载更新…"
         ]
@@ -1319,7 +1191,6 @@ final class GraphStore: ObservableObject {
             "upstream":"Direct Upstream", "downstream":"Direct Downstream", "memberships":"Chain Memberships", "relatedPlans":"Related Plans", "path":"Path", "revision":"Revision",
             "fitNetwork":"Fit Network", "focusMode":"Focus", "exitFocus":"Exit Focus", "isolate":"Related Only", "projectRules":"Project Rules", "decisions":"Architecture Decisions",
             "openProject":"Open Project", "changeProject":"Change Project", "recentProjects":"Recent Projects", "openProjectHelp":"Choose a project folder containing .contextos/project.json.", "open":"Open",
-            "connectCloudProject":"Connect Cloud MCP Project…", "cloudUrl":"Cloud Server URL", "projectId":"Project ID", "authToken":"Auth Token (Optional)", "connectAndImport":"Connect & Import Graph", "connecting":"Connecting to Cloud…", "cloudProject":"Cloud Project",
             "all":"All", "verification":"Verification", "unassigned":"Standalone checks", "verified":"Verified", "checkpointsPassed":"checkpoints passed", "noCheckpoints":"0 Checkpoints", "directBlockWork":"Direct Block work", "principle":"Principle", "product":"Product", "requirement":"Requirement", "decision":"Decision", "flow":"Flow", "ui":"UI", "service":"Service", "function":"Function", "api":"API", "integration":"Integration", "data":"Data", "database":"Database", "risk":"Risk", "test":"Test", "checkpoint":"Checkpoint",
             "softwareUpdate":"SOFTWARE UPDATE", "currentVersion":"Current Version", "checkUpdate":"Check for Updates", "checkingUpdate":"Checking for updates…", "upToDate":"ContextOS is up to date", "newVersionFound":"New Version Available", "updateNow":"Update Now", "updating":"Processing update…", "restartAndUpdate":"Restart & Install", "viewReleaseNotes":"Release Notes", "hideReleaseNotes":"Hide Notes", "selectEdition":"Package Edition", "fullEdition":"Full (Bundled Node 22 · Recommended)", "standardEdition":"Standard Lite (Requires Node.js)", "openInBrowser":"View in Browser", "openReleasePage":"Open GitHub Release", "gitRepository":"Git Repository", "selectVersion":"Select Version", "retry":"Retry", "devModeUpdateNotice":"Extracted to cache directory in development mode", "cancelDownload":"Cancel", "releaseNotes":"Release Notes", "downloadingUpdate":"Downloading update…"
         ]

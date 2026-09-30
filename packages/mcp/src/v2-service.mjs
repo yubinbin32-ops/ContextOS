@@ -520,7 +520,13 @@ export class ContextOSV2Service {
     limit,
     offset,
     format = 'markdown',
+    ...flatPlanData
   }) {
+    planData = {
+      ...flatPlanData,
+      ...(action !== 'list' && status !== undefined ? { status } : {}),
+      ...planData,
+    };
     const targetId = id || planId || planData.id;
     const targetCpId = checkpointId || planData.checkpointId;
     switch (action) {
@@ -620,6 +626,10 @@ export class ContextOSV2Service {
         const completed = this.planService.completePlan(targetId, planData);
         return format === 'json' ? completed : `Plan '${targetId}' completed successfully!\nSummary: ${completed.completedSummary}`;
       }
+      case 'archive': {
+        const archived = this.planService.archivePlan(targetId);
+        return format === 'json' ? archived : `Plan '${targetId}' archived successfully.`;
+      }
       case 'delete': {
         const deleted = this.planService.deletePlan(targetId);
         return format === 'json' ? { deleted, id: targetId } : `Plan '${targetId}' deleted successfully.`;
@@ -686,10 +696,69 @@ export class ContextOSV2Service {
     targetBlockId,
     files,
     reconcile = false,
+    limit,
+    offset,
+    status,
     format = 'markdown',
+    ...flatTaskData
   }) {
+    taskData = {
+      ...flatTaskData,
+      ...(action !== 'list' && planId !== undefined ? { planId } : {}),
+      ...(action !== 'list' && status !== undefined ? { status } : {}),
+      ...taskData,
+    };
     const targetId = id || taskId || taskData.id;
     switch (action) {
+      case 'list': {
+        const allTasks = this.db.listTasks(planId || null);
+        const statusFilter = typeof status === 'string' ? status.trim().toLowerCase() : '';
+        const matchingTasks = statusFilter
+          ? allTasks.filter((task) => String(task.status || '').toLowerCase() === statusFilter)
+          : allTasks;
+        const total = matchingTasks.length;
+        const requestedLimit = Number(limit);
+        const pageLimit = Number.isFinite(requestedLimit) && requestedLimit > 0
+          ? Math.max(1, Math.min(Math.floor(requestedLimit), 25))
+          : 10;
+        const requestedOffset = Number(offset);
+        const pageOffset = Math.min(total, Number.isFinite(requestedOffset) && requestedOffset > 0
+          ? Math.floor(requestedOffset)
+          : 0);
+        const pageTasks = matchingTasks.slice(pageOffset, pageOffset + pageLimit);
+        const hasMore = pageOffset + pageTasks.length < total;
+        const records = pageTasks.map((task) => ({
+          id: task.id,
+          planId: task.planId,
+          phaseId: task.phaseId,
+          title: task.title,
+          status: task.status,
+          updatedAt: task.updatedAt || null,
+          workingSetFiles: Array.isArray(task.workingSet?.files) ? task.workingSet.files.slice(0, 20) : [],
+          checkCount: Array.isArray(task.checks) ? task.checks.length : 0,
+          noteCount: Array.isArray(task.notes) ? task.notes.length : 0,
+        }));
+        const page = {
+          tasks: records,
+          total,
+          limit: pageLimit,
+          offset: pageOffset,
+          hasMore,
+          nextOffset: hasMore ? pageOffset + pageTasks.length : null,
+        };
+        if (format === 'json') return page;
+        const countLabel = pageTasks.length
+          ? `${pageOffset + 1}-${pageOffset + pageTasks.length} of ${total}`
+          : `0 of ${total}`;
+        const filters = [
+          planId ? `plan=${planId}` : null,
+          statusFilter ? `status=${statusFilter}` : null,
+        ].filter(Boolean);
+        const heading = `# Tasks (${countLabel}${filters.length ? `, ${filters.join(', ')}` : ''})`;
+        const entries = pageTasks.map((task) => `- [${String(task.status || 'unknown').toUpperCase()}] **${task.title}** (${task.id})${task.planId ? ` - plan: ${task.planId}` : ''}`);
+        if (hasMore) entries.push(`More tasks available: offset=${page.nextOffset}.`);
+        return [heading, entries.length ? entries.join('\n') : (total ? 'No tasks on this page.' : 'No tasks yet.')].join('\n');
+      }
       case 'start': {
         const existing = targetId ? this.db.getTask(targetId) : null;
         if (existing) {
@@ -750,6 +819,7 @@ export class ContextOSV2Service {
       }
       case 'create': {
         const payload = { ...taskData };
+        if (targetId) payload.id = targetId;
         const incomingRules = rules ?? payload.rules ?? payload.ruleRefs ?? payload.references?.rules ?? (ruleId ? [ruleId] : undefined);
         if (incomingRules !== undefined) payload.rules = this._validateRuleRefs(incomingRules);
         const created = this.taskService.createTask(payload, this.projectRoot);
@@ -855,6 +925,18 @@ export class ContextOSV2Service {
           };
         }
         return `Task '${id}' finished and synced.\nRevision: ${result.graphRevision}\nCoverage: ${result.syncResult.coverage.coveragePercent}%${completedPlan ? `\nLightweight plan '${completedPlan.id}' completed.` : ''}`;
+      }
+      case 'complete': {
+        const completed = this.taskService.completeTask(targetId);
+        return format === 'json' ? completed : `Task '${targetId}' completed successfully.`;
+      }
+      case 'archive': {
+        const archived = this.taskService.archiveTask(targetId);
+        return format === 'json' ? archived : `Task '${targetId}' archived successfully.`;
+      }
+      case 'delete': {
+        const deleted = this.taskService.deleteTask(targetId);
+        return format === 'json' ? { deleted, id: targetId } : `Task '${targetId}' deleted successfully.`;
       }
       case 'sync': {
         const result = this.taskService.syncTask(id, {
@@ -986,6 +1068,7 @@ export class ContextOSV2Service {
     hashMode = null,
     manifest = null,
     replacePaths = false,
+    refreshPaths = false,
     includeRefs = false,
     limit,
     offset,
@@ -1226,9 +1309,12 @@ export class ContextOSV2Service {
         // own files that were moved or deleted, which creates duplicate
         // owners and stale graph references.  The default remains additive
         // for callers that intentionally bind one more path.
+        // A scoped refresh replaces locators only for the parsed paths.
+        // Keep unrelated ownership; remove old symbols from edited files.
+        const refreshedPaths = new Set(autoArtifactRefs.map((ref) => ref.path));
         const existingRefs = replacePaths
           ? []
-          : dedupeArtifactRefs(existing.artifactRefs || []);
+          : dedupeArtifactRefs(existing.artifactRefs || []).filter((ref) => !refreshPaths || !refreshedPaths.has(ref.path));
         const mergedRefs = [...existingRefs];
         for (const autoRef of autoArtifactRefs) {
           const idx = mergedRefs.findIndex((r) => r.path === autoRef.path && r.symbol === autoRef.symbol);

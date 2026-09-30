@@ -1,67 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">ContextOS — a context exoskeleton for AI coding</title>
+  <desc id="desc">The main AI makes decisions. Micro and CLI workers carry execution. Real architecture canvas screenshot. The published single-task benchmark on commit 0dd6431 reported 63.8 percent lower peak main context; this is not a universal savings claim.</desc>
   <defs>
-    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
-      <path d="M32 0H0V32" fill="none" stroke="#9aa2ab" stroke-opacity="0.14" stroke-width="1"/>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#e9edf1" stroke-width="0.7"/>
     </pattern>
-    <filter id="shadow" x="-15%" y="-20%" width="140%" height="150%">
-      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#243246" flood-opacity="0.15"/>
-    </filter>
-    <clipPath id="screenFrame">
-      <rect x="548" y="74" width="700" height="401" rx="16"/>
-    </clipPath>
+    <clipPath id="screen"><rect x="562" y="158" width="666" height="382" rx="8"/></clipPath>
   </defs>
-
-  <!-- White technical paper, inspired by the supplied reference layout. -->
   <rect width="1280" height="640" fill="#ffffff"/>
-  <rect x="508" y="26" width="740" height="574" fill="url(#grid)" opacity="0.38"/>
-  <path d="M508 26V600" stroke="#cfd5dc" stroke-width="1"/>
-  <path d="M492 48h32M508 32v32M492 576h32M508 560v32" fill="none" stroke="#6f7c8b" stroke-opacity="0.34"/>
-
-  <!-- Real screenshot frame. The screenshot itself is composited from assets/canvas-overview.png. -->
-  <rect x="540" y="109" width="716" height="417" rx="20" fill="#ffffff" stroke="#d7dde5" stroke-width="1.5" filter="url(#shadow)"/>
-  <rect x="548" y="117" width="700" height="401" rx="16" fill="#ffffff" stroke="#e3e7ed" stroke-width="1"/>
-
-  <!-- Small, quiet label that does not overlap the screenshot. -->
-  <g font-family="Menlo, SFMono-Regular, Consolas, monospace" font-size="10" letter-spacing="1.55" fill="#657181">
-    <circle cx="552" cy="86" r="4" fill="#1167ff"/>
-    <text x="565" y="90">LIVE ARCHITECTURE CANVAS</text>
+  <rect x="526" y="28" width="724" height="555" fill="url(#grid)"/>
+  <path d="M526 28V583M60 573H1220" stroke="#dce1e6" stroke-width="1"/>
+  <path d="M516 48H536M526 38V58M516 561H536M526 551V571" stroke="#b2bdc7" stroke-width="1"/>
+  <g font-family="Arial, Helvetica, sans-serif" fill="#19212a">
+    <text x="60" y="81" font-size="34" letter-spacing="-0.8" font-weight="600">ContextOS</text>
+    <text x="60" y="112" font-size="13" fill="#6b7580" letter-spacing="1.25">CONTEXT EXOSKELETON FOR AI CODING</text>
+    <text x="60" y="208" font-size="62" letter-spacing="-2.4" font-weight="500">AI decides.</text>
+    <text x="60" y="279" font-size="62" letter-spacing="-2.4" font-weight="500">OS carries</text>
+    <text x="60" y="345" font-size="62" letter-spacing="-2.4" font-weight="500">the work.</text>
+    <text x="60" y="454" font-size="70" letter-spacing="-2" font-weight="600">63.8%</text>
+    <text x="60" y="488" font-size="17" fill="#414d5a">lower peak main context</text>
+    <text x="60" y="517" font-size="12" fill="#727d88">Reported on one plan-dependency feature.</text>
+    <text x="60" y="540" font-size="12" fill="#727d88">n = 1 per arm · measured commit 0dd6431</text>
+    <text x="562" y="89" font-size="17" font-weight="600">Main AI + Micro + CLI</text>
+    <text x="562" y="118" font-size="14" fill="#64717e">Decisions · bounded evidence · isolated implementation</text>
+    <text x="562" y="560" font-size="11" fill="#737e89">REAL DESKTOP CAPTURE · ARCHITECTURE / PLANS / RECEIPTS</text>
+    <text x="60" y="610" font-size="12" fill="#626e7b">Install with one message to your AI.</text>
+    <text x="1220" y="610" text-anchor="end" font-size="12" fill="#626e7b">github.com/yubinbin32-ops/ContextOS</text>
   </g>
-
-  <!-- Brand summary column -->
-  <g font-family="PingFang SC, Noto Sans CJK SC, Helvetica Neue, Arial, sans-serif">
-    <text x="68" y="256" font-size="52" font-weight="300" letter-spacing="-1.8" fill="#70747b">ContextOS</text>
-    <path d="M68 276H438" stroke="#d4d7db" stroke-width="1"/>
-    <text x="68" y="304" font-size="17" font-weight="600" fill="#202733">AI coding context operating system</text>
-    <text x="68" y="331" font-size="14" fill="#626c78">MCP-managed architecture and surgical code reads</text>
-    <text x="68" y="352" font-size="14" fill="#626c78">keep AI agents precise across large codebases.</text>
-    <text x="68" y="373" font-size="14" fill="#626c78">Every change returns a verifiable receipt.</text>
-  </g>
-
-  <!-- Measured impact table -->
-  <g font-family="Menlo, SFMono-Regular, Consolas, monospace">
-    <path d="M68 396H438M68 440H438M68 484H438M68 528H438" stroke="#d4d7db" stroke-width="1"/>
-    <text x="68" y="426" font-size="15" fill="#7b8087">Session bootstrap</text>
-    <text x="438" y="426" text-anchor="end" font-size="16" font-weight="700" fill="#11151c">96.79% ↓</text>
-    <text x="68" y="470" font-size="15" fill="#7b8087">Terminal noise</text>
-    <text x="438" y="470" text-anchor="end" font-size="16" font-weight="700" fill="#11151c">98.50% ↓</text>
-    <text x="68" y="514" font-size="15" fill="#252a31">Overall tokens</text>
-    <text x="438" y="514" text-anchor="end" font-size="16" font-weight="700" fill="#11151c">89.36% ↓</text>
-  </g>
-
-  <!-- Bottom principles -->
-  <g font-family="Menlo, SFMono-Regular, Consolas, monospace" font-size="13" letter-spacing="1.8" fill="#979ba0">
-    <text x="68" y="576">MCP</text>
-    <circle cx="119" cy="572" r="2.5" fill="#1167ff"/>
-    <text x="135" y="576">AST</text>
-    <circle cx="181" cy="572" r="2.5" fill="#28b978"/>
-    <text x="197" y="576">VERIFIED</text>
-    <circle cx="294" cy="572" r="2.5" fill="#ff655b"/>
-    <text x="310" y="576">LOCAL FIRST</text>
-  </g>
-
-  <!-- Measurement line below the screenshot, deliberately outside its content. -->
-  <g fill="none" stroke="#738092" stroke-opacity="0.40" stroke-width="1">
-    <path d="M548 550H1248M548 544V556M1248 544V556"/>
-  </g>
-  <text x="898" y="571" text-anchor="middle" font-family="Menlo, SFMono-Regular, Consolas, monospace" font-size="10" letter-spacing="1.4" fill="#7b8797">ARCHITECTURE · CONTEXT · RECEIPTS</text>
+  <rect x="556" y="152" width="678" height="394" rx="11" fill="#ffffff" stroke="#d7dee6"/>
+  <image href="canvas-overview.png" xlink:href="canvas-overview.png" x="562" y="158" width="666" height="382" preserveAspectRatio="xMidYMid meet" clip-path="url(#screen)"/>
+  <rect x="562" y="158" width="666" height="382" rx="8" fill="none" stroke="#e5e9ee" stroke-width="0.7"/>
 </svg>

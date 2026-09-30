@@ -43,3 +43,43 @@ test('non-contiguous source slices preserve original line numbers and markers', 
     assert.doesNotMatch(result, /^\s*5 \| export const first_90/m);
   } finally { service.close?.(); fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('complete explore never substitutes other symbols for an explicitly requested inspection', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-explore-precision-'));
+  fs.writeFileSync(path.join(root, 'package.json'), '{"name":"precise-explore","type":"module"}');
+  fs.writeFileSync(path.join(root, 'large.mjs'), 'export function alpha() { return "ALPHA_FOCUS"; }\n' + '// padding\n'.repeat(5000) + 'export function beta() { return "BETA_SLICE_REQUIRED"; }\n');
+  const service = new ContextOSV2Service({ projectRoot: root });
+  const orchestrator = new Orchestrator({ projectRoot: root, service });
+  try {
+    const result = await orchestrator.dispatch('pipeline', { autoVerify: false, mode: 'full', maxChars: 18000, steps: [
+      { explore: { intent: 'Inspect alpha in large.mjs', paths: ['large.mjs'] } },
+      { inspect: { path: 'large.mjs', symbol: 'beta', maxChars: 3000 } },
+    ] });
+    assert.match(result, /BETA_SLICE_REQUIRED/);
+    assert.doesNotMatch(result, /Skipped redundant inspect/);
+  } finally { service.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('orchestrator inspect accepts natural range shapes without outline fallback', async () => {
+  const { root, service, orchestrator } = fixture();
+  try {
+    const stringRanges = await orchestrator.dispatch('inspect', { path: 'src/first.mjs', ranges: '2-3', maxChars: 3000 });
+    assert.match(stringRanges, /first_2 = 2/);
+    assert.match(stringRanges, /first_3 = 3/);
+    assert.doesNotMatch(stringRanges, /AST Outline/);
+
+    const flatPair = await orchestrator.dispatch('inspect', { path: 'src/first.mjs', ranges: [4, 5], maxChars: 3000 });
+    assert.match(flatPair, /first_4 = 4/);
+    assert.match(flatPair, /first_5 = 5/);
+
+    const lineKey = await orchestrator.dispatch('inspect', { path: 'src/first.mjs', lines: '6-7', maxChars: 3000 });
+    assert.match(lineKey, /first_6 = 6/);
+    assert.match(lineKey, /first_7 = 7/);
+
+    await assert.rejects(
+      () => orchestrator.dispatch('inspect', { path: 'src/first.mjs', ranges: 'banana', maxChars: 3000 }),
+      /Invalid ranges/,
+    );
+  } finally { service.close?.(); fs.rmSync(root, { recursive: true, force: true }); }
+});

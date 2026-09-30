@@ -15,7 +15,8 @@ test('plugin manifest forwards CONTEXTOS_HOME for isolated test homes', () => {
   const mcp = readJson('plugins/contextos/.mcp.json');
   const server = mcp.contextos;
   assert.ok(server, 'contextos server entry is required');
-  assert.equal(server.env.CONTEXTOS_LEAN_SURFACE, '1');
+  assert.equal(server.env?.CONTEXTOS_LEAN_SURFACE, undefined);
+  assert.equal(server.env?.CONTEXTOS_TEXT_ONLY_RESULTS, '1');
   assert.ok(server.env_vars.includes('CONTEXTOS_HOME'), 'CONTEXTOS_HOME must be forwarded to the MCP process');
   assert.ok(server.env_vars.includes('CONTEXTOS_PROJECT_ROOT'));
   assert.ok(server.env_vars.includes('CONTEXTOS_DATA_DIR'));

@@ -46,7 +46,7 @@ const transport = new StdioClientTransport({
   args: [runtimeBundle],
   cwd: workDir,
   stderr: 'inherit',
-  env: { ...process.env, CONTEXTOS_LEAN_SURFACE: '0' },
+  env: { ...process.env },
 });
 const client = new Client({ name: 'contextos-distribution-smoke', version: packageVersion });
 
@@ -54,22 +54,21 @@ try {
   await client.connect(transport);
   const listing = await client.listTools();
   const names = listing.tools.map((tool) => tool.name).sort();
-  assert.deepEqual(names, ['change', 'explore', 'inspect', 'ops', 'pipeline', 'ship', 'verify']);
+  assert.deepEqual(names, ['contextos']);
 
   const result = await client.callTool({
-    name: 'ops',
+    name: 'contextos',
     arguments: {
       projectRoot,
-      capability: 'code',
-      action: 'search',
-      args: { query: 'greet', root: 'src', maxResults: 5 },
+      action: 'ops',
+      args: { capability: 'code', action: 'search', args: { query: 'greet', root: 'src', maxResults: 5 } },
     },
   });
   assert.equal(result.isError, undefined, 'AST search returned an MCP error');
   const text = (result.content || []).map((chunk) => chunk.text || '').join('\n');
   assert.match(text, /greet/);
   assert.match(text, /sample\.ts/);
-  const pythonResult = await client.callTool({ name: 'inspect', arguments: { projectRoot, path: 'sample.py', mode: 'outline' } });
+  const pythonResult = await client.callTool({ name: 'contextos', arguments: { action: 'inspect', args: { path: 'sample.py', mode: 'outline' }, projectRoot } });
   const pythonText = (pythonResult.content || []).map((chunk) => chunk.text || '').join('\n');
   assert.match(pythonText, /User\.name.*hash: `([a-f0-9]{16})`/, 'portable runtime must provide Python method hashes, not fallback-only symbols');
   assert.match(pythonText, /calls: \[user\.name\]/, 'portable runtime must retain Python calls');

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { cleanTomlCodex, configureJsonMcp, configureOpenCodeMcp, configureTomlCodex, deriveProjectId, initProjectWorkspace, mergePersonalMarketplaceDocument, saveGlobalCloudConfig, syncAllPlatforms } from '../src/bootstrap-util.mjs';
+import { antigravitySkillPaths, cleanTomlCodex, configureJsonMcp, configureOpenCodeMcp, configureTomlCodex, deriveProjectId, initProjectWorkspace, mergePersonalMarketplaceDocument, syncAllPlatforms } from '../src/bootstrap-util.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const bootstrapScript = path.join(repoRoot, 'scripts', 'bootstrap.mjs');
@@ -120,12 +120,12 @@ test('TOML configuration escapes quoted values and preserves unrelated sections'
     configPath,
     serverScript: '/tmp/server"quoted.mjs',
     nodePath: '/usr/bin/node"quoted',
-    env: { CONTEXTOS_CLOUD_TOKEN: 'a"b\\nc' },
+    env: { CUSTOM_TOKEN: 'a"b\\nc' },
   });
   const content = fs.readFileSync(configPath, 'utf8');
   assert.match(content, /\[other\]/);
   assert.ok(content.includes('command = "/usr/bin/node\\"quoted"'));
-  assert.ok(content.includes('CONTEXTOS_CLOUD_TOKEN = "a\\"b\\\\nc"'));
+  assert.ok(content.includes('CUSTOM_TOKEN = "a\\"b\\\\nc"'));
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -157,25 +157,6 @@ test('cleanTomlCodex removes legacy ContextOS MCP and hook state only', () => {
   assert.doesNotMatch(content, /contextos@personal:hooks\.json/);
   assert.doesNotMatch(content, /\[mcp_servers\.contextos\]/);
   fs.rmSync(dir, { recursive: true, force: true });
-});
-
-test('global cloud config preserves unknown fields and is owner-only on POSIX', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-home-'));
-  try {
-    const cloudPath = path.join(dir, '.contextos', 'cloud.json');
-    fs.mkdirSync(path.dirname(cloudPath), { recursive: true });
-    fs.writeFileSync(cloudPath, JSON.stringify({ custom: true, token: 'old' }));
-    saveGlobalCloudConfig({ cloudUrl: 'https://example.test/', token: 'secret', homeDir: dir });
-    const saved = JSON.parse(fs.readFileSync(cloudPath, 'utf8'));
-    assert.equal(saved.custom, true);
-    assert.equal(saved.cloudUrl, 'https://example.test');
-    assert.equal(saved.token, 'secret');
-    if (process.platform !== 'win32') {
-      assert.equal(fs.statSync(cloudPath).mode & 0o777, 0o600);
-    }
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 });
 
 test('syncAllPlatforms rejects unknown platform ids', () => {
@@ -212,4 +193,14 @@ test('OpenCode MCP uses the official local command array and preserves config', 
   assert.equal(config.mcp.contextos.type, 'local');
   assert.deepEqual(config.mcp.contextos.command, ['/usr/bin/node', '--no-warnings=ExperimentalWarning', '/tmp/contextos-mcp.mjs']);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('Antigravity refresh includes an existing legacy skill without creating an obsolete install', () => {
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'ctxos-agy-skills-'));
+ try {
+  const current=path.join(home,'.gemini/antigravity-cli/skills/contextos');
+  assert.deepEqual(antigravitySkillPaths(home),[current]);
+  const legacy=path.join(home,'.gemini/config/skills/contextos');fs.mkdirSync(legacy,{recursive:true});
+  assert.deepEqual(antigravitySkillPaths(home),[current,legacy]);
+ }finally{fs.rmSync(home,{recursive:true,force:true});}
 });

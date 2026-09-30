@@ -2,8 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ContextOSV2Service } from './v2-service.mjs';
-import { HybridContextOSService } from './hybrid-service.mjs';
-import { getGlobalCloudConfig, deriveProjectId } from './bootstrap-util.mjs';
+import { initProjectWorkspace, deriveProjectId } from './bootstrap-util.mjs';
 
 const serviceCache = new Map();
 
@@ -20,6 +19,9 @@ export function requireProjectRoot(inputRoot) {
     throw new Error('Explicit projectRoot is required. Pass the absolute path of the active workspace.');
   }
   const root = path.resolve(inputRoot);
+  if (process.env.CONTEXTOS_WORKER_ROOT && fs.realpathSync(root) !== fs.realpathSync(process.env.CONTEXTOS_WORKER_ROOT)) {
+    throw new Error('Worker projectRoot must match the assigned workspace.');
+  }
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
     throw new Error(`projectRoot does not exist or is not a directory: '${root}'`);
   }
@@ -51,62 +53,27 @@ export function findBundledPluginRoot() {
   throw new Error('Cannot locate the bundled ContextOS plugin assets; set CONTEXTOS_REPOSITORY_ROOT explicitly.');
 }
 
-function resolveProjectTransport(root) {
-  let mode = 'local';
-  let cloudUrl = null;
-  let token = null;
-  let projectId = deriveProjectId(root);
-
-  const projJsonPath = path.join(root, '.contextos', 'project.json');
-  if (fs.existsSync(projJsonPath)) {
-    try {
-      const proj = JSON.parse(fs.readFileSync(projJsonPath, 'utf8'));
-      if (proj.id) projectId = proj.id;
-      if (proj.storage === 'cloud' || proj.isCloud === true) {
-        mode = 'cloud';
-        const globalCloud = getGlobalCloudConfig();
-        cloudUrl = proj.cloudUrl || globalCloud?.cloudUrl || process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
-        token = globalCloud?.token || process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
-      } else if (proj.storage === 'local' || proj.isCloud === false) {
-        mode = 'local';
-      }
-    } catch (_) {}
-  } else {
-    if (process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL) {
-      mode = 'cloud';
-      cloudUrl = process.env.CONTEXTOS_CLOUD_URL || process.env.CONTEXTOS_REMOTE_URL;
-      token = process.env.CONTEXTOS_CLOUD_TOKEN || process.env.CONTEXTOS_TOKEN;
-      projectId = process.env.CONTEXTOS_PROJECT_ID || deriveProjectId(root);
-    }
-  }
-
-  return { mode, cloudUrl, token, projectId };
-}
-
 export function getService(projectRoot) {
   const root = requireProjectRoot(projectRoot);
-  const { mode, cloudUrl, token, projectId } = resolveProjectTransport(root);
-
-  const cacheKey = mode === 'cloud' && cloudUrl
-    ? `cloud:${cloudUrl}:${projectId}:${root}`
-    : `local:${root}:${projectId}`;
-
-  if (!serviceCache.has(cacheKey)) {
-    if (mode === 'cloud' && cloudUrl) {
-      serviceCache.set(
-        cacheKey,
-        new HybridContextOSService({ cloudUrl, token, projectId, projectRoot: root })
-      );
-    } else {
-      serviceCache.set(cacheKey, new ContextOSV2Service({ projectRoot: root, projectId }));
+  let projectId = deriveProjectId(root);
+  const marker = path.join(root, '.contextos', 'project.json');
+  if (fs.existsSync(marker)) {
+    const project = JSON.parse(fs.readFileSync(marker, 'utf8'));
+    projectId = project.id || projectId;
+    if (project.storage === 'cloud' || project.isCloud === true || project.cloudUrl || project.cloudToken) {
+      initProjectWorkspace({ projectRoot: root });
     }
+  }
+  const cacheKey = `local:${root}:${projectId}`;
+  if (!serviceCache.has(cacheKey)) {
+    serviceCache.set(cacheKey, new ContextOSV2Service({ projectRoot: root, projectId }));
   }
   return serviceCache.get(cacheKey);
 }
 
 export function evictServices(projectRoot) {
   for (const key of Array.from(serviceCache.keys())) {
-    if (key.endsWith(`:${projectRoot}`) || key.includes(`:${projectRoot}:`)) {
+    if (key.startsWith(`local:${path.resolve(projectRoot)}:`)) {
       try {
         serviceCache.get(key).close();
       } catch (_) {}

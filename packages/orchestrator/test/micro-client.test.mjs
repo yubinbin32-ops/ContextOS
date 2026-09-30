@@ -6,11 +6,13 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { storeArtifact } from '../src/artifact-store.mjs';
+import { pipelinePipeline } from '../src/pipelines.mjs';
 import {
   MICRO_OS_TOOLS,
   MICRO_PRESETS,
   applyOutputBudget,
   executeMicroTool,
+  loadMicroSkillGuidance,
   normalizeMicroInvocation,
   resolveMicroBudget,
   resolveChatCompletionsUrl,
@@ -18,8 +20,6 @@ import {
   runMicroTask,
   runMicroTasksParallel,
 } from '../src/micro-client.mjs';
-
-const NO_TOOLS_INSTRUCTION = '\nNo tools are available in this run. Do not emit tool calls, function-call syntax, XML tool tags, or a plan to inspect files; answer directly from the provided input.';
 
 function createMockServer() {
   const requests = [];
@@ -335,13 +335,55 @@ test('runMicroTask rejects an empty provider response', async () => {
   }
 });
 
+test('runMicroTask surfaces a provider completion cap instead of a silent success', async () => {
+  const mock = createMockServer();
+  mock.setHandler((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'mock-cap',
+      choices: [{ index: 0, finish_reason: 'length', message: { role: 'assistant', content: 'partial report' } }],
+      usage: { prompt_tokens: 10, completion_tokens: 20 },
+    }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const result = await runMicroTask({ url, model: 'test-model' }, { prompt: 'report everything', outputMode: 'answer' });
+    assert.equal(result.ok, true);
+    assert.equal(result.providerTruncated, true);
+    assert.equal(result.finishReason, 'length');
+    assert.equal(mock.requests[0].body.max_tokens, 3072, 'the custom answer ceiling must not silently cut a report at 512 tokens');
+  } finally {
+    await mock.close();
+  }
+});
+
+test('runMicroTask records provider cache hits instead of pricing every prompt token as fresh', async () => {
+  const mock = createMockServer();
+  mock.setHandler((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'mock-cache',
+      choices: [{ index: 0, finish_reason: 'stop', message: { role: 'assistant', content: 'cached answer' } }],
+      usage: { prompt_tokens: 1000, completion_tokens: 10, total_tokens: 1010, prompt_tokens_details: { cached_tokens: 900 } },
+    }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const result = await runMicroTask({ url, model: 'test-model' }, { prompt: 'cached?', outputMode: 'answer' });
+    assert.equal(result.ok, true);
+    assert.equal(result.providerUsage.cached_input_tokens, 900);
+    assert.equal(result.providerUsage.uncached_input_tokens, 100);
+  } finally {
+    await mock.close();
+  }
+});
+
 test('runMicroTask retries pseudo tool-call output when tools are disabled', async () => {
   const mock = createMockServer();
   let callIndex = 0;
   mock.setHandler((_req, res, body) => {
     callIndex += 1;
     if (callIndex === 1) {
-      assert.match(body.messages[0].content, /No tools are available/);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         id: 'pseudo-tool-call',
@@ -377,6 +419,55 @@ test('runMicroTask retries pseudo tool-call output when tools are disabled', asy
     assert.equal(mock.requests.length, 2);
   } finally {
     await mock.close();
+  }
+});
+
+test('runMicroTask injects host skill guidance without micro-only restrictions', async () => {
+  const mock = createMockServer();
+  const guidance = loadMicroSkillGuidance({ projectRoot: process.cwd() });
+  mock.setHandler((_req, res, body) => {
+    const systemPrompt = body.messages[0].content;
+    assert.equal(systemPrompt, guidance);
+    assert.match(systemPrompt, /name: contextos/);
+    assert.match(systemPrompt, /ContextOS operations and diagnosis/);
+    assert.match(systemPrompt, /Pipeline is the default container for 3 or more known independent reads/);
+    assert.doesNotMatch(systemPrompt, /You are a bounded executor/);
+    assert.doesNotMatch(systemPrompt, /When a change is rejected because it exceeds allowedPaths/);
+    assert.doesNotMatch(systemPrompt, /Do not delegate to another agent/);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'skill-guidance',
+      choices: [{ index: 0, message: { role: 'assistant', content: 'host-equivalent guidance received' } }],
+      usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+    }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const result = await runMicroTask(
+      { url, model: 'test-model' },
+      { prompt: 'inspect the assigned surface', withOS: true, invocation: { tools: { enabled: true } } },
+    );
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(mock.requests.length, 1);
+  } finally {
+    await mock.close();
+  }
+});
+
+test('project-local canonical skills take precedence over stale runtime copies', () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-skill-precedence-'));
+  const skillsRoot = path.join(projectRoot, 'plugins/contextos/skills');
+  fs.mkdirSync(path.join(skillsRoot, 'contextos'), { recursive: true });
+  fs.mkdirSync(path.join(skillsRoot, 'contextos-ops'), { recursive: true });
+  fs.writeFileSync(path.join(skillsRoot, 'contextos/SKILL.md'), '---\nname: contextos\n---\nPROJECT_CANONICAL_CONTEXTOS\n');
+  fs.writeFileSync(path.join(skillsRoot, 'contextos-ops/SKILL.md'), '---\nname: contextos-ops\n---\nPROJECT_CANONICAL_OPS\n');
+  try {
+    const guidance = loadMicroSkillGuidance({ projectRoot });
+    assert.match(guidance, /PROJECT_CANONICAL_CONTEXTOS/);
+    assert.match(guidance, /PROJECT_CANONICAL_OPS/);
+    assert.doesNotMatch(guidance, /意图级开发底座与编码执行外骨骼/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
 
@@ -583,16 +674,44 @@ test('runMicroTask sends proper payload and headers', async () => {
 
     const payload = req.body;
     assert.equal(payload.model, 'test-model');
-    assert.equal(payload.max_tokens, 1024);
+    assert.equal(Object.hasOwn(payload, 'max_tokens'), false);
     assert.equal(payload.reasoning_effort, 'low');
     assert.equal(payload.messages.length, 2);
     assert.equal(payload.messages[0].role, 'system');
-    assert.equal(payload.messages[0].content, `${MICRO_PRESETS.triage.system}${NO_TOOLS_INSTRUCTION}`);
+    assert.equal(payload.messages[0].content, loadMicroSkillGuidance({ projectRoot: process.cwd() }));
     assert.equal(payload.messages[1].role, 'user');
     assert.match(payload.messages[1].content, /Analyze this error/);
     assert.match(payload.messages[1].content, /<INPUT>\nTypeError: undefined is not a function\n<\/INPUT>/);
   } finally {
     await mock.close();
+  }
+});
+
+test('one-shot Micro calls do not persist empty continuation stubs', async () => {
+  const mock = createMockServer();
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-micro-stub-'));
+  mock.setHandler((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      id: 'one-shot',
+      choices: [{ index: 0, message: { role: 'assistant', content: 'one-shot complete' } }],
+      usage: { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 },
+    }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const result = await runMicroTask({ url, model: 'test-model' }, {
+      projectRoot,
+      prompt: 'one-shot task',
+      sessionId: 'sess-one-shot',
+      withOS: true,
+      invocation: { tools: { enabled: true } },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(fs.existsSync(path.join(projectRoot, '.contextos', 'micro-session-context')), false);
+  } finally {
+    await mock.close();
+    fs.rmSync(projectRoot, { recursive: true, force: true });
   }
 });
 
@@ -686,6 +805,7 @@ test('runMicroTask enforces provider token and cost budgets before dispatch', as
     const oversizedPreload = await runMicroTask(config, {
       prompt: 'summarize this small chore',
       maxTokens: 512,
+      maxProviderTokens: 1000,
       preload: { status: 'OK', summary: 'x'.repeat(40000) },
     });
     assert.equal(oversizedPreload.ok, false);
@@ -693,8 +813,17 @@ test('runMicroTask enforces provider token and cost budgets before dispatch', as
     assert.equal(oversizedPreload.budgetDecision.action, 'narrow_or_raise_provider_tokens');
     assert.equal(oversizedPreload.budgetDecision.retrySafe, false);
     assert.ok(oversizedPreload.budgetDecision.projected > oversizedPreload.budgetDecision.limit);
-    assert.equal(mock.requests.length, 0);
+    assert.equal(mock.requests.length, 0, 'an explicit budget still stops the dispatch');
 
+    const unbudgetedPreload = await runMicroTask(config, {
+      prompt: 'summarize this small chore',
+      maxTokens: 512,
+      preload: { status: 'OK', summary: 'x'.repeat(40000) },
+    });
+    assert.equal(unbudgetedPreload.ok, true, 'no default budget may kill a legitimate run');
+    assert.equal(mock.requests.length, 1);
+
+    const requestsBeforeTruncated = mock.requests.length;
     const truncatedPreload = await runMicroTask(config, {
       prompt: 'review the inspected source',
       preload: {
@@ -707,12 +836,12 @@ test('runMicroTask enforces provider token and cost budgets before dispatch', as
     assert.equal(truncatedPreload.ok, false);
     assert.match(truncatedPreload.error, /preload evidence was truncated/);
     assert.equal(truncatedPreload.usageSource, 'unavailable');
-    assert.equal(mock.requests.length, 0, 'truncated evidence must be rejected before provider dispatch');
+    assert.equal(mock.requests.length, requestsBeforeTruncated, 'truncated evidence must be rejected before provider dispatch');
 
     const measured = await runMicroTask(config, { prompt: 'measure usage' });
     assert.equal(measured.ok, true);
     assert.equal(measured.usage.total_tokens, 30);
-    assert.equal(measured.budget.maxProviderTokens, 8000);
+    assert.equal(measured.budget.maxProviderTokens, null, 'no default provider token budget may kill a Micro run');
   } finally {
     await mock.close();
   }
@@ -774,18 +903,18 @@ test('Micro input budgets short-circuit before dispatch and empty responses get 
   }
 });
 
-test('resolveMicroBudget scales default total budget for bounded multi-step tools', () => {
+test('resolveMicroBudget keeps provider token limits opt-in', () => {
   assert.equal(
-    resolveMicroBudget({}, { withOS: true, invocation: { provider: { maxRequests: 4 } } }, 'custom').maxProviderTokens,
-    32000,
+    resolveMicroBudget({}, { withOS: true, invocation: { provider: { maxRequests: 4 } } }).maxProviderTokens,
+    null,
   );
   assert.equal(
-    resolveMicroBudget({}, { withOS: true, invocation: { provider: { maxRequests: 4, maxProviderTokens: 9000 } } }, 'custom').maxProviderTokens,
+    resolveMicroBudget({}, { withOS: true, invocation: { provider: { maxRequests: 4, maxProviderTokens: 9000 } } }).maxProviderTokens,
     9000,
   );
   assert.equal(
-    resolveMicroBudget({}, { withOS: false, invocation: { provider: { maxRequests: 4 } } }, 'custom').maxProviderTokens,
-    8000,
+    resolveMicroBudget({}, { withOS: false, invocation: { provider: { maxRequests: 4 } } }).maxProviderTokens,
+    null,
   );
 });
 
@@ -829,38 +958,18 @@ test('Micro exposes run only when command execution is explicitly allowed', asyn
   assert.equal(calls[0].input.args.mode, 'summary');
 });
 
-test('runMicroTask withOS=true exposes run when allowCommands is enabled', async () => {
+test('API runMicroTask executes an allowed run tool through the provider loop', async () => {
   const mock = createMockServer();
   const { url } = await mock.listen();
   let requestCount = 0;
-  mock.setHandler((req, res, body) => {
+  let commandCount = 0;
+  mock.setHandler((_req, res) => {
     requestCount += 1;
-    if (requestCount === 1) {
-      assert.ok(body.tools.some((tool) => tool.function?.name === 'run'));
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        choices: [{
-          message: {
-            role: 'assistant',
-            content: null,
-            tool_calls: [{
-              id: 'run-1',
-              type: 'function',
-              function: { name: 'run', arguments: JSON.stringify({ command: 'npm test' }) },
-            }],
-          },
-        }],
-        usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
-      }));
-      return;
-    }
-    assert.equal(body.messages.at(-1).role, 'tool');
-    assert.match(body.messages.at(-1).content, /1 test failed/);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      choices: [{ message: { role: 'assistant', content: 'failure isolated' } }],
-      usage: { prompt_tokens: 18, completion_tokens: 5, total_tokens: 23 },
-    }));
+    const message = requestCount === 1
+      ? { tool_calls: [{ id: 'run-1', type: 'function', function: { name: 'run', arguments: JSON.stringify({ command: 'npm test' }) } }] }
+      : { content: '1 test failed' };
+    res.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 10, completion_tokens: 2 } }));
   });
 
   try {
@@ -870,15 +979,17 @@ test('runMicroTask withOS=true exposes run when allowCommands is enabled', async
         prompt: 'Run the focused test and summarize the failure.',
         withOS: true,
         caps: {
-          run: async () => ({ ok: true, data: JSON.stringify({ ok: false, summary: '1 test failed' }) }),
+          run: async (args) => { commandCount += 1; assert.equal(args.command, 'npm test'); return { ok: true, data: '1 test failed' }; },
         },
-        invocation: { tools: { enabled: true, allowCommands: true } },
+        invocation: { tools: { enabled: true, allowCommands: true }, provider: { maxRequests: 2 } },
       },
     );
-    assert.equal(result.ok, true);
-    assert.equal(result.executionMode, 'executor');
+    assert.equal(result.ok, true, result.error);
+    assert.equal(result.invocation.providerRequests, 2);
+    assert.equal(requestCount, 2, 'the API endpoint receives the tool turn and final turn');
+    assert.equal(commandCount, 1, 'the run capability executes once');
+    assert.equal(result.content, '1 test failed');
     assert.equal(result.toolCalls[0].name, 'run');
-    assert.equal(result.hostTurnsSaved, 1);
   } finally {
     await mock.close();
   }
@@ -929,7 +1040,7 @@ test('runMicroTask enforces budgets before final tool-convergence dispatch', asy
       withOS: true,
       maxSteps: 1,
       maxTokens: 5,
-      maxProviderTokens: 50,
+      maxProviderTokens: 4130,
       caps: { inspect: async () => 'export const x = 1;' },
     });
     assert.equal(result.ok, false);
@@ -1077,7 +1188,7 @@ test('runMicroTask supports thinking levels and custom maxTokens', async () => {
     const config = { url, model: 'test-model' };
 
     // high thinking
-    await runMicroTask(config, { prompt: 'hi', thinking: 'high', maxTokens: 8192, maxProviderTokens: 12000 });
+    await runMicroTask(config, { prompt: 'hi', thinking: 'high', maxTokens: 8192, maxProviderTokens: 20000 });
     assert.equal(mock.requests[0].body.reasoning_effort, 'high');
     assert.equal(mock.requests[0].body.max_tokens, 8192);
 
@@ -1107,9 +1218,9 @@ test('runMicroTask preserves conversation history for multi-turn tasks', async (
     });
 
     const messages = mock.requests[0].body.messages;
-    assert.equal(messages[0].role, 'system');
-    assert.equal(messages[0].content, `${MICRO_PRESETS.contract.system}${NO_TOOLS_INSTRUCTION}`);
+    assert.equal(messages[0].content, loadMicroSkillGuidance({ projectRoot: process.cwd() }));
     assert.equal(messages[1].content, 'Turn 1 user');
+
     assert.equal(messages[2].content, 'Turn 1 assistant');
     assert.equal(messages[3].content, 'Turn 2 user');
   } finally {
@@ -1142,7 +1253,11 @@ test('runMicroTask handles HTTP error responses and timeouts', async () => {
 
     const timeoutRes = await runMicroTask(config, { prompt: 'test', timeoutMs: 50 });
     assert.equal(timeoutRes.ok, false);
-    assert.match(timeoutRes.error, /timed out after 50ms/);
+    assert.equal(timeoutRes.status, 'partial');
+    assert.equal(timeoutRes.partial, true);
+    assert.equal(timeoutRes.errorCode, 'MICRO_CONTINUATION_REQUIRED');
+    assert.equal(timeoutRes.resume.kind, 'micro');
+    assert.match(timeoutRes.guidance, /refresh the 290s window/);
   } finally {
     await mock.close();
   }
@@ -1302,6 +1417,125 @@ test('executeMicroTool batches inspect paths, expands safe globs, and forwards s
       maxResults: 5,
     });
   } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('executeMicroTool routes read-only pipelines and blocks mutation or command bypasses', async () => {
+  const calls = [];
+  const dispatch = async (tool, input) => {
+    calls.push({ tool, input });
+    return '# ContextOS pipeline\nstatus=OK';
+  };
+
+  const readOnly = await executeMicroTool('os', {
+    action: 'pipeline',
+    args: { parallel: [{ inspect: { path: 'a.mjs' } }, { inspect: { path: 'b.mjs' } }] },
+  }, { dispatch, projectRoot: '/tmp/micro-pipeline-fixture' });
+  assert.match(readOnly, /status=OK/);
+  assert.equal(calls[0].input.maxChars, undefined);
+  assert.equal(calls[0].input.full, true);
+  assert.deepEqual(calls[0].input.parallel[0], { inspect: { path: 'a.mjs' } });
+
+  const analysisMutation = await executeMicroTool('os', {
+    action: 'pipeline',
+    args: { steps: [{ change: { edits: [{ path: 'a.mjs', target: 'x', replacement: 'y' }] } }] },
+  }, { dispatch, projectRoot: '/tmp/micro-pipeline-fixture' });
+  assert.match(analysisMutation, /Analysis tasks cannot run mutation steps/);
+  assert.equal(calls.length, 1);
+
+  const commandBypass = await executeMicroTool('os', {
+    action: 'pipeline',
+    args: { steps: [{ verify: { commands: ['npm test'] } }] },
+  }, { dispatch, projectRoot: '/tmp/micro-pipeline-fixture', allowCommands: false });
+  assert.match(commandBypass, /require invocation\.tools\.allowCommands:true/);
+  assert.equal(calls.length, 1);
+
+  const delegated = await executeMicroTool('os', {
+    action: 'pipeline',
+    args: { steps: [{ tool: 'agent', args: { task: 'x' } }] },
+  }, { dispatch, projectRoot: '/tmp/micro-pipeline-fixture' });
+  assert.match(delegated, /cannot delegate/);
+  assert.equal(calls.length, 1);
+
+  const implementMutation = await executeMicroTool('os', {
+    action: 'pipeline',
+    args: { steps: [{ change: { edits: [{ path: 'a.mjs', target: 'x', replacement: 'y' }] } }] },
+  }, { dispatch, projectRoot: '/tmp/micro-pipeline-fixture', execution: 'implement', allowedPaths: ['a.mjs'], allowCommands: true });
+  assert.match(implementMutation, /status=OK/);
+  assert.equal(calls.length, 2);
+});
+
+test('executeMicroTool keeps multi-inspect pipeline evidence wider than the old summary clip', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-micro-pipeline-full-'));
+  const calls = [];
+  const tail = 'SECOND-INSPECTION-TAIL';
+  const dispatch = async (tool, input) => {
+    calls.push({ tool, input });
+    return pipelinePipeline({
+      projectRoot: root,
+      orchestrator: {
+        dispatch: async (_tool, actionInput) => {
+          const second = actionInput.path === 'src/b.mjs';
+          return `# ContextOS inspect\n\n[L1-L2]\n${'x'.repeat(3200)}${second ? `\n${tail}` : '\nFIRST-INSPECTION'}`;
+        },
+      },
+    }, input);
+  };
+
+  try {
+    const output = await executeMicroTool('os', {
+      action: 'pipeline',
+      args: { parallel: [
+        { inspect: { path: 'src/a.mjs', ranges: [[1, 400]] } },
+        { inspect: { path: 'src/b.mjs', ranges: [[1, 400]] } },
+      ] },
+    }, { dispatch, projectRoot: root });
+
+    assert.equal(calls[0].input.maxChars, undefined);
+    assert.equal(calls[0].input.full, true);
+
+    assert.match(output, new RegExp(tail));
+    assert.doesNotMatch(output, /response truncated/i);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runMicroTask counts successful pipeline tool calls with preload runs', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-micro-pipeline-runs-'));
+  const mock = createMockServer();
+  const { url } = await mock.listen();
+  let requestCount = 0;
+  let pipelineCalls = 0;
+  mock.setHandler((req, res) => {
+    requestCount += 1;
+    const message = requestCount === 1
+      ? { tool_calls: [{ id: 'pipeline-1', type: 'function', function: { name: 'os', arguments: JSON.stringify({ action: 'pipeline', args: { parallel: [{ inspect: { path: 'a.mjs' } }] } }) } }] }
+      : { content: 'pipeline complete' };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 } }));
+  });
+  try {
+    const result = await runMicroTask({ url, model: 'test-model' }, {
+      prompt: 'run the bounded pipeline',
+      projectRoot: root,
+      withOS: true,
+      preload: { ok: true, status: 'OK', summary: 'preloaded evidence', chars: 18, pipelineRuns: 1 },
+      invocation: { tools: { enabled: true }, provider: { maxRequests: 2 } },
+      orchestrator: {
+        dispatch: async (tool) => {
+          assert.equal(tool, 'pipeline');
+          pipelineCalls += 1;
+          return '# ContextOS pipeline\npipeline=OK';
+        },
+      },
+    });
+    assert.equal(result.ok, true, result.error);
+    assert.equal(pipelineCalls, 1);
+    assert.equal(result.invocation.pipelineRuns, 2, 'preload and in-loop pipeline runs share the same invocation counter');
+  } finally {
+    await mock.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
@@ -1550,6 +1784,36 @@ test('applyOutputBudget and executeMicroTool honor budget: full and custom maxCh
   assert.match(customCtx, /\+.*chars truncated/);
 });
 
+test('runMicroTask has no default tool-round ceiling', async () => {
+  const mock = createMockServer();
+  const { url } = await mock.listen();
+  try {
+    let calls = 0;
+    mock.setHandler((req, res, body) => {
+      calls += 1;
+      const toolCalls = calls <= 10
+        ? [{ id: `call_${calls}`, type: 'function', function: { name: 'inspect', arguments: JSON.stringify({ path: `file_${calls}.mjs` }) } }]
+        : undefined;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{ message: toolCalls ? { role: 'assistant', content: null, tool_calls: toolCalls } : { role: 'assistant', content: 'finished after ten rounds' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+      }));
+    });
+    const result = await runMicroTask({ url, model: 'test-model' }, {
+      prompt: 'complete after ten tool rounds',
+      withOS: true,
+      caps: { inspect: async (args) => `content of ${args.path}` },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.steps, 10);
+    assert.equal(result.invocation.toolRounds, 10);
+    assert.match(result.content, /finished after ten rounds/);
+  } finally {
+    await mock.close();
+  }
+});
+
 test('runMicroTask withOS=true gracefully handles safety step limit convergence', async () => {
   const mock = createMockServer();
   const { url } = await mock.listen();
@@ -1624,4 +1888,20 @@ test('runMicroTask withOS=true gracefully handles safety step limit convergence'
   } finally {
     await mock.close();
   }
+});
+
+test('micro os inspect normalizes natural range forms before dispatch', async () => {
+  const calls = [];
+  const dispatch = async (tool, input) => {
+    calls.push({ tool, input });
+    return 'ok';
+  };
+  await executeMicroTool('os', { action: 'inspect', args: { path: 'src/example.mjs', lines: '1-4' } }, { dispatch, projectRoot: '/tmp/micro-range-fixture' });
+  await executeMicroTool('os', { action: 'inspect', args: { path: 'src/example.mjs', ranges: '2:3' } }, { dispatch, projectRoot: '/tmp/micro-range-fixture' });
+  await executeMicroTool('os', { action: 'inspect', args: { path: 'src/example.mjs', ranges: [4, 6] } }, { dispatch, projectRoot: '/tmp/micro-range-fixture' });
+  assert.deepEqual(calls, [
+    { tool: 'inspect', input: { path: 'src/example.mjs', ranges: [[1, 4]] } },
+    { tool: 'inspect', input: { path: 'src/example.mjs', ranges: [[2, 3]] } },
+    { tool: 'inspect', input: { path: 'src/example.mjs', ranges: [[4, 6]] } },
+  ]);
 });

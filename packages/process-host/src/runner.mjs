@@ -1,6 +1,7 @@
 import { spawn, execSync } from 'node:child_process';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { StringDecoder } from 'node:string_decoder';
 import { sanitizeTerminalOutput, redactSecrets } from './sanitizer.mjs';
 import {
   createLogSink,
@@ -20,10 +21,16 @@ export async function runCommand({
   projectRoot = cwd,
   raw = false,
   mode = 'auto',
+  signal,
 }) {
+  if (signal?.aborted) throw signal.reason || new Error('Command cancelled before execution.');
   const maxLogBytesLimit = normalizeMaxLogBytes(maxLogBytes);
   const receiptId = `receipt-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
   const startTime = Date.now();
+  const childEnv = { ...env };
+  // The MCP host uses this flag to choose its own response encoding. Child
+  // commands are separate processes and must never inherit that transport mode.
+  delete childEnv.CONTEXTOS_TEXT_ONLY_RESULTS;
 
   const logDir = ensureLogDir(projectRoot);
   const logFile = path.join(logDir, `${receiptId}.log`);
@@ -31,16 +38,19 @@ export async function runCommand({
   const boundedLog = maxLogBytesLimit === null
     ? null
     : createLogSink(logFile, { maxLogBytes: maxLogBytesLimit });
-  const maxCaptureChars = 10_000_000;
+  const maxCaptureChars = Infinity;
 
   return new Promise((resolve) => {
     let stdoutData = '';
     let stderrData = '';
     let captureTruncated = false;
     let killedByTimeout = false;
+    let killedByCancellation = false;
     let logBytes = 0;
     let logTruncated = false;
     let settled = false;
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
 
     const finish = (receipt) => {
       if (settled) return;
@@ -55,14 +65,13 @@ export async function runCommand({
 
     const child = spawn(shell, shellArgs, {
       cwd,
-      env,
+      env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: !isWin,
       windowsVerbatimArguments: isWin,
     });
 
-    const timer = setTimeout(() => {
-      killedByTimeout = true;
+    const terminate = () => {
       if (isWin && child.pid) {
         try {
           execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' });
@@ -77,10 +86,16 @@ export async function runCommand({
           child.kill('SIGKILL');
         }
       }
+    };
+    const timer = setTimeout(() => {
+      killedByTimeout = true;
+      terminate();
     }, timeoutMs);
+    const abort = () => { killedByCancellation = true; terminate(); };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
 
-    child.stdout.on('data', (chunk) => {
-      const text = chunk.toString('utf8');
+    const captureStdout = (text) => {
       if (boundedLog) {
         const logState = boundedLog.write(redactSecrets(text));
         logBytes = logState.logBytes;
@@ -91,10 +106,10 @@ export async function runCommand({
         return;
       }
       stdoutData += text.slice(0, maxCaptureChars - stdoutData.length);
-    });
+    };
+    child.stdout.on('data', (chunk) => captureStdout(stdoutDecoder.write(chunk)));
 
-    child.stderr.on('data', (chunk) => {
-      const text = chunk.toString('utf8');
+    const captureStderr = (text) => {
       if (boundedLog) {
         const logState = boundedLog.write(redactSecrets(text));
         logBytes = logState.logBytes;
@@ -105,10 +120,14 @@ export async function runCommand({
         return;
       }
       stderrData += text.slice(0, maxCaptureChars - stderrData.length);
-    });
+    };
+    child.stderr.on('data', (chunk) => captureStderr(stderrDecoder.write(chunk)));
 
     child.on('close', async (code) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      captureStdout(stdoutDecoder.end());
+      captureStderr(stderrDecoder.end());
       const durationMs = Date.now() - startTime;
       const rawOutput =
         stdoutData +
@@ -130,7 +149,7 @@ export async function runCommand({
         } catch (_) {}
       }
 
-      const exitCode = killedByTimeout ? 124 : (code !== null ? code : 1);
+      const exitCode = killedByCancellation ? 130 : killedByTimeout ? 124 : (code !== null ? code : 1);
       const sanitized = sanitizeTerminalOutput(rawOutput, { exitCode, maxChars, raw, mode, command: safeCommand });
 
       const relativeLogHandle = path.relative(projectRoot, logFile);
@@ -141,7 +160,7 @@ export async function runCommand({
         cwd,
         exitCode,
         durationMs,
-        summary: killedByTimeout ? `Command timed out after ${timeoutMs}ms.` : sanitized.summary,
+        summary: killedByCancellation ? 'Command cancelled.' : killedByTimeout ? `Command timed out after ${timeoutMs}ms.` : sanitized.summary,
         text: sanitized.text,
         errors: sanitized.errors,
         diagnostics: sanitized.diagnostics || [],
@@ -155,6 +174,7 @@ export async function runCommand({
 
     child.on('error', async (err) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
       const durationMs = Date.now() - startTime;
       if (boundedLog) {
         try {

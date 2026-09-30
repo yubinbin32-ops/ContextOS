@@ -102,14 +102,22 @@ export const PLAN_STATUS_TRANSITIONS = Object.freeze({
 });
 
 export const TASK_STATUS_TRANSITIONS = Object.freeze({
-  draft: ['active', 'blocked'],
-  active: ['checking', 'syncing', 'blocked'],
-  checking: ['syncing', 'sync_failed', 'active', 'blocked'],
-  syncing: ['completed', 'sync_failed', 'blocked'],
-  completed: [],
-  blocked: ['active'],
-  sync_failed: ['checking', 'active', 'blocked'],
+  draft: ['active', 'blocked', 'archived'],
+  active: ['checking', 'syncing', 'blocked', 'completed', 'archived'],
+  checking: ['syncing', 'sync_failed', 'active', 'blocked', 'completed', 'archived'],
+  syncing: ['completed', 'sync_failed', 'blocked', 'archived'],
+  completed: ['archived'],
+  blocked: ['active', 'archived'],
+  sync_failed: ['checking', 'active', 'blocked', 'archived'],
+  archived: [],
 });
+
+export const PLAN_COMPLETABLE_STATUSES = Object.freeze(['active']);
+export const PLAN_ARCHIVABLE_STATUSES = Object.freeze(['draft', 'active', 'completed']);
+export const PLAN_DELETABLE_STATUSES = Object.freeze(['archived']);
+export const TASK_COMPLETABLE_STATUSES = Object.freeze(['active', 'checking', 'syncing']);
+export const TASK_ARCHIVABLE_STATUSES = Object.freeze(['draft', 'active', 'checking', 'syncing', 'completed', 'blocked', 'sync_failed']);
+export const TASK_DELETABLE_STATUSES = Object.freeze(['archived']);
 
 function assertKnownStatus(value, allowed, entity, id) {
   if (!allowed.includes(value)) {
@@ -118,6 +126,50 @@ function assertKnownStatus(value, allowed, entity, id) {
       { id, status: value }
     );
   }
+}
+
+function assertLifecycleAction({ action, status, id, entity, allowedByAction, knownStatuses }) {
+  const allowed = allowedByAction[action];
+  if (!allowed) {
+    throw new InvariantViolationError(`Unknown ${entity} lifecycle action '${action}'.`, { id, action });
+  }
+  assertKnownStatus(status, knownStatuses, entity, id);
+  if (!allowed.includes(status)) {
+    throw new InvariantViolationError(
+      `${entity} '${id}' cannot ${action} from status '${status}'. Allowed statuses: ${allowed.join(', ')}`,
+      { id, action, status, allowed }
+    );
+  }
+}
+
+export function assertPlanLifecycleAction(action, status, planId = '<unknown>') {
+  assertLifecycleAction({
+    action,
+    status,
+    id: planId,
+    entity: 'Plan',
+    allowedByAction: {
+      complete: PLAN_COMPLETABLE_STATUSES,
+      archive: PLAN_ARCHIVABLE_STATUSES,
+      delete: PLAN_DELETABLE_STATUSES,
+    },
+    knownStatuses: Object.keys(PLAN_STATUS_TRANSITIONS),
+  });
+}
+
+export function assertTaskLifecycleAction(action, status, taskId = '<unknown>') {
+  assertLifecycleAction({
+    action,
+    status,
+    id: taskId,
+    entity: 'Task',
+    allowedByAction: {
+      complete: TASK_COMPLETABLE_STATUSES,
+      archive: TASK_ARCHIVABLE_STATUSES,
+      delete: TASK_DELETABLE_STATUSES,
+    },
+    knownStatuses: Object.keys(TASK_STATUS_TRANSITIONS),
+  });
 }
 
 export function assertPlanStatusTransition(previousStatus, nextStatus, planId = '<unknown>') {
@@ -236,7 +288,7 @@ export function assertPlanCanBeCompletedWithTasks(plan, tasks = [], { allowLight
   assertPlanStructure(plan, { allowLightweight });
   assertPlanTaskLinks(plan, tasks);
   assertPlanCanBeCompleted(plan);
-  const unfinished = tasks.filter((task) => task.status !== 'completed');
+  const unfinished = tasks.filter((task) => !['completed', 'archived'].includes(task.status));
   if (unfinished.length > 0) {
     throw new InvariantViolationError(
       `Cannot complete Plan '${plan.id}' while non-terminal tasks remain: ${unfinished.map((task) => `${task.id}(${task.status})`).join(', ')}`,

@@ -18,7 +18,7 @@ npm run plugin:verify
 npm run verify          # full release gate, including real MCP acceptance and desktop build
 ```
 
-For changes to context retrieval, AST slicing, mutation, storage, or log sanitization, add a focused regression test and, when the change affects the agent workflow, record a manual four-to-five-round A/B/C reproduction. Keep normal development evidence separate from provider usage; do not turn a synthetic score or benchmark into a release gate.
+For changes to context retrieval, AST slicing, mutation, storage, or log sanitization, add a focused regression test and, when the change affects the agent workflow, record a real multi-round host-conversation reproduction. Keep normal development evidence separate from provider usage; do not turn a synthetic score into a release gate.
 
 The macOS app can be compiled with:
 

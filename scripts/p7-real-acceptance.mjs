@@ -15,26 +15,28 @@ assert.ok(fs.existsSync(bundlePath), 'The shipped MCP bundle is missing');
 
 const fixture = createFixtureProject({ prefix: 'ctxos-p7-acceptance' });
 const legacyFixture = createFixtureProject({ prefix: 'ctxos-p7-legacy' });
-let legacyTransport = null;
-let legacyClient = null;
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [bundlePath],
   cwd: repoRoot,
   stderr: 'inherit',
-  env: { ...process.env, CONTEXTOS_LEAN_SURFACE: '0' },
+  env: { ...process.env },
 });
 const client = new Client({ name: 'contextos-p7-acceptance', version: packageVersion });
 
 const textOf = (result) => (result.content || []).map((chunk) => chunk.text || '').join('\n');
+const single = (name, args = {}, root = fixture.root) => ({
+  name: 'contextos',
+  arguments: { action: name, args: { ...args }, projectRoot: root },
+});
 const call = async (name, args = {}) => {
-  const result = await client.callTool({ name, arguments: { projectRoot: fixture.root, ...args } });
+  const result = await client.callTool(single(name, args));
   const text = textOf(result);
   assert.equal(Boolean(result.isError), false, `${name} failed: ${text}`);
   return text;
 };
 const callExpectError = async (name, args = {}) => {
-  const result = await client.callTool({ name, arguments: { projectRoot: fixture.root, ...args } });
+  const result = await client.callTool(single(name, args));
   assert.equal(Boolean(result.isError), true, `${name} unexpectedly succeeded`);
   return textOf(result);
 };
@@ -42,7 +44,7 @@ const callExpectError = async (name, args = {}) => {
 try {
   await client.connect(transport);
   const listing = await client.listTools();
-  assert.deepEqual(listing.tools.map((tool) => tool.name).sort(), ['change', 'explore', 'inspect', 'ops', 'pipeline', 'ship', 'verify']);
+  assert.deepEqual(listing.tools.map((tool) => tool.name).sort(), ['contextos']);
 
   const explored = await call('explore', { intent: 'inspect greet and the fixture test suite' });
   assert.match(explored, /# ContextOS explore/);
@@ -59,7 +61,7 @@ try {
   assert.ok(fileSearch.text.some((hit) => hit.path === 'src/math.mjs'));
 
   const beforeMath = fixture.read('src/math.mjs');
-  const rejected = await call('change', {
+  const rejected = await callExpectError('change', {
     edits: [
       { path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 1;' },
       { path: 'src/strings.mjs', target: 'this target does not exist', replacement: 'never' },
@@ -200,34 +202,16 @@ try {
     JSON.stringify({ id: legacyProjectId, name: legacyProjectId, storage: 'local', isCloud: false }, null, 2) + '\n',
     'utf8'
   );
-  legacyTransport = new StdioClientTransport({
-    command: process.execPath,
-    args: [bundlePath],
-    cwd: repoRoot,
-    stderr: 'inherit',
-    env: { ...process.env, CONTEXTOS_LEAN_SURFACE: '0' },
-  });
-  legacyClient = new Client({ name: 'contextos-p9-legacy-adoption', version: packageVersion });
-  await legacyClient.connect(legacyTransport);
-  const legacyPlanList = await legacyClient.callTool({
-    name: 'ops',
-    arguments: {
-      projectRoot: legacyFixture.root,
-      capability: 'plan',
-      action: 'list',
-      args: { format: 'json' },
-    },
-  });
+  const legacyPlanList = await client.callTool(single('ops', {
+    capability: 'plan',
+    action: 'list',
+    args: { format: 'json' },
+  }, legacyFixture.root));
   assert.equal(Boolean(legacyPlanList.isError), false, textOf(legacyPlanList));
   const legacyPlans = JSON.parse(textOf(legacyPlanList));
   const legacyPlanItems = Array.isArray(legacyPlans) ? legacyPlans : legacyPlans.plans;
   assert.ok(Array.isArray(legacyPlanItems), 'legacy plan list must expose an array of plans');
   assert.ok(legacyPlanItems.some((plan) => plan.id === 'plan-legacy-identity'));
-  await legacyClient.close();
-  legacyClient = null;
-  await legacyTransport.close();
-  legacyTransport = null;
-
   const shipped = await call('ship', { summary: 'P7 real MCP acceptance changed greet() and verified the fixture suite.', exportGraph: true });
   assert.match(shipped, /Closure/);
   assert.match(shipped, /Superseded failures: 1/);
@@ -249,7 +233,7 @@ try {
     'reopening SQLite during repeated sync must not create another revision'
   );
 
-  const noRoot = await client.callTool({ name: 'explore', arguments: { intent: 'missing root' } });
+  const noRoot = await client.callTool({ name: 'contextos', arguments: { action: 'explore', args: { intent: 'missing root' } } });
   assert.equal(Boolean(noRoot.isError), true);
 
   console.log('# P7 Real MCP Acceptance Passed!');
@@ -258,8 +242,6 @@ try {
   console.log('- project identity, legacy adoption, single-file search and superseded receipts: verified');
   console.log('- private receipt logs and graph export: verified');
 } finally {
-  if (legacyClient) await legacyClient.close().catch(() => {});
-  if (legacyTransport) await legacyTransport.close().catch(() => {});
   await client.close().catch(() => {});
   await transport.close().catch(() => {});
   fixture.cleanup();

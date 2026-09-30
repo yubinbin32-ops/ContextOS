@@ -1,179 +1,115 @@
-# ContextOS Capability Reference
+# ContextOS capability reference
 
-Read this when the intent-level loop is not enough, or when the task needs durable decisions, rules, plans, architecture relationships, process control, or project configuration. These are capabilities, not a required sequence. Choose one because it changes the state the next turn can rely on.
+ContextOS is the required underlying development scaffold for this project. Every development task must read the current OS state and use ContextOS as the primary path for evidence, commands, edits, architecture, and progress; native tools are fallbacks for operations ContextOS cannot perform.
 
-## Decision and rules
+Single entry point: `contextos({action, args, projectRoot})` with an absolute workspace root. Operation arguments go inside `args`.
 
-Use decisions for durable rationale. Use rules for durable constraints that should be applied repeatedly.
+## Capability summary
 
-| Need | Capability/action | State it creates | When it is worth using |
-| :--- | :--- | :--- | :--- |
-| Recover existing project decisions | `ops({ capability: "knowledge", action: "decision_open", args: { sectionId? } })` | Reads `DECISION.md` or one section | Before changing an established architecture, compatibility contract, or prior tradeoff |
-| Record a design choice and why alternatives were rejected | `ops({ capability: "knowledge", action: "decision_write", args: { sectionId, sectionTitle, content } })` | Upserts a durable decision section | A future agent would otherwise re-litigate the same choice; not for routine edits |
-| Close a goal with its rationale | `ship({ summary, decision: { id, title, content } })` | Ships evidence and writes the decision atomically | The current change itself establishes a lasting decision |
-| Discover project rules | `ops({ capability: "knowledge", action: "rule_list" })` | Returns rule summaries | Before implementation when constraints may exist |
-| Read one rule exactly | `ops({ capability: "knowledge", action: "rule_open", args: { ruleId } })` | Returns the full rule | A rule summary affects the implementation |
-| Create or update a reusable rule | `ops({ capability: "knowledge", action: "rule_write", args: { ruleData: { id, title, category, summary, content, priority? } } })` | Writes a rule document | The team wants a persistent constraint, not a one-off instruction |
-| Attach rules to future work | `plan.create/update` with `planData.ruleRefs`; `task.start/create/update` with `rules`; `task.bind_rule/unbind_rule` | Plan or Task carries validated rule references | Work must remain traceable to constraints after the conversation moves on |
+| Need | Action and arguments | Result |
+| --- | --- | --- |
+| Exact source inspection | `ask` with `inspect: [{path, ranges: [[first, last]]}]` | Deterministic source read without an API request. Batch multiple paths in one call. |
+| Semantic code discovery | `ask` with `request`, optional `known`, `purpose` | API Micro locates relevant evidence; returns paths, line ranges, and content hashes. |
+| Run bounded micro task | `ops` with `capability: "micro"`, `action: "run"`, `args: {prompt, execution, invocation}` | API Micro runs its own bounded tool loop and returns one compact report. Use `action: "batch"` to run several bounded tasks together. |
+| Recover saved evidence | `ask` with `resultId`, optional `inspect` | Current source from saved coverage; verifies file versions and reports changes. |
+| Execute bounded command | `command` with `command`, optional `id`, `focus`, `background` | One execution with durable local log receipts; long process output stays off the host. |
+| Recover command output | `command` with `action: "get"`, `id`, optional `ranges`, `full` | Saved output from earlier execution without re-running the command. |
+| Stop command | `command` with `action: "cancel"`, `id` | Halts execution and retains captured output. |
+| Batch steps | `pipeline` with `steps` or `parallel` using `inspect`, `change`, `verify`, `command`, `run` | Default container for 3+ known independent actions; one parallel call may run many actions and returns full step results. |
+| Delegate CLI task | `agent` with `task`, `workspace`, `context`, `background` | Configured CLI subagent executes bounded work and returns structured reports. |
+| Collect background task | `agent` with `action: "wait"`, `jobId`, optional `waitMs` | Bounded wait returning terminal report on completion, or running snapshot if timed out. Avoids polling. |
+| Merge isolated implementation | `integrate` with `jobId`, optional `verify`, `autoRevert` | Waits for the running job, merges the verified diff from the isolated CLI workspace via `changePipeline`, applies only `allowedPaths`, auto-binds new paths to Blocks/Chains, and carries worker verification checks. |
+| Assistant communication | `agent` with `action: "send|messages|cancel"`, `jobId` | Bidirectional host-worker communication; `messages` returns inbox items with `jobStatus`. |
+| Apply verified change | `change` with `edits`, optional `verify`, `architecture` | Scoped atomic file modifications verified against tests; keeps Block ownership current. |
+| System and state ops | `ops` with `capability`, `action`, `args` | Direct access to plan, task, block, chain, architecture, session, profile, and usage. |
+| Diagnostic checks | `ops` with `capability: "micro"`, `action: "doctor"` | Local role readiness and effective settings without making a model request. |
 
-Plans can also carry `decisionRefs`; Tasks can carry `references.decisionSections`. Use those links when future work should start from an established rationale rather than reopening it. Rules and decisions serve different purposes: a rule says what must remain true; a decision explains why one path was chosen. Keep them concise and reusable. Do not turn a single bug fix or transient preference into a project-wide rule.
+## Why and when to use each capability
 
-## Plans, tasks, probes, and evidence
+Delegation is the default. The main conversation owns the task contract, acceptance criteria, architecture decisions, integration, and final judgment; it must not pre-explore or implement work it can delegate. Micro owns bounded tasks and returns compact reports. CLI owns complex multi-file implementation in an isolated workspace. The context firewall keeps source, logs, diffs, architecture dumps, and full evidence out of main context for delegated work.
 
-Plans represent multi-step outcomes. Tasks represent the active unit of work. A lightweight Task can auto-create a lightweight Plan when no plan exists.
+Hard rules:
 
-`plan.list` returns a compact page (10 items by default, maximum 25) with `total`, `offset`, `hasMore`, and `nextOffset`. Use `plan.open` for one plan's full summary, phases, and checkpoints.
+1. **Route diagnosis by scope.** Bounded diagnosis/retrieval belongs to micro; open-ended, multi-goal, unknown-path root-cause investigation belongs to CLI. A micro task must state its goal, known evidence entry, allowed operations, return format, and stop condition.
+2. Every code change goes through `change` or `integrate`. The main conversation never writes project files with native tools.
+3. Prefer `pipeline`: one call that runs several steps beats several rounds of single calls, including chaining dispatch, wait and integrate.
+4. Native tools are the fallback for a quick single command or read that needs no OS evidence, architecture or delegation.
 
-| Need | Capability/action | State it creates | When it is worth using |
-| :--- | :--- | :--- | :--- |
-| Find current work | `ops({ capability: "os_context", action: "brief" })`, `plan.list/open`, `task.open` | Resumption anchor | A new turn, long task, or context reset must recover the active objective |
-| Track phases and checkpoints | `plan.create/update/upsert`, `plan.check`, `plan.complete` | Plan, phases, checkpoints, rule/decision refs | Multiple milestones, approvals, dependencies, or session-spanning work |
-| Start or resume a work unit | `task.start/create/open/activate/develop/resume` | Active Task with working set and context slice | Work needs ownership, rules, notes, files, or evidence across turns |
-| Capture exploratory experiments | `task.probe`, then `task.graduate_probe` | Probe notes plus promoted files/Block binding | Investigation is not yet production work, but findings should survive and later become scoped work |
-| Attach rules to a Task | `task.bind_rule` / `task.unbind_rule` | Validated Task rule references | One Task needs constraints different from the Plan |
-| Record a check | `task.check` with a receipt or evidence | Check entry | Evidence already exists and only needs recording |
-| Check and finish in one action | `task.finish` with `checkData.command`, `receiptId`, or `evidence` | Passing check, Task sync, possible lightweight-plan completion | The Task is ready to close and verification can run now |
-| Reconcile a Task with disk state | `task.reconcile`, `task.sync` | Working-set and graph synchronization | Files changed outside the active flow or a Task needs completion without rerunning checks |
-| Repair blocked state | `task.resume` after resolving the cause | Task returns to active | A dependency, missing binding, or failed check has been repaired |
+- **pipeline**: The default container for 3 or more known independent reads, searches, commands, or edits. One parallel call may run many actions at once and returns full step results. Do not habitually split known work across multiple pipeline calls or repeated single calls.
+- **command**: Executes one bounded command and returns the useful result without exposing the full process. Use it for builds, test suites, linters, and git checks. Output is stored in durable receipts, and `focus` or line ranges extract relevant lines without dumping entire logs.
+- **api-micro**: The default executor for bounded diagnosis/retrieval, discovery, summarization, command batches, verification, packaging, and small changes. Invoke it as `ops({capability:"micro", action:"run", args:{prompt, execution, invocation}})`. It runs its own tool loop and returns one compact report; `action:"batch"` runs several bounded tasks together. It can execute commands (`invocation.tools.allowCommands: true`) and edits (`execution: "implement"` with `context.allowedPaths` and Block ownership). Semantic `ask` is the evidence-only broker. API Micro cannot dispatch another agent.
+- **cli-agent**: Subagent for complex multi-step work, implementation workflows, refactoring, and cross-file repairs. Runs in an isolated process with independent tool loops, can use native tools and ContextOS, and returns structured reports.
+- **integrate**: Merges verified diffs from a completed isolated CLI implementation into the project. This makes delegation substitutive rather than additive: the host merges the verified diff once instead of re-implementing the same files.
 
-Do not use Plans and Tasks as mandatory bookkeeping. Use them when they preserve decisions, constraints, progress, or evidence that would otherwise be lost. Small edits stay in `inspect -> change({ edits, verify })`; `ship` is reserved for actual final closure. When a verified session is closed before the final host turn, pass its `receiptId` (or `receiptIds`) to `ship`; ContextOS reuses it only when its state hash still matches the current workspace and blocks stale evidence.
+## Substitutive CLI implementation lifecycle
 
-## Blocks, chains, and links
+When delegating complex multi-file implementation to a CLI subagent, use the 4-step substitutive lifecycle:
+1. **Dispatch (background)**: Dispatch implementation to an isolated workspace copy:
+   `agent({task, workspace: <isolated copy>, execution: "implement", context: {allowedPaths, acceptance, verify}, background: true})`
+2. **One bounded wait**: Collect the terminal report with a single bounded wait call:
+   `agent({action: "wait", jobId, waitMs})`
+   If `terminal: false` is returned, call `integrate` once; integrate waits for a running job in the same call and returns a terminal receipt or a running snapshot.
+3. **Merge back with integrate**: Call `integrate({jobId})`. It waits for a running job, applies only files within `allowedPaths`, auto-binds new paths to Blocks/Chains, and carries the worker's verification checks. Pass `verify` only when the host must run an additional check; do not repeat the worker's own verification.
+4. **Do not re-implement**: After `integrate` succeeds, the host must **NOT** re-implement the same files. Review the report and integrated diff, and run only remaining project-level checks.
 
-A Block is a curated semantic boundary anchored to files, symbols, or directory trees. A Chain groups Blocks into a meaningful flow. A Link records a typed relationship. The AST-derived ModuleIndex is for navigation only: its `mod-*` entries are not semantic owners, and must never be auto-bound as replacement architecture.
+## Evidence reuse and exact inspection
 
-| Need | Capability/action | State it creates | When it is worth using |
-| :--- | :--- | :--- | :--- |
-| Find existing architecture | `block.list/open/search`, `chain.list/open/links/validate` | Readable graph neighborhood and integrity report | Before cross-module changes or when ownership is unclear |
-| Bind or refresh a semantic Block | `block.bind` or `block.bind_auto`; use `replacePaths: true` when moving/replacing file ownership | Curated Block plus current file/symbol anchors | A meaningful subsystem or responsibility has a stable boundary |
-| Bind architecture with a code edit | `change({ edits, architecture: { blocks, chains } })` | Code edits, Block bindings, and Chain membership in one transaction | A change creates a new boundary or alters existing ownership |
-| Add Blocks to a feature flow | `chain.compose({ chainData: { id, title, memberIds } })` | Chain membership; existing members are retained by default | Several semantic Blocks form one user-facing or architectural flow |
-| Express dependency or call direction | `chain.link({ linkData: { from, to, kind, reason? } })` | Typed directed Link, not Chain membership | Direction matters beyond grouping |
-| Remove obsolete graph state | `chain.unlink`, `chain.delete`, `block.delete`; `block.prune_derived` only removes legacy generated `mod-*` nodes | Explicit graph cleanup | A boundary or relationship is obsolete |
-
-Before editing, find the existing semantic owner. Refresh that Block when the change remains within its responsibility. For a new responsibility, choose a meaningful Block identity and title, then bind it and compose its Chain in the same `change` call. Group related files under one semantic boundary; never mint a one-file “module” Block just to satisfy attribution. `kind` must be a semantic kind such as `component`, `service`, `engine`, `gateway`, `api`, `ui`, `tooling`, `verification`, or `testing`; `kind: "module"` and `mod-*` ids are rejected because they collide with AST-derived ModuleIndex entries. A changed path must have exactly one curated Block owner and belong to at least one Chain. Strict `ship` blocks on gaps; normal `ship` reports them as advisory. ModuleIndex hints can help locate code but do not satisfy ownership.
-
-`block.list` and `chain.list` return paginated compact summaries by default: 20 items, maximum page size 25, with `total`, `offset`, `hasMore`, and `nextOffset`. Use `block.open` or `chain.open` for full details. Internal pipelines explicitly page through full refs and members for architecture checks.
-
-Architecture discovery is two-layer. `block.search` and `os_context.search` match semantic titles/summaries, not artifact paths; an empty graph search means "no semantic match", not "no code". If the path or symbol is the known fact, locate it first with `explore` or `code.search`, then open known Blocks or create/refresh the appropriate boundary. Normal `explore` gives navigation and compact signatures; request `depth: "deep"` only when previews or action slots avoid extra turns. Derived ModuleIndex IDs are not architecture owners. `os_context.brief` prioritizes active work; after closure, recover completed context with `session.history`, `plan.list/open`, and `task.open`.
-
-## Code, commands, processes, and context state
-
-| Need | Capability/action | State it creates | When it is worth using |
-| :--- | :--- | :--- | :--- |
-| Work with low-level code operations | `ops({ capability: "code", action: "outline|read|search|create|edit|changeset", args })` | Readable slice or atomic create/edit/delete mutation; unchanged `read/search` requests reuse session receipts by default | The intent-level tools need a precise lower-level operation; set `dedupeReads:false` only for an intentional fresh replay |
-| Reinspect unchanged source | `inspect` / `work.inspect` with `path`, `symbol`, or `ranges` | Stat-validated unchanged reads return a compact reuse receipt without rereading source | Use `refresh:true` or `dedupeReads:false` only when a fresh slice is needed |
-| Read one known AST declaration | `ops({ capability: "code", action: "read", args: { path, symbol } })` | Source for one matched declaration | The file path and symbol are known |
-| Run a bounded command | `ops({ capability: "run_command", args: { command, cwd?, maxChars?, timeoutMs?, raw?, mode? } })` | Redacted receipt and bounded output | A command is useful but should not become raw terminal noise |
-| Manage long-running processes | `process.start/list/status/logs/stop/clear` | Named process plus log handle | Dev servers, watchers, or background jobs need lifecycle control |
-| Inspect or restore project state | `os_context.brief/search/open/reconcile` | Resumption anchor, entity view, or graph reconciliation | Starting/resuming work or resolving graph/disk divergence |
-| Operate the current session | `ops({ capability: "session", action: "note|close|history" })` | Session note, closure, or compact recent history | History is compact and can use `args.sessionId`; request `args.full: true` only for a deliberate diagnostic |
-| Configure project execution | `ops({ capability: "profile", action: "set", args: { micro: { url, model, key }, autoTriage: false } })` | `.contextos/profile.json` | Set Micro endpoint, default verify commands, timeout, output budget, or strict governance; do not persist transport `projectRoot` |
-| Check Micro configuration or connectivity | `ops({ capability: "micro", action: "doctor" })` or `ops({ capability: "micro", action: "doctor", args: { probe: true } })` | Field-presence checks by default; explicit provider probe when `probe:true` | Use the probe before a benchmark that depends on real Micro execution |
-| Read a truncated response | `ops({ capability: "artifact", action: "read", args: { id, startLine?, endLine?, grep?, contextLines?, maxChars? } })` | Bounded artifact excerpt | Only the missing slice is needed; never replay the full tool response |
-| Inspect or evict stored artifacts | `ops({ capability: "artifact", action: "stat|list|evict", args: { id|ids?, policy?: { maxArtifacts?, maxTotalBytes?, maxAgeMs? } } })` | Artifact metadata or compact eviction receipt | Diagnose retention, remove exact stale artifacts, or apply age/count/byte limits; policy may also be supplied flat for compatibility; eviction never returns the full index |
-| Parse real Codex rollout usage | `ops({ capability: "telemetry", action: "rollout", args: { paths: [...] } })` | Frozen `schemaVersion:1` report with `files` path array, relevant `records` count, duplicate/incomplete diagnostics, and metrics using `modelContextWindow` | Use explicit Codex rollout JSONL paths; prefers per-request `token_usage_record` and uses `token_count` only for requests it does not cover |
-| Compare recorded telemetry | `ops({ capability: "telemetry", action: "compare", args: { leftSessionId?, rightSessionId?, leftRolloutPath?, rightRolloutPath?, scope?: "external"|"internal"|"all" } })` | Compact JSON with session metrics and `rollout.left/right/delta`; external is the default | Session IDs compare host-visible estimates; rollout paths attach real usage separately and never overwrite estimate fields |
-| Audit OS versus OS+Micro routing | `ops({ capability: "telemetry", action: "audit", args: { sessionId, baselineSessionId?, limit? } })` | Compact joined host/Micro metrics, including host peak context chars/tokens, internal OS work, route counts, warnings, delivery outcomes, evidence quality, and optional savings delta | `sessionId` is required; get it from compact `session.status` first. Use for a real comparison; actual savings stays null unless complete host and provider usage receipts exist |
-| Execute one-shot or parallel Micro work | `ops({ capability: "micro", action: "run|batch", args: { preset, task, inputRef|inputArtifact|inputReceipt?, withOS?, delivery?, invocation?, tasks?, maxConcurrency? } })` | Bounded provider result with artifact-only traces, request/input budgets, provider-token enforcement, and a scheduler capped at 4 concurrent tasks by default (hard maximum 8) | Log triage, contract synthesis, structural relationship analysis, or independent tasks that do not need session continuity; when tasks share evidence, attach one Pipeline instead of duplicating reads |
-| Attach bounded OS evidence to Micro | `micro({ ..., pipeline: { steps, onFailure?, allowCommands?, maxChars?, cache? } })` or the compatible `preload` form; session creation accepts the same `pipeline` alias | OS runs the Pipeline once, briefly caches unchanged read-only evidence, stores the raw result as an artifact, injects only bounded evidence into Micro, and returns only a compact receipt | Known test/log/file context that should not be copied through the host transcript |
-| Run a multi-turn Micro subagent | `ops({ capability: "micro", args: { sessionAction: "create|send|get|list|close|delete", sessionId, objective?, task?, runFirst?, limit?, offset? } })` | Persistent bounded state under `.contextos/micro-sessions/`; `runFirst:true` combines creation, attached preload, first provider turn, and delivery in one host round; `list` returns a bounded recent page, while `get(id)` opens one session | Multi-step diagnosis or relationship reasoning where only the final answer and receipt should return to the main context |
-| Initialize, diagnose, or switch storage | `system.init/doctor/switch` | Project configuration or storage migration | Installation, health checks, and local/cloud mode changes |
-
-Telemetry summaries default to `scope: "external"` through the OS interface, so host-context measurements do not accidentally include internal Pipeline children. Pass `scope: "internal"` only when diagnosing routing fan-out, or `scope: "all"` when an aggregate operational view is explicitly needed.
-
-After repeated discovery turns without a mutation or verification, the OS may append one compact routing hint. Treat it as a convergence signal: batch the next known reads/searches, then edit or verify; do not answer the hint with another single-file read.
-
-The public intent tools already wrap most common code and command operations. `work` accepts `search` and `inspect` together, then can apply supplied edits, architecture bindings, and verification in the same request. Use one batched discovery request when findings must determine the patch, then one edit-and-verify request. Reach for `ops` when a lower-level action creates a state that the higher-level tools do not expose, not because the wrapper is unfamiliar.
-
-Use Micro when raw input or intermediate reasoning would otherwise persist in the host transcript, especially for several source bodies, noisy test output, or logs. Keep exact reads, mutations, verification receipts, and trivial deterministic commands in OS. Micro is optional: choose it when the host-context savings exceed the extra orchestration and provider cost.
-
-Routing heuristics:
-
-- Use `graph` for bounded structure and relationship analysis, `triage` for noisy failures/logs, and `custom` only when the task needs a specific output shape. Match the task to the preset; do not request a graph when you need a prose implementation plan.
-- Use the preset provider budget unless the input is genuinely tiny. After one budget, empty-response, or max-step failure, narrow the input or fall back to OS instead of repeating the same call. Build preload ranges from current evidence; refresh line ranges after any edit or branch change, and keep simple chores within the bounded input/provider budgets.
-- For direct Pipeline evidence, use `invocation.provider.maxRequests: 1` and `invocation.tools.enabled: false` unless a multi-step Micro route is intentional. Multi-step attached Pipelines auto-partition the evidence cap; explicit child caps remain the most precise control, while one oversized step still returns `TRUNCATED` so the host can narrow it. `invocation.provider.maxInputTokens` admits the complete prompt before network dispatch; a rejected admission is cheaper than a repeated oversized call. Delivery mode does not lower provider cost.
-- Keep one exact file read, edit, or verification in OS. If a known pipeline can produce bulky evidence, use `preload` so raw output is stored as an artifact and only a bounded result returns to the host.
-- `preload` does not grant Micro OS tools. Set `withOS: true` only when Micro needs further bounded reads or an explicitly assigned curated Block bind/additive Chain composition. The host supplies Block/Chain IDs and semantic purpose; Micro applies only the supplied path/member bindings. Micro gets no code edits, shell commands, deletes, or member replacement.
-- With `withOS:true`, read-only Micro OS calls are routed through internal ContextOS telemetry and identical reads in the same turn reuse the first bounded result. Prefer one attached Pipeline/preload for known evidence instead of repeated Micro reads.
-- Prefer `batch` for independent Micro analyses and a `session` only for dependent follow-ups. Batch independent simple edits in one OS `work` call; do not route trivial edits through Micro.
-- `delivery:"immediate"` returns the answer now (the default); `"errors-only"` is for assigned Block binds or additive Chain compositions and hides success text only when the write succeeded, while always returning failures; `"defer"` stores the answer for the next top-level OS response. Choose defer only when the host's intervening action does not depend on that answer. `"auto"` works with any preset: Micro supplies `needsHost`; true defers the answer, false hides successful content, and a missing/invalid decision falls back to immediate. Use auto only when the host can continue before the next-call recovery.
-- A read-only attached evidence Pipeline requested after a successful mutation and verification is skipped as `late-read-only-evidence` to prevent a post-implementation replay loop. Pass `allowLate:true` only for an explicit audit that genuinely needs fresh evidence.
-
-Preload executes a read-only pipeline before the Micro provider call; it is useful when the main agent already knows exactly which evidence to gather. ContextOS extracts the action outputs from the Pipeline artifact and injects bounded evidence directly into Micro; the host receives only a compact receipt. The default evidence cap is 2,400 characters and `maxChars` can raise it to 16,000. Multi-step Pipelines partition that cap across child outputs and retain truncation markers; a single oversized step reports `TRUNCATED` and skips the provider request so the host can narrow the path or line range. Unchanged read-only evidence is cached briefly by workspace fingerprint; use `refresh:true` when a fresh result is required. Commands require `allowCommands:true`; nested Micro and mutations are rejected. Use `onFailure:"collect"` when test failure output is evidence and later inspection steps still matter.
+- `ask({inspect: [{path, ranges}]})` bypasses model calls and reads exact line slices from disk.
+- `known: { refs: [{ resultId, path, ranges }] }` reuses previously retrieved evidence. Unchanged covered source is cited under `reused`; only new or changed ranges are delivered as source.
+- Short `known` text notes provide task context but do not prove source contents.
+- The current caller must hold the source marked known. A result ID alone does not deliver source; use `ask({resultId, inspect: [{path, ranges}]})` to recover saved coverage locally without an API request.
+- **Read-only preload**: attach `preload` (or `invocation.evidence.pipeline`) with read-only steps/commands and `allowCommands:true` when command steps are used. ContextOS executes the pipeline inside the micro lifecycle and injects its bounded result into micro instead of entering the main transcript.
 
 ```js
-// One-shot: OS executes the attached pipeline once before the Micro provider call.
-micro({
-  preset: "evidence",
-  delivery: "auto",
-  task: "Analyze the failure and return the smallest repair direction.",
-  pipeline: {
-    onFailure: "collect",
-    allowCommands: true,
-    steps: [
-      { verify: { command: "npm test", autoTriage: false } },
-      { inspect: { paths: ["src/queue.mjs", "test/queue.test.mjs"], budget: "compact" } }
-    ]
-  }
-})
-
-// Session: attach the pipeline at creation and start the first turn in the same round.
-ops({ capability: "micro", args: { sessionAction: "create", sessionId: "queue-fix", task: "Analyze the queue failure.", runFirst: true, pipeline: { steps: [...] } } })
+contextos({action:"micro", args:{
+  prompt:"Assess the attached evidence and return only findings.",
+  preload:{pipeline:{steps:[
+    {inspect:{path:"src/a.mjs"}},
+    {run:"node -p \"process.version\""}
+  ], allowCommands:true}}
+}}, projectRoot)
 ```
 
-## Composition patterns
+- `maxChars` limits Unicode characters delivered in a single call. Omitted source blocks appear under `missing` and remain recoverable by result ID and ranges.
+- Command results are durable: `command({action: "get", id})` retrieves prior command output by ID; do not rerun a command just to re-read its logs.
 
-These are examples of matching shape to dependency, not fixed workflows.
+## Change, verification, and architecture
 
-```js
-// Independent evidence in one request
-pipeline({
-  mode: "receipt",
-  parallelConcurrency: 3,
-  parallel: [
-    { inspect: { path: "src/a.mjs", ranges: [{ startLine: 1, endLine: 80 }] } },
-    { run: "rg -n \"featureFlag|configKey\" src test", raw: true, maxChars: 4000 },
-    { block: { action: "search", query: "feature" } }
-  ]
-})
+- `change({edits, verify, architecture})` performs atomic file modifications and runs verification commands.
+- `integrate({jobId, verify?, autoRevert?})` applies changes produced by a completed isolated CLI job:
+  - Reads the completed job's recorded `implementation` metadata (`workspace`, `allowedPaths`, `verify`).
+  - Restricts file additions, edits, and deletions strictly to `allowedPaths`; any path outside is ignored.
+  - Passes modifications through `changePipeline`, guaranteeing Block ownership preflight, atomic file writing, architecture graph refresh, and auto-reversion if verification fails.
+  - Replay-safe: if called again on an already-applied job, reports `status=noop changed=0`.
+- **Block/Chain architecture**: All code files within curated project boundaries require Block ownership. Target paths without Block owners are rejected before writing. Architecture state is queried and updated via `ops({capability: "architecture"})`, `ops({capability: "block"})`, and `ops({capability: "chain"})`. Never edit or inspect `.contextos/graph.json` directly.
+- Optional `autoRevert: true` rolls back changes if verification commands fail.
 
-// Dependent write/delete then proof in one request
-pipeline({
-  chain: [
-    { change: { edits: [{ path: "src/a.mjs", target: "old", replacement: "new" }] } },
-    { verify: "npm test" }
-  ]
-})
+## Plan, task, session continuity, and blackboard
 
-// Host-declared conditional recovery with a hard budget
-pipeline({
-  steps: [{ verify: "npm test" }],
-  branches: [{
-    when: { failed: true, tool: "verify" },
-    then: [{
-      tool: "ops",
-      // Replace with the failed verify receipt returned by the step.
-      args: { capability: "micro", action: "run", args: { preset: "triage", inputReceipt: "receipt-123" } }
-    }]
-  }],
-  budget: { maxActions: 3, maxFailures: 2, maxDurationMs: 120000 }
-})
+- `ops({capability: "session", action: "status"})` exposes the active session state: user intent, touched files, recent command receipts, and milestone notes.
+- **Blackboard purpose**: `.contextos/blackboard.md` is rendered from session state on every save. Read session state via `ops` rather than maintaining parallel tracking documents.
+- `ops({capability: "plan"})` and `ops({capability: "task"})` store long-term task breakdowns and status across turns. State files in `.contextos` are managed exclusively by the runtime.
 
-// Atomic deletion is a first-class mutation
-change({
-  delete: [{ path: "src/legacy.mjs" }],
-  verify: ["npm test"],
-  autoRevert: true
-})
+## CLI agent continuity, long tasks, and mailbox
 
-// Final closure with durable rationale
-ship({
-  summary: "switch persistence boundary",
-  decision: { id: "DEC-024", title: "Persistence boundary", content: "Why this boundary was chosen." }
-})
-```
+- **CLI session continuity rule**: reuse when the task is continuous, background is coherent, and current CLI context occupancy is below 233k; start a new conversation at 233k or when the next task is independent. Retain up to 5 completed sessions for reuse via `cliSessionId`.
+- **Long CLI tasks and timeout prevention**: CLI subagent tasks that may exceed host MCP tool call timeouts (e.g. AGY ~3 minutes) must be dispatched with `background: true` to obtain the job `id` immediately without blocking. Synchronous calls that hit host timeouts abort the child process, losing both the structured report and token accounting. Short tasks can run synchronously, and micro tasks must remain bounded.
+- **Collecting background reports without polling**: Collect the terminal report using a single bounded `agent({action: "wait", jobId, waitMs})` call. If the task completes within `waitMs`, it returns the full terminal report and token accounting; if it times out, it returns a running snapshot with `waitedMs` and `terminal: false`. When a snapshot is returned, proceed with other host work and call `wait` again later. **Do not poll in a tight loop** with repeated `get` or `messages` calls.
+- **Context-usage reporting**: Completed CLI reports include `report.cliUsage` (`{percent, usedTokens, windowTokens, source}`) when the adapter maps context usage from stream output.
+- **Mailbox communication (bidirectional only)**:
+  - `messages` is reserved strictly for bidirectional host-worker communication, not polling task completion. It returns message history along with `jobStatus`.
+  - `agent({action: "send", jobId, message})`: Host sends instructions or clarifications to worker (`direction: "host-to-worker"`).
+  - `agent({action: "messages", jobId, waitMs})`: Reads worker inbox (`direction: "worker-inbox"`). Returns inbox items and `jobStatus`. Set `waitMs > 0` to await worker updates.
+  - `needsHost`: Attention flag indicating host decision or response required.
+  - `needsHostReason`: Explains status (`question`, `blocked`, `failed`, `cancelled`, `changes`, `reported`, `none`). A `question` sets `waitingForHost: true` and pauses worker execution until answered.
+  - `mailbox.canSend`: Indicates whether the worker process is running and accepting messages.
 
-Prefer the smallest state transition that removes the current uncertainty. A pipeline is valuable when it expresses real parallel or dependency structure; it is harmful when it merely hides unrelated work behind one request.
+## Doctor checks and readiness semantics
 
-Pass pipeline actions as structured objects. Nested payloads should remain objects (`{ change: { edits: [...] } }`), not JSON strings; stringification prevents the normalizer from seeing the intended action fields.
+- `ops({capability: "micro", action: "doctor"})` is an offline local check of effective profile configuration.
+- Fields reporting `unknown; not probed` (such as `authentication`, `task_analyze`, `task_implement`) are normal expected states and do not constitute a blockage or problem.
+- As long as `endpoint`, `configured_model`, and `credential_source` are configured, API Micro should be dispatched normally. Run live network probes with `probe: true` only upon explicit user request.
+
+## Configuration and operations guide
+
+For provider/model/key switching, credential debugging, CLI adapter installation, OS MCP registration, skill installation, permission preconfiguration, and doctor diagnostics, see the [contextos-ops operations guide](../../contextos-ops/SKILL.md) and [micro-setup.md](../../contextos-ops/references/micro-setup.md).

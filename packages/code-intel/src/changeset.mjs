@@ -39,9 +39,19 @@ function planChangeset(projectRoot, changes = []) {
   const results = [];
 
   for (let index = 0; index < changes.length; index += 1) {
-    const change = changes[index] || {};
+    const change = { ...(changes[index] || {}) };
     const resolved = resolveWorkspacePath(projectRoot, change.path, 'changeset path');
     let state = states.get(resolved.fullPath);
+
+    // A complete new file has an unambiguous intent even when a caller puts
+    // it in edits. Keep missing source-target edits rejected and stay atomic.
+    if (change.kind === 'edit' && change.fullFile === true && typeof change.replacement === 'string'
+      && !state && !fs.existsSync(resolved.fullPath)
+      && !['target', 'startLine', 'endLine', 'expectedHash', 'hash'].some(key => change[key] !== undefined)) {
+      change.kind = 'create';
+      change.content = change.replacement;
+      change.overwrite = false;
+    }
 
     if (change.kind === 'create') {
       if (state) throw new Error(`Changeset operation ${index + 1} cannot create '${resolved.relativePath}' twice`);

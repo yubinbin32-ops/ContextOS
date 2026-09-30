@@ -2,6 +2,7 @@ import {
   Plan,
   Task,
   assertPlanCanBeCompletedWithTasks,
+  assertPlanLifecycleAction,
   assertPlanStatusTransition,
   assertPlanStructure,
   assertPlanTaskLinks,
@@ -195,6 +196,8 @@ export class PlanService {
   completePlan(planId, { completedSummary = null, historyRef = null } = {}) {
     const rawPlan = this.db.getPlan(planId);
     if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
+    assertPlanLifecycleAction('complete', rawPlan.status, planId);
+    assertPlanStatusTransition(rawPlan.status, 'completed', planId);
 
     const tasks = this.db.listTasks(planId);
     const plan = new Plan(rawPlan);
@@ -207,7 +210,28 @@ export class PlanService {
     return plan.toJSON();
   }
 
+  archivePlan(planId) {
+    const rawPlan = this.db.getPlan(planId);
+    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
+    assertPlanLifecycleAction('archive', rawPlan.status, planId);
+    assertPlanStatusTransition(rawPlan.status, 'archived', planId);
+
+    const archived = new Plan({
+      ...rawPlan,
+      status: 'archived',
+      updatedAt: new Date().toISOString(),
+    });
+    this.db.savePlan(archived.toJSON());
+    return archived.toJSON();
+  }
+
   deletePlan(planId) {
-    return this.db.deletePlan(planId);
+    const rawPlan = this.db.getPlan(planId);
+    if (!rawPlan) throw new Error(`Plan '${planId}' not found`);
+    assertPlanLifecycleAction('delete', rawPlan.status, planId);
+
+    const deleted = this.db.deletePlan(planId);
+    if (!deleted) throw new Error(`Plan '${planId}' could not be deleted`);
+    return deleted;
   }
 }

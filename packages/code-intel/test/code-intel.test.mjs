@@ -1034,6 +1034,27 @@ test('CodeTools.read supports multiple ranges', () => {
   assert.ok(!read.code.includes('constructor(name)'));
 });
 
+test('CodeTools.read unions overlapping and adjacent ranges without repeating lines', () => {
+  const source = Array.from({ length: 12 }, (_, index) => `LINE_${index + 1}`).join('\n');
+  const read = CodeTools.read('src/range-union.mjs', source, {
+    ranges: [
+      { startLine: 6, endLine: 8 },
+      { startLine: 1, endLine: 2 },
+      { startLine: 2, endLine: 4 },
+      { startLine: 8, endLine: 9 },
+    ],
+  });
+  assert.deepEqual(read.ranges, [
+    { startLine: 6, endLine: 9 },
+    { startLine: 1, endLine: 4 },
+  ], 'merged components retain the first-requested component order');
+  for (const line of [1, 2, 3, 4, 6, 7, 8, 9]) {
+    assert.equal((read.code.match(new RegExp(`^LINE_${line}$`, 'gm')) || []).length, 1);
+  }
+  assert.equal((read.code.match(/^LINE_5$/gm) || []).length, 0);
+  assert.equal((read.code.match(/LINE_10/g) || []).length, 0);
+});
+
 test('CodeTools.edit supports fullFile replacement', () => {
   const replacement = 'export const full = 42;\n';
   const edited = CodeTools.edit('src/engine.js', JS_CODE, {
@@ -1081,4 +1102,3 @@ test('applyChangeset supports fullFile: true for edit', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
-

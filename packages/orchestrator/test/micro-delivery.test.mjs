@@ -12,6 +12,7 @@ import {
   listMicroJobs,
   readMicroJob,
   renderMicroDeliveries,
+  reportMicroJob,
   updateMicroJob,
 } from '../src/micro-delivery.mjs';
 import { projectMicroResult } from '../src/response-budget.mjs';
@@ -76,6 +77,32 @@ test('Micro background jobs persist running and terminal state', () => {
     assert.equal(completed.status, 'completed');
     assert.equal(completed.receiptId, 'micro-job-1');
     assert.deepEqual(listMicroJobs(root, { status: 'running' }), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('worker reports update job state without forcing host attention for informational changes', () => {
+  const root = tempProject('contextos-micro-report-');
+  try {
+    createMicroJob(root, { jobId: 'job-report' });
+    const changes = reportMicroJob(root, 'job-report', {
+      summary: 'changed files', changes: ['src/a.mjs'], checks: [], blockers: [], question: '',
+    });
+    assert.equal(changes.queued, true);
+    const changesJob = readMicroJob(root, 'job-report');
+    assert.equal(changesJob.report.needsHost, false);
+    assert.equal(changesJob.report.needsHostReason, 'changes');
+    assert.equal(changesJob.report.waitingForHost, false);
+
+    const question = reportMicroJob(root, 'job-report', JSON.stringify({
+      summary: 'need a decision', changes: [], checks: [], blockers: [], question: 'A or B?',
+    }));
+    assert.equal(question.queued, true);
+    const questionJob = readMicroJob(root, 'job-report');
+    assert.equal(questionJob.report.needsHost, true);
+    assert.equal(questionJob.report.needsHostReason, 'question');
+    assert.equal(questionJob.report.waitingForHost, true);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

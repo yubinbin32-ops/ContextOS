@@ -1,3 +1,5 @@
+import { selectMicroProvider } from './micro-provider.mjs';
+import { cliDoctor } from './micro-cli.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -5,20 +7,27 @@ import { SessionStore, workspaceFingerprint } from './session-store.mjs';
 import { Tracer } from './tracer.mjs';
 import { createCapabilities } from './capabilities.mjs';
 import { globalProfilePath, loadProfile, saveProfile } from './profile.mjs';
-import { changePipeline, explorePipeline, extractFailureEvidence, inspectPipeline, pipelinePipeline, shipPipeline, verifyPipeline, workPipeline } from './pipelines.mjs';
+import { changePipeline, explorePipeline, extractFailureEvidence, inspectPipeline, integratePipeline, pipelinePipeline, shipPipeline, verifyPipeline, workPipeline } from './pipelines.mjs';
+import { executeAgent } from './agent-service.mjs';
 import { MICRO_PRESETS, runMicroTask, runMicroTasksParallel } from './micro-client.mjs';
-import { microPreloadReceipt, runMicroPreload } from './micro-preload.mjs';
+import { microPreloadReceipt, runTaskMicroPreload } from './micro-preload.mjs';
 import { buildMicroHistory, closeMicroSession, completeMicroTurn, createMicroSession, deleteMicroSession, failMicroTurn, listMicroSessions, microSessionSnapshot, readMicroSession, startMicroTurn } from './micro-session.mjs';
 import { evictArtifacts, listArtifacts, readArtifact, statArtifact, storeArtifact } from './artifact-store.mjs';
 import { RESPONSE_BUDGETS, clipText, compactJson, finalizeResponse, projectMicroResult, summarizeMicroUsage } from './response-budget.mjs';
 import { parseRolloutTelemetry } from './rollout-telemetry.mjs';
 import { compareTelemetry, recordTelemetry, summarizeTelemetry } from './telemetry.mjs';
 import { auditRouting } from './routing-audit.mjs';
-import { claimMicroDeliveries, completeMicroDeliveryClaims, createMicroJob, listMicroJobs, releaseMicroDeliveryClaims, renderMicroDeliveries, updateMicroJob, enqueueMicroDelivery } from './micro-delivery.mjs';
+import { claimMicroDeliveries, completeMicroDeliveryClaims, createMicroJob, readMicroJob, reportMicroJob, listMicroJobs, releaseMicroDeliveryClaims, renderMicroDeliveries, updateMicroJob, enqueueMicroDelivery } from './micro-delivery.mjs';
+import { receiveMicroMessages, sendMicroMessage, waitForMicroMessages } from './micro-mailbox.mjs';
+import { resolveMicroRoles } from './micro-role-config.mjs';
+import { createEvidenceTransport } from './api-transports.mjs';
+import { appendRoleUsage, readRoleUsage, summarizeRoleUsage } from './role-usage-ledger.mjs';
 
 export * from './context-budget.mjs';
 export * from './intent-router.mjs';
 export * from './micro-client.mjs';
+export * from './micro-cli.mjs';
+export * from './micro-provider.mjs';
 export * from './micro-delivery.mjs';
 export * from './micro-preload.mjs';
 export * from './micro-session.mjs';
@@ -45,11 +54,35 @@ export const OPS_CAPABILITIES = [
   'profile',
   'micro',
   'artifact',
+  'usage',
   'telemetry',
 ];
 
 function render(value) {
   return typeof value === 'string' ? value : compactJson(value);
+}
+
+const SECRET_FIELD_PATTERN = /(^|[-_.])(api[-_]?key|key|token|secret|password|passwd|credential|credentials|authorization|auth|cookie)([-_.]|$)/i;
+const SECRET_MAP_PATTERN = /(^|[-_.])(headers?|env|env[-_]?vars?)([-_.]|$)/i;
+
+/**
+ * Profile responses are user-visible. Replace credential material with a
+ * placeholder while keeping structural fields (for example `keyEnv`) visible.
+ */
+export function redactProfileSecrets(value, fieldName = '') {
+  if (Array.isArray(value)) return value.map((item) => redactProfileSecrets(item, fieldName));
+  if (value === null || typeof value !== 'object') {
+    return SECRET_FIELD_PATTERN.test(fieldName) && typeof value === 'string' && value ? '[redacted]' : value;
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => {
+    if (SECRET_MAP_PATTERN.test(key) && item !== null && typeof item === 'object' && !Array.isArray(item)) {
+      return [key, Object.fromEntries(Object.entries(item).map(([name, mapValue]) => [
+        name,
+        typeof mapValue === 'string' && mapValue ? '[redacted]' : redactProfileSecrets(mapValue, name),
+      ]))];
+    }
+    return [key, redactProfileSecrets(item, key)];
+  }));
 }
 
 const MUTATION_INPUT_KEYS = new Set([
@@ -102,12 +135,13 @@ const SEMANTIC_OPS_READS = new Set([
 const CONVERGENCE_DISCOVERY_LIMIT = 6;
 const INSPECT_RESPONSE_HARD_CAP = 32000;
 const MICRO_BATCH_DEFAULT_CONCURRENCY = 4;
-const MICRO_BATCH_MAX_CONCURRENCY = 8;
+const MICRO_ACTION_NAMES = ['run', 'batch', 'doctor', 'help', 'schema', 'get', 'list', 'cancel', 'report', 'send', 'messages', 'session', 'continue', 'resume'];
+const MICRO_ACTION_SET = new Set(MICRO_ACTION_NAMES);
 
 function normalizeMicroBatchConcurrency(value) {
   const requested = Number(value);
   if (!Number.isFinite(requested) || requested <= 0) return MICRO_BATCH_DEFAULT_CONCURRENCY;
-  return Math.min(MICRO_BATCH_MAX_CONCURRENCY, Math.max(1, Math.floor(requested)));
+  return Math.max(1, Math.floor(requested));
 }
 
 function shouldEnableMicroOS(args = {}) {
@@ -398,47 +432,46 @@ function microPreloadFailure(preload, requestedDelivery = null) {
   };
 }
 
-function shouldSkipLateMicroEvidence(store, args = {}) {
-  if (!microPreloadSpec(args)
-    || args.allowLate === true
-    || args.refresh === true
-    || args.full === true
-    || args.withOS === true) {
-    return false;
-  }
-  const session = store?.current;
-  if (!session) return false;
-  const receipts = Array.isArray(session.receipts) ? session.receipts : [];
-  const hasMutation = Array.isArray(session.touchedFiles)
-    && session.touchedFiles.some((entry) => entry?.source === 'edit' || entry?.source === 'change');
-  const hasSuccessfulVerification = receipts.some((receipt) => (
-    Number(receipt?.exitCode) === 0
-    && typeof receipt?.command === 'string'
-    && receipt.command.trim()
-  ));
-  const hasUnresolvedFailure = receipts.some((receipt) => (
-    Number(receipt?.exitCode) !== 0 && receipt?.status !== 'superseded'
-  ));
-  return hasMutation && hasSuccessfulVerification && !hasUnresolvedFailure;
+function compactMicroJob(job) {
+  if (!job) return null;
+  return { jobId: job.jobId, status: job.status, provider: job.provider,
+    ...(job.receiptId ? { receiptId: job.receiptId } : {}),
+    ...(job.artifactId ? { artifactId: job.artifactId } : {}),
+    ...(job.report ? { report: job.report } : {}),
+    ...(job.error ? { error: job.error.slice(0, 500) } : {}),
+    ...(job.result?.costEstimate ? { costEstimate: job.result.costEstimate } : {}) };
+}
+function attachChildMessages(result) {
+  if (process.env.CONTEXTOS_WORKER_MODE !== '1' || !process.env.CONTEXTOS_MICRO_REPORT_JOB || !process.env.CONTEXTOS_MICRO_REPORT_ROOT) return result;
+  let messages;
+  try { messages = receiveMicroMessages(process.env.CONTEXTOS_MICRO_REPORT_ROOT, process.env.CONTEXTOS_MICRO_REPORT_JOB); }
+  catch { return result; } // A mailbox failure must not make an executed edit appear unexecuted.
+  if (!messages.length) return result;
+  if (typeof result !== 'string') return { ...result, microMessages: messages };
+  try { return compactJson({ ...JSON.parse(result), microMessages: messages }); }
+  catch { return compactJson({ result, microMessages: messages }); }
 }
 
-function attachMicroDeliveryData(result, claims = [], warning = null, pendingJobs = []) {
-  const microRecovered = claims.map(({ deliveryId, receiptId, artifactId, content }) => ({
+function structuredDelivery(content) {
+  try {
+    const value = JSON.parse(content);
+    if (value && typeof value === 'object' && typeof value.summary === 'string' && typeof value.needsHost === 'boolean') return { report: value };
+  } catch {}
+  return { content };
+}
+
+function attachMicroDeliveryData(result, claims = [], warning = null) {
+  const microRecovered = claims.map(({ deliveryId, receiptId, artifactId, content, truncated }) => ({
     deliveryId,
     receiptId,
     artifactId,
-    content,
-  }));
-  const microPending = pendingJobs.map((job) => ({
-    jobId: job.jobId,
-    preset: job.preset || null,
-    startedAt: job.createdAt || null,
+    ...structuredDelivery(content),
+    ...(truncated ? { truncated: true } : {}),
   }));
   if (result && typeof result === 'object' && !Array.isArray(result)) {
     return {
       ...result,
       ...(microRecovered.length ? { microRecovered } : {}),
-      ...(microPending.length ? { microPending } : {}),
       ...(warning ? { microRecoveryWarning: warning } : {}),
     };
   }
@@ -449,15 +482,13 @@ function attachMicroDeliveryData(result, claims = [], warning = null, pendingJob
         return compactJson({
           ...parsed,
           ...(microRecovered.length ? { microRecovered } : {}),
-          ...(microPending.length ? { microPending } : {}),
           ...(warning ? { microRecoveryWarning: warning } : {}),
         });
       }
-      if (microRecovered.length || microPending.length || warning) {
+      if (microRecovered.length || warning) {
         return compactJson({
           result: parsed,
           ...(microRecovered.length ? { microRecovered } : {}),
-          ...(microPending.length ? { microPending } : {}),
           ...(warning ? { microRecoveryWarning: warning } : {}),
         });
       }
@@ -466,11 +497,10 @@ function attachMicroDeliveryData(result, claims = [], warning = null, pendingJob
     const notice = warning ? `## Deferred Micro recovery notice\n${warning}` : '';
     return [recovered, notice, result].filter(Boolean).join('\n\n');
   }
-  if (microRecovered.length || microPending.length || warning) {
+  if (microRecovered.length || warning) {
     return {
       result,
       ...(microRecovered.length ? { microRecovered } : {}),
-      ...(microPending.length ? { microPending } : {}),
       ...(warning ? { microRecoveryWarning: warning } : {}),
     };
   }
@@ -493,6 +523,36 @@ function attachRoutingHint(result, hint = null) {
     return result;
   }
   return result;
+}
+
+function retainContinuableMicroSession(ctx, args, result, projected, { withOS = false } = {}) {
+  const providerTruncated = result?.providerTruncated === true
+    || ['length', 'max_tokens', 'max_output_tokens'].includes(String(result?.finishReason || '').toLowerCase());
+  if ((!result?.partial && !providerTruncated) || !result?.sessionId) return null;
+  try {
+    const task = String(args.firstTask ?? args.task ?? args.prompt ?? '').trim() || 'Continue the partial Micro task.';
+    const session = createMicroSession(ctx.projectRoot, {
+      sessionId: result.sessionId,
+      objective: task,
+      preset: args.preset,
+      withOS,
+      preload: null,
+    });
+    startMicroTurn(ctx.projectRoot, session.id, task);
+    const completed = completeMicroTurn(ctx.projectRoot, session.id, {
+      result: {
+        ...result,
+        content: projected?.content || result.content || result.guidance || 'Partial Micro work retained.',
+      },
+      receiptId: projected?.receiptId || null,
+    });
+    return {
+      session: completed,
+      resume: projected?.resume || { kind: 'micro', action: 'send', sessionId: completed.id },
+    };
+  } catch (error) {
+    return { retentionWarning: `Partial Micro work could not be retained: ${error.message}` };
+  }
 }
 
 async function runMicroSessionTurn(ctx, args, session) {
@@ -549,8 +609,13 @@ async function runMicroSessionTurn(ctx, args, session) {
       full: args.full === true,
       maxChars: args.maxChars,
     });
-    const nextSession = result.ok
-      ? completeMicroTurn(ctx.projectRoot, startedSession.id, { result, receiptId: projected.receiptId })
+    const nextSession = result.ok || result.partial
+      ? completeMicroTurn(ctx.projectRoot, startedSession.id, {
+          result: result.ok
+            ? result
+            : { ...result, content: projected.content || result.content || result.guidance || 'Partial Micro work retained.' },
+          receiptId: projected.receiptId,
+        })
       : failMicroTurn(ctx.projectRoot, startedSession.id);
     return { ...projected, session: nextSession };
   } catch (error) {
@@ -559,29 +624,41 @@ async function runMicroSessionTurn(ctx, args, session) {
   }
 }
 
+const backgroundMicroControllers = new Map();
+const backgroundKey = (root, id) => `${fs.realpathSync(root)}:${id}`;
+
 function startBackgroundMicroRun(ctx, { args, microConfig, preload, action, effectiveWithOS }) {
   const jobId = String(args.jobId || `micro-job-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`);
   const created = createMicroJob(ctx.projectRoot, {
     jobId,
+    kind: 'micro',
     preset: args.preset || null,
+    provider: selectMicroProvider(microConfig, args).provider || null,
     hostSessionId: ctx.sessionId,
     inputSource: preload ? 'preload' : (args.prompt || args.task ? 'task' : 'none'),
   });
   if (!created.created) {
     return {
       ok: true,
-      delivery: 'running',
+      delivery: created.job.status === 'running' ? 'running' : created.job.delivery || created.job.status,
       jobId,
+      status: created.job.status,
       duplicate: true,
       ...(preload ? { preload: microPreloadReceipt(preload) } : {}),
     };
   }
 
+  const controller = new AbortController();
+  const key = backgroundKey(ctx.projectRoot, jobId);
+  backgroundMicroControllers.set(key, controller);
   const run = async () => {
     try {
       const result = await runMicroTask(microConfig, {
         ...args,
-        delivery: args.delivery === 'errors-only' ? 'errors-only' : 'defer',
+        delivery: args.delivery === 'immediate' ? 'defer' : (args.delivery || 'auto'),
+        signal: controller.signal,
+        reportJobId: jobId,
+        agentJobId: jobId,
         preload,
         action,
         withOS: effectiveWithOS,
@@ -596,12 +673,34 @@ function startBackgroundMicroRun(ctx, { args, microConfig, preload, action, effe
         full: false,
         maxChars: args.maxChars,
       });
+      const retained = retainContinuableMicroSession(ctx, args, result, projected, { withOS: effectiveWithOS });
+      if (projected.status === 'partial') {
+        const content = projected.guidance || projected.content || 'Micro background job reached the 290s continuation window.';
+        enqueueMicroDelivery(ctx.projectRoot, {
+          deliveryId: jobId,
+          receiptId: projected.receiptId || jobId,
+          artifactId: projected.artifactId || null,
+          content: `Micro background job partial: ${content}`,
+        });
+        updateMicroJob(ctx.projectRoot, jobId, {
+          status: 'partial',
+          receiptId: projected.receiptId || jobId,
+          artifactId: projected.artifactId || null,
+          result: { ...projected, ...(retained || {}) },
+          report: result.agentReport ? { ...result.agentReport, status: 'partial', needsHost: true } : null,
+          error: null,
+        });
+        return;
+      }
       if (projected.ok) {
+        if (projected.delivery === 'immediate') enqueueMicroDelivery(ctx.projectRoot, { deliveryId: jobId, receiptId: projected.receiptId || jobId, artifactId: projected.artifactId, content: projected.content || 'Micro completed; read the result artifact.' });
         updateMicroJob(ctx.projectRoot, jobId, {
           status: 'completed',
           receiptId: projected.receiptId || jobId,
           artifactId: projected.artifactId || null,
           delivery: projected.delivery || null,
+          result: projected,
+          report: result.agentReport || null,
         });
         return;
       }
@@ -615,6 +714,9 @@ function startBackgroundMicroRun(ctx, { args, microConfig, preload, action, effe
       updateMicroJob(ctx.projectRoot, jobId, {
         status: 'failed',
         receiptId: projected.receiptId || jobId,
+        artifactId: projected.artifactId || null,
+        result: projected,
+        report: result.agentReport ? { ...result.agentReport, status: 'failed', needsHost: true } : null,
         error: message,
       });
     } catch (error) {
@@ -627,10 +729,15 @@ function startBackgroundMicroRun(ctx, { args, microConfig, preload, action, effe
         });
       } catch (_) {}
       updateMicroJob(ctx.projectRoot, jobId, { status: 'failed', error: message });
+    } finally {
+      backgroundMicroControllers.delete(key);
     }
   };
 
-  void run();
+  void run().catch(() => {
+    // A deleted/unwritable workspace must not crash the MCP host.
+    process.stderr.write(`ContextOS could not persist terminal state for Micro job ${jobId}.\n`);
+  });
   return {
     ok: true,
     delivery: 'running',
@@ -937,7 +1044,7 @@ export class Orchestrator {
     }
   }
 
-  _context(tracer, { turnMemo = new Map(), internal = false } = {}) {
+  _context(tracer, { turnMemo = new Map(), internal = false, actionEvidence = null } = {}) {
     return {
       service: this.service,
       caps: createCapabilities({ service: this.service, projectRoot: this.projectRoot, projectId: this.projectId }),
@@ -949,13 +1056,15 @@ export class Orchestrator {
       sessionId: tracer?.sessionId || null,
       turnMemo,
       internal,
+      actionEvidence,
       // Pipeline children are internal work. Only the top-level host request
       // restores deferred Micro results, once, after its own action completes.
       orchestrator: {
-        dispatch: (tool, input = {}) => this._dispatch(tool, input, {
+        dispatch: (tool, input = {}, childActionEvidence = null) => this._dispatch(tool, input, {
           recoverMicroDeliveries: false,
           internal: true,
           turnMemo,
+          actionEvidence: childActionEvidence,
         }),
       },
     };
@@ -968,7 +1077,14 @@ export class Orchestrator {
     });
   }
 
-  async _dispatch(tool, input = {}, { recoverMicroDeliveries = false, internal = false, turnMemo = null } = {}) {
+  async dispatchInternal(tool, input = {}) {
+    return this._dispatch(tool, input, {
+      recoverMicroDeliveries: false,
+      internal: true,
+    });
+  }
+
+  async _dispatch(tool, input = {}, { recoverMicroDeliveries = false, internal = false, turnMemo = null, actionEvidence = null } = {}) {
     await this._selfHeal();
     const seed = this.store.current || this.store.ensureSession(input.intent || input.summary || '');
     const route = routeKind(tool, input);
@@ -989,7 +1105,7 @@ export class Orchestrator {
       if (turnMemo instanceof Map) turnMemo.clear();
     }
     const tracer = new Tracer({ projectRoot: this.projectRoot, sessionId: seed.id });
-    const ctx = this._context(tracer, { turnMemo: turnMemo || new Map(), internal });
+    const ctx = this._context(tracer, { turnMemo: turnMemo || new Map(), internal, actionEvidence });
     if (this.healed) tracer.step('heal', this.healed);
     const startedAt = Date.now();
     const routingHint = internal ? null : this._routingHint(seed.id, tool, input);
@@ -1001,7 +1117,7 @@ export class Orchestrator {
       ? this.store.findExploreReceipt({ key: exploreKey, revision: exploreRevision })
       : null;
     let deliveryClaims = [];
-    let pendingMicroJobs = [];
+    let activeMicroReceiptIds = [];
     let deliveryWarning = null;
     let deliveryClaimsCompleted = false;
     const semanticMemo = tool === 'ops' ? semanticOpsMemoSpec(input) : null;
@@ -1015,8 +1131,11 @@ export class Orchestrator {
     try {
       if (recoverMicroDeliveries) {
         try {
-          deliveryClaims = claimMicroDeliveries(this.projectRoot);
-          pendingMicroJobs = listMicroJobs(this.projectRoot, { status: 'running', limit: 3 });
+          // Detect an exited worker once; terminal failures enter the report queue.
+          const active = listMicroJobs(this.projectRoot, { status: 'running', limit: 100 });
+          // A report generated by the current Micro call belongs to the next
+          // host call; an earlier worker may finish during ordinary host work.
+          if (!(tool === 'ops' && input.capability === 'micro')) activeMicroReceiptIds = active.map(job => job.jobId);
         } catch (error) {
           deliveryWarning = `Deferred Micro result recovery will retry on a later OS call: ${error.message}`;
         }
@@ -1057,12 +1176,34 @@ export class Orchestrator {
           case 'change':
             result = await changePipeline(ctx, input);
             break;
+          case 'integrate':
+            result = await integratePipeline(ctx, input);
+            break;
           case 'verify':
             result = await verifyPipeline(ctx, input);
             break;
           case 'ship':
             result = await shipPipeline(ctx, input);
             break;
+          case 'agent': {
+            // Pipeline-visible CLI delegation so dispatch, wait and integrate can
+            // be chained in one call instead of costing a round each.
+            const agentRoles = resolveMicroRoles(ctx.profile || {});
+            const adapterName = input.adapter || agentRoles.agents?.default || null;
+            const configured = adapterName ? agentRoles.agents?.adapters?.[adapterName] : null;
+            if (!configured) throw new Error(`CLI adapter '${adapterName || '(none)'}' is not configured; set agents.default in the profile.`);
+            result = await executeAgent(input, {
+              projectRoot: ctx.projectRoot,
+              adapter: configured.cli && typeof configured.cli === 'object' ? configured.cli : configured,
+              name: adapterName,
+              roles: agentRoles,
+              onUsage: (row) => appendRoleUsage(ctx.projectRoot, {
+                ...row,
+                ...(process.env.CONTEXTOS_WORKER_MODE === '1' ? { parentTaskId: process.env.CONTEXTOS_MICRO_REPORT_JOB || null } : {}),
+              }),
+            });
+            break;
+          }
           case 'ops':
             result = await this._ops(ctx, input);
             break;
@@ -1091,9 +1232,13 @@ export class Orchestrator {
       if (tool === 'explore' && exploreRevision && !exploreReceipt && typeof result === 'string') {
         recordExploreMemo(this.projectRoot, this.store, input, result, exploreRevision);
       }
+      if (recoverMicroDeliveries) {
+        try { deliveryClaims = claimMicroDeliveries(this.projectRoot, { createdBefore: startedAt, activeReceiptIds: activeMicroReceiptIds }); }
+        catch (error) { deliveryWarning = `Micro report recovery will retry: ${error.message}`; }
+      }
       if (typeof result !== 'string') {
         const combined = attachRoutingHint(
-          attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
+          attachChildMessages(attachMicroDeliveryData(result, deliveryClaims, deliveryWarning)),
           hostHint
         );
         recordTelemetry(this.projectRoot, {
@@ -1112,7 +1257,7 @@ export class Orchestrator {
         return combined;
       }
       const response = attachRoutingHint(
-        attachMicroDeliveryData(result, deliveryClaims, deliveryWarning, pendingMicroJobs),
+        result,
         hostHint
       );
       const decisionPackage = decisionPackageMetadata(tool, result);
@@ -1135,10 +1280,21 @@ export class Orchestrator {
         : (typeof responseArgs.maxChars === 'number'
             ? responseArgs.maxChars
             : (requestedMaxChars ?? undefined));
+      const focusedWorkRead = tool === 'work' && (input.inspect !== undefined || input.read !== undefined)
+        && responseMaxChars !== undefined
+        && ![...MUTATION_INPUT_KEYS].some((key) => input[key] !== undefined);
       const explicitInspectWiden = tool === 'inspect' && responseMaxChars !== undefined;
-      const decisionPackageBudget = explicitInspectWiden
+      const receiptLogRecovery = tool === 'verify' && input.mode === 'logs' && responseMaxChars !== undefined;
+      const failureSourceRecovery = tool === 'change' && /(?:^|\n)## Failure source\n/.test(response);
+      const decisionPackageBudget = focusedWorkRead
+        ? Math.min(responseMaxChars ?? RESPONSE_BUDGETS.pipelineDecision, INSPECT_RESPONSE_HARD_CAP)
+        : receiptLogRecovery
+        ? Math.min(responseMaxChars, 8000)
+        : failureSourceRecovery
+        ? Math.min(responseMaxChars ?? 4000, 4000)
+        : explicitInspectWiden
         ? Math.min(responseMaxChars, INSPECT_RESPONSE_HARD_CAP)
-        : (decisionPackage && responseMaxChars === undefined
+        : (decisionPackage && responseMaxChars === undefined && tool !== 'work'
             ? RESPONSE_BUDGETS.pipelineDecision
             : responseMaxChars);
       const nestedFull = nestedFullRequest(nestedRequests);
@@ -1146,6 +1302,9 @@ export class Orchestrator {
         || responseArgs.allowWiden === true
         || nestedFull
         || explicitInspectWiden
+        || receiptLogRecovery
+        || failureSourceRecovery
+        || focusedWorkRead
         || Boolean(decisionPackage);
       const full = input.full === true || input.budget === 'full' || input.mode === 'full'
         || responseArgs.full === true || responseArgs.budget === 'full'
@@ -1160,11 +1319,12 @@ export class Orchestrator {
         full,
         routingHint: isJsonValueString(response) ? null : hostHint,
       });
+      const deliveredText = attachChildMessages(attachMicroDeliveryData(finalized.text, deliveryClaims, deliveryWarning));
       recordTelemetry(this.projectRoot, {
         sessionId: seed.id,
         tool,
         input,
-        output: finalized.text,
+        output: deliveredText,
         internal,
         routeKind: route,
         artifactId: finalized.meta.artifactId,
@@ -1175,7 +1335,7 @@ export class Orchestrator {
         completeMicroDeliveryClaims(this.projectRoot, deliveryClaims.map((item) => item.deliveryId));
         deliveryClaimsCompleted = true;
       }
-      return finalized.text;
+      return deliveredText;
     } catch (error) {
       if (deliveryClaims.length && !deliveryClaimsCompleted) {
         try {
@@ -1354,8 +1514,13 @@ export class Orchestrator {
           }
           return render(data);
         }
-      case 'run_command':
-        return render(await service.runCommand(args));
+      case 'run_command': {
+        const receipt = await service.runCommand(args);
+        if (receipt && typeof receipt === 'object' && receipt.command) {
+          store.attachReceipt(receipt);
+        }
+        return render(receipt);
+      }
       case 'process':
         return render(await service.process({ ...args, action }));
       case 'knowledge':
@@ -1433,9 +1598,9 @@ export class Orchestrator {
       case 'profile': {
         if (action === 'set') {
           const { scope, values, ...patch } = args;
-          return render(saveProfile(this.projectRoot, applyDottedProfileValues(patch, values), { scope }));
+          return render(redactProfileSecrets(saveProfile(this.projectRoot, applyDottedProfileValues(patch, values), { scope })));
         }
-        return render(loadProfile(this.projectRoot));
+        return render(redactProfileSecrets(loadProfile(this.projectRoot)));
       }
       case 'artifact': {
         if (action === 'read' || action === 'get' || action === 'open') {
@@ -1509,6 +1674,20 @@ export class Orchestrator {
         }
         throw new Error(`Unknown artifact action '${action}'. Available: read, get, open, stat, list, evict`);
       }
+      case 'usage': {
+        if (action === 'record') {
+          const receipt = await appendRoleUsage(this.projectRoot, { role: 'main', ...args });
+          return render(receipt);
+        }
+        if (!action || action === 'report' || action === 'summary') {
+          const { rows, ledgerPath } = await readRoleUsage(this.projectRoot);
+          return render({
+            ledgerPath: path.relative(this.projectRoot, ledgerPath).split(path.sep).join('/'),
+            ...summarizeRoleUsage(rows),
+          });
+        }
+        throw new Error(`Unknown usage action '${action}'. Available: record, report`);
+      }
       case 'telemetry': {
         if (action === 'audit') {
           return render(auditRouting(this.projectRoot, {
@@ -1564,14 +1743,60 @@ export class Orchestrator {
         throw new Error(`Unknown telemetry action '${action}'. Available: summary, list, compare, audit, rollout`);
       }
       case 'micro': {
-        const microConfig = ctx.profile?.micro || {};
+        const requestedMicroAction = String(action ?? 'run').trim().toLowerCase() || 'run';
+        if (!MICRO_ACTION_SET.has(requestedMicroAction)) {
+          throw new Error(`Unsupported micro action '${action}'. Supported actions: ${MICRO_ACTION_NAMES.join(', ')}.`);
+        }
+        action = requestedMicroAction;
+        if (action === 'session' && !args.sessionAction) {
+          throw new Error('Micro action session requires sessionAction. Available: create, send, continue, resume, get, list, close, delete.');
+        }
+        if ((action === 'continue' || action === 'resume') && !args.sessionAction) {
+          args.sessionAction = 'send';
+        }
+        if (action === 'send' && !args.sessionAction) {
+          if (process.env.CONTEXTOS_WORKER_MODE === '1') throw new Error('Child tasks cannot message other jobs.');
+          return render({ ok: true, ...sendMicroMessage(this.projectRoot, args.jobId, args.message) });
+        }
+        if (action === 'messages') {
+          const worker = process.env.CONTEXTOS_WORKER_MODE === '1';
+          if (worker && args.jobId !== process.env.CONTEXTOS_MICRO_REPORT_JOB) throw new Error('Message job must match the assigned job.');
+          const root = worker ? process.env.CONTEXTOS_MICRO_REPORT_ROOT : this.projectRoot;
+          if (!root) throw new Error('No assigned message channel.');
+          return render({ ok: true, jobId: args.jobId, messages: await waitForMicroMessages(root, args.jobId, { waitMs: args.waitMs }) });
+        }
+        if (action === 'report') {
+          const worker = process.env.CONTEXTOS_WORKER_MODE === '1';
+          if (worker && args.jobId !== process.env.CONTEXTOS_MICRO_REPORT_JOB) throw new Error('Report job must match the assigned job.');
+          const root = worker ? process.env.CONTEXTOS_MICRO_REPORT_ROOT : this.projectRoot;
+          if (!root) throw new Error('No assigned report channel.');
+          return render({ ok: true, ...reportMicroJob(root, args.jobId, args.content) });
+        }
+        if (action === 'get') {
+          const job = readMicroJob(this.projectRoot, args.jobId);
+          return render({ ok: Boolean(job), job: args.full ? job : compactMicroJob(job) });
+        }
+        if (action === 'list') {
+          return render({
+            ok: true,
+            jobs: listMicroJobs(this.projectRoot, { ...args, excludeAgentJobs: true }).map(compactMicroJob),
+          });
+        }
+        if (action === 'cancel') {
+          const job = readMicroJob(this.projectRoot, args.jobId);
+          const controller = backgroundMicroControllers.get(backgroundKey(this.projectRoot, args.jobId));
+          if (controller) controller.abort();
+          return render({ ok: Boolean(job), jobId: args.jobId, status: job?.status || 'missing', cancellationRequested: Boolean(controller) });
+        }
+        let microConfig = ctx.profile?.micro || {};
         if (action === 'help' || action === 'schema') {
           return render({
             ok: true,
             local: true,
             capability: 'micro',
-            actions: ['doctor', 'run', 'batch'],
-            sessionActions: ['create', 'send', 'get', 'list', 'close', 'delete'],
+            actions: ['doctor', 'run', 'batch', 'get', 'list', 'cancel', 'report', 'send', 'messages'],
+            background: { enabled: true, defaultDelivery: 'auto', materialReports: true, delivery: ['auto', 'defer', 'errors-only'], reportOn: 'next top-level OS response', pollingRequired: false },
+            sessionActions: ['create', 'send', 'continue', 'resume', 'get', 'list', 'close', 'delete'],
             executor: {
               withOS: true,
               invocation: {
@@ -1583,59 +1808,130 @@ export class Orchestrator {
           });
         }
         if (action === 'doctor') {
-          const checks = [
-            { name: 'url', ok: Boolean(microConfig.url), value: microConfig.url || null },
-            { name: 'model', ok: Boolean(microConfig.model), value: microConfig.model || null },
-            { name: 'key', ok: Boolean(microConfig.key), value: microConfig.key ? 'configured' : 'missing' },
-          ];
-          if (args.probe === true && checks.every((check) => check.ok)) {
-            const probe = await runMicroTask(microConfig, {
-              preset: 'custom',
-              prompt: 'Reply with exactly PONG.',
-              invocation: {
-                provider: { maxRequests: 1 },
-                tools: { enabled: false },
-              },
-              outputMode: 'answer',
-            });
-            const projected = projectMicroResult(probe, {
-              projectRoot: this.projectRoot,
-              hostSessionId: ctx.sessionId,
-              maxChars: 200,
-            });
-            checks.push({
-              name: 'provider',
-              ok: projected?.ok === true && Boolean(String(projected.content || '').trim()),
-              value: projected?.ok
-                ? String(projected.content || '').trim().slice(0, 80)
-                : (projected?.error || 'no response'),
-              receiptId: projected?.receiptId || null,
-            });
+          const roles = resolveMicroRoles(ctx.profile || {});
+          const requestedRole = args.role ? String(args.role).toLowerCase() : null;
+          const cliSelected = requestedRole === 'cli' || requestedRole === 'adapter' || (!requestedRole && Boolean(args.adapter));
+          if (requestedRole && !['api', 'cli', 'adapter'].includes(requestedRole)) {
+            return render({ ok: false, status: 'invalid-role', errorCode: 'MICRO_DOCTOR_ROLE_INVALID', error: 'Choose role api or cli.' });
           }
-          return render({
-            ok: checks.every((check) => check.ok),
-            checks,
+          if (requestedRole === 'api' && args.adapter) {
+            return render({ ok: false, status: 'invalid-role', errorCode: 'MICRO_DOCTOR_ROLE_CONFLICT', error: 'An adapter can only be checked with role cli.' });
+          }
+
+          if (cliSelected) {
+            const adapterName = args.adapter || roles.agents?.default;
+            const adapter = adapterName ? roles.agents?.adapters?.[adapterName] : null;
+            if (!adapter || typeof adapter !== 'object') {
+              return render({
+                ok: false,
+                status: 'unconfigured',
+                role: 'cli-agent',
+                errorCode: 'CLI_ADAPTER_NOT_CONFIGURED',
+                error: adapterName ? `CLI adapter '${adapterName}' is not configured.` : 'No CLI adapter is selected.',
+                checks: [{ name: 'adapter', ok: false, value: adapterName || null }],
+                note: 'API Micro is a separate role; this explicit CLI check never falls back to API.',
+              });
+            }
+            const cli = adapter.cli && typeof adapter.cli === 'object' ? adapter.cli : adapter;
+            const model = adapter.model || cli.model || args.model || null;
+            const report = cliDoctor({ model, cli });
+            report.role = 'cli-agent';
+            report.adapter = adapterName;
+            report.routing = { provider: 'cli', reason: 'explicit CLI role/adapter selection' };
+            report.status = report.ok ? 'configured-unverified' : 'misconfigured';
+            if (report.ok && args.probe === true) {
+              const result = await runMicroTask({ model, cli }, {
+                provider: 'cli',
+                projectRoot: this.projectRoot,
+                prompt: 'Reply with exactly PONG. No tools are needed.',
+                timeoutMs: args.timeoutMs || 60000,
+              });
+              const projected = projectMicroResult(result, { projectRoot: this.projectRoot, hostSessionId: ctx.sessionId, maxChars: 200 });
+              const check = { name: 'connectivity', ok: projected.ok === true && String(projected.content || '').trim() === 'PONG', value: projected.error || projected.content, receiptId: projected.receiptId };
+              report.checks.push(check);
+              report.status = check.ok ? 'probe-passed' : 'probe-failed';
+              report.ok = check.ok;
+              report.taskModes = { analyze: null, implement: null };
+            } else if (report.ok) report.ok = null;
+            return render(report);
+          }
+
+          const api = roles.micro || {};
+          const endpoint = api.baseUrl || api.url || null;
+          const model = api.model || null;
+          const credentialConfigured = Boolean(api.apiKey || api.key || api.keyEnv);
+          const provider = api.provider || api.vendor || (/^deepseek-/i.test(String(model || '')) ? 'deepseek' : null);
+          const requestedThinkingValue = api.thinking ?? api.effort ?? null;
+          const requestedThinking = typeof requestedThinkingValue === 'object' && requestedThinkingValue
+            ? requestedThinkingValue.effort ?? requestedThinkingValue.level ?? requestedThinkingValue.mode ?? null
+            : requestedThinkingValue;
+          const transport = /\/responses\/?$/i.test(String(endpoint || '')) || ['responses', 'response'].includes(String(api.transport || api.protocol || '').toLowerCase())
+            ? 'responses' : 'chat';
+          const deepseek = String(provider || '').toLowerCase() === 'deepseek' || /^deepseek-/i.test(String(model || ''));
+          const deepseekMap = { off: 'none', none: 'none', minimal: 'low', low: 'low', medium: 'high', high: 'high', xhigh: 'high', max: 'max', ultra: 'max' };
+          const configuredMap = api.thinkingMap?.[transport] || {};
+          const normalizedThinking = String(requestedThinking || '').toLowerCase();
+          const mappedThinking = deepseek ? (deepseekMap[normalizedThinking] || null) : (configuredMap[normalizedThinking] || null);
+          const supportedThinking = deepseek ? ['off', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+            : Object.entries(configuredMap).filter(([, value]) => value !== null && value !== false).map(([level]) => level).sort();
+          const requestLimits = {
+            maxTransportInvocations: api.budget?.maxTransportInvocations ?? null,
+            maxToolCalls: api.budget?.maxToolCalls ?? null,
+            maxEvidenceBytes: api.budget?.maxEvidenceBytes ?? null,
+            maxOutputTokens: api.maxOutputTokens ?? null,
+            timeoutMs: api.timeoutMs ?? null,
+          };
+          const requestLimitsComplete = Object.values(requestLimits).every((value) => Number.isSafeInteger(value) && value > 0);
+          const requestLimitsInvalid = Object.values(requestLimits).some((value) => value !== null && (!Number.isSafeInteger(value) || value < 1));
+          const report = {
+            ok: null,
+            status: endpoint && model ? 'configured-unverified' : 'unconfigured',
+            role: 'api-micro',
+            provider: provider || 'api',
+            routing: { provider: 'api', reason: 'API Micro is the default evidence role; CLI agents are a separate optional role' },
+            checks: [
+              { name: 'endpoint', ok: Boolean(endpoint), value: endpoint ? 'configured (value hidden)' : 'not configured' },
+              { name: 'configured_model', ok: Boolean(model), value: model },
+              { name: 'credential_source', ok: credentialConfigured ? true : null, value: credentialConfigured ? 'configured (secret hidden)' : 'unknown/not configured; unauthenticated endpoints may be valid' },
+              { name: 'authentication', ok: null, value: 'unknown; not probed' },
+              { name: 'thinking', ok: requestedThinking ? (mappedThinking ? true : null) : null, value: { requested: requestedThinking || null, mapped: mappedThinking, supported: supportedThinking.length ? supportedThinking : null } },
+              { name: 'request_limits', ok: requestLimitsInvalid ? false : (requestLimitsComplete ? true : null), value: requestLimits },
+              { name: 'task_analyze', ok: null, value: 'unknown; text connectivity does not verify analyze task quality' },
+              { name: 'task_implement', ok: null, value: 'unknown; requires a separate isolated implementation smoke' },
+            ],
             globalProfile: globalProfilePath(),
             projectProfile: `${this.projectRoot}/.contextos/profile.json`,
-          });
+            note: 'No provider call is made by default. Use probe:true only for one explicit bounded text-connectivity request; that does not certify analyze or implement readiness.',
+          };
+          if (args.probe === true && endpoint && model) {
+            const transportResult = await createEvidenceTransport(api)({
+              system: 'This is a bounded API connectivity check. Do not call tools or expose secrets.',
+              input: 'Reply with exactly PONG.',
+              thinking: requestedThinking || undefined,
+              signal: args.signal,
+            });
+            const connected = transportResult.ok === true && String(transportResult.summary || '').trim() === 'PONG';
+            report.checks.push({ name: 'connectivity', ok: connected, value: connected ? 'PONG' : (transportResult.error || transportResult.summary || 'provider did not return exact PONG') });
+            if (credentialConfigured) report.checks.find((check) => check.name === 'authentication').ok = transportResult.ok === true ? true : false;
+            report.checks.push({ name: 'actual_model', ok: transportResult.model ? transportResult.model === model : null, value: { requested: model, actual: transportResult.model } });
+            report.ok = connected;
+            report.status = connected ? 'probe-passed' : 'probe-failed';
+            report.usage = transportResult.usage;
+            report.providerLaunches = transportResult.invocation?.providerLaunches ?? null;
+          }
+          return render(report);
         }
         const microWithOS = shouldEnableMicroOS(args);
         const caps = microWithOS ? ctx.caps : null;
 
-        // A read-only evidence preload after a successful mutation/verification
-        // is almost always an agent replaying discovery too late. Avoid another
-        // Pipeline/provider round and make the escape hatch explicit for audits.
-        if (!args.sessionAction && shouldSkipLateMicroEvidence(store, args)) {
-          return render({
-            ok: true,
-            skipped: true,
-            reason: 'late-read-only-evidence',
-            hint: 'Reuse the successful receipt and existing artifacts; set allowLate:true only for an intentional post-verify audit.',
-          });
-        }
-
         if (args.sessionAction) {
-          const sessionAction = String(args.sessionAction);
+          const requestedSessionAction = String(args.sessionAction).toLowerCase();
+          const sessionAction = requestedSessionAction === 'continue' || requestedSessionAction === 'resume'
+            ? 'send'
+            : requestedSessionAction;
+          if (sessionAction === 'send' && !String(args.firstTask ?? args.task ?? args.prompt ?? '').trim()) {
+            args.task = 'Continue the previous task from its partial state.';
+          }
           const sessionId = args.sessionId;
           if (sessionAction === 'create') {
             let existing = null;
@@ -1651,7 +1947,7 @@ export class Orchestrator {
               throw new Error('Micro session runFirst requires a non-empty task, firstTask, or prompt.');
             }
             const preloadSpec = microPreloadSpec(args);
-            const preload = preloadSpec ? await runMicroPreload(ctx, preloadSpec) : null;
+            const preload = preloadSpec ? await runTaskMicroPreload(ctx, preloadSpec, args) : null;
             // Do not persist a poisoned session. A failed or truncated preload
             // is a complete create-turn failure; making the host call `send`
             // just to rediscover the same error creates a dirty extra round.
@@ -1710,27 +2006,29 @@ export class Orchestrator {
             const result = await runMicroSessionTurn(ctx, args, session);
             return render(result);
           }
-          throw new Error(`Unknown micro sessionAction '${sessionAction}'. Available: create, send, get, list, close, delete`);
+          throw new Error(`Unknown micro sessionAction '${sessionAction}'. Available: create, send, continue, resume, get, list, close, delete`);
         }
 
         if (action === 'batch') {
           const taskInputs = Array.isArray(args.tasks) ? args.tasks : [];
           const batchConcurrency = normalizeMicroBatchConcurrency(args.maxConcurrency);
-          // Preloads are OS work too. Use the same bounded scheduler as the
-          // provider phase so a large batch cannot fan out Pipeline reads all
-          // at once before Micro even receives a request.
+          // Read evidence after obtaining the provider's workspace reservation.
+          // Otherwise queued writers can receive source from before an earlier edit.
           const tasks = await mapWithConcurrency(taskInputs, batchConcurrency, async (task, index) => {
             const preloadSpec = microPreloadSpec(task);
             return {
               ...task,
               id: task.id || `task-${index + 1}`,
               withOS: shouldEnableMicroOS({ ...args, ...task }),
-              preload: preloadSpec ? await runMicroPreload(ctx, preloadSpec) : undefined,
+              preparePreload: preloadSpec ? () => runTaskMicroPreload(ctx, preloadSpec, { ...args, ...task }) : undefined,
             };
           });
           const batchNeedsCaps = tasks.some((task) => Boolean(task.withOS));
           const runnableTasks = tasks.filter((task) => !task.preload || task.preload.ok !== false);
           const { tasks: _taskInputs, maxConcurrency: _requestedConcurrency, ...batchDefaults } = args;
+          if (args.background === true) return render({ ok: tasks.every((task) => task.preload?.ok !== false), tasks: tasks.map((task) => task.preload?.ok === false
+            ? { id: task.id, ...microPreloadFailure(task.preload, task.delivery) }
+            : { id: task.id, ...startBackgroundMicroRun(ctx, { args: { ...batchDefaults, ...task, jobId: task.jobId, maxConcurrency: batchConcurrency }, microConfig, preload: task.preload, action: 'run', effectiveWithOS: task.withOS }) }) });
           const result = await runMicroTasksParallel(microConfig, runnableTasks, { ...batchDefaults, batch: true, maxConcurrency: batchConcurrency, withOS: microWithOS, outputMode: args.full ? 'full' : 'answer', caps: batchNeedsCaps ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });
           const resultById = new Map((result.tasks || []).map((task, index) => [String(task.id || `task-${index + 1}`), task]));
           return render({
@@ -1749,43 +2047,36 @@ export class Orchestrator {
                   full: args.full === true,
                   maxChars: args.maxChars,
                 }),
-                ...(task.preload ? { preload: microPreloadReceipt(task.preload) } : {}),
+                ...(rawResult.preload ? { preload: rawResult.preload } : {}),
               };
             }),
           });
         }
         const preloadSpec = microPreloadSpec(args);
-        const preload = preloadSpec ? await runMicroPreload(ctx, preloadSpec) : null;
-        if (preload && preload.ok === false) {
-          return render({
-            ...projectMicroResult(microPreloadFailure(preload, args.delivery), {
-              projectRoot: this.projectRoot,
-              hostSessionId: ctx.sessionId,
-              full: args.full === true,
-              maxChars: args.maxChars,
-            }),
-            preload: microPreloadReceipt(preload),
-          });
-        }
+        const preload = null;
+        const taskArgs = { ...args, ...(preloadSpec ? {preparePreload: () => runTaskMicroPreload(ctx, preloadSpec, args)} : {}) };
         const effectiveWithOS = microWithOS;
         if (args.background === true) {
           return render(startBackgroundMicroRun(ctx, {
-            args,
+            args: taskArgs,
             microConfig,
             preload,
             action,
             effectiveWithOS,
           }));
         }
-        const result = await runMicroTask(microConfig, { ...args, preload, action, withOS: effectiveWithOS, outputMode: args.full ? 'full' : 'answer', caps: effectiveWithOS ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });
+        const result = await runMicroTask(microConfig, { ...taskArgs, preload, action, withOS: effectiveWithOS, outputMode: args.full ? 'full' : 'answer', caps: effectiveWithOS ? ctx.caps : null, orchestrator: ctx.orchestrator, projectRoot: this.projectRoot });
+        const projected = projectMicroResult(result, {
+          projectRoot: this.projectRoot,
+          hostSessionId: ctx.sessionId,
+          full: args.full === true,
+          maxChars: args.maxChars,
+        });
+        const retained = retainContinuableMicroSession(ctx, taskArgs, result, projected, { withOS: effectiveWithOS });
         return render({
-          ...projectMicroResult(result, {
-            projectRoot: this.projectRoot,
-            hostSessionId: ctx.sessionId,
-            full: args.full === true,
-            maxChars: args.maxChars,
-          }),
-          ...(preload ? { preload: microPreloadReceipt(preload) } : {}),
+          ...projected,
+          ...(retained || {}),
+          ...(result.preload ? { preload: result.preload } : {}),
         });
       }
       case 'system': {

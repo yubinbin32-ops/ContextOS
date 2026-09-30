@@ -302,8 +302,13 @@ test('kernel e2e: pipeline shorthand preserves ship architecture in receipt mode
       },
     ],
   });
-  assert.match(result, /pipeline=OK/);
-  assert.match(result, /architectureGaps=0/, 'receipt mode must expose ship architecture completeness');
+  assert.match(result, /^# ContextOS pipeline/m);
+  assert.match(result, /pipeline=OK actions=2\/1 mode=receipt/);
+  assert.match(result, /## Step 1: chain/);
+  assert.match(result, /### Action 1\.1: verify/);
+  assert.match(result, /### Action 1\.2: ship/);
+  assert.match(result, /receipt=[A-Za-z0-9._-]+/);
+  assert.match(result, /src\/pipeline-worker\.mjs/);
   const block = await service.block({ action: 'open', id: 'block-pipeline-worker', format: 'json' });
   assert.ok(block.artifactRefs.some((ref) => ref.path === 'src/pipeline-worker.mjs'));
   const chain = await service.chain({ action: 'open', id: 'chain-pipeline-worker', format: 'json' });

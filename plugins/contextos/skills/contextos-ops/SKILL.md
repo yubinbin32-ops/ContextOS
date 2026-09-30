@@ -1,174 +1,83 @@
 ---
 name: contextos-ops
-description: Manage ContextOS environment operations: run doctor health checks, configure external Micro subagent, deploy Cloudflare Hub, and switch between local and cloud modes (运行 ContextOS 环境自检、配置外接 Micro 小脑、部署云端协同与本地/云端无损切换时调用).
+description: "Required ContextOS operations guide for the project development scaffold: configure, switch, and diagnose API Micro, CLI agent, provider keys, adapters, OS MCP installation, permissions, and readiness."
 ---
 
-# ContextOS Operations & Management Guide (副 Skill)
+# ContextOS operations and diagnosis
 
-本指南专门负责 ContextOS 的**环境自检、外部小脑（Micro）配置、存储模式切换（本地/云端）与性能诊断**。
-日常代码开发读写请使用主 `contextos` Skill；当用户在对话中提出以下需求时唤起本操作流：
-1. *"检查 ContextOS 状态 / 运行 doctor"*
-2. *"配置 Micro / 接入外部小脑 / 接入 DeepSeek/OpenCode"*
-3. *"切换为云端协同模式 / 切回本地开发"*
-4. *"部署 Cloudflare Worker 云端中枢"*
-5. *"测试或对比 Token 消耗 (A/B Test)"*
+ContextOS is the project's required development scaffold. Use this guide to configure, switch, and diagnose the roles and adapters that the scaffold delegates to.
 
----
+ContextOS exists to lower host token/context cost while preserving exact evidence, verified edits, architecture state, and continuity across conversations.
 
-## 一、 系统状态诊断与自检 (Doctor Health Check)
+Use this skill for installation, provider/model/key switching, key debugging, CLI adapter installation, OS MCP registration, skill installation, permission preconfiguration, and doctor checks.
 
-当需要确认环境状态或排查连接问题时，调用：
-```javascript
-// Lean 紧凑传输
-contextos({
-  action: "ops",
-  args: { capability: "system", action: "doctor" },
-  projectRoot: "<当前项目绝对路径>"
-})
-```
+## Roles and flexible routing
 
-### 诊断报告项解读：
-- **Node Runtime**：必须 `>= 22.0.0`（ContextOS 原生依赖轻量级实验性 SQLite 驱动）；若使用 macOS `ContextOS.app`，会内置专用 Node。
-- **Active Storage Mode**：当前生效的存储模式（`local` 或 `cloud`）。
-- **Cloud Hub Connectivity**：云端中枢连通性状态。
-- **Detected Editors**：探测系统中已安装的编辑器（Cursor、Codex、Claude Code、Antigravity、OpenCode 等）。
+Keep API Micro and CLI independent and let the AI choose who executes each task; there is no fixed routing table:
 
----
+- **Pipeline default**: Pipeline is the default container for 3 or more known independent reads, searches, commands, or edits. One parallel pipeline call may run many actions at once and returns full step results; do not habitually split known work across multiple pipeline calls or repeated single calls.
 
-## 二、 存储模式配置与无损切换 (Local vs Cloud)
+- **api-micro**: Lean worker for bounded retrieval, summarization, verification, command batches, and at most one small single-file edit; route multi-file implementation, refactoring, packaging, and repair to cli-agent. Micro assignments state the goal, evidence entry, allowed operations, return format, and stop condition. It can use OS and returns one host-ready result. Semantic `ask` is read-only. Command/change uses `withOS`; commands require `invocation.tools.allowCommands: true`, edits require `execution: "implement"` plus `context.allowedPaths`, and both bind Blocks. It cannot dispatch another agent.
+- **cli-agent**: Subagent for open-ended, multi-goal, or unknown-path root-cause investigation and other complex multi-step work. It runs its own tool loop in an isolated process and can use native tools and OS.
 
-### 1. 核心定位与推荐原则
-- **本地模式 (Local Storage Mode · 强烈推荐 ⭐⭐⭐⭐⭐)**：
-  - 数据保存在当前项目 `.contextos/state.sqlite`；
-  - 100% 离线运行，0 毫秒网络延迟，完全保护代码与架构隐私；
-  - **对于单人开发或绝大部分项目，默认且唯一推荐本地模式**。
-- **云端模式 (Cloud Hub Mode · 实验公测中 ⚠️)**：
-  - 通过 Cloudflare D1 边缘数据库进行多端、团队多人架构图谱同步；
-  - **重要提醒**：云端协作目前处于公测阶段，接口与稳定性仍在迭代中。如无团队多人实时协作的刚需，**无需配置云端**。
+Non-trivial tasks default to planning delegation first before self-executing. The main conversation holds judgment, architecture decisions, and integration, using delegation as a replacement cost rather than additive overhead:
+- Micro tasks stay bounded and return synchronously in that call.
+- CLI subagent tasks that may exceed host MCP tool call timeouts (AGY ~3 minutes) must be dispatched with `background: true` to avoid host timeouts aborting the child process and losing reports and token accounting. Collect the terminal report with a single bounded `agent({action: "wait", jobId, waitMs})` call. If it returns a running snapshot, proceed with other work and wait again later; do not poll in a tight loop. Use `messages` strictly for bidirectional host-worker communication (which returns `jobStatus`). Short tasks can run synchronously.
+- **Substitutive CLI implementation flow**:
+  1. Dispatch implementation in background to an isolated copy: `agent({task, workspace: <isolated copy>, execution: "implement", context: {allowedPaths, acceptance, verify}, background: true})`.
+  2. Collect terminal report with one bounded wait: `agent({action: "wait", jobId, waitMs})`.
+  3. Merge verified isolated diffs back into the project with `integrate({jobId})`. This runs through `changePipeline`, enforces Block ownership, applies only `allowedPaths`, and runs recorded verify commands.
+  4. Do not duplicate implementation: after `integrate` succeeds, the host must not re-implement the same files; review/integrate the result and execute only remaining project-level verification.
+- To batch several workers, put them in one `pipeline` call.
 
-### 2. 部署 Cloudflare Worker 云端中枢（仅团队需要时）
-1. 提供一键部署链接给用户：
-   👉 [一键部署 Cloudflare Worker](https://deploy.workers.cloudflare.com/?url=https://github.com/yubinbin32-ops/ContextOS/tree/main)
-2. 部署完成后，索取用户的 Worker URL（如 `https://contextos-hub.your-subdomain.workers.dev`）与 `AUTH_TOKEN`。
-3. 全局保存凭据：
-   在后台执行 `node scripts/bootstrap.mjs --save-global-cloud --cloud-url "<URL>" --token "<TOKEN>"`。
+## Conversation retention
 
-### 3. 本地 ➔ 云端无损切换
-用户说：*“把当前项目切换为云端协同模式”*
-```javascript
-contextos({
-  action: "ops",
-  args: {
-    capability: "system",
-    action: "switch",
-    args: {
-      targetMode: "cloud",
-      cloudUrl: "<Cloudflare Worker 网址>",
-      token: "<AUTH_TOKEN>"
-    }
-  },
-  projectRoot: "<当前项目绝对路径>"
-})
-```
-- **效果**：本地 SQLite 中现有的 Block、Chain、Link、Task 架构拓扑将被原子推送到云端 D1 数据库，后续操作与云端实时同步。
+Completed micro and CLI conversations stay resumable. At most five are retained; older ones are evicted automatically. Resume with `sessionId` (micro) or `cliSessionId` (CLI). Start a new conversation when the next task is independent, and for CLI also when its reported context usage exceeds 233k.
 
-### 4. 云端 ➔ 本地无损切回
-用户说：*“把当前项目切回本地离线开发”*
-```javascript
-contextos({
-  action: "ops",
-  args: {
-    capability: "system",
-    action: "switch",
-    args: { targetMode: "local" }
-  },
-  projectRoot: "<当前项目绝对路径>"
-})
-```
-- **效果**：从云端下载最新架构快照并完整落盘为本地 SQLite，断开网络依赖，恢复完全离线运行。
+## CLI session continuity and reporting
 
----
+- **CLI session rule**: reuse when the task is continuous, background is coherent, and current CLI context occupancy is below 233k; start a new conversation at 233k or when the next task is independent.
+- **Context-usage reporting**: Completed CLI reports include `report.cliUsage` (`{percent, usedTokens, windowTokens, source}`) when the adapter maps context usage from stream output.
 
-## 三、 配置 Micro 外接小脑 (Dual-Brain Subagent)
+## Configuration management
 
-### 1. 价值与意义（为什么强烈推荐配置？⭐⭐⭐⭐⭐）
-- **职责**：作为主对话舱外的“脏活累活处理专员”。
-- **痛点解决**：当单测跑挂抛出 20,000~50,000 字符的巨型终端堆栈、或需要提炼庞杂接口契约时，传统流程会直接把巨型日志喂给主模型，造成**上下文暴涨与注意力严重稀释**。
-- **运作机制**：Micro 在独立会话中消化日志与切片，只向主上下文返回几行精炼的失败原因或契约结论（Receipt），节省 80% 以上的主模型 Token。
-- **推荐端点**：兼容任意 OpenAI 格式接口。推荐低成本模型（如 OpenCode Go 订阅、DeepSeek `deepseek-chat` 或本地免费的 Ollama）。
+Configuration is loaded from two locations:
+1. **Global profile** (`~/.contextos/profile.json` or `$CONTEXTOS_HOME/profile.json`): Stores machine-level adapters, models, and credentials.
+2. **Project profile** (`<project>/.contextos/profile.json`): Provides repository-specific overrides.
 
-### 2. 引导配置步骤
-用户说：*“帮我配置 Micro 小脑”*
-1. 询问用户获取凭据（若用户已有配置直接复用）：
-   - **API URL**（如 `https://api.deepseek.com/v1` 或 `https://opencode.ai/zen/go/v1` 或本地 `http://localhost:11434/v1`）
-   - **Model 名称**（如 `deepseek-chat` 或 `deepseek-v4.1-flash`）
-   - **API Key**（本地免密服务可直接填空）
-2. AI 在后台写入项目或全局 `.contextos/profile.json`：
-   ```json
-   {
-     "micro": {
-       "url": "<用户提供的 URL>",
-       "model": "<用户提供的 Model>",
-       "key": "<用户提供的 API Key>",
-       "sessionHeader": "x-opencode-session",
-       "thinking": "low",
-       "maxTokens": 1024,
-       "maxProviderTokens": 8000,
-       "requireBulkInput": false,
-       "ttlMs": 86400000,
-       "timeoutMs": 30000,
-       "maxTurns": 6,
-       "maxContextChars": 24000
-     }
-   }
-   ```
-3. 执行挂载测试与自检：
-   ```javascript
-   // Step 1: 创建测试会话
-   contextos({
-     action: "ops",
-     args: {
-       capability: "micro",
-       args: { sessionAction: "create", sessionId: "setup-check", objective: "ping" }
-     },
-     projectRoot: "<当前项目绝对路径>"
-   });
-   
-   // Step 2: 发送测试任务
-   contextos({
-     action: "ops",
-     args: {
-       capability: "micro",
-       args: { sessionAction: "send", sessionId: "setup-check", task: "Reply with pong only." }
-     },
-     projectRoot: "<当前项目绝对路径>"
-   });
-   ```
-4. 验证通过后向用户反馈已成功接入。
+`loadProfile` merges them deeply for `micro` and `agents.adapters`. Project values override global values; scalar values replace, and explicit `null` clears an inherited key.
 
----
+- Read effective configuration: `ops({capability: "profile", action: "get"})` (credentials show as `[redacted]`).
+- Write global settings: `ops({capability: "profile", action: "set", args: {scope: "global", values: {...}}})`.
+- Write project settings: `ops({capability: "profile", action: "set", args: {values: {...}}})`.
 
-## 四、 真实 A/B 测试与 Token 审计 (Telemetry & Benchmark)
+## Actionable operational procedures
 
-当需要评估使用 ContextOS 相比原生开发的真实 Token 消耗与收益时，调用：
-```javascript
-// 审计会话 Token 消耗
-contextos({
-  action: "ops",
-  args: {
-    capability: "telemetry",
-    action: "audit",
-    args: { sessionId: "<当前会话ID>", baselineSessionId: "<对照组会话ID>" }
-  },
-  projectRoot: "<当前项目绝对路径>"
-})
-```
+- **Provider/model/key switching**: Update dotted keys (e.g. `micro.model`, `micro.url`, `micro.thinking`) in the profile. Switching is a profile write, not a code edit. Never print or commit secret keys.
+- **Key debugging**:
+  - Resolution order: profile `key` -> `apiKey` -> environment variable named in `keyEnv`.
+  - Prefer keeping secrets in the host environment and referencing `keyEnv` in the profile.
+  - For stdio MCP configurations (such as Codex `.mcp.json`), add only the exact required variable name to `env_vars`.
+  - Isolated credential testing: `CONTEXTOS_API_MICRO_PROFILE` points to a JSON file `{"micro": {...}}`.
+  - Classify probe errors: HTTP 401/403 (invalid credential), HTTP 404 (route or model ID error), connection/DNS/timeout (pre-auth network issue), 200 with parse failure (response format mapping mismatch).
+- **CLI adapter installation**: Install the target CLI via its official installer. Verify locally (`--help`, version, model availability, effort flags) before writing adapter config.
+- **OS MCP registration**: Register the canonical server bundle (`~/.contextos/server/contextos-mcp.mjs`) in the CLI host configuration with arguments `["--no-warnings=ExperimentalWarning", "<path-to-bundle>"]`.
+- **Skill installation**: Sync the ContextOS skill package to the CLI's skills directory (`~/.gemini/antigravity-cli/skills` or `~/.gemini/config/skills`). Skill frontmatter must be strict YAML; quote any description containing a colon.
+- **Permission preconfiguration**: Preconfigure the CLI adapter with documented full-permission flags (e.g. AGY `--dangerously-skip-permissions`) and grant MCP permissions (`mcp(contextos/contextos)`) so execution is not blocked by manual prompts. Do not combine `--effort` with an effort-suffixed model, and do not force `--sandbox` for MCP-backed work.
+- **Doctor checks**: Run `ops({capability: "micro", action: "doctor"})`. Local checks make no model call; reporting `unknown; not probed` for `authentication`, `task_analyze`, or `task_implement` is expected normal behavior and does not block micro delegation. As long as `endpoint`, `configured_model`, and `credential_source` are set, dispatch micro normally. Run bounded live checks with `probe: true` only upon explicit request.
 
-### 客观 A/B 测试基准准则：
-1. **简单任务（单文件修改、1~2 轮日常修复）**：
-   - 原生开发消耗 ~500-800 Tokens；
-   - 若使用全套 ContextOS（explore + inspect + change + ship），由于协议元数据与图谱交互，消耗约为 3,000-5,000 Tokens，**表现为负收益**；
-   - **规范**：简单任务请直接调用原生编辑或轻量单步 `change`，严禁触发全套 explore/ship！
-2. **复杂长程任务（跨文件重构、深层单测报错、10+ 轮多步协同）**：
-   - 原生开发中日志反复倾倒与上下文重述容易消耗 80,000~150,000 Tokens 甚至导致注意力崩溃；
-   - ContextOS 带外执行 + 原地诊断 + Micro 脱毒 + 300 字节黑板，可将总消耗压缩至 25,000~45,000 Tokens，**展现 50%~70% 的高正收益**。
+## Continuity, blackboard, and architecture
+
+- **Session continuity**: `ops({capability: "session", action: "status"})` exposes active session state, touched files, command receipts, and notes.
+- **Blackboard purpose**: `.contextos/blackboard.md` is rendered from session state on every save. Read session state via `ops` rather than maintaining parallel files.
+- **Plan and task tracking**: Read and update multi-step progress with `ops({capability: "plan"})` and `ops({capability: "task"})`. Never edit `.contextos` files directly.
+- **Block/Chain architecture**: Inspect and update architecture boundaries with `ops({capability: "architecture"})`; never edit `.contextos/graph.json` directly.
+
+## Role usage accounting
+
+Track usage by role: `main`, `api-micro`, and `cli-agent`.
+- Raw tokens = `input + output`; diagnostic only. Cached input is included in input and reasoning in output.
+- Authoritative weighted cost = `cached input * 0.1 + uncached input * 2 + output * 10`; API Micro and CLI agent divide by 7 for main-equivalent cost, while main uses it directly.
+- Report raw tokens, weighted cost, peak input, and main-equivalent cost separately; never double-bill receipts.
+
+For the detailed configuration and switching guide, see [micro-setup.md](references/micro-setup.md).

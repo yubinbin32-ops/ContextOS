@@ -316,12 +316,10 @@ export class MarkdownRenderer {
     if (
       id.includes('desktop') ||
       id.includes('cli') ||
-      id.includes('cloud') ||
       id.includes('installer') ||
       id.includes('client') ||
       refs.includes('apps/desktop') ||
       refs.includes('apps/cli') ||
-      refs.includes('apps/cloud') ||
       title.includes('desktop') ||
       title.includes('metro map')
     ) {

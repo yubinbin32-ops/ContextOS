@@ -159,14 +159,31 @@ export class CodeTools {
     } else if (typeof selector === 'object' && selector !== null && Array.isArray(selector.ranges) && selector.ranges.length > 0) {
       const snippets = [];
       const extractedRanges = [];
-      for (const r of selector.ranges) {
+      const requestedRanges = selector.ranges.map((r, index) => {
         let s = r.startLine !== undefined && r.startLine !== null ? Number(r.startLine) : 1;
         let e = r.endLine !== undefined && r.endLine !== null ? Number(r.endLine) : lines.length;
         s = Math.max(1, Math.min(s, lines.length));
         e = Math.max(s, Math.min(e, lines.length));
-        extractedRanges.push({ startLine: s, endLine: e });
-        const slice = lines.slice(s - 1, e);
-        snippets.push(`// [L${s}-L${e}]\n` + slice.join('\n'));
+        return { startLine: s, endLine: e, index };
+      }).sort((left, right) => left.startLine - right.startLine || left.endLine - right.endLine);
+      const mergedRanges = [];
+      for (const range of requestedRanges) {
+        const previous = mergedRanges.at(-1);
+        if (previous
+          && Number.isFinite(range.startLine)
+          && Number.isFinite(range.endLine)
+          && range.startLine <= previous.endLine + 1) {
+          previous.endLine = Math.max(previous.endLine, range.endLine);
+          previous.index = Math.min(previous.index, range.index);
+        } else {
+          mergedRanges.push({ ...range });
+        }
+      }
+      mergedRanges.sort((left, right) => left.index - right.index);
+      for (const { startLine, endLine } of mergedRanges) {
+        extractedRanges.push({ startLine, endLine });
+        const slice = lines.slice(startLine - 1, endLine);
+        snippets.push(`// [L${startLine}-L${endLine}]\n` + slice.join('\n'));
       }
       const codeSnippet = snippets.join('\n\n');
       const hash = calculateHash(codeSnippet);

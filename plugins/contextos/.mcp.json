@@ -7,12 +7,20 @@
     ],
     "cwd": ".",
     "env": {
-      "CONTEXTOS_LEAN_SURFACE": "1"
+      "CONTEXTOS_TEXT_ONLY_RESULTS": "1"
     },
     "env_vars": [
       "CONTEXTOS_HOME",
       "CONTEXTOS_PROJECT_ROOT",
-      "CONTEXTOS_DATA_DIR"
+      "CONTEXTOS_DATA_DIR",
+      "CONTEXTOS_API_MICRO_PROFILE",
+      "CONTEXTOS_API_MICRO_KEY",
+      "CONTEXTOS_DISABLE_API_MICRO",
+      "CONTEXTOS_DISABLE_MICRO",
+      "CONTEXTOS_WORKER_MODE",
+      "CONTEXTOS_WORKER_ROOT",
+      "CONTEXTOS_MICRO_REPORT_ROOT",
+      "CONTEXTOS_MICRO_REPORT_JOB"
     ],
     "startup_timeout_sec": 60
   }

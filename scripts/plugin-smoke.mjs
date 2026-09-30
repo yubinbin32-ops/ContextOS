@@ -12,12 +12,12 @@ import { createFixtureProject } from "./fixture-project.mjs";
 import { packageVersion } from "./version.mjs";
 
 const projectRoot = process.cwd();
-const EXPECTED_TOOLS = ["explore", "inspect", "change", "verify", "ship", "ops", "pipeline"];
+const EXPECTED_TOOLS = ["contextos"];
 const transport = new StdioClientTransport({
   command: "node",
   args: ["plugins/contextos/server/contextos-mcp.mjs"],
   cwd: projectRoot,
-  env: { ...process.env, CONTEXTOS_LEAN_SURFACE: "0" },
+  env: { ...process.env, CONTEXTOS_TEXT_ONLY_RESULTS: "1" },
 });
 const client = new Client({ name: "contextos-plugin-smoke", version: packageVersion });
 const fixture = createFixtureProject({ prefix: "ctxos-plugin" });
@@ -33,20 +33,8 @@ const skillPath = path.join("plugins", "contextos", "skills", "contextos", "SKIL
 assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");
 const skillText = fs.readFileSync(skillPath, "utf8");
 const capabilityReference = path.join("plugins", "contextos", "skills", "contextos", "references", "capabilities.md");
-assert.ok(skillText.includes("## Route work"), "Skill must document repository execution routing");
-assert.ok(skillText.includes("Legal capabilities:"), "Skill must list legal advanced capabilities");
-for (const capability of ["architecture", "block", "chain", "telemetry", "micro", "run_command"]) {
-  assert.ok(skillText.includes(capability), `Skill must document capability ${capability}`);
-}
 assert.ok(fs.existsSync(capabilityReference), "ContextOS capability reference is missing");
-const capabilityText = fs.readFileSync(capabilityReference, "utf8");
-for (const term of ["decision_write", "rule_write", "bind_rule", "bind_auto", "chain", "compose", "link", "task.finish", "telemetry", "audit", "scope"]) {
-  assert.ok(capabilityText.includes(term), `Capability reference must document ${term}`);
-}
-for (const tool of EXPECTED_TOOLS) {
-  assert.ok(new RegExp(`\\b${tool}\\b`).test(skillText), `Skill must document the ${tool} tool`);
-}
-assert.ok(skillText.includes("capability:"), "Skill must document capability routing through ops");
+assert.ok(fs.existsSync("plugins/contextos/skills/contextos-ops/references/micro-setup.md"), "AI provider setup reference must be packaged");
 assert.ok(skillText.length < 7000, `Skill must stay lean for context budgets (got ${skillText.length} chars; limit 7000)`);
 
 try {
@@ -54,18 +42,31 @@ try {
   const listing = await client.listTools();
   const names = listing.tools.map((tool) => tool.name).sort();
   assert.deepEqual(names, [...EXPECTED_TOOLS].sort(), "bundled server must expose exactly the V3 tools");
-  const exploreTool = listing.tools.find((tool) => tool.name === "explore");
-  const inspectTool = listing.tools.find((tool) => tool.name === "inspect");
-  assert.match(JSON.stringify(exploreTool?.inputSchema), /refresh/, "bundled explore must expose refresh");
-  assert.match(JSON.stringify(exploreTool?.inputSchema), /dedupeReads/, "bundled explore must expose dedupeReads");
-  assert.match(JSON.stringify(inspectTool?.inputSchema), /refresh/, "bundled inspect must expose refresh");
-  assert.match(JSON.stringify(inspectTool?.inputSchema), /dedupeReads/, "bundled inspect must expose dedupeReads");
+  const transportTool = listing.tools.find((tool) => tool.name === "contextos");
+  assert.match(JSON.stringify(transportTool?.inputSchema), /ask \| command \| agent \| change/);
+  assert.match(transportTool?.description || "", /ops\(\{capability,action,args\}\)/);
 
+  // Every capability is reachable through the single transport tool. This
+  // helper keeps the smoke readable while exercising the real public surface.
   const call = async (name, args) => {
-    const res = await client.callTool({ name, arguments: { projectRoot: fixture.root, ...args } });
+    const res = await client.callTool({
+      name: "contextos",
+      arguments: { action: name, args: { ...args }, projectRoot: fixture.root },
+    });
     assert.ok(!res.isError, `${name} failed`);
     return (res.content || []).map((chunk) => chunk.text ?? "").join("\n");
   };
+
+  const pipelined = await call("pipeline", {
+    steps: [{ command: { command: "node --version", focus: "version" } }],
+  });
+  assert.match(pipelined, /pipeline=OK/);
+
+  const envProbe = `${JSON.stringify(process.execPath)} -e "if(process.env.CONTEXTOS_TEXT_ONLY_RESULTS)process.exit(3);console.log('clean')"`;
+  const pipelinedEnv = await call("pipeline", {
+    steps: [{ command: { command: envProbe, focus: "clean" } }],
+  });
+  assert.match(pipelinedEnv, /pipeline=OK/);
 
   // 1. explore
   const explored = await call("explore", { intent: "了解 src/math.mjs" });
@@ -116,36 +117,23 @@ try {
   const blocks = await call("ops", { capability: "block", action: "list", args: { format: "json" } });
   assert.ok(blocks.length > 0, "ops block list returned nothing");
 
-  // 6. lean surface forwards object verify commands to the runner
-  const leanTransport = new StdioClientTransport({
-    command: "node",
-    args: ["plugins/contextos/server/contextos-mcp.mjs"],
-    cwd: projectRoot,
-    env: { ...process.env, CONTEXTOS_LEAN_SURFACE: "1" },
-  });
-  const leanClient = new Client({ name: "contextos-plugin-lean-smoke", version: packageVersion });
-  await leanClient.connect(leanTransport);
-  try {
-    const leanResult = await leanClient.callTool({
-      name: "contextos",
-      arguments: {
-        action: "change",
-        args: {
-          create: [{ path: "src/lean-verify.mjs", content: "export const verified = true;\n" }],
-          verify: { commands: ["node --check src/lean-verify.mjs"] },
-        },
-        projectRoot: fixture.root,
+  // 6. the single surface forwards object verify commands to the runner
+  const leanResult = await client.callTool({
+    name: "contextos",
+    arguments: {
+      action: "change",
+      args: {
+        create: [{ path: "src/lean-verify.mjs", content: "export const verified = true;\n" }],
+        verify: { commands: ["node --check src/lean-verify.mjs"] },
       },
-    });
-    const leanText = (leanResult.content || []).map((chunk) => chunk.text ?? "").join("\n");
-    assert.ok(!leanResult.isError, leanText);
-    assert.match(leanText, /`node --check src\/lean-verify\.mjs`/);
-    assert.match(leanText, /Verify: PASS/);
-    assert.doesNotMatch(leanText, /- `` → exit/);
-  } finally {
-    await leanClient.close();
-    await leanTransport.close();
-  }
+      projectRoot: fixture.root,
+    },
+  });
+  const leanText = (leanResult.content || []).map((chunk) => chunk.text ?? "").join("\n");
+  assert.ok(!leanResult.isError, leanText);
+  assert.match(leanText, /`node --check src\/lean-verify\.mjs`/);
+  assert.match(leanText, /Verify: PASS/);
+  assert.doesNotMatch(leanText, /- `` → exit/);
 
   console.log("# ContextOS Plugin Smoke Verification Passed!");
   console.log(`- MCP tools: ${names.length} (${names.join(", ")})`);

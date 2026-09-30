@@ -137,6 +137,8 @@ export function syncDesktopVersion({ checkOnly = false, version = readPackageVer
 export function syncReadmeVersion({ checkOnly = false, version = readPackageVersion(), changes = [] } = {}) {
   for (const relPath of ['README.md', 'README_zh.md']) {
     const content = read(relPath);
+    // A README can use the live release badge instead of a duplicated version.
+    if (!content.includes('id="contextos-version"')) continue;
     const updated = replaceRequired(
       content,
       /(<span id="contextos-version">)[^<]*(<\/span>)/,

@@ -101,6 +101,19 @@ test('command receipts are compacted and action diagnostics stay bounded', () =>
   })), /"ok":true/);
 });
 
+test('projectMicroResult keeps the full Micro report by default', () => {
+  const root = makeTempProject();
+  try {
+    const content = `BEGIN\n${'x'.repeat(RESPONSE_BUDGETS.micro + 500)}\nEND`;
+    const projected = projectMicroResult({ ok: true, content }, { projectRoot: root });
+    assert.equal(projected.content, content);
+    assert.equal(projected.chars, content.length);
+    assert.equal(projected.truncated, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('projectMicroResult keeps reasoning and tool traces out of model context', () => {
   const root = makeTempProject();
   try {
@@ -128,7 +141,7 @@ test('projectMicroResult keeps reasoning and tool traces out of model context', 
     assert.deepEqual(projected.estimatedUsage, { promptTokens: 5, completionTokens: 1, totalTokens: 6 });
     assert.equal(projected.toolCalls, undefined);
     assert.equal(projected.invocation.toolCalls, 1);
-    assert.equal(projected.invocation.toolRounds, 0);
+    assert.equal(projected.invocation.toolRounds, null);
 
     const failed = projectMicroResult({
       ok: false,
@@ -137,6 +150,175 @@ test('projectMicroResult keeps reasoning and tool traces out of model context', 
     }, { projectRoot: root });
     assert.equal(failed.budgetExceeded, 'providerTokens');
     assert.ok(failed.artifactId);
+
+    const partial = projectMicroResult({
+      ok: false,
+      status: 'partial',
+      partial: true,
+      errorCode: 'MICRO_CONTINUATION_REQUIRED',
+      error: 'Micro reached the host continuation window.',
+      content: 'Partial progress',
+      guidance: 'Continue with the same session.',
+      resume: { kind: 'micro', action: 'send', sessionId: 'micro-partial' },
+      sessionId: 'micro-partial',
+    }, { projectRoot: root });
+    assert.equal(partial.status, 'partial');
+    assert.equal(partial.partial, true);
+    assert.equal(partial.errorCode, 'MICRO_CONTINUATION_REQUIRED');
+    assert.equal(partial.content, 'Partial progress');
+    assert.equal(partial.guidance, 'Continue with the same session.');
+    assert.deepEqual(partial.resume, { kind: 'micro', action: 'send', sessionId: 'micro-partial' });
+    assert.equal(partial.sessionId, 'micro-partial');
+    assert.equal(partial.error, undefined);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Micro receipt counters preserve unknown, measured zero, and positive counts', () => {
+  const root = makeTempProject();
+  try {
+    const unknown = projectMicroResult({
+      ok: true,
+      provider: 'cli',
+      content: 'terminal result',
+      providerRequests: null,
+      invocation: { providerRequests: null, toolRounds: null },
+    }, { projectRoot: root });
+    assert.equal(unknown.providerRequests, null);
+    assert.equal(unknown.invocation.providerRequests, null);
+    assert.equal(unknown.invocation.toolRounds, null);
+    assert.equal(unknown.invocation.toolCalls, null);
+
+    const zero = projectMicroResult({
+      ok: true,
+      provider: 'cli',
+      content: 'measured idle result',
+      providerRequests: 0,
+      steps: 0,
+      hostTurnsSaved: 0,
+      invocation: { providerRequests: 0, toolRounds: 0, toolCalls: 0 },
+    }, { projectRoot: root });
+    assert.equal(zero.providerRequests, 0);
+    assert.equal(zero.invocation.providerRequests, 0);
+    assert.equal(zero.invocation.toolRounds, 0);
+    assert.equal(zero.invocation.toolCalls, 0);
+
+    const positive = projectMicroResult({
+      ok: true,
+      provider: 'cli',
+      content: 'measured tool result',
+      providerRequests: 2,
+      steps: 3,
+      hostTurnsSaved: 5,
+      invocation: { providerRequests: 2, toolRounds: 3, toolCalls: 4 },
+    }, { projectRoot: root });
+    assert.equal(positive.providerRequests, 2);
+    assert.equal(positive.invocation.providerRequests, 2);
+    assert.equal(positive.invocation.toolRounds, 3);
+    assert.equal(positive.invocation.toolCalls, 4);
+
+    const api = projectMicroResult({
+      ok: true,
+      provider: 'api',
+      content: 'API result',
+      providerRequests: 0,
+      providerUsageCalls: 2,
+      steps: 0,
+      invocation: { providerRequests: 0, toolRounds: 0 },
+      toolCalls: [],
+    }, { projectRoot: root });
+    assert.equal(api.providerRequests, 0);
+    assert.equal(api.invocation.providerRequests, 0);
+    assert.equal(api.invocation.toolRounds, 0);
+    assert.equal(api.invocation.toolCalls, 0);
+
+    const entries = fs.readFileSync(path.join(root, '.contextos', 'logs', 'micro-usage.jsonl'), 'utf8')
+      .trim().split('\n').map((line) => JSON.parse(line));
+    assert.equal(entries[0].providerRequests, null);
+    assert.equal(entries[0].toolRounds, null);
+    assert.equal(entries[0].toolCallCount, null);
+    assert.equal(entries[1].providerRequests, 0);
+    assert.equal(entries[1].toolRounds, 0);
+    assert.equal(entries[1].toolCallCount, 0);
+    assert.equal(entries[1].steps, 0);
+    assert.equal(entries[1].hostTurnsSaved, 0);
+    assert.equal(entries[1].hostTurnsSavedEvidence, 'explicit');
+    assert.equal(entries[2].providerRequests, 2);
+    assert.equal(entries[2].toolRounds, 3);
+    assert.equal(entries[2].toolCallCount, 4);
+    assert.equal(entries[2].steps, 3);
+    assert.equal(entries[2].hostTurnsSaved, 5);
+    assert.equal(entries[2].hostTurnsSavedEvidence, 'explicit');
+    assert.equal(entries[3].toolCallCount, 0);
+    assert.equal(entries[3].toolRounds, 0);
+    assert.equal(entries[3].hostTurnsSaved, null);
+    assert.equal(entries[3].hostTurnsSavedEvidence, 'unknown');
+    assert.equal(entries[0].hostTurnsSavedEvidence, 'unknown');
+
+    const ledgerPath = path.join(root, '.contextos', 'logs', 'micro-usage.jsonl');
+    fs.appendFileSync(ledgerPath, JSON.stringify({
+      receiptId: 'legacy-proxy', ok: true, usageSource: 'unavailable', hostTurnsSaved: 7,
+    }) + '\n');
+    fs.appendFileSync(ledgerPath, JSON.stringify({
+      receiptId: 'current-unknown', ok: false, provider: 'cli', usageSource: 'unavailable', providerRequests: null,
+    }) + '\n');
+    const legacyEntry = JSON.parse(fs.readFileSync(ledgerPath, 'utf8').trim().split('\n').at(-1));
+    assert.equal(legacyEntry.receiptId, 'current-unknown');
+    const priorEntry = JSON.parse(fs.readFileSync(ledgerPath, 'utf8').trim().split('\n').at(-2));
+    assert.equal(priorEntry.hostTurnsSavedEvidence, undefined, 'existing rows remain unchanged');
+
+    const summary = summarizeMicroUsage(root);
+    assert.equal(summary.toolCallCountUnknownCalls, 3);
+    assert.equal(summary.toolRoundsUnknownCalls, 3);
+    assert.equal(summary.stepsUnknownCalls, 3);
+    assert.equal(summary.hostTurnsSaved, 5);
+    assert.equal(summary.hostTurnsSavedExplicitCalls, 2);
+    assert.equal(summary.hostTurnsSavedUnknownCalls, 3);
+    assert.equal(summary.hostTurnsSavedLegacyProxy, 7);
+    assert.equal(summary.hostTurnsSavedLegacyProxyCalls, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Micro counters accept only safe nonnegative integer values', () => {
+  const root = makeTempProject();
+  try {
+    const maxSafe = Number.MAX_SAFE_INTEGER;
+    const boundary = projectMicroResult({
+      ok: true,
+      provider: 'cli',
+      content: 'boundary result',
+      providerRequests: String(maxSafe),
+      steps: maxSafe,
+      hostTurnsSaved: maxSafe,
+      invocation: {
+        providerRequests: String(maxSafe),
+        toolRounds: maxSafe,
+        toolCalls: String(maxSafe),
+      },
+    }, { projectRoot: root });
+    assert.equal(boundary.providerRequests, maxSafe);
+    assert.equal(boundary.invocation.providerRequests, maxSafe);
+    assert.equal(boundary.invocation.toolRounds, maxSafe);
+    assert.equal(boundary.invocation.toolCalls, maxSafe);
+
+    for (const invalid of [1.5, Infinity, NaN, -1, true, '', '  ', '1.5', '-1', '9007199254740992']) {
+      const projected = projectMicroResult({
+        ok: true,
+        provider: 'cli',
+        content: 'invalid count result',
+        providerRequests: invalid,
+        steps: invalid,
+        hostTurnsSaved: invalid,
+        invocation: { providerRequests: invalid, toolRounds: invalid, toolCalls: invalid },
+      }, { projectRoot: root });
+      assert.equal(projected.providerRequests, null, String(invalid));
+      assert.equal(projected.invocation.providerRequests, null, String(invalid));
+      assert.equal(projected.invocation.toolRounds, null, String(invalid));
+      assert.equal(projected.invocation.toolCalls, null, String(invalid));
+    }
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -177,7 +359,9 @@ test('Micro provider usage is recorded separately from host usage', () => {
     assert.equal(summary.estimatedUsageCalls, 1);
     assert.equal(summary.estimatedTotalTokens, 3);
     assert.equal(summary.usageUnavailableCalls, 0);
-    assert.equal(summary.estimatedCostUsd, 0.001);
+    assert.equal(summary.estimatedCostUsd, null);
+    assert.equal(summary.costUnknownCalls, 1);
+    assert.equal(summary.totalTokensComplete, false);
     assert.equal(summary.byPreset[0].preset, 'triage');
     assert.equal(summary.byModel[0].model, 'deepseek-v4.1-flash');
   } finally {
@@ -263,6 +447,69 @@ test('Micro usage records requested delivery, effective outcome, and preload met
     assert.equal(summary.preloadChars, 37);
     assert.equal(summary.providerUsageCalls, 1);
     assert.equal(summary.totalTokens, 14);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('missing task usage marks totals incomplete and unknown pricing stays unknown', () => {
+ const root=makeTempProject();try {
+  recordMicroUsage(root,{ok:false,provider:'cli',usageSource:'unavailable',cost:{estimatedUsd:null}},'missing');
+  recordMicroUsage(root,{ok:true,provider:'api',usageSource:'provider',providerUsage:{prompt_tokens:7,completion_tokens:0,total_tokens:7},cost:{estimatedUsd:0,pricingConfigured:false},costEstimate:{rawTokens:7,weightedCostTokens:14,workerDivisor:7,mainEquivalentTokens:2}},'known');
+  const summary=summarizeMicroUsage(root);
+  assert.equal(summary.totalTokens,7);assert.equal(summary.weightedCostTokens,14);assert.equal(summary.weightedMainEquivalentTokens,2);assert.equal(summary.mainEquivalentTokens,1);
+  assert.equal(summary.totalTokensComplete,false);assert.equal(summary.weightedCostTokensComplete,false);assert.equal(summary.mainEquivalentTokensComplete,false);
+  assert.equal(summary.estimatedCostUsd,null);assert.equal(summary.costUnknownCalls,2);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('weighted cost uses cached, uncached, and output weights with a /7 worker equivalent', () => {
+ const root=makeTempProject();try {
+  recordMicroUsage(root,{ok:true,provider:'api',usageSource:'provider',providerUsage:{
+    prompt_tokens:100,cached_input_tokens:40,uncached_input_tokens:60,completion_tokens:20,total_tokens:120,
+  }},'weighted');
+  const summary=summarizeMicroUsage(root);
+  assert.equal(summary.totalTokens,120);
+  assert.equal(summary.weightedCostTokens,324);
+  assert.equal(summary.weightedMainEquivalentTokens,324/7);
+  assert.equal(summary.mainEquivalentTokens,120/7);
+  assert.equal(summary.weightedCostTokensComplete,true);
+  assert.equal(summary.mainEquivalentTokensComplete,true);
+  assert.match(summary.costFormula,/cached input \* 0\.1/);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
+
+test('projectMicroResult surfaces a provider completion cap as truncation', () => {
+  const root = makeTempProject();
+  try {
+    const result = projectMicroResult({
+      ok: true,
+      content: 'partial report',
+      providerTruncated: true,
+      finishReason: 'length',
+      sessionId: 'cap-session',
+      providerUsage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+    }, { projectRoot: root });
+    assert.equal(result.truncated, true);
+    assert.equal(result.providerTruncated, true);
+    assert.equal(result.finishReason, 'length');
+    assert.match(result.guidance, /sessionAction:"continue"/);
+    assert.match(result.guidance, /cap-session/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('projectMicroResult keeps the provider cache split in the projected usage', () => {
+  const root = makeTempProject();
+  try {
+    const result = projectMicroResult({
+      ok: true,
+      content: 'answer',
+      providerUsage: { prompt_tokens: 1000, completion_tokens: 10, total_tokens: 1010, cached_input_tokens: 900, uncached_input_tokens: 100 },
+    }, { projectRoot: root });
+    assert.equal(result.providerUsage.cachedInputTokens, 900);
+    assert.equal(result.providerUsage.uncachedInputTokens, 100);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

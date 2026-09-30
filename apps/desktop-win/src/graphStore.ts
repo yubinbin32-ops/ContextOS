@@ -30,6 +30,34 @@ import {
 } from './models';
 import { ContextOSTheme } from './theme';
 
+type MicroRoleConfigSummary = {
+  micro: {
+    status: string;
+    configurationSource: string;
+    provider: string | null;
+    transport: string | null;
+    model: string | null;
+    credentialConfigured: boolean;
+    requestedThinking: string | null;
+    effectiveThinking: string | null;
+    supportedThinking: string[];
+    authentication: null | string;
+    taskReady: { analyze: null | boolean; implement: null | boolean };
+  };
+  agents: {
+    default: string | null;
+    adapters: Record<string, {
+      configured: boolean;
+      command: string | null;
+      installed: null | boolean;
+      authenticated: null | boolean;
+      model: string | null;
+      thinking: string | null;
+      taskReady: { analyze: null | boolean; implement: null | boolean };
+    }>;
+  };
+};
+
 export class GraphStore {
   // State
   updater = new AppUpdater();
@@ -47,6 +75,8 @@ export class GraphStore {
   recentlyChangedRefs: Set<string> = new Set();
   errorMessage: string | null = null;
   settingsPresented: boolean = false;
+  microRoles: MicroRoleConfigSummary | null = null;
+  microRolesError: string | null = null;
   editorStatuses: EditorPlatformStatus[] = [];
   runningProcesses: RunningProcessItem[] = [];
   syncingPlatformId: string | null = null;
@@ -374,7 +404,7 @@ export class GraphStore {
         try {
           const { invoke } = await import('@tauri-apps/api/core');
           const raw = await invoke<any>('load_snapshot', { path: customPath || null });
-          rootPath = await invoke<string>('get_project_root');
+          rootPath = customPath || await invoke<string>('get_project_root');
           if (raw) {
             data = this.normalizeGraphData(raw, rootPath);
           }
@@ -1411,9 +1441,25 @@ export class GraphStore {
     console.info(`[Reveal Source] ${source.path}`);
   }
 
+  async refreshMicroRoles() {
+    if (!this.projectRoot) { this.microRoles = null; return; }
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      this.microRoles = await invoke<MicroRoleConfigSummary>('get_micro_roles', { projectRoot: this.projectRoot });
+      this.microRolesError = null;
+      this.notify();
+    } catch (error) {
+      this.microRoles = null;
+      this.microRolesError = String(error);
+      console.warn('Micro role settings unavailable:', error);
+      this.notify();
+    }
+  }
+
   setSettingsPresented(val: boolean) {
     this.settingsPresented = val;
     if (val) {
+      void this.refreshMicroRoles();
       this.updater.checkOnSettingsOpen();
       this.refreshEditorStatuses();
     }
@@ -1534,13 +1580,7 @@ export class GraphStore {
       recentProjects: '最近项目',
       openProjectHelp: '请选择包含 .contextos/project.json 的项目目录。',
       open: '打开',
-      connectCloudProject: '连接到云端 MCP 项目…',
-      cloudUrl: '云端服务器地址',
       projectId: '项目 ID',
-      authToken: '访问令牌 (可选)',
-      connectAndImport: '连接并导入图谱',
-      connecting: '正在连接云端…',
-      cloudProject: '云端项目',
       all: '全部',
       verification: '验证',
       unassigned: '独立验证',
@@ -1658,13 +1698,7 @@ export class GraphStore {
       recentProjects: 'Recent Projects',
       openProjectHelp: 'Choose a project folder containing .contextos/project.json.',
       open: 'Open',
-      connectCloudProject: 'Connect Cloud MCP Project…',
-      cloudUrl: 'Cloud Server URL',
       projectId: 'Project ID',
-      authToken: 'Auth Token (Optional)',
-      connectAndImport: 'Connect & Import Graph',
-      connecting: 'Connecting to Cloud…',
-      cloudProject: 'Cloud Project',
       all: 'All',
       verification: 'Verification',
       unassigned: 'Standalone checks',

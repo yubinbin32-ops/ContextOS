@@ -1,4 +1,5 @@
 import { summarizeMicroUsage } from './response-budget.mjs';
+import { MICRO_COST_FORMULA, MICRO_WORKER_COST_DIVISOR } from './micro-provider.mjs';
 import { summarizeTelemetry } from './telemetry.mjs';
 
 const DEFAULT_LIMIT = 500;
@@ -96,7 +97,10 @@ function microSnapshot(summary, sessionId) {
     providerUsageCalls,
     estimatedUsageCalls,
     deduplicatedToolCallCount: Number(summary.deduplicatedToolCallCount) || 0,
-    providerRequests: Number(summary.providerRequests) || 0,
+    providerRequests: summary.providerRequestsUnknownCalls ? null : (Number(summary.providerRequests) || 0),
+    providerRequestsUnknownCalls: Number(summary.providerRequestsUnknownCalls) || 0,
+    weightedCostTokens: calls === 0 ? 0 : (summary.weightedCostTokensComplete ? summary.weightedCostTokens : null),
+    mainEquivalentTokens: calls === 0 ? 0 : (summary.weightedMainEquivalentTokensComplete ? summary.weightedMainEquivalentTokens : null),
     pipelineRuns: Number(summary.pipelineRuns) || 0,
     preloadCacheHits: Number(summary.preloadCacheHits) || 0,
     toolRounds: Number(summary.toolRounds) || 0,
@@ -159,7 +163,9 @@ function deltaSnapshot(right, left) {
       providerActualTokens: deltaNumber(right.micro.providerActualTokens, left.micro.providerActualTokens),
       estimatedProviderTokens: deltaNumber(right.micro.estimatedProviderTokens, left.micro.estimatedProviderTokens),
       deduplicatedToolCallCount: right.micro.deduplicatedToolCallCount - left.micro.deduplicatedToolCallCount,
-      providerRequests: right.micro.providerRequests - left.micro.providerRequests,
+      providerRequests: deltaNumber(right.micro.providerRequests, left.micro.providerRequests),
+      weightedCostTokens: deltaNumber(right.micro.weightedCostTokens, left.micro.weightedCostTokens),
+      mainEquivalentTokens: deltaNumber(right.micro.mainEquivalentTokens, left.micro.mainEquivalentTokens),
       pipelineRuns: right.micro.pipelineRuns - left.micro.pipelineRuns,
       preloadCacheHits: right.micro.preloadCacheHits - left.micro.preloadCacheHits,
       toolRounds: right.micro.toolRounds - left.micro.toolRounds,
@@ -232,11 +238,30 @@ export function auditRouting(projectRoot, { sessionId, baselineSessionId = null,
   const bounded = boundedLimit(limit);
   const right = snapshot(projectRoot, rightId, bounded);
   const baseline = baselineId ? snapshot(projectRoot, baselineId, bounded) : null;
+  const equivalent = totalTokens(right, 'actualTokens', 'mainEquivalentTokens');
+  const baselineEquivalent = baseline ? totalTokens(baseline, 'actualTokens', 'mainEquivalentTokens') : null;
+  const savedEquivalent = baselineEquivalent === null || equivalent === null ? null : baselineEquivalent - equivalent;
+  const microWeightedCostTokens = right.micro.weightedCostTokens;
+  const baselineMicroWeightedCostTokens = baseline ? baseline.micro.weightedCostTokens : null;
+  const savedMicroWeightedCostTokens = baselineMicroWeightedCostTokens === null || microWeightedCostTokens === null
+    ? null : baselineMicroWeightedCostTokens - microWeightedCostTokens;
   const result = {
     sessionId: rightId,
     host: right.host,
     internal: right.internal,
     micro: right.micro,
+    personalCostEstimate: {
+      weightedCostTokens: microWeightedCostTokens,
+      baselineWeightedCostTokens: baselineMicroWeightedCostTokens,
+      savedWeightedCostTokens: savedMicroWeightedCostTokens,
+      mainEquivalentTokens: equivalent,
+      baselineMainEquivalentTokens: baselineEquivalent,
+      savedMainEquivalentTokens: savedEquivalent,
+      savedPercent: percent(savedEquivalent, baselineEquivalent),
+      workerDivisor: MICRO_WORKER_COST_DIVISOR,
+      formula: MICRO_COST_FORMULA,
+      assumption: 'Micro worker weighted cost divided by 7; host actual tokens are added at main-equivalent value; recorded session usage only, not an actual bill',
+    },
     warnings: routingWarnings(right),
     savings: baseline
       ? savings(baseline, right)

@@ -4,7 +4,236 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { pipelinePipeline } from '../src/pipelines.mjs';
+import { pipelinePipeline, verifyPipeline } from '../src/pipelines.mjs';
+import { runCommand } from '../../process-host/src/runner.mjs';
+
+test('pipeline preserves a Micro report instead of applying the generic ops clip', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-micro-output-'));
+  const body = `BEGIN\n${'m'.repeat(8000)}\nEND`;
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async () => body,
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      steps: [{ ops: { capability: 'micro', action: 'run' } }],
+    });
+    assert.match(output, /## Step 1: micro/);
+    assert.match(output, /END/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline returns a resumable partial result at the continuation window', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-continuation-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return '# ContextOS inspect\n\nok';
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      steps: [
+        { inspect: { path: 'README.md' } },
+        { inspect: { path: 'DECISION.md' } },
+      ],
+      budget: { maxDurationMs: 1 },
+    });
+
+    assert.equal(calls.length, 1);
+    assert.match(output, /pipeline=PARTIAL/);
+    assert.match(output, /partial=true resume=\{"kind":"pipeline","fromStep":2\}/);
+    assert.match(output, /do not replay completed steps/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline accepts command shorthand and tool aliases as run_command steps', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-command-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        return JSON.stringify({ ok: true, exitCode: 0, text: 'command ran' });
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      steps: [
+        { command: { command: 'node --version', focus: 'version' } },
+        { tool: 'command', args: { command: 'npm --version' } },
+      ],
+    });
+
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((call) => call.tool === 'ops'));
+    assert.deepEqual(calls.map((call) => call.input.args.command), ['node --version', 'npm --version']);
+    assert.ok(calls.every((call) => call.input.capability === 'run_command'));
+    assert.match(output, /pipeline=OK/);
+    assert.match(output, /command ran/);
+    assert.match(output, /"exitCode":0/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline accepts ask as an inspect alias', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-ask-alias-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        return '# ContextOS ask\n\nok';
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      steps: [
+        { tool: 'ask', args: { inspect: [{ path: 'src/a.mjs', ranges: [[1, 2]] }] } },
+        { tool: 'ask', args: { inspect: [{ path: 'src/b.mjs', ranges: [[1, 2]] }] } },
+      ],
+    });
+
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((call) => call.tool === 'inspect'));
+    assert.deepEqual(calls.map((call) => call.input.inspect[0].path), ['src/a.mjs', 'src/b.mjs']);
+    assert.match(output, /pipeline=OK/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('verify includes full stdout when full evidence is requested', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-verify-output-'));
+  const tail = 'VERIFY-FULL-STDOUT-TAIL';
+  let runArgs = null;
+  const ctx = {
+    projectRoot,
+    profile: {},
+    caps: {
+      run: async (args) => {
+        runArgs = args;
+        return {
+          ok: true,
+          data: {
+            id: 'verify-receipt',
+            command: 'echo hi',
+            cwd: projectRoot,
+            exitCode: 0,
+            durationMs: 3,
+            text: `${'v'.repeat(5200)}\n${tail}`,
+          },
+        };
+      },
+    },
+    store: {
+      current: { receipts: [] },
+      currentPassingReceipt: () => null,
+      attachReceipt: () => {},
+    },
+    tracer: { step: () => {} },
+    actionEvidence: { verifications: [] },
+  };
+
+  try {
+    const output = await verifyPipeline(ctx, { commands: ['echo hi'], full: true });
+    assert.equal(runArgs.raw, true);
+    assert.equal(runArgs.maxChars, Infinity);
+    assert.match(output, new RegExp(tail));
+    assert.doesNotMatch(output, /output truncated/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline command actions return stdout beyond the run_command preview limit', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-command-output-'));
+  const script = path.join(projectRoot, 'emit-long-output.mjs');
+  const tail = 'PIPELINE-COMMAND-STDOUT-TAIL';
+  fs.writeFileSync(script, `process.stdout.write('x'.repeat(5200) + '\\n${tail}\\n');\n`);
+  const command = `${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`;
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        const receipt = await runCommand({
+          ...input.args,
+          cwd: projectRoot,
+          projectRoot,
+        });
+        return JSON.stringify(receipt);
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, { steps: [{ command }] });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].tool, 'ops');
+    assert.equal(calls[0].input.capability, 'run_command');
+    assert.equal(calls[0].input.args.raw, true);
+    assert.equal(calls[0].input.args.maxChars, Infinity);
+    assert.ok(output.length > 5000, `expected full command output, got ${output.length}`);
+    assert.match(output, new RegExp(tail));
+    assert.doesNotMatch(output, /\[output truncated\]/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline accepts type-based tool steps used by micro', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-type-step-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        return '# ContextOS inspect\n\nok';
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      parallel: [
+        { type: 'inspect', path: 'README.md', ranges: [[1, 2]] },
+        { type: 'inspect', path: 'DECISION.md', ranges: [[1, 2]] },
+      ],
+    });
+
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((call) => call.tool === 'inspect'));
+    assert.deepEqual(calls.map((call) => call.input.path), ['README.md', 'DECISION.md']);
+    assert.deepEqual(calls.map((call) => call.input.ranges), [[[1, 2]], [[1, 2]]]);
+    assert.match(output, /pipeline=OK/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
 
 test('pipeline halts when a parallel action returns an inner failure', async () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-failure-'));
@@ -32,8 +261,8 @@ test('pipeline halts when a parallel action returns an inner failure', async () 
 
     assert.deepEqual(calls.sort(), ['inspect', 'ops']);
     assert.match(output, /pipeline=HALTED/);
-    assert.match(output, /parallel#1 FAIL/);
-    assert.match(output, /ops=FAIL/);
+    assert.match(output, /## Step 1: parallel \[FAIL\]/);
+    assert.match(output, /micro \[FAIL\]/);
     assert.match(output, /Micro URL is not configured/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -71,8 +300,8 @@ test('pipeline can collect exploratory failures without discarding successful ev
 
     assert.deepEqual(calls.sort(), ['inspect', 'ops']);
     assert.match(output, /pipeline=PARTIAL/);
-    assert.match(output, /inspect=OK[\s\S]*useful evidence/);
-    assert.match(output, /ops=FAIL/);
+    assert.match(output, /inspect[\s\S]*useful evidence/);
+    assert.match(output, /run_command \[FAIL\]/);
     assert.doesNotMatch(output, /pipeline=HALTED/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -204,10 +433,10 @@ test('pipeline failure projection keeps the Micro triage that the host paid for'
     });
 
     assert.match(output, /pipeline=HALTED/);
-    assert.match(output, /verify=FAIL/);
+    assert.match(output, /verify \[FAIL\]/);
     assert.match(output, /Micro-Triage/);
     assert.match(output, /replayBatch/);
-    assert.match(output, /receipt=receipt-triage-1/);
+    assert.match(output, /receipt receipt-triage-1/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -248,8 +477,9 @@ test('pipeline failure projection surfaces the root cause under a YAML error lab
     assert.match(output, /pipeline=HALTED/);
     assert.match(output, /batch replay is not implemented/);
     assert.match(output, /replayBatch/);
-    assert.match(output, /receipt=receipt-yaml-1/);
-    assert.ok(output.length < 1200, `pipeline failure should stay bounded, got ${output.length}`);
+    assert.match(output, /receipt receipt-yaml-1/);
+    assert.ok(output.length > 3000, `expected full failure evidence, got ${output.length}`);
+    assert.doesNotMatch(output, /response truncated|action output truncated/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -295,7 +525,7 @@ test('pipeline treats verify mode full as verification, not process control', as
     });
 
     assert.match(output, /pipeline=HALTED/);
-    assert.match(output, /verify=FAIL/);
+    assert.match(output, /verify \[FAIL\]/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -332,7 +562,7 @@ test('pipeline runs a predeclared failure branch without deciding on its own', a
 
     assert.deepEqual(calls.map((call) => call.tool), ['verify', 'ops']);
     assert.match(output, /pipeline=RECOVERED/);
-    assert.match(output, /branch#1 OK/);
+    assert.match(output, /## Branch 1/);
     assert.match(output, /triaged failure/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -364,6 +594,103 @@ test('pipeline stops at the predeclared maxActions budget', async () => {
     assert.deepEqual(calls, ['inspect']);
     assert.match(output, /pipeline=HALTED/);
     assert.match(output, /budget exceeded: maxActions=1/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline runs more than eight parallel actions without a concurrency clamp', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-parallel-'));
+  const calls = [];
+  let active = 0;
+  let peak = 0;
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (_tool, input) => {
+        calls.push(input.path);
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        active -= 1;
+        return `# ContextOS inspect\n\n${input.path}`;
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      parallel: Array.from({ length: 20 }, (_, index) => ({ inspect: { path: `a-${index + 1}.mjs` } })),
+    });
+
+    assert.equal(calls.length, 20);
+    assert.ok(peak > 8, `expected more than 8 concurrent actions, got ${peak}`);
+    assert.match(output, /a-20\.mjs/);
+    assert.match(output, /pipeline=OK/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline preserves full step output beyond the old 4000-character cap', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-full-output-'));
+  const body = `# ContextOS inspect\n\n${'x'.repeat(5200)}\nFULL-OUTPUT-TAIL`;
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async () => body,
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      parallel: [{ inspect: { path: 'src/large.mjs' } }],
+    });
+
+    assert.ok(output.includes(body));
+    assert.ok(output.length > 5200);
+    assert.doesNotMatch(output, /response truncated|action output truncated|os-response|os-budget|artifact=/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline renderer uses clean step boundaries without transport metadata', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-render-'));
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool) => tool === 'ops'
+        ? JSON.stringify({
+          id: 'receipt-clean',
+          command: 'node --version',
+          exitCode: 0,
+          text: 'v22.22.1',
+          logHandle: '.contextos/logs/receipt-clean.log',
+        })
+        : '# ContextOS inspect\n\nsource body',
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      steps: [
+        { inspect: { path: 'src/a.mjs' } },
+        { parallel: [
+          { inspect: { path: 'src/b.mjs' } },
+          { command: { command: 'node --version' } },
+        ] },
+      ],
+    });
+
+    assert.match(output, /^# ContextOS pipeline/);
+    assert.match(output, /## Step 1: inspect/);
+    assert.match(output, /## Step 2: parallel/);
+    assert.match(output, /### Action 2\.1: inspect/);
+    assert.match(output, /### Action 2\.2: run_command/);
+    assert.match(output, /v22\.22\.1/);
+    assert.doesNotMatch(output, /receipt-clean|logHandle|exitCode/);
+    assert.doesNotMatch(output, /inspect=OK|parallel#|step#|os-response|os-budget|receipt=/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }

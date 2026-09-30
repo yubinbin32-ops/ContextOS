@@ -1,56 +1,116 @@
 ---
 name: contextos
-description: MUST be used for non-trivial repository engineering (architecture exploration, multi-file edits, in-session verification, refactoring). For a trivial 1-line edit, use direct change or native tools to avoid fixed context overhead.
+description: "Required project development scaffold: every development task must read current ContextOS state and use ContextOS for delegation, evidence, commands, edits, architecture, and continuity."
 ---
 
 # ContextOS
 
-Default transport: `contextos({action,args,projectRoot})`.
+ContextOS is this project's required underlying development scaffold. Every development task starts by reading current OS state, and every source change goes through ContextOS so Block ownership, receipts and cross-session continuity stay current. Native tools are fallbacks.
 
-## Hard gates
-- Use OS for non-trivial repository work. Do not replace it with per-file `cat`/`sed`/`rg`, ad-hoc `npm test`, or native `apply_patch` loops.
-- If the compact tool is not visible, call `tool_search` once with `ContextOS compact repository tool`; do not call `list_mcp_resources`.
-- Load this Skill body once at session start. If it is not already present in context, read it once; never reread it or use shell reads as a recovery loop. Do not call host `update_plan` in an OS-owned task.
-- A/B/C launchers must install/enable the plugin and export `CONTEXTOS_HOME` before `codex exec`; do not spend a turn checking it.
-- After `decision=complete` or `read_complete=true`, native `apply_patch`, `rg`, `cat`, `sed`, and `npm test` are protocol violations. Use `change`/`work`; a passing verify is final evidence.
-- After a complete decision package, prefer `change`/`work`; if a named path is genuinely missing, use one explicit bounded recovery read with `full:true`/`refresh:true`, then mutate.
+Single entry point: `contextos({action, args, projectRoot})`. All parameters go inside `args`.
 
-## Route work
-- Trivial one-line change: one `change({edits,verify})`; skip `explore` and `ship`.
-- Complex task: the first OS call must be exactly one `pipeline` containing `explore`, known exact `inspect`, and baseline `verify`; then one `change`/`work` containing all edits, verify, architecture, and ship. Do not open with a standalone `explore`, `inspect`, or `work`. Do not add a directory-wide `inspect` (`paths:["."]`) to the first pipeline; `explore` already returns the map.
-- After `change` reports `verified and shipped`, finalize immediately; do not issue another `change` unless a failing check or an unmet requirement is explicitly present.
-- A decision packet is final: do not call `resume` or replay raw artifacts. After `read_complete=true`, mutate directly; after `false`, make only the named bounded recovery read.
-- Search with `work.search` or pipeline `{tool:"search",args:{query,root|paths}}`; use `maxLogBytes` on noisy commands. Do not place native `sed`/`cat`/`rg`/`npm test` between OS calls.
-- `verify.commands` is an array of command strings; pass a top-level `maxLogBytes` when the batch may be noisy.
-- Public surface: if `explore` reports a barrel gap, include the entrypoint/barrel update in the same change when the new capability is public.
+## Operating model
 
-## Inspection
-- Prefer exact `inspect({path,symbol|ranges:[{startLine,endLine}]})`. Explicit ranges are honored exactly; do not ask for a whole file when a slice is enough.
-- Use `inspect({paths,budget:"shallow"})` for maps. A multi-file inspect returns outlines and locators.
-- Use `budget:"full"` only for one bounded file or symbol. Whole-file replacement belongs in `change`/`work` edit payloads.
-- Read a large file once. Do not reconstruct it with many 80-line slices.
+- **main thread - brain**: owns the task contract, acceptance criteria, architecture decisions, integration and final judgement. It does not pre-explore or implement work that can be delegated.
+- **micro - small brain**: bounded retrieval, summarization, verification, or one small single-file edit. Multi-file implementation belongs to CLI.
+- **agent (CLI) - hands**: complex multi-file implementation, refactoring or repair in an isolated workspace. It can call micro and ContextOS itself.
+- **change / integrate - the only code mutation paths**. Every source edit goes through one of them so Block ownership and receipts stay current.
 
-## Micro
-- Micro is an explicitly assigned out-of-context executor, not the decision maker.
-- Health check: `ops({capability:"micro",action:"doctor"})`; it validates URL, model, and key without reading the ops Skill.
-- Run shape: `micro({preset:"triage",task:"...",pipeline:{steps:[...]},withOS:true,invocation:{tools:{enabled:true,allowCommands:true},provider:{maxRequests:5}}})`. Do not call `ops.micro.help` before an assigned run.
-- Attach bulky evidence to the first Micro call with `pipeline:{steps:[...]}`; do not run a separate pipeline and copy its output.
-- Use Micro when raw failure/log evidence exceeds 2,000 characters; not for trivial edits or already triaged evidence.
-- Use `delivery:"defer"` or `"auto"` when the host can continue; `"immediate"` only when the next decision depends on it; `"errors-only"` for fire-and-forget.
-- Executor validation: set `withOS:true`, `invocation.tools.enabled:true`, `invocation.tools.allowCommands:true`, and enough `provider.maxRequests`; check `providerRequests`, `toolRounds`, `toolCalls`, and `executionMode`.
+Delegation is the default; delegate when possible.
+
+## Hard rules
+
+1. **Route diagnosis by scope.** Bounded diagnosis/retrieval belongs to micro; multi-file implementation and open-ended repair belong to CLI. A micro task must state its goal, evidence, allowed operations, return format, and stop condition.
+2. **Code changes go through change or integrate.** The main thread never writes project files with native tools.
+3. **Use one pipeline as the default batch.** For 3+ independent reads, searches, commands, or edits, use one parallel pipeline call. It returns full step results; do not habitually split the work across pipeline or single calls.
+
+```js
+contextos({action:"pipeline",args:{mode:"parallel",steps:[
+  {tool:"ask",args:{inspect:[{path:"a.mjs",ranges:[[1,80]]}]}},
+  {tool:"command",args:{command:"rg -n foo src",id:"find"}},
+]}},projectRoot)
+```
+```
+4. **Native tools are the fallback**, for a quick single command or read that needs no OS evidence, architecture or delegation. They are not the path for exploration or diagnosis.
+
+## Context firewall
+
+Main context holds only the task contract, acceptance criteria, dispatch receipts and compact worker reports. Do not ingest source files, logs, diffs or architecture dumps; workers fetch evidence in their own context and return references.
+
+## Delegation lifecycle
+
+**micro** - one compact report for bounded retrieval, summarization, verification, or one small single-file edit; multi-file work is CLI.
+
+```js
+contextos({action:"micro", args:{
+  prompt:"Locate the pipeline entry points, persistence helpers and architecture owners. Return file:line references and risks only.",
+  execution:"analyze",
+  invocation:{tools:{enabled:true, allowCommands:true}}
+}}, projectRoot)
+```
+
+Micro sessions are retained for follow-up; at most 5 dormant, oldest evicted first.
+
+Use `delivery:"defer"` (or `"errors-only"`) when you do not need the result this turn: the call returns once queued and the pending report surfaces on your next ContextOS call. Use `delivery:"immediate"` only when the next step depends on the answer.
+
+- At 290s Micro returns `status:"partial"` and a session handle; continue that session instead of restarting.
+
+**CLI** - dispatch in the background, then collect with one bounded wait:
+
+```js
+contextos({action:"agent", args:{
+  task:"<bounded implementation contract with acceptance criteria>",
+  workspace:"/tmp/<isolated-copy>",
+  execution:"implement",
+  context:{allowedPaths:["<files>"], acceptance:["<command>"], verify:["<command>"]},
+  background:true
+}}, projectRoot)
+```
+
+```js
+contextos({action:"agent", args:{action:"wait", jobId:"<id>", waitMs:290000}}, projectRoot)
+contextos({action:"integrate", args:{jobId:"<id>"}}, projectRoot)
+```
+
+- A 290s wait or pipeline returns `status:"partial"` plus a resume handle. Resend only that handle or remaining steps to refresh the window; never redispatch a running job or replay completed steps.
+- After integrate succeeds, never re-implement the same files; review the report and run only the remaining project-level checks.
+- Reuse a retained CLI session when work is continuous and occupancy is below 233k; otherwise start a new conversation. Keep at most 5 completed sessions.
+
+**One-call delegation.** `pipeline` chains the whole lifecycle in one round:
+
+```js
+contextos({action:"pipeline", args:{continueOnFailure:false, steps:[
+  {tool:"agent", args:{task:"<contract>", workspace:"/tmp/<copy>", execution:"implement",
+    context:{allowedPaths:["<files>"], acceptance:["<command>"], verify:["<command>"]}, background:true}},
+  {tool:"agent", args:{action:"wait", jobId:"<id from step 1>", waitMs:240000}},
+  {tool:"integrate", args:{jobId:"<id from step 1>"}}
+]}}, projectRoot)
+```
+
+Step results carry the job id forward; read it from step 1 rather than inventing one. If wait returns a running snapshot, rerun only the wait and integrate steps - never re-dispatch a running job.
+
+## Tool guide
+
+| Need | Call |
+| --- | --- |
+| Exact source read | `ask` with `inspect:[{path, ranges:[[first,last]]}]` - deterministic, no model request |
+| Semantic discovery | `ask` with `request`, optional `known`, `purpose` |
+| Bounded retrieval/verification or one single-file edit | `micro({prompt, execution, invocation})`, or `pipeline` steps with `{ops:{capability:"micro",...}}` |
+| Execute a command | `command({command, focus})`, then `command({action:"get", id})` for its saved output |
+| Batch 3+ known independent actions | One `pipeline` call, often parallel, returns full step results. |
+| Multi-file or open-ended implementation | `agent({task, workspace, execution:"implement", context:{allowedPaths, acceptance, verify}, background:true})` |
+| Collect a worker | `agent({action:"wait", jobId, waitMs})` |
+| Merge an isolated diff | `integrate({jobId, verify?})` |
+| Edit files | `change({edits:[{path, target, replacement}], verify})` |
+| Plan, task, block, chain, architecture, session | `ops({capability, action, args})` |
+| Role readiness | `ops({capability:"micro", action:"doctor"})` |
 
 ## Architecture
-- Blocks are semantic ownership boundaries; Chains group Blocks; Links express directed relationships.
-- Never use `mod-*` or `kind:"module"` as ownership. Compact `change` normalizes `kind:"module"` to `component`, but new payloads must use semantic ids and kinds directly.
-- After changing business code, include `architecture.blocks` and `architecture.chains` in the same `change`/`work`. A state-only `change({architecture})` is valid.
-- Bind only paths touched by this change; do not enumerate unrelated repository paths. For a bounded repair, one semantic Block for the changed surface plus one Chain is valid; split only for real ownership boundaries.
-- Every tracked source path needs exactly one curated Block and at least one Chain membership.
-- A failing `verify` blocks `ship` unless `allowUnverified:true`. A blocked architecture contract must not leave partial ownership.
-- Compact shape:
-```js
-architecture:{blocks:[{id,title,kind,paths,summary}],chains:[{id,title,memberIds}]}
-```
-- Discover with `ops({capability:"architecture",action:"list|open|search"})`; `block.get` and `block.inspect` alias `open`.
 
-## Advanced
-Legal capabilities: `os_context`, `plan`, `task`, `block`, `chain`, `architecture`, `code`, `run_command`, `process`, `knowledge`, `session`, `system`, `profile`, `micro`, `artifact`, `telemetry`. Route them through `ops({capability: "...", action: "...", args: {...}})`; do not shell-read capability source.
+Every curated code file requires Block ownership. Read and update architecture through `ops({capability:"architecture"|"block"|"chain"})`; never read or edit `.contextos/graph.json` directly. `change` and `integrate` bind Blocks for the paths they touch.
+
+## Plan, task and continuity
+
+- `ops({capability:"session", action:"status"})` exposes intent, touched files, recent receipts and milestones.
+- `ops({capability:"plan"})` and `ops({capability:"task"})` hold the long-term breakdown across turns; read them before starting work and update them as tasks move.
+- State under `.contextos` is runtime-managed; read it through `ops`, not by opening files.

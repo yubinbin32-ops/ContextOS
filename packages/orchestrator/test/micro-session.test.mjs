@@ -12,6 +12,7 @@ import {
   deleteMicroSession,
   failMicroTurn,
   listMicroSessions,
+  pruneMicroSessions,
   readMicroSession,
   startMicroTurn,
   withMicroSessionLock,
@@ -283,6 +284,25 @@ test('micro sessions mark the final allowed turn as completed', () => {
     });
     assert.equal(snapshot.status, 'completed');
     assert.equal(snapshot.remainingTurns, 0);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('micro sessions retain at most five completed conversations', () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-micro-session-pool-'));
+  try {
+    for (let index = 0; index < 7; index += 1) {
+      const id = `pooled-${index}`;
+      createMicroSession(projectRoot, { sessionId: id });
+      startMicroTurn(projectRoot, id, `task ${index}`);
+      completeMicroTurn(projectRoot, id, { result: { content: `answer ${index}` }, receiptId: `receipt-${index}` });
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);
+    }
+    const retained = listMicroSessions(projectRoot, { limit: 20 }).map((session) => session.id);
+    assert.equal(retained.length, 5);
+    assert.deepEqual(retained.sort(), ['pooled-2', 'pooled-3', 'pooled-4', 'pooled-5', 'pooled-6']);
+    assert.equal(pruneMicroSessions(projectRoot).length, 0, 'pruning is idempotent once the pool is at its cap');
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }

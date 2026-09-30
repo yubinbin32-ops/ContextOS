@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { storeArtifact } from './artifact-store.mjs';
 import { enqueueMicroDelivery } from './micro-delivery.mjs';
+import { normalizeAgentReport } from './micro-agent-report.mjs';
+import { weightedCostTokens as computeWeightedCostTokens, MICRO_WORKER_COST_DIVISOR, MICRO_COST_FORMULA } from './micro-provider.mjs';
 
 const MICRO_REQUESTED_DELIVERIES = new Set(['immediate', 'defer', 'errors-only', 'auto']);
 const MICRO_DELIVERY_OUTCOMES = new Set(['immediate', 'deferred', 'success-hidden', 'error']);
@@ -29,6 +31,37 @@ function preloadCharCount(preload) {
   const chars = Number(preload.chars);
   if (Number.isFinite(chars) && chars >= 0) return Math.floor(chars);
   return typeof preload.summary === 'string' ? preload.summary.length : 0;
+}
+
+function measuredCount(value) {
+  if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) return null;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && !/^\d+(?:\.0+)?$/.test(value.trim())) return null;
+  const count = Number(value);
+  return Number.isSafeInteger(count) && count >= 0 ? count : null;
+}
+
+function providerRequestCount(result, invocation = {}) {
+  const observed = measuredCount(result?.providerRequests ?? invocation.providerRequests);
+  return result?.provider === 'cli'
+    ? observed
+    : (observed ?? (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0));
+}
+
+function costEstimateFromUsage(usage, { complete = true } = {}) {
+  const weightedCostTokens = computeWeightedCostTokens(usage);
+  if (weightedCostTokens === null) return null;
+  const rawTokens = measuredCount(usage?.total_tokens ?? usage?.totalTokens);
+  return {
+    ...(complete ? {} : { complete: false }),
+    rawTokens,
+    weightedCostTokens,
+    workerDivisor: MICRO_WORKER_COST_DIVISOR,
+    mainEquivalentTokens: weightedCostTokens / MICRO_WORKER_COST_DIVISOR,
+    weights: { cachedInput: 0.1, uncachedInput: 2, output: 10 },
+    formula: MICRO_COST_FORMULA,
+    assumption: 'weighted main-token equivalent; not an actual provider bill',
+  };
 }
 
 export const RESPONSE_BUDGETS = Object.freeze({
@@ -125,7 +158,7 @@ export function finalizeResponse(text, {
   const contentBudget = hintText ? Math.max(0, budget - hintText.length) : budget;
   const clippedContent = clipText(raw, contentBudget, { label: 'response', keepTail: true });
   const initialClipped = `${clippedContent}${hintText}`;
-  const initiallyTruncated = initialClipped.length < raw.length;
+  const initiallyTruncated = clippedContent !== raw;
   let artifact = null;
 
   if ((initiallyTruncated || forceArtifact) && projectRoot) {
@@ -146,17 +179,20 @@ export function finalizeResponse(text, {
   // The artifact locator is part of the host response. Reserve its space
   // after the id is known so bookkeeping cannot make a bounded response grow
   // past its declared budget.
-  const finalContentBudget = artifact && budget !== Infinity
-    ? Math.max(0, budget - suffix.length)
-    : contentBudget;
+  // Bookkeeping shares one budget with source evidence. Reserve both the
+  // recovery locator and route hint, and measure truncation on the body itself.
+  const boundedSuffix = budget === Infinity ? suffix : suffix.slice(0, budget);
+  const boundedHint = budget === Infinity ? hintText
+    : hintText.slice(0, Math.max(0, budget - boundedSuffix.length));
+  const finalContentBudget = budget === Infinity ? Infinity
+    : Math.max(0, budget - boundedSuffix.length - boundedHint.length);
   const finalContent = clipText(raw, finalContentBudget, { label: 'response', keepTail: true });
-  const clipped = `${finalContent}${hintText}`;
-  const finalText = `${clipped}${suffix}`;
+  const finalText = `${finalContent}${boundedHint}${boundedSuffix}`;
   const meta = {
     chars: finalText.length,
     estimatedTokens: estimateTokens(finalText),
     fullChars: raw.length,
-    truncated: finalText.length < raw.length,
+    truncated: finalContent !== raw,
     forcedArtifact: Boolean(forceArtifact && artifact),
     receiptId,
     artifactId: artifact?.id || null,
@@ -177,6 +213,7 @@ export function summarizeCommandReceipt(receipt = {}, { includeDiagnostics = fal
     durationMs: receipt.durationMs,
     receiptId: receipt.id || null,
   };
+  if (typeof receipt.text === 'string') summary.text = receipt.text;
   if (receipt.summary) summary.summary = receipt.summary;
   if (receipt.distinctFiles?.length) summary.files = receipt.distinctFiles.slice(0, 8);
   if (receipt.logHandle) summary.log = receipt.logHandle;
@@ -234,14 +271,19 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
   const estimatedUsage = result.estimatedUsage || {};
   const cost = result.cost || {};
   const budget = result.budget || {};
+  const effectiveCostEstimate = result.costEstimate
+    || costEstimateFromUsage(usage, { complete: result.providerUsageComplete !== false });
   const preload = result.preload && typeof result.preload === 'object' && !Array.isArray(result.preload)
     ? result.preload
     : null;
   const invocation = result.invocation && typeof result.invocation === 'object'
     ? result.invocation
     : {};
-  const toolCallCount = Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
-  const toolRounds = Number(invocation.toolRounds ?? result.steps) || 0;
+  const toolCallCount = Array.isArray(result.toolCalls)
+    ? result.toolCalls.length
+    : measuredCount(invocation.toolCalls ?? result.toolCallCount);
+  const toolRounds = measuredCount(invocation.toolRounds ?? result.steps);
+  const hostTurnsSaved = measuredCount(result.hostTurnsSaved);
   const executionMode = result.executionMode
     || (!result.withOS
       ? 'summarizer-only'
@@ -257,6 +299,7 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     statusCode: Number.isFinite(Number(result.statusCode)) ? Number(result.statusCode) : null,
     preset: result.preset || null,
     model: result.model || null,
+    ...(effectiveCostEstimate ? { costEstimate: effectiveCostEstimate } : {}),
     providerHost: result.providerHost || null,
     inputSource: result.inputSource || null,
     inputTruncated: Boolean(result.inputTruncated),
@@ -271,19 +314,20 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     sessionId: result.sessionId || null,
     sessionMode: result.sessionMode || null,
     batch: Boolean(result.batch),
-    steps: Number(result.steps) || 0,
+    steps: measuredCount(result.steps),
     executionMode,
     summarizerOnly: executionMode === 'summarizer-only',
-    hostTurnsSaved: Number(result.hostTurnsSaved ?? toolRounds) || 0,
+    hostTurnsSaved,
+    hostTurnsSavedEvidence: hostTurnsSaved === null ? 'unknown' : 'explicit',
     toolCallCount,
     toolNames: Array.isArray(result.toolCalls) ? result.toolCalls.map((call) => call.name).filter(Boolean) : [],
     durationMs: Number(result.durationMs) || 0,
     usageSource: result.usageSource || (result.providerUsage ? 'provider' : 'unavailable'),
+    providerUsageComplete: result.providerUsageComplete !== false,
     providerUsageCalls: Number(result.providerUsageCalls) || 0,
     estimatedUsageCalls: Number(result.estimatedUsageCalls) || 0,
     deduplicatedToolCallCount: Number(result.deduplicatedToolCallCount) || 0,
-    providerRequests: Number(result.providerRequests ?? invocation.providerRequests)
-      || (Number(result.providerUsageCalls) || 0) + (Number(result.estimatedUsageCalls) || 0),
+    providerRequests: providerRequestCount(result, invocation),
     toolRounds,
     shortCircuited: Boolean(invocation.shortCircuited),
     shortCircuitReason: invocation.shortCircuitReason || null,
@@ -293,8 +337,15 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     estimatedPromptTokens: result.estimatedUsage ? Number(estimatedUsage.prompt_tokens) || 0 : null,
     estimatedCompletionTokens: result.estimatedUsage ? Number(estimatedUsage.completion_tokens) || 0 : null,
     estimatedTotalTokens: result.estimatedUsage ? Number(estimatedUsage.total_tokens) || 0 : null,
+    weightedCostTokens: effectiveCostEstimate?.weightedCostTokens ?? null,
+    mainEquivalentTokens: effectiveCostEstimate?.mainEquivalentTokens ?? null,
     hostSessionId: hostSessionId || result.hostSessionId || null,
-    estimatedCostUsd: Number(cost.estimatedUsd) || 0,
+    estimatedCostUsd: cost.estimatedUsd == null || cost.pricingConfigured === false ? null : (Number(cost.estimatedUsd) || 0),
+    ...(result.provider === 'cli'
+      ? { provider: 'cli', usageRaw: result.usageRaw || null, cachedInputTokens: usage.cached_input_tokens ?? null, uncachedInputTokens: usage.uncached_input_tokens ?? null }
+      : (usage.cached_input_tokens !== undefined || usage.uncached_input_tokens !== undefined
+        ? { cachedInputTokens: Number(usage.cached_input_tokens) || 0, uncachedInputTokens: Number(usage.uncached_input_tokens) || 0 }
+        : {})),
     maxProviderTokens: Number(budget.maxProviderTokens) || null,
     maxCostUsd: Number(budget.maxCostUsd) || null,
     budgetExceeded: result.budgetExceeded || null,
@@ -343,6 +394,10 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     executorIdleCalls: 0,
     summarizerOnlyCalls: 0,
     hostTurnsSaved: 0,
+    hostTurnsSavedExplicitCalls: 0,
+    hostTurnsSavedUnknownCalls: 0,
+    hostTurnsSavedLegacyProxy: 0,
+    hostTurnsSavedLegacyProxyCalls: 0,
     preloadCalls: 0,
     preloadChars: 0,
     preloadCacheHits: 0,
@@ -350,12 +405,21 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     batchCalls: 0,
     persistentSessionCalls: 0,
     toolCallCount: 0,
+    toolCallCountUnknownCalls: 0,
     steps: 0,
     providerUsageCalls: 0,
     estimatedUsageCalls: 0,
     deduplicatedToolCallCount: 0,
     providerRequests: 0,
+    providerRequestsUnknownCalls: 0,
+    costUnknownCalls: 0,
+    weightedCostTokens: 0,
+    weightedMainEquivalentTokens: 0,
+    legacyMainEquivalentTokens: 0,
+    costEstimateUnavailableCalls: 0,
     toolRounds: 0,
+    toolRoundsUnknownCalls: 0,
+    stepsUnknownCalls: 0,
     shortCircuitedCalls: 0,
     providerUsageEntries: 0,
     estimatedUsageEntries: 0,
@@ -379,15 +443,28 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     if (entry.executionMode === 'executor') totals.executorCalls += 1;
     else if (entry.executionMode === 'executor-idle') totals.executorIdleCalls += 1;
     else if (entry.executionMode === 'summarizer-only' || entry.summarizerOnly) totals.summarizerOnlyCalls += 1;
-    totals.hostTurnsSaved += Number(entry.hostTurnsSaved) || 0;
+    if (entry.hostTurnsSavedEvidence === 'explicit') {
+      if (entry.hostTurnsSaved == null) totals.hostTurnsSavedUnknownCalls += 1;
+      else {
+        totals.hostTurnsSaved += Number(entry.hostTurnsSaved) || 0;
+        totals.hostTurnsSavedExplicitCalls += 1;
+      }
+    } else if (entry.hostTurnsSavedEvidence === 'unknown' || entry.hostTurnsSaved == null) {
+      totals.hostTurnsSavedUnknownCalls += 1;
+    } else {
+      totals.hostTurnsSavedLegacyProxy += Number(entry.hostTurnsSaved) || 0;
+      totals.hostTurnsSavedLegacyProxyCalls += 1;
+    }
     if (entry.preloadAttached ?? entry.preload) totals.preloadCalls += 1;
     totals.preloadChars += Number(entry.preloadChars) || 0;
     if (entry.preloadCacheHit) totals.preloadCacheHits += 1;
     totals.pipelineRuns += Number(entry.pipelineRuns) || 0;
     if (entry.batch) totals.batchCalls += 1;
     if (entry.sessionMode === 'persistent') totals.persistentSessionCalls += 1;
-    totals.toolCallCount += Number(entry.toolCallCount) || 0;
-    totals.steps += Number(entry.steps) || 0;
+    if (entry.toolCallCount == null) totals.toolCallCountUnknownCalls += 1;
+    else totals.toolCallCount += Number(entry.toolCallCount) || 0;
+    if (entry.steps == null) totals.stepsUnknownCalls += 1;
+    else totals.steps += Number(entry.steps) || 0;
     const hasProviderUsage = entry.usageSource === 'provider' || entry.usageSource === 'mixed';
     const hasEstimatedUsage = entry.usageSource === 'estimated' || entry.usageSource === 'mixed';
     if (hasProviderUsage && hasEstimatedUsage) totals.mixedUsageEntries += 1;
@@ -396,8 +473,11 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     totals.providerUsageCalls += Number(entry.providerUsageCalls) || 0;
     totals.estimatedUsageCalls += Number(entry.estimatedUsageCalls) || 0;
     totals.deduplicatedToolCallCount += Number(entry.deduplicatedToolCallCount) || 0;
-    totals.providerRequests += Number(entry.providerRequests) || 0;
-    totals.toolRounds += Number(entry.toolRounds) || 0;
+    if (entry.provider === 'cli' && entry.providerRequests == null) totals.providerRequestsUnknownCalls += 1;
+    else totals.providerRequests += Number(entry.providerRequests) || 0;
+    if (entry.estimatedCostUsd == null || entry.providerUsageComplete === false) totals.costUnknownCalls += 1;
+    if (entry.toolRounds == null) totals.toolRoundsUnknownCalls += 1;
+    else totals.toolRounds += Number(entry.toolRounds) || 0;
     if (entry.shortCircuited) totals.shortCircuitedCalls += 1;
     if (hasProviderUsage) {
       totals.promptTokens += Number(entry.promptTokens) || 0;
@@ -409,22 +489,42 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
       totals.estimatedCompletionTokens += Number(entry.estimatedCompletionTokens) || 0;
       totals.estimatedTotalTokens += Number(entry.estimatedTotalTokens) || 0;
     }
-    if (!hasProviderUsage && !hasEstimatedUsage) totals.usageUnavailableCalls += 1;
+    if (entry.providerUsageComplete === false || (!hasProviderUsage && !hasEstimatedUsage)) totals.usageUnavailableCalls += 1;
     totals.estimatedCostUsd += Number(entry.estimatedCostUsd) || 0;
+    if (entry.costEstimate) {
+      totals.weightedCostTokens += Number(entry.costEstimate.weightedCostTokens) || 0;
+      totals.weightedMainEquivalentTokens += Number(entry.costEstimate.mainEquivalentTokens) || 0;
+      if (entry.costEstimate.weightedCostTokens == null || entry.costEstimate.mainEquivalentTokens == null) totals.costEstimateUnavailableCalls += 1;
+    } else totals.costEstimateUnavailableCalls += 1;
+    if (entry.totalTokens != null) totals.legacyMainEquivalentTokens += Number(entry.totalTokens) / MICRO_WORKER_COST_DIVISOR;
+    else totals.legacyMainEquivalentTokens = null;
     totals.durationMs += Number(entry.durationMs) || 0;
     const presetKey = entry.preset || 'custom';
     const modelKey = entry.model || 'unknown';
-    const preset = byPreset.get(presetKey) || { preset: presetKey, calls: 0, totalTokens: 0 };
+    const preset = byPreset.get(presetKey) || { preset: presetKey, calls: 0, totalTokens: 0, weightedCostTokens: 0, mainEquivalentTokens: 0 };
     preset.calls += 1;
     preset.totalTokens += Number(entry.totalTokens) || 0;
+    preset.weightedCostTokens += Number(entry.costEstimate?.weightedCostTokens) || 0;
+    preset.mainEquivalentTokens += Number(entry.costEstimate?.mainEquivalentTokens) || 0;
     byPreset.set(presetKey, preset);
-    const model = byModel.get(modelKey) || { model: modelKey, calls: 0, totalTokens: 0 };
+    const model = byModel.get(modelKey) || { model: modelKey, calls: 0, totalTokens: 0, weightedCostTokens: 0, mainEquivalentTokens: 0 };
     model.calls += 1;
     model.totalTokens += Number(entry.totalTokens) || 0;
+    model.weightedCostTokens += Number(entry.costEstimate?.weightedCostTokens) || 0;
+    model.mainEquivalentTokens += Number(entry.costEstimate?.mainEquivalentTokens) || 0;
     byModel.set(modelKey, model);
   }
   return {
     ...totals,
+    totalTokensComplete: totals.usageUnavailableCalls === 0 && totals.estimatedUsageEntries === 0 && totals.mixedUsageEntries === 0,
+    weightedCostTokensComplete: totals.costEstimateUnavailableCalls === 0 && totals.usageUnavailableCalls === 0 && totals.estimatedUsageEntries === 0 && totals.mixedUsageEntries === 0,
+    weightedMainEquivalentTokensComplete: totals.costEstimateUnavailableCalls === 0 && totals.usageUnavailableCalls === 0 && totals.estimatedUsageEntries === 0 && totals.mixedUsageEntries === 0,
+    mainEquivalentTokens: totals.legacyMainEquivalentTokens,
+    mainEquivalentTokensComplete: totals.costEstimateUnavailableCalls === 0 && totals.usageUnavailableCalls === 0 && totals.estimatedUsageEntries === 0 && totals.mixedUsageEntries === 0,
+    mainEquivalentTokensDiagnosticOnly: true,
+    ...(totals.costUnknownCalls ? { estimatedCostUsd: null } : {}),
+    costFormula: MICRO_COST_FORMULA,
+    rawTokensDiagnosticOnly: true,
     deliveryOutcomes,
     byPreset: [...byPreset.values()].sort((a, b) => b.totalTokens - a.totalTokens),
     byModel: [...byModel.values()].sort((a, b) => b.totalTokens - a.totalTokens),
@@ -448,7 +548,7 @@ export function persistMicroArtifact(projectRoot, result, {
   try {
     fs.mkdirSync(logDir, { recursive: true });
     const detail = JSON.stringify({ ...result, receiptId }, null, 2) + '\n';
-    fs.writeFileSync(path.join(logDir, `${receiptId}.log`), detail, 'utf8');
+    fs.writeFileSync(path.join(logDir, `${receiptId}.log`), detail, { encoding: 'utf8', mode: 0o600 });
     storeArtifact(projectRoot, detail, {
       id: artifactId,
       kind: 'micro-result',
@@ -466,6 +566,8 @@ function projectProviderUsage(result) {
         promptTokens: Number(usage.prompt_tokens) || 0,
         completionTokens: Number(usage.completion_tokens) || 0,
         totalTokens: Number(usage.total_tokens) || 0,
+        ...(usage.cached_input_tokens !== undefined ? { cachedInputTokens: Number(usage.cached_input_tokens) || 0 } : {}),
+        ...(usage.uncached_input_tokens !== undefined ? { uncachedInputTokens: Number(usage.uncached_input_tokens) || 0 } : {}),
       }
     : null;
   const invocation = result?.invocation && typeof result.invocation === 'object'
@@ -473,24 +575,26 @@ function projectProviderUsage(result) {
     : {};
   return {
     usageSource: result?.usageSource || 'unavailable',
+    ...(result?.providerUsageComplete === false ? { providerUsageComplete: false } : {}),
     providerUsage: project(result?.providerUsage),
     estimatedUsage: project(result?.estimatedUsage),
     providerUsageCalls: Number(result?.providerUsageCalls) || 0,
     estimatedUsageCalls: Number(result?.estimatedUsageCalls) || 0,
-    providerRequests: Number(result?.providerRequests ?? invocation.providerRequests)
-      || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0),
+    providerRequests: providerRequestCount(result, invocation),
+    ...(result?.costEstimate ? { costEstimate: result.costEstimate } : {}),
+    ...(result?.routing ? { routing: result.routing } : {}),
+    ...(result?.provider === 'cli' ? { provider: 'cli', jobId: result.jobId, cliSessionId: result.cliSessionId || null } : {}),
     invocation: {
       evidenceMode: invocation.evidenceMode || (result?.preload ? 'pipeline' : 'none'),
       evidenceCacheHit: Boolean(invocation.evidenceCacheHit || result?.preload?.cacheHit),
       pipelineRuns: Number(invocation.pipelineRuns ?? result?.preload?.pipelineRuns) || 0,
       executionMode: result?.executionMode || invocation.executionMode || null,
       allowCommands: Boolean(invocation.allowCommands),
-      providerRequests: Number(invocation.providerRequests ?? result?.providerRequests)
-        || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0),
-      toolRounds: Number(invocation.toolRounds ?? result?.steps) || 0,
+      providerRequests: providerRequestCount(result, invocation),
+      toolRounds: measuredCount(invocation.toolRounds ?? result?.steps),
       toolCalls: Array.isArray(result?.toolCalls)
         ? result.toolCalls.length
-        : (Number(invocation.toolCalls ?? result?.toolCallCount) || 0),
+        : measuredCount(invocation.toolCalls ?? result?.toolCallCount),
       shortCircuited: Boolean(invocation.shortCircuited),
       ...(invocation.shortCircuitReason ? { shortCircuitReason: invocation.shortCircuitReason } : {}),
     },
@@ -525,7 +629,7 @@ function failedToolCall(result) {
   return { call, args, error: call.error || output?.error || 'OS reported failure' };
 }
 
-export function projectMicroResult(result, { projectRoot, hostSessionId = null, full = false, maxChars = RESPONSE_BUDGETS.micro } = {}) {
+export function projectMicroResult(result, { projectRoot, hostSessionId = null, full = false, maxChars = null } = {}) {
   const requestedDelivery = normalizeMicroRequestedDelivery(result?.requestedDelivery ?? result?.delivery);
   const effectiveHostSessionId = hostSessionId || result?.hostSessionId || null;
   const persisted = persistMicroArtifact(projectRoot, result, { recordUsage: false, hostSessionId: effectiveHostSessionId });
@@ -539,12 +643,24 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
     });
   };
   if (!result?.ok) {
+    const partial = result?.partial === true;
+    const resume = result?.resume || (partial && result?.sessionId
+      ? { kind: 'micro', action: 'send', sessionId: result.sessionId }
+      : null);
     const projected = {
       ok: false,
+      status: partial ? 'partial' : 'failed',
+      ...(partial ? { partial: true } : {}),
+      ...(result?.errorCode ? { errorCode: result.errorCode } : {}),
+      ...(resume ? { resume } : {}),
+      ...(result?.sessionId ? { sessionId: result.sessionId } : {}),
+      ...(partial && result?.guidance ? { guidance: clipText(result.guidance, maxChars, { label: 'micro guidance' }) } : {}),
+      ...(partial ? { content: clipText(result?.content || result?.error || 'Partial Micro work is retained.', maxChars, { label: 'micro partial' }) } : {}),
       receiptId,
       artifactId,
+      ...(result?.implementationEvidence ? { implementationEvidence: result.implementationEvidence } : {}),
       ...projectProviderUsage(result),
-      error: clipText(result?.error || 'Micro task failed', maxChars, { label: 'micro error' }),
+      ...(partial ? {} : { error: clipText(result?.error || 'Micro task failed', maxChars, { label: 'micro error' }) }),
       ...(result?.budgetExceeded ? { budgetExceeded: result.budgetExceeded } : {}),
     };
     recordOutcome('error', false);
@@ -560,15 +676,28 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
       deliveryFallback = 'Micro did not provide needsHost; returned its answer to avoid losing it.';
     }
   }
+  if (result.agentReport?.needsHost && delivery === 'errors-only') delivery = 'defer';
 
   // Evidence results are JSON internally, but returning that JSON as `content`
   // and then returning its parsed fields duplicates the same payload to the host.
   const evidenceAnswer = result.preset === 'evidence' && typeof result.structured?.answer === 'string'
     ? result.structured.answer.trim()
     : '';
-  const content = evidenceAnswer || (result.content || '');
+  const content = result.agentReport ? JSON.stringify(result.agentReport) : evidenceAnswer || (result.content || '');
+  // A provider that stopped at its completion cap returns ok:true with a
+  // silently short report. Surface that state so the host can continue the
+  // retained session instead of re-discovering the missing half.
+  const providerTruncated = result?.providerTruncated === true
+    || ['length', 'max_tokens', 'max_output_tokens'].includes(String(result?.finishReason || '').toLowerCase());
+  const truncationNote = providerTruncated
+    ? {
+        providerTruncated: true,
+        finishReason: result.finishReason || 'length',
+        guidance: `Micro stopped at its completion cap; the report may be incomplete. Continue session ${result.sessionId || '(unknown)'} with sessionAction:"continue", or request full:true.`,
+      }
+    : {};
 
-  if (requestedDelivery === 'errors-only') {
+  if (delivery === 'errors-only') {
     const failedCall = failedToolCall(result);
     if (failedCall) {
       const action = failedCall.args && typeof failedCall.args === 'object'
@@ -613,6 +742,7 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
         artifactId,
         queuedDeliveryId: queued.deliveryId,
         chars: deferredContent.length,
+        ...truncationNote,
         ...projectProviderUsage(result),
         ...(queued.duplicate ? { duplicate: true } : {}),
         ...(queued.delivered ? { delivered: true } : {}),
@@ -633,6 +763,7 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
       artifactId,
       chars: content.length,
       ...(requestedDelivery === 'auto' ? { needsHost: false } : {}),
+      ...truncationNote,
       ...projectProviderUsage(result),
     };
     recordOutcome('success-hidden', true);
@@ -645,6 +776,7 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
       content: result.content || '',
       receiptId,
       artifactId,
+      ...truncationNote,
       delivery: 'immediate',
       ...(deliveryFallback ? { deliveryFallback } : {}),
     };
@@ -658,8 +790,9 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
     receiptId,
     artifactId,
     chars: content.length,
-    truncated: projected.length < content.length,
-    content: projected,
+    truncated: projected.length < content.length || providerTruncated,
+    ...truncationNote,
+    ...(result.agentReport ? { report: normalizeAgentReport(result.agentReport, { jobId: result.agentReport.jobId, status: result.agentReport.status, maxChars }) } : { content: projected }),
     ...(deliveryFallback ? { deliveryFallback } : {}),
     ...(requestedDelivery === 'auto' && result.needsHost === true ? { needsHost: true } : {}),
     ...projectProviderUsage(result),

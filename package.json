@@ -1,7 +1,7 @@
 {
   "name": "contextos",
-  "version": "2.7.1",
-  "description": "ContextOS is a context-governance MCP runtime for AI coding agents, with bounded repository I/O, receipt-first verification, and a multi-turn Micro subagent.",
+  "version": "2.7.2",
+  "description": "Local MCP tools for exact code evidence, reusable command results, API retrieval, and optional CLI coding assistants.",
   "license": "MIT",
   "type": "module",
   "homepage": "https://dashend.cn",
@@ -42,7 +42,8 @@
     "plugins/contextos/skills/contextos/SKILL.md",
     "plugins/contextos/skills/contextos/references/",
     "packages/code-intel/grammars/",
-    "AI_SETUP.md",
+    "plugins/contextos/skills/contextos-ops/",
+    "setup.md",
     "README.md",
     "README_zh.md",
     "LICENSE"
@@ -58,13 +59,12 @@
     "preplugin:build": "npm run version:sync",
     "verify": "npm test && npm run plugin:verify && npm run dist:smoke && npm run acceptance:real && npm run desktop:build",
     "plugin:build": "node scripts/build-plugin.mjs",
-    "plugin:verify": "npm run plugin:build && node scripts/plugin-smoke.mjs",
+    "plugin:verify": "npm run plugin:build && node scripts/plugin-smoke.mjs && node scripts/micro-worker-smoke.mjs",
     "dist:smoke": "node scripts/distribution-smoke.mjs",
     "acceptance:real": "node scripts/p7-real-acceptance.mjs",
     "preplugin:install": "npm run version:sync",
     "plugin:install": "npm run plugin:build && node scripts/install-plugin.mjs",
-    "plugin:install:check": "node scripts/install-plugin.mjs --check",
-    "benchmark:context": "npm run plugin:build && node scripts/benchmark-context.mjs",
+    "plugin:install:check": "node scripts/install-plugin.mjs --check --runtime-check",
     "predesktop:build": "npm run version:sync",
     "desktop:build": "swift build --package-path apps/desktop",
     "desktop:run": "swift run --package-path apps/desktop contextos-desktop",
@@ -87,7 +87,6 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
-    "esbuild": "^0.25.9",
-    "js-tiktoken": "1.0.21"
+    "esbuild": "^0.25.9"
   }
 }

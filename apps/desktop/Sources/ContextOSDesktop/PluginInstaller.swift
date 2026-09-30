@@ -172,7 +172,7 @@ enum PluginInstaller {
 
         // 3. Antigravity
         let antigravityAppExists = FileManager.default.fileExists(atPath: "/Applications/Antigravity.app") ||
-                                   FileManager.default.fileExists(atPath: home.appending(path: ".gemini/antigravity").path)
+                                   FileManager.default.fileExists(atPath: home.appending(path: ".gemini/antigravity").path) || FileManager.default.fileExists(atPath: home.appending(path: ".local/bin/agy").path)
         let antigravityUserURL = home.appending(path: ".gemini/config/mcp_config.json")
         let antigravityMetadata = antigravityAppExists ? readMcpMetadata(at: antigravityUserURL) : (version: nil, build: nil)
         let antigravityInstalledVer = antigravityMetadata.version
@@ -271,27 +271,12 @@ enum PluginInstaller {
             .standardizedFileURL
         let home = FileManager.default.homeDirectoryForCurrentUser
 
-        var cloudEnv: [String: String]? = nil
-        if let root = projectRoot {
-            let projJson = root.appending(path: ".contextos/project.json")
-            if let data = try? Data(contentsOf: projJson),
-               let dict = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-               let isCloud = dict["isCloud"] as? Bool, isCloud,
-               let cloudUrl = dict["cloudUrl"] as? String {
-                cloudEnv = [
-                    "CONTEXTOS_MODE": "cloud",
-                    "CONTEXTOS_CLOUD_URL": cloudUrl,
-                    "CONTEXTOS_PROJECT_ID": (dict["id"] as? String) ?? "contextos"
-                ]
-            }
-        }
-
         switch id {
         case "claude":
             let claudeConfigURL = home.appending(path: "Library/Application Support/Claude/claude_desktop_config.json")
             try? FileManager.default.createDirectory(at: claudeConfigURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try cleanJsonMcp(at: claudeConfigURL)
-            _ = try configureJsonMcp(at: claudeConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+            _ = try configureJsonMcp(at: claudeConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
 
         case "cursor":
             // 1. Clean old skill and MCP config
@@ -302,36 +287,40 @@ enum PluginInstaller {
             try cleanJsonMcp(at: userMcpConfig)
 
             // 2. Copy fresh skill and write fresh MCP config
-            try syncDirectory(from: skillSource, to: userSkillDest)
-            _ = try configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+            try syncSkills(from: skillSource, to: userSkillDest)
+            _ = try configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
 
             // 3. Update project root IF .cursor directory already explicitly existed
             if let root = projectRoot {
                 let projectCursorDir = root.appending(path: ".cursor")
                 if FileManager.default.fileExists(atPath: projectCursorDir.path) {
                     try cleanJsonMcp(at: projectCursorDir.appending(path: "mcp.json"))
-                    _ = try configureJsonMcp(at: projectCursorDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                    _ = try configureJsonMcp(at: projectCursorDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
                 }
             }
 
         case "antigravity":
             // 1. Clean old skill and MCP config
             let geminiConfigDir = home.appending(path: ".gemini/config")
-            let userSkillDest = geminiConfigDir.appending(path: "skills/contextos")
+            let userSkillDest = home.appending(path: ".gemini/antigravity-cli/skills/contextos")
             let userMcpConfig = geminiConfigDir.appending(path: "mcp_config.json")
             try? FileManager.default.createDirectory(at: geminiConfigDir, withIntermediateDirectories: true)
             try cleanJsonMcp(at: userMcpConfig)
 
             // 2. Copy fresh skill and write fresh MCP config
-            try syncDirectory(from: skillSource, to: userSkillDest)
-            _ = try configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+            try syncSkills(from: skillSource, to: userSkillDest)
+            let legacySkillDest = geminiConfigDir.appending(path: "skills/contextos")
+            if FileManager.default.fileExists(atPath: legacySkillDest.path) {
+                try syncSkills(from: skillSource, to: legacySkillDest)
+            }
+            _ = try configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
 
             // 3. Update project root IF .agents/mcp_config.json already explicitly existed
             if let root = projectRoot {
                 let projectAgentsConfig = root.appending(path: ".agents/mcp_config.json")
                 if FileManager.default.fileExists(atPath: projectAgentsConfig.path) {
                     try cleanJsonMcp(at: projectAgentsConfig)
-                    _ = try configureJsonMcp(at: projectAgentsConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                    _ = try configureJsonMcp(at: projectAgentsConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
                 }
             }
 
@@ -344,15 +333,15 @@ enum PluginInstaller {
             try cleanJsonMcp(at: userMcpConfig)
 
             // 2. Copy fresh skill and write fresh MCP config
-            try syncDirectory(from: skillSource, to: userSkillDest)
-            _ = try configureJsonMcp(at: userOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+            try syncSkills(from: skillSource, to: userSkillDest)
+            _ = try configureJsonMcp(at: userOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
 
             // 3. Update project root IF .opencode directory already explicitly existed
             if let root = projectRoot {
                 let projectOpencodeDir = root.appending(path: ".opencode")
                 if FileManager.default.fileExists(atPath: projectOpencodeDir.path) {
                     try cleanJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"))
-                    _ = try configureJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                    _ = try configureJsonMcp(at: projectOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
                 }
             }
 
@@ -413,10 +402,10 @@ enum PluginInstaller {
             if let executable = try? codexExecutable() {
                 let installResult = try? run(executable, arguments: ["plugin", "add", "contextos@personal", "--json"])
                 if installResult?.status != 0 {
-                    try configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                    try configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
                 }
             } else {
-                try configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: cloudEnv)
+                try configureTomlMcp(at: codexConfigURL, serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
             }
 
         default:
@@ -646,6 +635,14 @@ enum PluginInstaller {
         process.waitUntilExit()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
+    private static func syncSkills(from sourceURL: URL, to destURL: URL) throws {
+        try syncDirectory(from: sourceURL, to: destURL)
+        let opsSource = sourceURL.deletingLastPathComponent().appending(path: "contextos-ops")
+        if FileManager.default.fileExists(atPath: opsSource.path) {
+            try syncDirectory(from: opsSource, to: destURL.deletingLastPathComponent().appending(path: "contextos-ops"))
+        }
     }
 
     private static func syncDirectory(from sourceURL: URL, to destURL: URL) throws {

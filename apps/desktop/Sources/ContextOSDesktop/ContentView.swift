@@ -336,7 +336,6 @@ struct ContentView: View {
 
     private var projectHeader: some View {
         VStack(alignment: .leading, spacing: 7) {
-            let isCloudProject = store.snapshot.project.name.contains("(Cloud)") || store.projectRoot.contains(".contextos/cloud_projects")
             HStack(alignment: .center, spacing: 6) {
                 Menu {
                     if !store.recentProjects.isEmpty {
@@ -346,10 +345,9 @@ struct ContentView: View {
                                     store.openProject(project)
                                 } label: {
                                     let isCurrent = project.path == store.projectRoot
-                                    let isCloud = project.name.contains("(Cloud)") || project.path.contains(".contextos/cloud_projects")
                                     Label(
                                         project.name,
-                                        systemImage: isCurrent ? "checkmark" : (isCloud ? "cloud" : "folder")
+                                        systemImage: isCurrent ? "checkmark" : "folder"
                                     )
                                 }
                             }
@@ -375,7 +373,7 @@ struct ContentView: View {
                     Button(store.text("openProject")) { store.chooseProject() }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: isCloudProject ? "cloud.fill" : "folder.fill")
+                        Image(systemName: "folder.fill")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(ContextOSTheme.focus)
                         Text(store.snapshot.project.name)
@@ -398,17 +396,6 @@ struct ContentView: View {
                 .menuIndicator(.hidden)
                 .help(store.activeLocale == "zh-Hans" ? "点击切换项目或查看最近项目 (⌘O 打开)" : "Click to switch project or view recents (⌘O to open)")
 
-                if isCloudProject {
-                    Button {
-                        Task { await store.refreshCloudProject() }
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(ContextOSTheme.focus)
-                    }
-                    .buttonStyle(.plain)
-                    .help(store.activeLocale == "zh-Hans" ? "从云端中枢拉取最新图谱" : "Sync latest graph from cloud")
-                }
                 Spacer()
             }
 
@@ -661,6 +648,20 @@ private struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("contextos.appearance") private var appearance = AppearancePreference.system.rawValue
 
+    private func microSettingRow(_ title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title).foregroundStyle(ContextOSTheme.muted)
+            Spacer(minLength: 4)
+            Text(value).foregroundStyle(ContextOSTheme.ink).multilineTextAlignment(.trailing)
+        }
+        .font(.system(size: 10))
+    }
+
+    private var microProviderProtocol: String {
+        let value = [store.microRolesSummary.provider, store.microRolesSummary.transport].compactMap { $0 }.joined(separator: " / ")
+        return value.isEmpty ? (store.activeLocale == "zh-Hans" ? "未指定" : "Unspecified") : value
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // macOS / iOS Sheet Navigation Bar
@@ -685,6 +686,52 @@ private struct SettingsView: View {
             HStack(alignment: .top, spacing: 16) {
                 // Left Column: 偏好设置 + 软件更新 + 数据内核
                 VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(store.activeLocale == "zh-Hans" ? "API Micro（必需）" : "API Micro (required)")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        microSettingRow(store.activeLocale == "zh-Hans" ? "配置" : "Configuration", value: store.microRolesSummary.apiStatus)
+                        microSettingRow(store.activeLocale == "zh-Hans" ? "有效配置来源" : "Effective config source", value: store.microRolesSummary.configurationSource)
+                        microSettingRow(store.activeLocale == "zh-Hans" ? "Provider / 协议" : "Provider / protocol", value: microProviderProtocol)
+                        microSettingRow(store.activeLocale == "zh-Hans" ? "模型" : "Model", value: store.microRolesSummary.model ?? (store.activeLocale == "zh-Hans" ? "未配置" : "Not configured"))
+                        let thinking = store.microRolesSummary.requestedThinking.map { requested in
+                            let mapped = store.microRolesSummary.effectiveThinking.map { " → \($0)" } ?? ""
+                            return requested + mapped
+                        } ?? (store.activeLocale == "zh-Hans" ? "未指定" : "Unspecified")
+                        microSettingRow(store.activeLocale == "zh-Hans" ? "思考等级（请求→映射）" : "Thinking (requested → mapped)", value: thinking)
+                        microSettingRow(store.activeLocale == "zh-Hans" ? "支持等级" : "Mapped levels", value: store.microRolesSummary.supportedThinking.isEmpty
+                            ? (store.activeLocale == "zh-Hans" ? "未知（未配置映射）" : "Unknown (no mapping configured)")
+                            : store.microRolesSummary.supportedThinking.joined(separator: ", "))
+                        microSettingRow(store.activeLocale == "zh-Hans" ? "凭据来源" : "Credential source", value: store.microRolesSummary.credentialConfigured
+                            ? (store.activeLocale == "zh-Hans" ? "已配置（密钥不显示）" : "Configured (secret hidden)")
+                            : (store.activeLocale == "zh-Hans" ? "未配置" : "Not configured"))
+
+                        Divider()
+                        Text(store.activeLocale == "zh-Hans" ? "CLI Agent（可选 adapter）" : "CLI Agent (optional adapter)")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        microSettingRow(store.activeLocale == "zh-Hans" ? "默认 adapter" : "Default adapter", value: store.microRolesSummary.defaultAdapter ?? (store.activeLocale == "zh-Hans" ? "未配置" : "Not configured"))
+                        if store.microRolesSummary.adapters.isEmpty {
+                            Text(store.activeLocale == "zh-Hans" ? "未配置 CLI adapter。" : "No CLI adapter configured.")
+                                .font(.system(size: 10)).foregroundStyle(ContextOSTheme.muted)
+                        } else {
+                            ForEach(store.microRolesSummary.adapters) { adapter in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    microSettingRow(adapter.id, value: adapter.command ?? (store.activeLocale == "zh-Hans" ? "命令未知" : "Command unknown"))
+                                    Text(store.activeLocale == "zh-Hans"
+                                        ? "已安装：未知 · 已认证：未知 · 模型：未知 · analyze：未知 · implement：未知"
+                                        : "Installed: unknown · Auth: unknown · Model: unknown · Analyze: unknown · Implement: unknown")
+                                        .font(.system(size: 9)).foregroundStyle(ContextOSTheme.muted)
+                                }
+                            }
+                        }
+                        Text(store.activeLocale == "zh-Hans"
+                            ? "只读取并脱敏展示全局/项目的有效配置，不把全局密钥写入项目。API 认证和任务就绪度未知。CLI 安装、登录、模型及 analyze/implement 就绪度未探测，需由 AI 显式执行一次有界验证。"
+                            : "Reads and redacts effective global/project config without copying global secrets into the project. API authentication and task readiness are unknown. CLI installation, login, model, and analyze/implement readiness are unprobed until the AI runs one explicit bounded check.")
+                            .font(.system(size: 10)).foregroundStyle(ContextOSTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(10)
+                    .background(ContextOSTheme.surface)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     // Group 1: 偏好设置 (PREFERENCES)
                     VStack(alignment: .leading, spacing: 5) {
                         sectionHeader(store.activeLocale == "zh-Hans" ? "偏好设置" : "PREFERENCES")

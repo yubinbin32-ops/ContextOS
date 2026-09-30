@@ -10,14 +10,23 @@ import { createV3Server } from "../src/v3-server.mjs";
 import { createFixtureProject } from "../../../scripts/fixture-project.mjs";
 import { packageVersion } from "../../../scripts/version.mjs";
 import { SessionStore } from "../../orchestrator/src/session-store.mjs";
+import { createMicroJob, reportMicroJob, updateMicroJob } from "../../orchestrator/src/micro-delivery.mjs";
 
-const EXPECTED_TOOLS = ["explore", "inspect", "change", "verify", "ship", "ops", "pipeline"];
+const EXPECTED_TOOLS = ["contextos"];
 
 async function boot() {
-  const server = createV3Server({ surface: "legacy" });
+  const server = createV3Server();
   const client = new Client({ name: "contextos-v3-test", version: packageVersion });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const rawCallTool = client.callTool.bind(client);
+  // Capabilities that used to be separate tools must stay reachable through
+  // the single transport tool.
+  client.callTool = (request, ...rest) => {
+    if (request.name === "contextos") return rawCallTool(request, ...rest);
+    const { projectRoot, ...params } = request.arguments || {};
+    return rawCallTool({ name: "contextos", arguments: { action: request.name, args: params, projectRoot } }, ...rest);
+  };
   return client;
 }
 
@@ -63,16 +72,16 @@ test("V3 default surface exposes one compact transport tool", async () => {
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   const listing = await client.listTools();
   assert.deepEqual(listing.tools.map((tool) => tool.name), ["contextos"]);
-  assert.match(JSON.stringify(listing.tools[0].inputSchema), /work/);
-  assert.match(listing.tools[0].description, /pipeline.*direct/i);
-  assert.match(listing.tools[0].description, /delivery/i);
+  assert.match(JSON.stringify(listing.tools[0].inputSchema), /micro \| ask \| command \| agent/);
+  assert.match(listing.tools[0].description, /exact source/i);
+  assert.match(listing.tools[0].description, /configured CLI/i);
   assert.ok(
     listing.tools[0].description.length < 600,
     `the per-request compact tool description must stay below 600 chars, got ${listing.tools[0].description.length}`,
   );
-  for (const field of ['pipeline', 'withOS', 'invocation', 'preset', 'task', 'delivery', 'provider']) {
-    assert.ok(listing.tools[0].inputSchema.properties[field], `compact micro field ${field} must remain visible`);
-  }
+  assert.deepEqual(Object.keys(listing.tools[0].inputSchema.properties).sort(), ['action', 'args', 'projectRoot']);
+  assert.notEqual(listing.tools[0].inputSchema.additionalProperties, false, 'legacy sibling aliases must still be accepted');
+  assert.ok(JSON.stringify(listing.tools[0].inputSchema).length < 1000, 'lean transport schema must stay below 1000 characters');
   const fixture = createFixtureProject({ prefix: "ctxos-v3-lean-work" });
   const work = await client.callTool({
     name: "contextos",
@@ -107,6 +116,112 @@ test("V3 default surface exposes one compact transport tool", async () => {
   assert.match(fixture.read("src/lean-work.mjs"), /value = 2/);
   await client.close();
   fixture.cleanup();
+});
+
+test("agent get supersedes a stale mailbox report with the terminal job report", async () => {
+  const client = await boot();
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-agent-report" });
+  try {
+    createMicroJob(fixture.root, { jobId: "agent-v3-supersede" });
+    reportMicroJob(fixture.root, "agent-v3-supersede", JSON.stringify({
+      summary: "mid-run changes",
+      changes: ["src/math.mjs"],
+      checks: [],
+      blockers: [],
+      question: "",
+    }));
+    updateMicroJob(fixture.root, "agent-v3-supersede", {
+      status: "completed",
+      report: {
+        jobId: "agent-v3-supersede",
+        status: "completed",
+        summary: "terminal summary",
+        changes: ["src/math.mjs"],
+        checks: ["npm test"],
+        blockers: [],
+        question: null,
+        needsHost: false,
+        needsHostReason: "changes",
+        waitingForHost: false,
+        hostReason: null,
+      },
+    });
+    const result = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "agent",
+        args: { action: "get", id: "agent-v3-supersede" },
+        projectRoot: fixture.root,
+      },
+    });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.match(text, /terminal summary/);
+    assert.doesNotMatch(text, /mid-run changes/);
+    assert.equal((text.match(/^report=/gm) || []).length, 1);
+
+    createMicroJob(fixture.root, { jobId: "agent-v3-command-supersede" });
+    reportMicroJob(fixture.root, "agent-v3-command-supersede", JSON.stringify({
+      summary: "stale command report",
+      changes: ["src/math.mjs"],
+      checks: [],
+      blockers: [],
+      question: "",
+    }));
+    updateMicroJob(fixture.root, "agent-v3-command-supersede", {
+      status: "completed",
+      report: {
+        jobId: "agent-v3-command-supersede",
+        status: "completed",
+        summary: "terminal command report",
+        changes: ["src/math.mjs"],
+        checks: ["npm test"],
+        blockers: [],
+        question: null,
+        needsHost: false,
+        needsHostReason: "changes",
+        waitingForHost: false,
+        hostReason: null,
+      },
+    });
+    const commandResult = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "command",
+        args: { command: "node -e \"process.exit(0)\"" },
+        projectRoot: fixture.root,
+      },
+    });
+    const commandText = (commandResult.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.doesNotMatch(commandText, /stale command report/);
+    assert.equal((commandText.match(/^report=/gm) || []).length, 0);
+  } finally {
+    fixture.cleanup();
+    await client.close();
+  }
+});
+
+test("Codex text-only mode keeps primary results out of structuredContent", async () => {
+  const previous = process.env.CONTEXTOS_TEXT_ONLY_RESULTS;
+  process.env.CONTEXTOS_TEXT_ONLY_RESULTS = "1";
+  const client = await boot();
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-text-only" });
+  try {
+    const result = await client.callTool({
+      name: "contextos",
+      arguments: {
+        action: "ask",
+        args: { inspect: [{ path: "src/math.mjs", ranges: [[1, 3]] }] },
+        projectRoot: fixture.root,
+      },
+    });
+    assert.equal(result.structuredContent, undefined);
+    assert.match((result.content || []).map((chunk) => chunk.text ?? "").join("\n"), /add\(a, b\)/);
+  } finally {
+    await client.close();
+    fixture.cleanup();
+    if (previous === undefined) delete process.env.CONTEXTOS_TEXT_ONLY_RESULTS;
+    else process.env.CONTEXTOS_TEXT_ONLY_RESULTS = previous;
+  }
 });
 
 test("V3 compact normalizes common pipeline, range, capability, and edit shapes", async () => {
@@ -521,12 +636,9 @@ test("V3 MCP surface exposes exactly the intent-level tools", async () => {
   const listing = await client.listTools();
   const names = listing.tools.map((tool) => tool.name).sort();
   assert.deepEqual(names, [...EXPECTED_TOOLS].sort());
-  const exploreTool = listing.tools.find((tool) => tool.name === "explore");
-  const inspectTool = listing.tools.find((tool) => tool.name === "inspect");
-  assert.match(JSON.stringify(exploreTool?.inputSchema), /refresh/);
-  assert.match(JSON.stringify(exploreTool?.inputSchema), /dedupeReads/);
-  assert.match(JSON.stringify(inspectTool?.inputSchema), /refresh/);
-  assert.match(JSON.stringify(inspectTool?.inputSchema), /dedupeReads/);
+  const tool = listing.tools.find((candidate) => candidate.name === "contextos");
+  assert.match(JSON.stringify(tool?.inputSchema), /micro \| ask \| command \| agent \| change/);
+  assert.match(tool?.description || "", /ops\(\{capability,action,args\}\)/);
   await client.close();
 });
 
@@ -770,6 +882,15 @@ test("V3 ops search, receipt logs, plan update, and optional Rules are usable en
   assert.equal(restarted.task.contextSlice.objective, "preserve this");
   assert.deepEqual(restarted.task.rules, ["rule-optional-p5"]);
 
+  const listedTasks = JSON.parse(await call("ops", {
+    capability: "task",
+    action: "list",
+    args: { planId: "plan-p5-optional", format: "json" },
+  }));
+  assert.equal(listedTasks.total, 1);
+  assert.equal(listedTasks.tasks[0].id, "task-p5-optional");
+  assert.equal(listedTasks.tasks[0].phaseId, "P0");
+
   const compactOpen = JSON.parse(await call("ops", {
     capability: "task",
     action: "open",
@@ -921,9 +1042,13 @@ test("V3 inspect resolves globs and pipeline accepts receipt plus run aliases", 
       { inspect: { path: "src/math.mjs" } },
     ],
   });
-  assert.match(parallel, /pipeline=OK/);
-  assert.match(parallel, /ops=OK/);
-  assert.match(parallel, /inspect=OK/);
+  assert.match(parallel, /^# ContextOS pipeline/m);
+  assert.match(parallel, /pipeline=OK actions=2\/1 mode=receipt/);
+  assert.match(parallel, /## Step 1: parallel/);
+  assert.match(parallel, /### Action 1\.1: run_command/);
+  assert.match(parallel, /### Action 1\.2: inspect/);
+  assert.match(parallel, /receipt=[A-Za-z0-9._-]+/);
+  assert.match(parallel, /src\/math\.mjs/);
 
   const chained = await call("pipeline", {
     chain: [
@@ -990,6 +1115,250 @@ test("V3 compact surface exposes architecture aliases and bounded command logs",
     }));
     assert.equal(receipt.logBytes, 64);
     assert.equal(receipt.logTruncated, true);
+  } finally {
+    await client.close();
+    fixture.cleanup();
+  }
+});
+
+test("V3 named orchestration actions stay equivalent to ops capabilities", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-named-actions" });
+  const client = await boot();
+  const call = async (name, args) => {
+    const res = await client.callTool({ name, arguments: { projectRoot: fixture.root, ...args } });
+    const text = (res.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!res.isError, `${name} failed: ${text}`);
+    return text;
+  };
+
+  try {
+    const plan = JSON.parse(await call("plan", {
+      action: "create",
+      id: "plan-named-actions",
+      format: "json",
+      planData: {
+        title: "Named action plan",
+        phases: [{ id: "P0", order: 0, objective: "Stay reachable", acceptance: ["Named actions resolve through ops"], status: "active" }],
+      },
+    }));
+    assert.equal(plan.id, "plan-named-actions");
+
+    const fetched = JSON.parse(await call("plan", { action: "get", format: "json" }));
+    assert.equal(fetched.id, "plan-named-actions");
+
+    const task = JSON.parse(await call("task", {
+      action: "create",
+      format: "json",
+      taskData: { id: "task-named-actions", planId: "plan-named-actions", phaseId: "P0", title: "Named task" },
+    }));
+    assert.equal(task.id, "task-named-actions");
+
+    const command = JSON.parse(await call("run_command", { command: "node -e \"process.stdout.write('named')\"" }));
+    assert.equal(command.exitCode, 0);
+    assert.match(command.text || "", /named/);
+  } finally {
+    await client.close();
+    fixture.cleanup();
+  }
+});
+
+test("V3 ops plan and task lifecycle actions enforce legal transitions", async () => {
+  const fixture = createFixtureProject({ prefix: "ctxos-v3-lifecycle" });
+  const client = await boot();
+  const callLifecycle = async (capability, action, args = {}) => {
+    const result = await client.callTool({
+      name: "ops",
+      arguments: { projectRoot: fixture.root, capability, action, args },
+    });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!result.isError, `${capability}.${action} failed: ${text}`);
+    return text;
+  };
+  const callDot = async (action, args = {}) => {
+    const result = await client.callTool({
+      name: "ops",
+      arguments: { projectRoot: fixture.root, action, args },
+    });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.ok(!result.isError, `${action} failed: ${text}`);
+    return text;
+  };
+  const expectLifecycleError = async (capability, action, args = {}) => {
+    const result = await client.callTool({
+      name: "ops",
+      arguments: { projectRoot: fixture.root, capability, action, args },
+    });
+    const text = (result.content || []).map((chunk) => chunk.text ?? "").join("\n");
+    assert.equal(result.isError, true, `${capability}.${action} should fail`);
+    return text;
+  };
+  const lifecyclePhase = {
+    id: "P0",
+    order: 0,
+    objective: "Exercise terminal lifecycle actions.",
+    acceptance: ["Lifecycle transitions remain explicit."],
+    status: "active",
+  };
+  const createPlan = async (id, phases = [lifecyclePhase]) => JSON.parse(await callLifecycle("plan", "create", {
+    id,
+    format: "json",
+    planData: { title: id, phases },
+  }));
+  const createTask = async (id, planId) => JSON.parse(await callLifecycle("task", "create", {
+    format: "json",
+    taskData: { id, planId, phaseId: "P0", title: id },
+  }));
+
+  try {
+    await createPlan("plan-life-cycle-complete");
+    const completedPlan = JSON.parse(await callLifecycle("plan", "complete", {
+      id: "plan-life-cycle-complete",
+      format: "json",
+    }));
+    assert.equal(completedPlan.status, "completed");
+
+    await createPlan("plan-life-cycle-archive");
+    const archivedPlan = JSON.parse(await callLifecycle("plan", "archive", {
+      id: "plan-life-cycle-archive",
+      format: "json",
+    }));
+    assert.equal(archivedPlan.status, "archived");
+    assert.match(
+      await expectLifecycleError("plan", "complete", { id: "plan-life-cycle-archive" }),
+      /cannot complete from status 'archived'/,
+    );
+    assert.match(
+      await expectLifecycleError("plan", "archive", { id: "plan-life-cycle-archive" }),
+      /cannot archive from status 'archived'/,
+    );
+
+    const deletedPlan = JSON.parse(await callLifecycle("plan", "delete", {
+      id: "plan-life-cycle-archive",
+      format: "json",
+    }));
+    assert.equal(deletedPlan.deleted, true);
+
+    await createPlan("plan-life-cycle-delete-invalid");
+    assert.match(
+      await expectLifecycleError("plan", "delete", { id: "plan-life-cycle-delete-invalid" }),
+      /cannot delete from status 'active'/,
+    );
+
+    for (const action of ["complete", "archive", "delete"]) {
+      assert.match(
+        await expectLifecycleError("plan", action, { id: `plan-missing-${action}` }),
+        /not found/,
+      );
+    }
+
+    await createPlan("plan-life-cycle-task");
+    await createPlan("plan-life-cycle-dot");
+    const dottedPlan = JSON.parse(await callDot("plan.complete", {
+      id: "plan-life-cycle-dot",
+      format: "json",
+    }));
+    assert.equal(dottedPlan.status, "completed");
+
+    await createTask("task-life-cycle-draft", "plan-life-cycle-task");
+    assert.match(
+      await expectLifecycleError("task", "complete", { id: "task-life-cycle-draft" }),
+      /cannot complete from status 'draft'/,
+    );
+
+    await createTask("task-life-cycle-complete", "plan-life-cycle-task");
+    await callLifecycle("task", "start", { id: "task-life-cycle-complete", taskData: {}, format: "json" });
+    const completedTask = JSON.parse(await callLifecycle("task", "complete", {
+      id: "task-life-cycle-complete",
+      format: "json",
+    }));
+    assert.equal(completedTask.status, "completed");
+
+    const archivedTask = JSON.parse(await callLifecycle("task", "archive", {
+      id: "task-life-cycle-complete",
+      format: "json",
+    }));
+    assert.equal(archivedTask.status, "archived");
+    assert.match(
+      await expectLifecycleError("task", "archive", { id: "task-life-cycle-complete" }),
+      /cannot archive from status 'archived'/,
+    );
+
+    const deletedTask = JSON.parse(await callLifecycle("task", "delete", {
+      id: "task-life-cycle-complete",
+      format: "json",
+    }));
+    assert.equal(deletedTask.deleted, true);
+
+    await createTask("task-life-cycle-delete-invalid", "plan-life-cycle-task");
+    await callLifecycle("task", "start", { id: "task-life-cycle-delete-invalid", taskData: {}, format: "json" });
+    assert.match(
+      await expectLifecycleError("task", "delete", { id: "task-life-cycle-delete-invalid" }),
+      /cannot delete from status 'active'/,
+    );
+    await callLifecycle("task", "archive", {
+      id: "task-life-cycle-delete-invalid",
+      format: "json",
+    });
+    await callLifecycle("task", "delete", {
+      id: "task-life-cycle-delete-invalid",
+      format: "json",
+    });
+
+    await createTask("task-life-cycle-dot", "plan-life-cycle-task");
+    await callLifecycle("task", "start", { id: "task-life-cycle-dot", taskData: {}, format: "json" });
+    const dottedTask = JSON.parse(await callDot("task.complete", {
+      id: "task-life-cycle-dot",
+      format: "json",
+    }));
+    assert.equal(dottedTask.status, "completed");
+
+    for (const action of ["complete", "archive", "delete"]) {
+      assert.match(
+        await expectLifecycleError("task", action, { id: `task-missing-${action}` }),
+        /not found/,
+      );
+    }
+
+    await createPlan("plan-life-cycle-shared-a");
+    await createPlan("plan-life-cycle-shared-b");
+    await createTask("task-shared-a-delete", "plan-life-cycle-shared-a");
+    await createTask("task-shared-a-cascade", "plan-life-cycle-shared-a");
+    await createTask("task-shared-b", "plan-life-cycle-shared-b");
+
+    await callLifecycle("task", "archive", { id: "task-shared-a-delete", format: "json" });
+    await callLifecycle("task", "delete", { id: "task-shared-a-delete", format: "json" });
+
+    const cleanedPlan = JSON.parse(await callLifecycle("plan", "get", {
+      id: "plan-life-cycle-shared-a",
+      format: "json",
+    }));
+    const untouchedPlan = JSON.parse(await callLifecycle("plan", "get", {
+      id: "plan-life-cycle-shared-b",
+      format: "json",
+    }));
+    assert.deepEqual(cleanedPlan.phases[0].taskIds, ["task-shared-a-cascade"]);
+    assert.deepEqual(untouchedPlan.phases[0].taskIds, ["task-shared-b"]);
+
+    await callLifecycle("plan", "archive", { id: "plan-life-cycle-shared-a", format: "json" });
+    const cascadeDelete = JSON.parse(await callLifecycle("plan", "delete", {
+      id: "plan-life-cycle-shared-a",
+      format: "json",
+    }));
+    assert.equal(cascadeDelete.deleted, true);
+    assert.match(
+      await expectLifecycleError("task", "archive", { id: "task-shared-a-cascade" }),
+      /not found/,
+    );
+    const preservedPlan = JSON.parse(await callLifecycle("plan", "get", {
+      id: "plan-life-cycle-shared-b",
+      format: "json",
+    }));
+    assert.equal(preservedPlan.id, "plan-life-cycle-shared-b");
+    const preservedTasks = JSON.parse(await callLifecycle("task", "list", {
+      planId: "plan-life-cycle-shared-b",
+      format: "json",
+    }));
+    assert.deepEqual(preservedTasks.tasks.map((task) => task.id), ["task-shared-b"]);
   } finally {
     await client.close();
     fixture.cleanup();

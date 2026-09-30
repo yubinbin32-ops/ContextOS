@@ -198,3 +198,20 @@ test('Orchestrator emits one bounded convergence hint at the discovery threshold
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('personal cost savings remain separate from raw-token increases and unknown CLI requests', () => {
+ const root=tempProject();try {
+  recordTelemetry(root,{sessionId:'native-cost',tool:'work',input:{},output:'baseline',hostUsage:{total_tokens:100}});
+  recordTelemetry(root,{sessionId:'micro-cost',tool:'work',input:{},output:'candidate',hostUsage:{total_tokens:65}});
+  recordMicroUsage(root,{ok:true,provider:'cli',usageSource:'provider',providerUsage:{prompt_tokens:63,completion_tokens:7,total_tokens:70},providerUsageCalls:1,costEstimate:{rawTokens:70,weightedCostTokens:70,workerDivisor:7,mainEquivalentTokens:10}},'cheap-worker',{hostSessionId:'micro-cost'});
+  const audit=auditRouting(root,{sessionId:'micro-cost',baselineSessionId:'native-cost'});
+  assert.equal(audit.savings.actualTokens,-35);assert.equal(audit.savings.actualPercent,-35);
+  assert.equal(audit.micro.weightedCostTokens,70);
+  assert.equal(audit.personalCostEstimate.mainEquivalentTokens,75);assert.equal(audit.personalCostEstimate.savedPercent,25);
+  assert.equal(audit.personalCostEstimate.workerDivisor,7);assert.match(audit.personalCostEstimate.formula,/cached input \* 0\.1/);
+  assert.equal(audit.micro.providerRequests,null);assert.equal(audit.delta.micro.providerRequests,null);
+  recordMicroUsage(root,{ok:false,provider:'cli',usageSource:'unavailable'},'interrupted',{hostSessionId:'micro-cost'});
+  const incomplete=auditRouting(root,{sessionId:'micro-cost',baselineSessionId:'native-cost'});
+  assert.equal(incomplete.personalCostEstimate.savedPercent,null);assert.equal(incomplete.savings.actualPercent,null);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});

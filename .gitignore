@@ -27,3 +27,17 @@ assets/截屏*.png
 # Generated standalone plugin parser assets
 plugins/contextos/server/web-tree-sitter.wasm
 plugins/contextos/grammars/
+
+# Private real-development traces and isolated auth/runtime homes
+.contextos/benchmarks/
+# Python benchmark runner bytecode
+__pycache__/
+*.pyc
+
+# Private provider settings, worker state and local task logs
+.contextos/profile*.json
+.contextos/micro-cli/
+.contextos/micro-sessions/
+.contextos/micro-deliveries/
+.contextos/logs/
+.contextos/artifacts/

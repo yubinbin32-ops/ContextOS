@@ -21,6 +21,25 @@ test('Sanitizer strips ANSI, redacts secrets, and collapses build noise', () => 
   assert.equal(sanitized.errors.length, 1);
 });
 
+test('runCommand strips the MCP text-only transport flag from child processes', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-runner-env-test-'));
+  const previous = process.env.CONTEXTOS_TEXT_ONLY_RESULTS;
+  process.env.CONTEXTOS_TEXT_ONLY_RESULTS = '1';
+  try {
+    const receipt = await runCommand({
+      command: `${process.execPath} -e "process.stdout.write(String(process.env.CONTEXTOS_TEXT_ONLY_RESULTS))"`,
+      projectRoot: tempDir,
+      raw: true,
+    });
+    assert.equal(receipt.exitCode, 0);
+    assert.equal(receipt.text, 'undefined');
+  } finally {
+    if (previous === undefined) delete process.env.CONTEXTOS_TEXT_ONLY_RESULTS;
+    else process.env.CONTEXTOS_TEXT_ONLY_RESULTS = previous;
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('runCommand executes command, logs out-of-context, and compresses context', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-runner-test-'));
 

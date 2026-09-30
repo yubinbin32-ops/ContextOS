@@ -775,6 +775,37 @@ export class V2Database {
     });
   }
 
+  deleteTask(taskId) {
+    return this.transaction((db) => {
+      const taskRow = db.db.prepare('SELECT plan_id, phase_id FROM tasks WHERE id = ?').get(taskId);
+      if (!taskRow) return false;
+
+      const result = db.db.prepare('DELETE FROM tasks WHERE id = ?').run(taskId);
+      if (result.changes === 0) return false;
+
+      if (taskRow.plan_id && taskRow.phase_id) {
+        const phaseRow = db.db.prepare(
+          'SELECT task_ids_json FROM phases WHERE plan_id = ? AND id = ?'
+        ).get(taskRow.plan_id, taskRow.phase_id);
+        if (phaseRow) {
+          let taskIds = [];
+          try {
+            taskIds = JSON.parse(phaseRow.task_ids_json || '[]');
+          } catch (_) {}
+          const nextTaskIds = Array.isArray(taskIds)
+            ? taskIds.filter((id) => id !== taskId)
+            : [];
+          db.db.prepare('UPDATE phases SET task_ids_json = ? WHERE plan_id = ? AND id = ?')
+            .run(JSON.stringify(nextTaskIds), taskRow.plan_id, taskRow.phase_id);
+          db.db.prepare('UPDATE plans SET updated_at = ? WHERE id = ?')
+            .run(new Date().toISOString(), taskRow.plan_id);
+        }
+      }
+
+      return true;
+    });
+  }
+
   // --- Block & ArtifactRefs ---
   saveBlock(block) {
     return this.transaction((db) => db._saveBlock(block));

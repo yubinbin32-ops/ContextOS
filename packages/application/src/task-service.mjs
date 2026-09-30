@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { Task, assertBlockHasRealCode } from '../../../packages/domain/src/index.mjs';
+import {
+  Task,
+  assertBlockHasRealCode,
+  assertTaskLifecycleAction,
+  assertTaskStatusTransition,
+} from '../../../packages/domain/src/index.mjs';
 import {
   CoverageChecker,
   LanguageRegistry,
@@ -817,6 +822,42 @@ export class TaskService {
       graphRevision: exportResult ? exportResult.graphRevision : null,
       graphWarning,
     };
+  }
+
+  completeTask(taskId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    assertTaskLifecycleAction('complete', raw.status, taskId);
+    assertTaskStatusTransition(raw.status, 'completed', taskId);
+
+    const task = new Task(raw);
+    task.status = 'completed';
+    task.updatedAt = new Date().toISOString();
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+
+  archiveTask(taskId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    assertTaskLifecycleAction('archive', raw.status, taskId);
+    assertTaskStatusTransition(raw.status, 'archived', taskId);
+
+    const task = new Task(raw);
+    task.status = 'archived';
+    task.updatedAt = new Date().toISOString();
+    this.db.saveTask(task.toJSON());
+    return task.toJSON();
+  }
+
+  deleteTask(taskId) {
+    const raw = this.db.getTask(taskId);
+    if (!raw) throw new Error(`Task '${taskId}' not found`);
+    assertTaskLifecycleAction('delete', raw.status, taskId);
+
+    const deleted = this.db.deleteTask(taskId);
+    if (!deleted) throw new Error(`Task '${taskId}' could not be deleted`);
+    return deleted;
   }
 
   resumeTask(taskId) {

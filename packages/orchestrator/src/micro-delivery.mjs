@@ -1,6 +1,8 @@
+import { storeArtifact } from './artifact-store.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { normalizeAgentReport } from './micro-agent-report.mjs';
 
 const DELIVERY_VERSION = 1;
 const DEFAULT_LOCK_TIMEOUT_MS = 2000;
@@ -42,6 +44,7 @@ function jobsDir(projectRoot) {
 }
 
 function jobPath(projectRoot, jobId) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(String(jobId))) throw new Error('Invalid Micro job id.');
   return path.join(jobsDir(projectRoot), `${jobId}.json`);
 }
 
@@ -50,7 +53,7 @@ function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait);
 }
 
-function withQueueLock(projectRoot, callback, options = {}) {
+export function withQueueLock(projectRoot, callback, options = {}) {
   if (typeof callback !== 'function') throw new Error('Micro delivery queue lock requires a callback.');
   const dir = deliveryDir(projectRoot);
   const filePath = lockPath(projectRoot);
@@ -114,7 +117,7 @@ function readState(projectRoot) {
 function writeState(projectRoot, state) {
   const filePath = statePath(projectRoot);
   const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(temporary, filePath);
 }
 
@@ -227,13 +230,13 @@ function writeJob(projectRoot, job) {
   const filePath = jobPath(projectRoot, job.jobId);
   fs.mkdirSync(jobsDir(projectRoot), { recursive: true });
   const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.tmp`;
-  fs.writeFileSync(temporary, `${JSON.stringify(job, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(temporary, `${JSON.stringify(job, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   fs.renameSync(temporary, filePath);
   return job;
 }
 
 function normalizeJobStatus(status) {
-  return ['running', 'completed', 'failed'].includes(status) ? status : 'running';
+  return ['running', 'completed', 'failed', 'cancelled'].includes(status) ? status : 'running';
 }
 
 function normalizeJob(projectRoot, job) {
@@ -270,7 +273,8 @@ export function createMicroJob(projectRoot, job = {}) {
   if (!projectRoot) throw new Error('Micro job requires a project root.');
   const jobId = String(job.jobId || '').trim();
   if (!jobId) throw new Error('Micro job requires a jobId.');
-  const existing = readMicroJob(projectRoot, jobId);
+  return withQueueLock(projectRoot, () => {
+  const existing = readJobFile(jobPath(projectRoot, jobId));
   if (existing) return { created: false, job: existing };
   const now = new Date().toISOString();
   const record = normalizeJob(projectRoot, {
@@ -282,6 +286,22 @@ export function createMicroJob(projectRoot, job = {}) {
     leasePid: process.pid,
   });
   return { created: true, job: writeJob(projectRoot, record) };
+  });
+}
+
+export function claimMicroJob(projectRoot, jobId, { leasePid = process.pid } = {}) {
+  if (!projectRoot || !jobId) return null;
+  return withQueueLock(projectRoot, () => {
+    const existing = readJobFile(jobPath(projectRoot, String(jobId)));
+    if (!existing || existing.status !== 'running') return null;
+    return writeJob(projectRoot, {
+      ...existing,
+      jobId: String(jobId),
+      status: 'running',
+      leasePid,
+      updatedAt: new Date().toISOString(),
+    });
+  });
 }
 
 export function updateMicroJob(projectRoot, jobId, patch = {}) {
@@ -303,17 +323,33 @@ export function readMicroJob(projectRoot, jobId) {
   const job = readJobFile(filePath);
   if (!job) return null;
   const normalized = normalizeJob(projectRoot, job);
-  if (normalized && normalized.status !== job.status) writeJob(projectRoot, normalized);
+  if (normalized && normalized.status !== job.status) {
+    writeJob(projectRoot, normalized);
+    // No terminal receipt means cost is unknown, not zero. Keep the failed
+    // assignment in the same usage ledger as completed provider calls.
+    const ledger = path.join(projectRoot, '.contextos', 'logs', 'micro-usage.jsonl');
+    fs.mkdirSync(path.dirname(ledger), { recursive: true });
+    fs.appendFileSync(ledger, JSON.stringify({ at: normalized.updatedAt, receiptId: normalized.jobId, hostSessionId: normalized.hostSessionId || null, ok: false, usageSource: 'unavailable', providerUsageComplete: false, providerRequests: null, provider: normalized.provider || 'cli', estimatedCostUsd: null, error: normalized.error }) + '\n', { mode: 0o600 });
+    enqueueMicroDelivery(projectRoot, { deliveryId: normalized.jobId, receiptId: normalized.jobId, content: normalized.error });
+  }
   return normalized;
 }
 
-export function listMicroJobs(projectRoot, { status = null, limit = 20 } = {}) {
+const LEGACY_AGENT_JOB_PREFIXES = ['agent-', 'agy-', 'goal-'];
+
+function isAgentJob(job) {
+  if (job?.kind) return job.kind === 'agent';
+  if (job?.worker || job?.adapter || job?.implementation) return true;
+  const jobId = String(job?.jobId || '');
+  return LEGACY_AGENT_JOB_PREFIXES.some((prefix) => jobId.startsWith(prefix));
+}
+
+export function listMicroJobs(projectRoot, { status = null, limit = 20, excludeAgentJobs = false } = {}) {
   if (!projectRoot) return [];
   let files = [];
   try {
     files = fs.readdirSync(jobsDir(projectRoot))
-      .filter((name) => name.endsWith('.json'))
-      .slice(-Math.max(1, Math.min(Number(limit) || 20, 100)));
+      .filter((name) => name.endsWith('.json'));
   } catch (_) {
     return [];
   }
@@ -321,7 +357,9 @@ export function listMicroJobs(projectRoot, { status = null, limit = 20 } = {}) {
     .map((name) => readMicroJob(projectRoot, name.replace(/\.json$/, '')))
     .filter(Boolean)
     .filter((job) => !status || job.status === status)
-    .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
+    .filter((job) => !excludeAgentJobs || !isAgentJob(job))
+    .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+    .slice(0, Math.max(1, Math.min(Number(limit) || 20, 100)));
 }
 
 export function claimMicroDeliveries(projectRoot, options = {}) {
@@ -336,15 +374,19 @@ export function claimMicroDeliveries(projectRoot, options = {}) {
     const maxChars = boundedInteger(options.maxChars, DEFAULT_RESTORE_CHARS, 300, 12000);
     const claimed = [];
     let usedChars = 0;
+    const activeReceipts = new Set(options.activeReceiptIds || []);
+    const eligible = item => options.createdBefore == null || Date.parse(item.createdAt) < options.createdBefore || activeReceipts.has(item.receiptId);
     while (state.pending.length && claimed.length < maxItems) {
-      const item = state.pending[0];
+      const index = state.pending.findIndex(eligible);
+      if (index < 0) break;
+      const item = state.pending[index];
       const remaining = maxChars - usedChars;
-      if (claimed.length > 0 && remaining < 200) break;
+      if (claimed.length > 0 && remaining < item.content.length + 180) break;
       const content = clip(item.content, Math.max(120, Math.min(item.content.length, remaining - 180)));
-      state.pending.shift();
+      state.pending.splice(index, 1);
       const lease = { ...item, claimedAt: new Date().toISOString(), leasePid: process.pid };
       state.leased.push(lease);
-      claimed.push({ ...lease, content });
+      claimed.push({ ...lease, content, ...(content.length < item.content.length ? { truncated: true } : {}) });
       usedChars += content.length + 180;
     }
     if (claimed.length || recoveredState || pendingBeforeDedup !== state.pending.length) writeState(projectRoot, state);
@@ -424,7 +466,29 @@ export function renderMicroDeliveries(items = []) {
   if (!Array.isArray(items) || !items.length) return '';
   const sections = items.map((item) => {
     const ref = item.artifactId ? `; artifact=${item.artifactId}` : '';
-    return `### Deferred Micro result\n- receipt=${item.receiptId}${ref}\n${item.content}`;
+    const clipped = item.truncated ? '; truncated=true' : '';
+    return `### Deferred Micro result\n- receipt=${item.receiptId}${ref}${clipped}\n${item.content}`;
   });
   return `## Micro results recovered from a previous OS call\n${sections.join('\n\n')}`;
+}
+
+export function reportMicroJob(projectRoot, jobId, content) {
+  const job = readMicroJob(projectRoot, jobId);
+  if (!job || job.status !== 'running') throw new Error('Micro reports require a running assigned job.');
+  const serialized = typeof content === 'string'
+    ? content
+    : (content && typeof content === 'object' ? JSON.stringify(content) : String(content ?? ''));
+  const text = serialized.trim();
+  if (!text || text.length > 3200) throw new Error('Report must contain 1–3200 characters.');
+  const hash = crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+  const artifact = storeArtifact(projectRoot, text, { id: `micro-report-${jobId}-${hash}`, kind: 'micro-report' });
+  const report = normalizeAgentReport(text, {
+    jobId,
+    status: 'running',
+    answeredQuestions: Array.isArray(job.answeredQuestions) ? job.answeredQuestions : [],
+  });
+  updateMicroJob(projectRoot, jobId, { report });
+  return enqueueMicroDelivery(projectRoot, {
+    deliveryId: `${jobId}-report-${hash}`, receiptId: jobId, artifactId: artifact.id, content: JSON.stringify(report),
+  });
 }
