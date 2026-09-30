@@ -32944,6 +32944,7 @@ ${text2}`;
   const verifyLines = [];
   const failureLines = [];
   let verifyPassed = true;
+  let failedReceiptId = null;
   const verifyCommands = verifyCommandsFromInput(input.verify, profile);
   if (verifyCommands.length) {
     if (verifyCommands && verifyCommands.length) {
@@ -32968,6 +32969,7 @@ ${text2}`;
         verifyLines.push(`- \`${label}\` \u2192 exit ${receipt.exitCode} (${receipt.durationMs}ms, receipt ${receipt.id})`);
         if (receipt.exitCode !== 0) {
           verifyPassed = false;
+          failedReceiptId ||= receipt.id;
           const diag = receipt.diagnostics && receipt.diagnostics.length ? receipt.diagnostics.join("\n\n---\n\n") : receipt.errors && receipt.errors.length ? receipt.errors.slice(0, 5).join("\n") : clip3(receipt.summary || "failed", 240);
           failureLines.push(`### \`${label}\`
 ${diag}`);
@@ -33035,7 +33037,7 @@ ${diag}`);
       }
     }
   }
-  const nextLines = verifyCommands.length ? verifyPassed ? ["done: verified; finalize the bounded repair. Do not make speculative follow-up edits without a failing check or unmet requirement."] : [`\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to repair and verify again`] : [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
+  const nextLines = verifyCommands.length ? verifyPassed ? ["done: verified; finalize the bounded repair. Do not make speculative follow-up edits without a failing check or unmet requirement."] : [failedReceiptId ? `Read the failure log: verify(${JSON.stringify({ mode: "logs", id: failedReceiptId, lines: 80, maxChars: 4e3 })}); then repair only the named source location and verify once.` : `\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to repair and verify again`] : [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
   const touchedLines = touched.slice(-8).map((filePath) => `- \`${filePath}\` (edit)`);
   const sections = [
     { key: "next", title: "Next", priority: 0, lines: nextLines },
@@ -34757,7 +34759,8 @@ ${detail.replace(/^status=.*$/m, "").replace(/\r?\n/g, " | ")}`;
     if (item.tool === "explore") return isCompleteExploreDecision(item);
     const output = String(item.output || "");
     if (completeExploreSeen && /Skipped redundant inspect: the prior explore decision package/.test(output)) return true;
-    return /\[L\d+-L\d+\]/.test(output) && !/✗|\[body not inlined|\[response truncated|Symbol .* not found/.test(output);
+    const receipt = output.split("\n").filter((line) => !/^\s*\d+\s*\|/.test(line)).join("\n");
+    return /\[L\d+-L\d+\]/.test(receipt) && !/✗|\[body not inlined|\[response truncated|Symbol .* not found/.test(receipt);
   });
   const decisionReady = decisionPackage && failureCount === 0 && sourceEvidenceComplete && !exploreIncomplete && !summaryTruncated && lines.join("\n").length <= responseBudget;
   if (decisionReady) {
@@ -63804,7 +63807,7 @@ function createV3Server({
     server.registerTool(
       "contextos",
       {
-        description: "Repository work. Known paths: work({inspect:[{path,symbol|ranges}],verify:{commands}}), then change({edits,verify}). Work preserves bounded source bodies; use symbols or ranges up to 240 lines. Existing owners refresh automatically; omit architecture for preserved boundaries. Unknown paths: explore/pipeline. Verified repair: finish. Blocked: retry once using its receipt. Search via work.search; ops for advanced capabilities. Micro only when explicitly assigned. projectRoot is absolute; parameters belong inside args.",
+        description: 'Repository work. Known paths: work({inspect:[{path,symbol|startLine,endLine}],search:[{query,paths}],verify:{commands}}), then change({edits,verify}). Edits: {path,target,replacement} or {path,fullFile:true,content}; no patch. Search all calls before renaming. Failed check: verify({mode:"logs",id:"receipt-...",lines:80,maxChars:4000}); read its named location. Preserved owners refresh automatically; omit architecture. Unknown paths: explore/pipeline. Verified: finish. Blocked: receipt recovery once. Micro only when explicitly assigned. projectRoot absolute; parameters inside args.',
         inputSchema: object2({
           action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops", "search", "create"]),
           args: record(any()).optional().describe("Action parameters; advanced operations use capability/action/args."),

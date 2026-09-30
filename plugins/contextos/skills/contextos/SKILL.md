@@ -19,11 +19,11 @@ edits:[{path,target:"old source",replacement:"new source"}]
 create:[{path,content}]
 delete:[{path}]
 ```
-Aliases: oldText/newText, targetContent/replacementContent. Also supported: symbol/replacementContent, startLine/endLine/replacementContent, append, fullFile/content.
+Aliases: oldText/newText, targetContent/replacementContent. Also supported: symbol/replacementContent, startLine/endLine/replacementContent, append, fullFile/content. `patch` is unsupported. Before renaming a declaration, search its old name and include all affected calls in the same change.
 
 Existing ownership refreshes automatically; omit architecture for preserved boundaries. For new ownership, use `architecture:{blocks:[{id,title,paths}],chains:[{id,memberIds}]}`. Reuse receipt IDs/titles, never mod-* identities.
 
-For a failed command, recover its existing receipt with `verify({mode:"logs",id:"receipt-...",lines:80,maxChars:4000})`; correct the reported failure, then verify the repair. Do not search the tool inventory for receipts or repeat the failing command just to get its log.
+For a failed command, recover its existing receipt with `verify({mode:"logs",id:"receipt-...",lines:80,maxChars:4000})`; correct the reported failure, then verify the repair. Do not search the tool inventory for receipts or repeat the failing command just to get its log. Read only the failure's named symbol or nearby lines; do not reload whole files for a localized error.
 
 After read_complete=true, mutate. If partial, make one named recovery read. status=blocked means no changes: correct the named fields and retry once using its receipt. status=verified means finish; use ship for session archival. Do not repeat successful reads/checks, open graphs to recover known owners, or use native reads/tests between OS calls.
 

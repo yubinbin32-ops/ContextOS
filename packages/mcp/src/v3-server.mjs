@@ -106,7 +106,7 @@ export function createV3Server({
     server.registerTool(
       'contextos',
       {
-        description: 'Repository work. Known paths: work({inspect:[{path,symbol|ranges}],verify:{commands}}), then change({edits,verify}). Work preserves bounded source bodies; use symbols or ranges up to 240 lines. Existing owners refresh automatically; omit architecture for preserved boundaries. Unknown paths: explore/pipeline. Verified repair: finish. Blocked: retry once using its receipt. Search via work.search; ops for advanced capabilities. Micro only when explicitly assigned. projectRoot is absolute; parameters belong inside args.',
+        description: 'Repository work. Known paths: work({inspect:[{path,symbol|startLine,endLine}],search:[{query,paths}],verify:{commands}}), then change({edits,verify}). Edits: {path,target,replacement} or {path,fullFile:true,content}; no patch. Search all calls before renaming. Failed check: verify({mode:"logs",id:"receipt-...",lines:80,maxChars:4000}); read its named location. Preserved owners refresh automatically; omit architecture. Unknown paths: explore/pipeline. Verified: finish. Blocked: receipt recovery once. Micro only when explicitly assigned. projectRoot absolute; parameters inside args.',
         inputSchema: z.object({
           action: z.enum(['explore', 'inspect', 'change', 'verify', 'ship', 'pipeline', 'work', 'micro', 'resume', 'ops', 'search', 'create']),
           args: z.record(z.any()).optional().describe('Action parameters; advanced operations use capability/action/args.'),

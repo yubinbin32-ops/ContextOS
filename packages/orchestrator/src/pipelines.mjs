@@ -2023,6 +2023,7 @@ export async function changePipeline(ctx, input = {}) {
   const verifyLines = [];
   const failureLines = [];
   let verifyPassed = true;
+  let failedReceiptId = null;
 
   const verifyCommands = verifyCommandsFromInput(input.verify, profile);
 
@@ -2049,6 +2050,7 @@ export async function changePipeline(ctx, input = {}) {
         verifyLines.push(`- \`${label}\` → exit ${receipt.exitCode} (${receipt.durationMs}ms, receipt ${receipt.id})`);
         if (receipt.exitCode !== 0) {
           verifyPassed = false;
+          failedReceiptId ||= receipt.id;
           const diag = receipt.diagnostics && receipt.diagnostics.length
             ? receipt.diagnostics.join('\n\n---\n\n')
             : (receipt.errors && receipt.errors.length ? receipt.errors.slice(0, 5).join('\n') : clip(receipt.summary || 'failed', 240));
@@ -2127,7 +2129,9 @@ export async function changePipeline(ctx, input = {}) {
   const nextLines = verifyCommands.length
     ? (verifyPassed
         ? ['done: verified; finalize the bounded repair. Do not make speculative follow-up edits without a failing check or unmet requirement.']
-        : [`👉 change(${JSON.stringify({ intent: input.intent || '<fix the failure>' })}) to repair and verify again`])
+        : [failedReceiptId
+            ? `Read the failure log: verify(${JSON.stringify({ mode: 'logs', id: failedReceiptId, lines: 80, maxChars: 4000 })}); then repair only the named source location and verify once.`
+            : `👉 change(${JSON.stringify({ intent: input.intent || '<fix the failure>' })}) to repair and verify again`])
     : [`👉 ${computeNext({ session, changedCount: touched.length, profile, stage: 'change', intent: input.intent })}`];
 
   const touchedLines = touched.slice(-8).map((filePath) => `- \`${filePath}\` (edit)`);
@@ -4185,8 +4189,10 @@ export async function pipelinePipeline(ctx, input = {}) {
     if (item.tool === 'explore') return isCompleteExploreDecision(item);
     const output = String(item.output || '');
     if (completeExploreSeen && /Skipped redundant inspect: the prior explore decision package/.test(output)) return true;
-    return /\[L\d+-L\d+\]/.test(output)
-      && !/✗|\[body not inlined|\[response truncated|Symbol .* not found/.test(output);
+    // Source lines can contain receipt/error strings literally. They are data, not control metadata.
+    const receipt = output.split('\n').filter((line) => !/^\s*\d+\s*\|/.test(line)).join('\n');
+    return /\[L\d+-L\d+\]/.test(receipt)
+      && !/✗|\[body not inlined|\[response truncated|Symbol .* not found/.test(receipt);
   });
   const decisionReady = decisionPackage
     && failureCount === 0

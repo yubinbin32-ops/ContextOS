@@ -1,0 +1,1593 @@
+{
+  "schemaVersion": 1,
+  "candidate": {
+    "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+    "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+    "version": "2.7.2"
+  },
+  "protocol": {
+    "schemaVersion": 1,
+    "campaign": "candidate9-explicit-finish-long-confirmation-20261001",
+    "candidate": {
+      "version": "2.7.2",
+      "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+      "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34"
+    },
+    "model": "gpt-6-luna",
+    "effort": "max",
+    "serial": true,
+    "tasks": [
+      "alignment-types",
+      "ownership-refresh",
+      "installer-json-resume"
+    ],
+    "thresholds": {
+      "minimumPairs": 3,
+      "totalSavings": 0.2,
+      "peakSavings": 0.1,
+      "maximumPairRegression": 0.1,
+      "medianUncachedInputMustNotIncrease": true,
+      "longSessionObservedCompactionRequired": true
+    },
+    "limits": {
+      "runs": 2,
+      "inputTokens": 3000000,
+      "uncachedInputTokens": 600000,
+      "outputTokens": 140000,
+      "seconds": 4000
+    },
+    "perTask": {
+      "alignment-types": {
+        "requests": 8,
+        "inputTokens": 100000,
+        "uncachedInputTokens": 30000,
+        "outputTokens": 6000,
+        "seconds": 300,
+        "arms": [
+          "native",
+          "contextos"
+        ]
+      },
+      "ownership-refresh": {
+        "requests": 24,
+        "inputTokens": 1000000,
+        "uncachedInputTokens": 140000,
+        "outputTokens": 24000,
+        "seconds": 1200,
+        "arms": [
+          "contextos",
+          "native"
+        ]
+      },
+      "installer-json-resume": {
+        "requests": 48,
+        "inputTokens": 1400000,
+        "uncachedInputTokens": 300000,
+        "outputTokens": 64000,
+        "seconds": 1800,
+        "arms": [
+          "contextos",
+          "native"
+        ]
+      }
+    },
+    "policy": "Every launched group remains in this campaign, including interruptions. No savings assigned to incomplete runs. Prior candidates remain historical diagnostic results. No runtime/skill changes during the campaign; no stronger models.",
+    "protocolRevision": "Runtime and skill remain candidate9. Two already completed matched pairs are reused without changing raw records. Only the long pair is run again with a larger equal two-stage budget after the prior native control passed repair/resume/regression checks but hit its output boundary before normal completion. Evaluation accounting now recognizes a strictly matched zero-usage context-size reset after compaction, without dropping provider response records. The interrupted original remains diagnostic and never becomes valid savings. The second long native control emitted normal completion and passed quality, but crossed the uncached-input boundary on its last response and remains invalid. Fresh long arms use equal wider stop thresholds and explicit finite-wait/final-summary follow-up guidance. OS runs first; reused tiny/cross pairs are unchanged. No old interruption becomes a valid comparison.",
+    "reusedPairs": [
+      {
+        "pairId": "2d9a5c48e04f",
+        "task": "alignment-types",
+        "sourceCampaign": "frozen-candidate9-source-context-20261001",
+        "reason": "Only completed tiny-task pair on this exact candidate; its task, prompts, preparation and bounds are unchanged. Raw records remain unchanged."
+      },
+      {
+        "pairId": "750df75daedf",
+        "task": "ownership-refresh",
+        "sourceCampaign": "candidate9-efficient-control-confirmation-20261001",
+        "reason": "Completed exact-candidate pair; task, preparation, prompt, bounds and raw records unchanged."
+      }
+    ]
+  },
+  "qualification": {
+    "schemaVersion": 1,
+    "qualified": false,
+    "thresholds": {
+      "minimumPairs": 3,
+      "totalSavings": 0.2,
+      "peakSavings": 0.1,
+      "maximumPairRegression": 0.1
+    },
+    "gates": {
+      "sameCandidate": true,
+      "completePairs": true,
+      "matchedGroups": true,
+      "totalTokens": false,
+      "peakContext": false,
+      "uncachedInput": true,
+      "regressionGuard": false,
+      "taskDiversity": true,
+      "repoDiversity": true,
+      "longSession": true
+    },
+    "pairs": [
+      {
+        "pairId": "2d9a5c48e04f",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "candidateSnapshot": {
+          "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+          "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+          "version": "2.7.2"
+        },
+        "native": {
+          "requestCount": 4,
+          "inputTokens": 51185,
+          "cachedInputTokens": 37888,
+          "outputTokens": 1922,
+          "reasoningOutputTokens": 982,
+          "totalTokens": 53107,
+          "peakRequestInputTokens": 13818,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 13297,
+          "peakInputWindowPercent": 5.35
+        },
+        "contextos": {
+          "requestCount": 4,
+          "inputTokens": 52427,
+          "cachedInputTokens": 45056,
+          "outputTokens": 2350,
+          "reasoningOutputTokens": 1351,
+          "totalTokens": 54777,
+          "peakRequestInputTokens": 14418,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 7371,
+          "peakInputWindowPercent": 5.58
+        },
+        "savings": {
+          "inputTokens": -0.024264921363680747,
+          "totalTokens": -0.03144594874498652,
+          "uncachedInputTokens": 0.44566443558697455,
+          "peakRequestInputTokens": -0.04342162396873639,
+          "elapsedSeconds": -0.3119831360467
+        }
+      },
+      {
+        "pairId": "750df75daedf",
+        "task": "ownership-refresh",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "cross-file",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "candidateSnapshot": {
+          "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+          "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+          "version": "2.7.2"
+        },
+        "native": {
+          "requestCount": 11,
+          "inputTokens": 450229,
+          "cachedInputTokens": 390400,
+          "outputTokens": 13219,
+          "reasoningOutputTokens": 9081,
+          "totalTokens": 463448,
+          "peakRequestInputTokens": 55860,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 59829,
+          "peakInputWindowPercent": 21.62
+        },
+        "contextos": {
+          "requestCount": 11,
+          "inputTokens": 299251,
+          "cachedInputTokens": 255232,
+          "outputTokens": 22675,
+          "reasoningOutputTokens": 16843,
+          "totalTokens": 321926,
+          "peakRequestInputTokens": 43042,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 44019,
+          "peakInputWindowPercent": 16.66
+        },
+        "savings": {
+          "inputTokens": 0.3353360178931166,
+          "totalTokens": 0.30536759248070977,
+          "uncachedInputTokens": 0.26425312139597856,
+          "peakRequestInputTokens": 0.22946652345148588,
+          "elapsedSeconds": -0.6483531691115416
+        }
+      },
+      {
+        "pairId": "c7a5f5516046",
+        "task": "installer-json-resume",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "long-session",
+          "contextMode": "curated-local",
+          "compactTokenLimit": 32000
+        },
+        "candidateSnapshot": {
+          "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+          "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+          "version": "2.7.2"
+        },
+        "native": {
+          "requestCount": 15,
+          "inputTokens": 309611,
+          "cachedInputTokens": 228608,
+          "outputTokens": 18220,
+          "reasoningOutputTokens": 12386,
+          "totalTokens": 327831,
+          "peakRequestInputTokens": 27850,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 81003,
+          "peakInputWindowPercent": 10.78
+        },
+        "contextos": {
+          "requestCount": 19,
+          "inputTokens": 413419,
+          "cachedInputTokens": 281856,
+          "outputTokens": 36929,
+          "reasoningOutputTokens": 27074,
+          "totalTokens": 450348,
+          "peakRequestInputTokens": 35913,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 131563,
+          "peakInputWindowPercent": 13.9
+        },
+        "savings": {
+          "inputTokens": -0.3352852450332837,
+          "totalTokens": -0.3737199959735351,
+          "uncachedInputTokens": -0.6241744132933349,
+          "peakRequestInputTokens": -0.2895152603231599,
+          "elapsedSeconds": -0.5739229797726682
+        }
+      }
+    ],
+    "excluded": [],
+    "medianSavings": {
+      "inputTokens": -0.024264921363680747,
+      "totalTokens": -0.03144594874498652,
+      "uncachedInputTokens": 0.26425312139597856,
+      "peakRequestInputTokens": -0.04342162396873639,
+      "elapsedSeconds": -0.5739229797726682
+    },
+    "limitations": [
+      "Provider usage counts are not currency.",
+      "Only completed matched pairs contribute to savings.",
+      "Small samples do not establish universal savings.",
+      "Long-session qualification requires observed compaction and independent resume validation."
+    ]
+  },
+  "results": [
+    {
+      "schemaVersion": 2,
+      "arm": "native",
+      "pairId": "2d9a5c48e04f",
+      "task": "alignment-types",
+      "scenario": {
+        "repo": "private-python-project",
+        "kind": "small-repair",
+        "contextMode": "cold-local",
+        "compactTokenLimit": null
+      },
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+      "promptSha256": "b105f4e9abea95d6de982457d310efc54277b2e79209428998f2d5f5ca639d2e",
+      "candidateSnapshot": {
+        "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+        "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+        "version": "2.7.2"
+      },
+      "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+      "allowNativeFallback": true,
+      "cliVersion": "codex-cli 0.159.2",
+      "provider": "chatgpt-http",
+      "bounds": {
+        "requests": 8,
+        "inputTokens": 100000,
+        "uncachedInputTokens": 30000,
+        "outputTokens": 6000,
+        "seconds": 300
+      },
+      "status": 0,
+      "stopReason": null,
+      "elapsedSeconds": 61.67,
+      "complete": true,
+      "accountingMatches": true,
+      "accountingMode": "cumulative-cli",
+      "modelVerified": true,
+      "observedModels": [
+        "gpt-6-luna"
+      ],
+      "osUsed": true,
+      "quality": {
+        "pass": true,
+        "checks": [
+          {
+            "name": "nested-dict",
+            "pass": true
+          },
+          {
+            "name": "nested-list",
+            "pass": true
+          },
+          {
+            "name": "raw-container-types",
+            "pass": true
+          },
+          {
+            "name": "scalar-types",
+            "pass": true
+          },
+          {
+            "name": "invalid-top-level",
+            "pass": true
+          },
+          {
+            "name": "malformed-json",
+            "pass": true
+          },
+          {
+            "name": "null",
+            "pass": true
+          },
+          {
+            "name": "valid-layout",
+            "pass": true
+          },
+          {
+            "name": "unknown-value",
+            "pass": true
+          },
+          {
+            "name": "line-limit",
+            "pass": true
+          },
+          {
+            "name": "trim-defaults",
+            "pass": true
+          },
+          {
+            "name": "all-defaults",
+            "pass": true
+          },
+          {
+            "name": "empty-answer",
+            "pass": true
+          }
+        ],
+        "regression": {
+          "pass": true,
+          "modifiedTests": [
+            "tests/test_answer_formatting.py"
+          ],
+          "seedStatus": 1,
+          "repairedStatus": 0
+        }
+      },
+      "scopePass": true,
+      "workflowRoute": "native",
+      "validForComparison": true,
+      "metrics": {
+        "requestCount": 4,
+        "inputTokens": 51185,
+        "cachedInputTokens": 37888,
+        "outputTokens": 1922,
+        "reasoningOutputTokens": 982,
+        "totalTokens": 53107,
+        "peakRequestInputTokens": 13818,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 13297,
+        "peakInputWindowPercent": 5.35
+      },
+      "observedPartialMetrics": null,
+      "requests": [
+        {
+          "input_tokens": 11531,
+          "cached_input_tokens": 8960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 457,
+          "reasoning_output_tokens": 251,
+          "total_tokens": 11988
+        },
+        {
+          "input_tokens": 12388,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1036,
+          "reasoning_output_tokens": 641,
+          "total_tokens": 13424
+        },
+        {
+          "input_tokens": 13448,
+          "cached_input_tokens": 4864,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 314,
+          "reasoning_output_tokens": 90,
+          "total_tokens": 13762
+        },
+        {
+          "input_tokens": 13818,
+          "cached_input_tokens": 13056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 115,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 13933
+        }
+      ],
+      "tools": {
+        "commands": 5,
+        "fileChanges": 1,
+        "osCalls": 0,
+        "osErrors": 0,
+        "mutationRejections": 0,
+        "verifiedMutations": 0,
+        "lastMutationStatus": null,
+        "compactionRecords": 0
+      },
+      "warnings": [],
+      "campaign": "contextos-frozen9-python-20261001"
+    },
+    {
+      "schemaVersion": 2,
+      "arm": "contextos",
+      "pairId": "2d9a5c48e04f",
+      "task": "alignment-types",
+      "scenario": {
+        "repo": "private-python-project",
+        "kind": "small-repair",
+        "contextMode": "cold-local",
+        "compactTokenLimit": null
+      },
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+      "promptSha256": "b105f4e9abea95d6de982457d310efc54277b2e79209428998f2d5f5ca639d2e",
+      "candidateSnapshot": {
+        "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+        "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+        "version": "2.7.2"
+      },
+      "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+      "allowNativeFallback": true,
+      "cliVersion": "codex-cli 0.159.2",
+      "provider": "chatgpt-http",
+      "bounds": {
+        "requests": 8,
+        "inputTokens": 100000,
+        "uncachedInputTokens": 30000,
+        "outputTokens": 6000,
+        "seconds": 300
+      },
+      "status": 0,
+      "stopReason": null,
+      "elapsedSeconds": 80.91,
+      "complete": true,
+      "accountingMatches": true,
+      "accountingMode": "cumulative-cli",
+      "modelVerified": true,
+      "observedModels": [
+        "gpt-6-luna"
+      ],
+      "osUsed": true,
+      "quality": {
+        "pass": true,
+        "checks": [
+          {
+            "name": "nested-dict",
+            "pass": true
+          },
+          {
+            "name": "nested-list",
+            "pass": true
+          },
+          {
+            "name": "raw-container-types",
+            "pass": true
+          },
+          {
+            "name": "scalar-types",
+            "pass": true
+          },
+          {
+            "name": "invalid-top-level",
+            "pass": true
+          },
+          {
+            "name": "malformed-json",
+            "pass": true
+          },
+          {
+            "name": "null",
+            "pass": true
+          },
+          {
+            "name": "valid-layout",
+            "pass": true
+          },
+          {
+            "name": "unknown-value",
+            "pass": true
+          },
+          {
+            "name": "line-limit",
+            "pass": true
+          },
+          {
+            "name": "trim-defaults",
+            "pass": true
+          },
+          {
+            "name": "all-defaults",
+            "pass": true
+          },
+          {
+            "name": "empty-answer",
+            "pass": true
+          }
+        ],
+        "regression": {
+          "pass": true,
+          "modifiedTests": [
+            "tests/test_answer_formatting.py"
+          ],
+          "seedStatus": 1,
+          "repairedStatus": 0
+        }
+      },
+      "scopePass": true,
+      "workflowRoute": "native-fallback",
+      "validForComparison": true,
+      "metrics": {
+        "requestCount": 4,
+        "inputTokens": 52427,
+        "cachedInputTokens": 45056,
+        "outputTokens": 2350,
+        "reasoningOutputTokens": 1351,
+        "totalTokens": 54777,
+        "peakRequestInputTokens": 14418,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 7371,
+        "peakInputWindowPercent": 5.58
+      },
+      "observedPartialMetrics": null,
+      "requests": [
+        {
+          "input_tokens": 11739,
+          "cached_input_tokens": 8960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 259,
+          "reasoning_output_tokens": 127,
+          "total_tokens": 11998
+        },
+        {
+          "input_tokens": 12388,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1470,
+          "reasoning_output_tokens": 946,
+          "total_tokens": 13858
+        },
+        {
+          "input_tokens": 13882,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 420,
+          "reasoning_output_tokens": 220,
+          "total_tokens": 14302
+        },
+        {
+          "input_tokens": 14418,
+          "cached_input_tokens": 13056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 201,
+          "reasoning_output_tokens": 58,
+          "total_tokens": 14619
+        }
+      ],
+      "tools": {
+        "commands": 3,
+        "fileChanges": 1,
+        "osCalls": 0,
+        "osErrors": 0,
+        "mutationRejections": 0,
+        "verifiedMutations": 0,
+        "lastMutationStatus": null,
+        "compactionRecords": 0
+      },
+      "warnings": [],
+      "campaign": "contextos-frozen9-python-20261001"
+    },
+    {
+      "schemaVersion": 2,
+      "arm": "contextos",
+      "pairId": "750df75daedf",
+      "task": "ownership-refresh",
+      "scenario": {
+        "repo": "ContextOS",
+        "kind": "cross-file",
+        "contextMode": "curated-local",
+        "compactTokenLimit": null
+      },
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+      "promptSha256": "e182e4b19a3a84198b089e9c640e0237915c2edc955f8cd61d7332ca747d4e75",
+      "candidateSnapshot": {
+        "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+        "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+        "version": "2.7.2"
+      },
+      "inputTree": "1b068486f5c387251ebc76c8dfc191a037c38fc3",
+      "allowNativeFallback": false,
+      "cliVersion": "codex-cli 0.159.2",
+      "provider": "chatgpt-http",
+      "bounds": {
+        "requests": 24,
+        "inputTokens": 1000000,
+        "uncachedInputTokens": 140000,
+        "outputTokens": 24000,
+        "seconds": 1200
+      },
+      "status": 0,
+      "stopReason": null,
+      "elapsedSeconds": 476.44,
+      "complete": true,
+      "accountingMatches": true,
+      "accountingMode": "cumulative-cli",
+      "modelVerified": true,
+      "observedModels": [
+        "gpt-6-luna"
+      ],
+      "osUsed": true,
+      "quality": {
+        "pass": true,
+        "checks": [
+          {
+            "name": "scoped refresh true",
+            "pass": true
+          },
+          {
+            "name": "scoped refresh false",
+            "pass": true
+          },
+          {
+            "name": "legacy full replacement remains full",
+            "pass": true
+          }
+        ],
+        "regression": {
+          "pass": true,
+          "modifiedTests": [
+            "packages/orchestrator/test/kernel-e2e.test.mjs"
+          ],
+          "seedStatus": 1,
+          "repairedStatus": 0
+        }
+      },
+      "scopePass": true,
+      "workflowRoute": "contextos",
+      "validForComparison": true,
+      "metrics": {
+        "requestCount": 11,
+        "inputTokens": 299251,
+        "cachedInputTokens": 255232,
+        "outputTokens": 22675,
+        "reasoningOutputTokens": 16843,
+        "totalTokens": 321926,
+        "peakRequestInputTokens": 43042,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 44019,
+        "peakInputWindowPercent": 16.66
+      },
+      "observedPartialMetrics": null,
+      "requests": [
+        {
+          "input_tokens": 11778,
+          "cached_input_tokens": 4864,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 156,
+          "reasoning_output_tokens": 75,
+          "total_tokens": 11934
+        },
+        {
+          "input_tokens": 12408,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 251,
+          "reasoning_output_tokens": 107,
+          "total_tokens": 12659
+        },
+        {
+          "input_tokens": 13483,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 663,
+          "reasoning_output_tokens": 516,
+          "total_tokens": 14146
+        },
+        {
+          "input_tokens": 17441,
+          "cached_input_tokens": 13056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 11025,
+          "reasoning_output_tokens": 9583,
+          "total_tokens": 28466
+        },
+        {
+          "input_tokens": 28497,
+          "cached_input_tokens": 17152,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1973,
+          "reasoning_output_tokens": 711,
+          "total_tokens": 30470
+        },
+        {
+          "input_tokens": 30608,
+          "cached_input_tokens": 27392,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2101,
+          "reasoning_output_tokens": 741,
+          "total_tokens": 32709
+        },
+        {
+          "input_tokens": 33330,
+          "cached_input_tokens": 30464,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 173,
+          "reasoning_output_tokens": 65,
+          "total_tokens": 33503
+        },
+        {
+          "input_tokens": 34055,
+          "cached_input_tokens": 32512,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 709,
+          "reasoning_output_tokens": 369,
+          "total_tokens": 34764
+        },
+        {
+          "input_tokens": 35021,
+          "cached_input_tokens": 33536,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1775,
+          "reasoning_output_tokens": 1563,
+          "total_tokens": 36796
+        },
+        {
+          "input_tokens": 39588,
+          "cached_input_tokens": 34560,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3196,
+          "reasoning_output_tokens": 2621,
+          "total_tokens": 42784
+        },
+        {
+          "input_tokens": 43042,
+          "cached_input_tokens": 38656,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 653,
+          "reasoning_output_tokens": 492,
+          "total_tokens": 43695
+        }
+      ],
+      "tools": {
+        "commands": 1,
+        "fileChanges": 0,
+        "osCalls": 5,
+        "osErrors": 2,
+        "mutationRejections": 1,
+        "verifiedMutations": 2,
+        "lastMutationStatus": "verified",
+        "compactionRecords": 0
+      },
+      "warnings": [],
+      "campaign": "contextos-efficient9-ownership-20261001"
+    },
+    {
+      "schemaVersion": 2,
+      "arm": "native",
+      "pairId": "750df75daedf",
+      "task": "ownership-refresh",
+      "scenario": {
+        "repo": "ContextOS",
+        "kind": "cross-file",
+        "contextMode": "curated-local",
+        "compactTokenLimit": null
+      },
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+      "promptSha256": "e182e4b19a3a84198b089e9c640e0237915c2edc955f8cd61d7332ca747d4e75",
+      "candidateSnapshot": {
+        "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+        "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+        "version": "2.7.2"
+      },
+      "inputTree": "1b068486f5c387251ebc76c8dfc191a037c38fc3",
+      "allowNativeFallback": false,
+      "cliVersion": "codex-cli 0.159.2",
+      "provider": "chatgpt-http",
+      "bounds": {
+        "requests": 24,
+        "inputTokens": 1000000,
+        "uncachedInputTokens": 140000,
+        "outputTokens": 24000,
+        "seconds": 1200
+      },
+      "status": 0,
+      "stopReason": null,
+      "elapsedSeconds": 289.04,
+      "complete": true,
+      "accountingMatches": true,
+      "accountingMode": "cumulative-cli",
+      "modelVerified": true,
+      "observedModels": [
+        "gpt-6-luna"
+      ],
+      "osUsed": true,
+      "quality": {
+        "pass": true,
+        "checks": [
+          {
+            "name": "scoped refresh true",
+            "pass": true
+          },
+          {
+            "name": "scoped refresh false",
+            "pass": true
+          },
+          {
+            "name": "legacy full replacement remains full",
+            "pass": true
+          }
+        ],
+        "regression": {
+          "pass": true,
+          "modifiedTests": [
+            "packages/orchestrator/test/scoped-ownership-refresh.test.mjs"
+          ],
+          "seedStatus": 1,
+          "repairedStatus": 0
+        }
+      },
+      "scopePass": true,
+      "workflowRoute": "native",
+      "validForComparison": true,
+      "metrics": {
+        "requestCount": 11,
+        "inputTokens": 450229,
+        "cachedInputTokens": 390400,
+        "outputTokens": 13219,
+        "reasoningOutputTokens": 9081,
+        "totalTokens": 463448,
+        "peakRequestInputTokens": 55860,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 59829,
+        "peakInputWindowPercent": 21.62
+      },
+      "observedPartialMetrics": null,
+      "requests": [
+        {
+          "input_tokens": 11570,
+          "cached_input_tokens": 1792,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 390,
+          "reasoning_output_tokens": 133,
+          "total_tokens": 11960
+        },
+        {
+          "input_tokens": 20235,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 470,
+          "reasoning_output_tokens": 119,
+          "total_tokens": 20705
+        },
+        {
+          "input_tokens": 30596,
+          "cached_input_tokens": 19200,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1318,
+          "reasoning_output_tokens": 898,
+          "total_tokens": 31914
+        },
+        {
+          "input_tokens": 37942,
+          "cached_input_tokens": 30464,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2984,
+          "reasoning_output_tokens": 2703,
+          "total_tokens": 40926
+        },
+        {
+          "input_tokens": 44100,
+          "cached_input_tokens": 37632,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3259,
+          "reasoning_output_tokens": 2896,
+          "total_tokens": 47359
+        },
+        {
+          "input_tokens": 47383,
+          "cached_input_tokens": 43776,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 153,
+          "reasoning_output_tokens": 0,
+          "total_tokens": 47536
+        },
+        {
+          "input_tokens": 47560,
+          "cached_input_tokens": 46848,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 284,
+          "reasoning_output_tokens": 127,
+          "total_tokens": 47844
+        },
+        {
+          "input_tokens": 49852,
+          "cached_input_tokens": 46848,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 622,
+          "reasoning_output_tokens": 510,
+          "total_tokens": 50474
+        },
+        {
+          "input_tokens": 51579,
+          "cached_input_tokens": 48896,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1949,
+          "reasoning_output_tokens": 349,
+          "total_tokens": 53528
+        },
+        {
+          "input_tokens": 53552,
+          "cached_input_tokens": 50944,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 458,
+          "reasoning_output_tokens": 203,
+          "total_tokens": 54010
+        },
+        {
+          "input_tokens": 55860,
+          "cached_input_tokens": 52992,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1332,
+          "reasoning_output_tokens": 1143,
+          "total_tokens": 57192
+        }
+      ],
+      "tools": {
+        "commands": 18,
+        "fileChanges": 3,
+        "osCalls": 0,
+        "osErrors": 0,
+        "mutationRejections": 0,
+        "verifiedMutations": 0,
+        "lastMutationStatus": null,
+        "compactionRecords": 0
+      },
+      "warnings": [],
+      "campaign": "contextos-efficient9-ownership-20261001"
+    },
+    {
+      "schemaVersion": 2,
+      "arm": "contextos",
+      "pairId": "c7a5f5516046",
+      "task": "installer-json-resume",
+      "scenario": {
+        "repo": "ContextOS",
+        "kind": "long-session",
+        "contextMode": "curated-local",
+        "compactTokenLimit": 32000
+      },
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+      "promptSha256": "9fc420c1695a4842d3c6dac90f6e83671fdbe99cf4d7fe6aaa96138dea88db29",
+      "candidateSnapshot": {
+        "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+        "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+        "version": "2.7.2"
+      },
+      "inputTree": "1b068486f5c387251ebc76c8dfc191a037c38fc3",
+      "allowNativeFallback": false,
+      "cliVersion": "codex-cli 0.159.2",
+      "provider": "chatgpt-http",
+      "bounds": {
+        "requests": 48,
+        "inputTokens": 1400000,
+        "uncachedInputTokens": 300000,
+        "outputTokens": 64000,
+        "seconds": 1800
+      },
+      "status": 0,
+      "stopReason": null,
+      "elapsedSeconds": 785.12,
+      "complete": true,
+      "accountingMatches": true,
+      "accountingMode": "cumulative-cli",
+      "modelVerified": true,
+      "observedModels": [
+        "gpt-6-luna"
+      ],
+      "osUsed": true,
+      "quality": {
+        "pass": true,
+        "checks": [
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "stale",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "stale",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "stale",
+            "pass": true
+          }
+        ],
+        "initial": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ]
+        },
+        "regression": {
+          "pass": true,
+          "modifiedTests": [
+            "packages/mcp/test/plugin-install.test.mjs"
+          ],
+          "seedStatus": 1,
+          "repairedStatus": 0
+        },
+        "resume": {
+          "pass": true,
+          "checks": [
+            {
+              "mode": "healthy",
+              "pass": true
+            },
+            {
+              "mode": "parser-drift",
+              "pass": true
+            },
+            {
+              "mode": "bundle-drift",
+              "pass": true
+            }
+          ]
+        }
+      },
+      "scopePass": true,
+      "workflowRoute": "contextos",
+      "validForComparison": true,
+      "metrics": {
+        "requestCount": 19,
+        "inputTokens": 413419,
+        "cachedInputTokens": 281856,
+        "outputTokens": 36929,
+        "reasoningOutputTokens": 27074,
+        "totalTokens": 450348,
+        "peakRequestInputTokens": 35913,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 131563,
+        "peakInputWindowPercent": 13.9
+      },
+      "observedPartialMetrics": null,
+      "requests": [
+        {
+          "input_tokens": 11764,
+          "cached_input_tokens": 4864,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 440,
+          "reasoning_output_tokens": 147,
+          "total_tokens": 12204
+        },
+        {
+          "input_tokens": 14331,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 415,
+          "reasoning_output_tokens": 261,
+          "total_tokens": 14746
+        },
+        {
+          "input_tokens": 20236,
+          "cached_input_tokens": 14080,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 4997,
+          "reasoning_output_tokens": 3807,
+          "total_tokens": 25233
+        },
+        {
+          "input_tokens": 25494,
+          "cached_input_tokens": 19200,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 545,
+          "reasoning_output_tokens": 422,
+          "total_tokens": 26039
+        },
+        {
+          "input_tokens": 26237,
+          "cached_input_tokens": 25344,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8874,
+          "reasoning_output_tokens": 8641,
+          "total_tokens": 35111
+        },
+        {
+          "input_tokens": 35913,
+          "cached_input_tokens": 2816,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1046,
+          "reasoning_output_tokens": 746,
+          "total_tokens": 36959
+        },
+        {
+          "input_tokens": 12310,
+          "cached_input_tokens": 8960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 247,
+          "reasoning_output_tokens": 164,
+          "total_tokens": 12557
+        },
+        {
+          "input_tokens": 13031,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 588,
+          "reasoning_output_tokens": 435,
+          "total_tokens": 13619
+        },
+        {
+          "input_tokens": 20310,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 7424,
+          "reasoning_output_tokens": 5662,
+          "total_tokens": 27734
+        },
+        {
+          "input_tokens": 27911,
+          "cached_input_tokens": 19200,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3232,
+          "reasoning_output_tokens": 767,
+          "total_tokens": 31143
+        },
+        {
+          "input_tokens": 31820,
+          "cached_input_tokens": 27392,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 929,
+          "reasoning_output_tokens": 784,
+          "total_tokens": 32749
+        },
+        {
+          "input_tokens": 27719,
+          "cached_input_tokens": 2816,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 823,
+          "reasoning_output_tokens": 516,
+          "total_tokens": 28542
+        },
+        {
+          "input_tokens": 12317,
+          "cached_input_tokens": 8960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 321,
+          "reasoning_output_tokens": 243,
+          "total_tokens": 12638
+        },
+        {
+          "input_tokens": 13112,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 722,
+          "reasoning_output_tokens": 588,
+          "total_tokens": 13834
+        },
+        {
+          "input_tokens": 16102,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 329,
+          "reasoning_output_tokens": 191,
+          "total_tokens": 16431
+        },
+        {
+          "input_tokens": 22345,
+          "cached_input_tokens": 15104,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3292,
+          "reasoning_output_tokens": 2338,
+          "total_tokens": 25637
+        },
+        {
+          "input_tokens": 25814,
+          "cached_input_tokens": 21248,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1130,
+          "reasoning_output_tokens": 130,
+          "total_tokens": 26944
+        },
+        {
+          "input_tokens": 27608,
+          "cached_input_tokens": 25344,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1134,
+          "reasoning_output_tokens": 966,
+          "total_tokens": 28742
+        },
+        {
+          "input_tokens": 29045,
+          "cached_input_tokens": 27392,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 441,
+          "reasoning_output_tokens": 266,
+          "total_tokens": 29486
+        }
+      ],
+      "tools": {
+        "commands": 2,
+        "fileChanges": 0,
+        "osCalls": 8,
+        "osErrors": 4,
+        "mutationRejections": 2,
+        "verifiedMutations": 2,
+        "lastMutationStatus": "verified",
+        "compactionRecords": 2
+      },
+      "contextSizeHintsIgnored": 2,
+      "duplicateSnapshotsIgnored": 2,
+      "warnings": [],
+      "campaign": "contextos-finish9-resume-20261001"
+    },
+    {
+      "schemaVersion": 2,
+      "arm": "native",
+      "pairId": "c7a5f5516046",
+      "task": "installer-json-resume",
+      "scenario": {
+        "repo": "ContextOS",
+        "kind": "long-session",
+        "contextMode": "curated-local",
+        "compactTokenLimit": 32000
+      },
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+      "promptSha256": "9fc420c1695a4842d3c6dac90f6e83671fdbe99cf4d7fe6aaa96138dea88db29",
+      "candidateSnapshot": {
+        "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+        "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34",
+        "version": "2.7.2"
+      },
+      "inputTree": "1b068486f5c387251ebc76c8dfc191a037c38fc3",
+      "allowNativeFallback": false,
+      "cliVersion": "codex-cli 0.159.2",
+      "provider": "chatgpt-http",
+      "bounds": {
+        "requests": 48,
+        "inputTokens": 1400000,
+        "uncachedInputTokens": 300000,
+        "outputTokens": 64000,
+        "seconds": 1800
+      },
+      "status": 0,
+      "stopReason": null,
+      "elapsedSeconds": 498.83,
+      "complete": true,
+      "accountingMatches": true,
+      "accountingMode": "cumulative-cli",
+      "modelVerified": true,
+      "observedModels": [
+        "gpt-6-luna"
+      ],
+      "osUsed": true,
+      "quality": {
+        "pass": true,
+        "checks": [
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "stale",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "stale",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "stale",
+            "pass": true
+          }
+        ],
+        "initial": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ]
+        },
+        "regression": {
+          "pass": true,
+          "modifiedTests": [
+            "packages/mcp/test/plugin-install.test.mjs"
+          ],
+          "seedStatus": 1,
+          "repairedStatus": 0
+        },
+        "resume": {
+          "pass": true,
+          "checks": [
+            {
+              "mode": "healthy",
+              "pass": true
+            },
+            {
+              "mode": "parser-drift",
+              "pass": true
+            },
+            {
+              "mode": "bundle-drift",
+              "pass": true
+            }
+          ]
+        }
+      },
+      "scopePass": true,
+      "workflowRoute": "native",
+      "validForComparison": true,
+      "metrics": {
+        "requestCount": 15,
+        "inputTokens": 309611,
+        "cachedInputTokens": 228608,
+        "outputTokens": 18220,
+        "reasoningOutputTokens": 12386,
+        "totalTokens": 327831,
+        "peakRequestInputTokens": 27850,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 81003,
+        "peakInputWindowPercent": 10.78
+      },
+      "observedPartialMetrics": null,
+      "requests": [
+        {
+          "input_tokens": 11555,
+          "cached_input_tokens": 8960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 292,
+          "reasoning_output_tokens": 124,
+          "total_tokens": 11847
+        },
+        {
+          "input_tokens": 12881,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 207,
+          "reasoning_output_tokens": 76,
+          "total_tokens": 13088
+        },
+        {
+          "input_tokens": 17172,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 291,
+          "reasoning_output_tokens": 169,
+          "total_tokens": 17463
+        },
+        {
+          "input_tokens": 19997,
+          "cached_input_tokens": 16128,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2449,
+          "reasoning_output_tokens": 2039,
+          "total_tokens": 22446
+        },
+        {
+          "input_tokens": 22470,
+          "cached_input_tokens": 19200,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 847,
+          "reasoning_output_tokens": 22,
+          "total_tokens": 23317
+        },
+        {
+          "input_tokens": 23341,
+          "cached_input_tokens": 22272,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 325,
+          "reasoning_output_tokens": 120,
+          "total_tokens": 23666
+        },
+        {
+          "input_tokens": 25344,
+          "cached_input_tokens": 8960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 923,
+          "reasoning_output_tokens": 750,
+          "total_tokens": 26267
+        },
+        {
+          "input_tokens": 26395,
+          "cached_input_tokens": 24320,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 244,
+          "reasoning_output_tokens": 52,
+          "total_tokens": 26639
+        },
+        {
+          "input_tokens": 26837,
+          "cached_input_tokens": 25344,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 6715,
+          "reasoning_output_tokens": 5164,
+          "total_tokens": 33552
+        },
+        {
+          "input_tokens": 27850,
+          "cached_input_tokens": 2816,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 609,
+          "reasoning_output_tokens": 262,
+          "total_tokens": 28459
+        },
+        {
+          "input_tokens": 12148,
+          "cached_input_tokens": 8960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 357,
+          "reasoning_output_tokens": 175,
+          "total_tokens": 12505
+        },
+        {
+          "input_tokens": 14950,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 357,
+          "reasoning_output_tokens": 179,
+          "total_tokens": 15307
+        },
+        {
+          "input_tokens": 20059,
+          "cached_input_tokens": 14080,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3693,
+          "reasoning_output_tokens": 2605,
+          "total_tokens": 23752
+        },
+        {
+          "input_tokens": 23776,
+          "cached_input_tokens": 19200,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 638,
+          "reasoning_output_tokens": 451,
+          "total_tokens": 24414
+        },
+        {
+          "input_tokens": 24836,
+          "cached_input_tokens": 23296,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 273,
+          "reasoning_output_tokens": 198,
+          "total_tokens": 25109
+        }
+      ],
+      "tools": {
+        "commands": 11,
+        "fileChanges": 4,
+        "osCalls": 0,
+        "osErrors": 0,
+        "mutationRejections": 0,
+        "verifiedMutations": 0,
+        "lastMutationStatus": null,
+        "compactionRecords": 1
+      },
+      "contextSizeHintsIgnored": 1,
+      "duplicateSnapshotsIgnored": 1,
+      "warnings": [],
+      "campaign": "contextos-finish9-resume-20261001"
+    }
+  ]
+}

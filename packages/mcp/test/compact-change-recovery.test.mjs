@@ -42,3 +42,17 @@ test('compact edits recover from ownership conflicts using only the returned rec
     assert.equal(fs.readFileSync(file, 'utf8'), '');
   } finally { await client.close(); fixture.cleanup(); }
 });
+test('failed change names the failing receipt and recovers logs without rerunning commands',async()=>{
+ const fixture=createFixtureProject({prefix:'ctxos-failure-receipt'});
+ fixture.write('src/failing.mjs','export const value = 1;\n');
+ const client=new Client({name:'failure-receipt',version:'1'}),server=createV3Server();
+ const [ct,st]=InMemoryTransport.createLinkedPair();await Promise.all([server.connect(st),client.connect(ct)]);
+ try {
+  const command=`node -e "require('node:fs').appendFileSync('checks.count','x');console.error('CTX_EXISTING_FAILURE_LOG');process.exit(1)"`;
+  const result=await client.callTool({name:'contextos',arguments:{action:'change',projectRoot:fixture.root,args:{edits:[{path:'src/failing.mjs',target:'value = 1',replacement:'value = 2'}],verify:['node --check src/failing.mjs',command],autoRevert:false}}});
+  const text=result.content[0].text;const recovery=JSON.parse(text.match(/verify\((\{[^\n]+\})\)/)[1]);
+  assert.equal(recovery.mode,'logs');assert.match(recovery.id,/^receipt-/);
+  const logs=await client.callTool({name:'contextos',arguments:{action:'verify',projectRoot:fixture.root,args:recovery}});
+  assert.match(logs.content[0].text,/CTX_EXISTING_FAILURE_LOG/);assert.equal(fs.readFileSync(path.join(fixture.root,'checks.count'),'utf8'),'x');
+ } finally {await client.close();fixture.cleanup();}
+});
