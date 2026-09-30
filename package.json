@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "description": "ContextOS is a context-governance MCP runtime for AI coding agents, with bounded repository I/O, receipt-first verification, and a multi-turn Micro subagent.",
   "license": "MIT",
   "type": "module",
@@ -64,6 +64,7 @@
     "preplugin:install": "npm run version:sync",
     "plugin:install": "npm run plugin:build && node scripts/install-plugin.mjs",
     "plugin:install:check": "node scripts/install-plugin.mjs --check",
+    "benchmark:context": "npm run plugin:build && node scripts/benchmark-context.mjs",
     "predesktop:build": "npm run version:sync",
     "desktop:build": "swift build --package-path apps/desktop",
     "desktop:run": "swift run --package-path apps/desktop contextos-desktop",
@@ -86,6 +87,7 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
-    "esbuild": "^0.25.9"
+    "esbuild": "^0.25.9",
+    "js-tiktoken": "1.0.21"
   }
 }

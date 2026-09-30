@@ -24,3 +24,11 @@ const normalized = bundled
   .map((line) => line.replace(/[ \t]+$/, ''))
   .join('\n');
 if (normalized !== bundled) fs.writeFileSync(outfile, normalized, 'utf8');
+
+// Ship the parser runtime beside the bundled server. A plugin cache lives
+// outside the repository and cannot rely on the repo's node_modules/grammars.
+const runtimeDir = path.dirname(outfile);
+fs.copyFileSync(path.join(repoRoot, 'node_modules', 'web-tree-sitter', 'web-tree-sitter.wasm'), path.join(runtimeDir, 'web-tree-sitter.wasm'));
+const pluginGrammars = path.join(repoRoot, 'plugins', 'contextos', 'grammars');
+fs.rmSync(pluginGrammars, { recursive: true, force: true });
+fs.cpSync(path.join(repoRoot, 'packages', 'code-intel', 'grammars'), pluginGrammars, { recursive: true });

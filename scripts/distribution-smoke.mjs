@@ -39,6 +39,8 @@ fs.writeFileSync(
   'utf8',
 );
 
+fs.writeFileSync(path.join(projectRoot, 'sample.py'), 'class User:\n    def name(self):\n        return "Ada"\n\ndef greet(user):\n    return user.name()\n');
+
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [runtimeBundle],
@@ -67,6 +69,10 @@ try {
   const text = (result.content || []).map((chunk) => chunk.text || '').join('\n');
   assert.match(text, /greet/);
   assert.match(text, /sample\.ts/);
+  const pythonResult = await client.callTool({ name: 'inspect', arguments: { projectRoot, path: 'sample.py', mode: 'outline' } });
+  const pythonText = (pythonResult.content || []).map((chunk) => chunk.text || '').join('\n');
+  assert.match(pythonText, /User\.name.*hash: `([a-f0-9]{16})`/, 'portable runtime must provide Python method hashes, not fallback-only symbols');
+  assert.match(pythonText, /calls: \[user\.name\]/, 'portable runtime must retain Python calls');
   console.log('# Distribution Smoke Verification Passed!');
   console.log(`- Bundle: ${path.relative(repoRoot, bundlePath)}`);
   console.log('- Runtime layout: bundle + web-tree-sitter.wasm + grammars, no node_modules');

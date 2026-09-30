@@ -33110,20 +33110,20 @@ function readReceiptStillValid(projectRoot, relativePath, receipt) {
 function numberCodeLines(text, fallbackStartLine = 1) {
   const lines = String(text ?? "").split("\n");
   const headerIndex = lines.findIndex((line) => /\[L(\d+)-L(\d+)\]/.test(line));
-  const header = headerIndex >= 0 ? lines[headerIndex] : "";
-  const match = /\[L(\d+)-L(\d+)\]/.exec(header);
-  const startLine = match ? Number(match[1]) : fallbackStartLine;
-  let bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
-  if (bodyStart < lines.length && /^\/\/ \[L\d+-L\d+\]$/.test(lines[bodyStart].trim())) {
-    bodyStart += 1;
-  }
+  const match = headerIndex >= 0 ? /\[L(\d+)-L(\d+)\]/.exec(lines[headerIndex]) : null;
+  let lineNumber = match ? Number(match[1]) : fallbackStartLine;
+  const bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
   const closingFence = lines.lastIndexOf("```");
   const bodyEnd = closingFence > bodyStart ? closingFence : lines.length;
-  const prefix2 = headerIndex >= 0 ? lines.slice(0, bodyStart) : [];
-  const body2 = lines.slice(bodyStart, bodyEnd);
-  const suffix = lines.slice(bodyEnd);
-  const numbered = body2.map((line, index) => `${String(startLine + index).padStart(4, " ")} | ${line}`).join("\n");
-  return [...prefix2, numbered, ...suffix].filter((line, index, values) => line !== "" || index === values.length - 1).join("\n");
+  const numbered = lines.slice(bodyStart, bodyEnd).map((line) => {
+    const range = /^\/\/ \[L(\d+)-L(\d+)\]$/.exec(line.trim());
+    if (range) {
+      lineNumber = Number(range[1]);
+      return line;
+    }
+    return `${String(lineNumber++).padStart(4, " ")} | ${line}`;
+  });
+  return [...lines.slice(0, bodyStart), ...numbered, ...lines.slice(bodyEnd)].filter((line, index, values) => line !== "" || index === values.length - 1).join("\n");
 }
 async function inspectPipeline(ctx, input = {}) {
   if (input.inspect && typeof input.inspect === "object" && !Array.isArray(input.inspect)) {
@@ -34008,7 +34008,7 @@ function guardBatchInspectAction(normalized, enabled) {
   if (!enabled || normalized?.tool !== "inspect" || !normalized.input || typeof normalized.input !== "object") {
     return normalized;
   }
-  if (normalized.input.allowExplicitBatchInspect === true && inspectHasExplicitTarget(normalized.input)) return normalized;
+  if (inspectHasExplicitTarget(normalized.input)) return normalized;
   const requestedMax = Number(normalized.input.maxChars);
   return {
     ...normalized,
@@ -63313,7 +63313,7 @@ import path34 from "node:path";
 // package.json
 var package_default = {
   name: "contextos",
-  version: "2.7.0",
+  version: "2.7.1",
   description: "ContextOS is a context-governance MCP runtime for AI coding agents, with bounded repository I/O, receipt-first verification, and a multi-turn Micro subagent.",
   license: "MIT",
   type: "module",
@@ -63377,6 +63377,7 @@ var package_default = {
     "preplugin:install": "npm run version:sync",
     "plugin:install": "npm run plugin:build && node scripts/install-plugin.mjs",
     "plugin:install:check": "node scripts/install-plugin.mjs --check",
+    "benchmark:context": "npm run plugin:build && node scripts/benchmark-context.mjs",
     "predesktop:build": "npm run version:sync",
     "desktop:build": "swift build --package-path apps/desktop",
     "desktop:run": "swift run --package-path apps/desktop contextos-desktop",
@@ -63399,7 +63400,8 @@ var package_default = {
     zod: "^4.1.5"
   },
   devDependencies: {
-    esbuild: "^0.25.9"
+    esbuild: "^0.25.9",
+    "js-tiktoken": "1.0.21"
   }
 };
 

@@ -53,27 +53,11 @@ function stripLegacyHookState(configPath) {
 
 function findPluginInstalls() {
   const cacheRoot = path.join(codexHome, "plugins", "cache");
-  if (!fs.existsSync(cacheRoot)) return [];
-  const installs = [];
-  for (const marketplace of fs.readdirSync(cacheRoot)) {
-    const marketplaceDir = path.join(cacheRoot, marketplace);
-    if (!fs.statSync(marketplaceDir).isDirectory()) continue;
-    for (const plugin of fs.readdirSync(marketplaceDir)) {
-      if (!plugin.toLowerCase().includes("contextos")) continue;
-      const pluginEntry = path.join(marketplaceDir, plugin);
-      if (!fs.statSync(pluginEntry).isDirectory()) continue;
-      for (const version of fs.readdirSync(pluginEntry)) {
-        const versionDir = path.join(pluginEntry, version);
-        if (fs.statSync(versionDir).isDirectory()
-          && fs.existsSync(path.join(versionDir, "server", "contextos-mcp.mjs"))) {
-          installs.push(versionDir);
-        }
-      }
-    }
-  }
-  return installs;
+  return registeredPlugins.map((plugin) => path.join(
+    cacheRoot, plugin.marketplaceName || plugin.pluginId.split("@").at(-1),
+    "contextos", plugin.version
+  )).filter((target) => fs.existsSync(path.join(target, "server", "contextos-mcp.mjs")));
 }
-
 function listInstalledContextosPlugins() {
   const codexBin = process.env.CONTEXTOS_CODEX_BIN || "codex";
   try {
@@ -149,11 +133,37 @@ function detectMcpToolDiscovery() {
 }
 
 function findLocalSourceInstalls() {
-  const sourceTarget = path.join(os.homedir(), "plugins", "contextos");
-  return fs.existsSync(sourceTarget) ? [sourceTarget] : [];
+  return registeredPlugins.map((plugin) => plugin.source?.path)
+    .filter((target) => target && path.resolve(target) !== path.resolve(pluginDir) && fs.existsSync(target));
 }
 
-const registeredPlugins = ensureCodexPluginInstalled();
+function assertInstalledMatchesBuild(plugins) {
+  for (const plugin of plugins) {
+    if (plugin.version !== expectedVersion) {
+      throw new Error(`Installed ${plugin.pluginId} is ${plugin.version}; expected ${expectedVersion}. Run npm run plugin:install to refresh the registered version.`);
+    }
+    const target = path.join(codexHome, "plugins", "cache", plugin.marketplaceName || plugin.pluginId.split("@").at(-1), "contextos", plugin.version);
+    const grammarDir = path.join(pluginDir, "grammars");
+    const grammarFiles = fs.existsSync(grammarDir) ? fs.readdirSync(grammarDir)
+      .filter((name) => name.endsWith(".wasm")).map((name) => `grammars/${name}`) : [];
+    for (const relative of ["server/contextos-mcp.mjs", "server/web-tree-sitter.wasm", "skills/contextos/SKILL.md", ".codex-plugin/plugin.json", ".mcp.json", ...grammarFiles]) {
+      const expected = path.join(pluginDir, relative);
+      if (!fs.existsSync(expected)) continue;
+      const actual = path.join(target, relative);
+      if (!fs.existsSync(actual) || !fs.readFileSync(actual).equals(fs.readFileSync(expected))) {
+        throw new Error(`Installed plugin differs from this build: ${actual}. Run npm run plugin:install.`);
+      }
+    }
+  }
+  const canonicalBundle = path.join(contextosHome, "server", "contextos-mcp.mjs");
+  if (!fs.existsSync(canonicalBundle) || !fs.readFileSync(canonicalBundle).equals(fs.readFileSync(bundle))) {
+    throw new Error(`Canonical server differs from this build: ${canonicalBundle}. Run npm run plugin:install.`);
+  }
+}
+
+const expectedVersion = JSON.parse(fs.readFileSync(path.join(manifestDir, "plugin.json"), "utf8")).version;
+const registeredPlugins = checkOnly ? listInstalledContextosPlugins() : ensureCodexPluginInstalled();
+if (!registeredPlugins.length) throw new Error("ContextOS is not installed/enabled. Run npm run plugin:install first.");
 console.log(`✓ Codex 已注册 ContextOS 插件：${registeredPlugins.map((plugin) => plugin.pluginId).join(", ")}`);
 const mcpDiscovery = detectMcpToolDiscovery();
 if (!mcpDiscovery.ok) {
@@ -169,7 +179,8 @@ if (mcpDiscovery.mode === "tool_search") {
 }
 console.log(`  CONTEXTOS_HOME=${contextosHome}`);
 if (checkOnly) {
-  console.log("✓ 插件安装与 MCP discovery 门禁通过。");
+  assertInstalledMatchesBuild(registeredPlugins);
+  console.log(`✓ ContextOS ${expectedVersion} 注册版本、插件文件与权威服务端均已核验。`);
   process.exit(0);
 }
 
@@ -182,6 +193,10 @@ for (const target of targets) {
   fs.mkdirSync(path.join(target, "server"), { recursive: true });
   fs.copyFileSync(bundle, path.join(target, "server", "contextos-mcp.mjs"));
   fs.chmodSync(path.join(target, "server", "contextos-mcp.mjs"), 0o755);
+  const runtimeWasm = path.join(pluginDir, "server", "web-tree-sitter.wasm");
+  if (fs.existsSync(runtimeWasm)) fs.copyFileSync(runtimeWasm, path.join(target, "server", "web-tree-sitter.wasm"));
+  const grammars = path.join(pluginDir, "grammars");
+  if (fs.existsSync(grammars)) copyDir(grammars, path.join(target, "grammars"));
   copyDir(skillDir, path.join(target, "skills", "contextos"));
   // Drop stale reference docs that the current skill no longer ships.
   const staleReferences = path.join(target, "skills", "contextos", "references");
@@ -207,6 +222,10 @@ const canonicalDir = path.join(contextosHome, "server");
 fs.mkdirSync(canonicalDir, { recursive: true });
 fs.copyFileSync(bundle, path.join(canonicalDir, "contextos-mcp.mjs"));
 fs.chmodSync(path.join(canonicalDir, "contextos-mcp.mjs"), 0o755);
+const runtimeWasm = path.join(pluginDir, "server", "web-tree-sitter.wasm");
+if (fs.existsSync(runtimeWasm)) fs.copyFileSync(runtimeWasm, path.join(canonicalDir, "web-tree-sitter.wasm"));
+const grammarDir = path.join(pluginDir, "grammars");
+if (fs.existsSync(grammarDir)) copyDir(grammarDir, path.join(contextosHome, "grammars"));
 console.log(`✓ 已同步权威服务端：${path.join(canonicalDir, "contextos-mcp.mjs")}`);
 stripLegacyHookState(path.join(codexHome, "config.toml"));
 const legacyHooksDir = path.join(contextosHome, "hooks");
@@ -216,4 +235,14 @@ for (const stale of ["contextos-hook.mjs", "contextos-hook-launcher.mjs", "runti
 try {
   if (fs.existsSync(legacyHooksDir) && fs.readdirSync(legacyHooksDir).length === 0) fs.rmdirSync(legacyHooksDir);
 } catch (_) {}
+// Refresh registration after synchronizing the local marketplace source. Copying
+// bytes into an old cache alone does not update Codex's installed-version record.
+for (const plugin of registeredPlugins) {
+  if (plugin.version === expectedVersion) continue;
+  execFileSync(process.env.CONTEXTOS_CODEX_BIN || "codex", ["plugin", "add", plugin.pluginId, "--json"], {
+    encoding: "utf8", env: { ...process.env, CODEX_HOME: codexHome }, stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+assertInstalledMatchesBuild(listInstalledContextosPlugins());
+console.log(`✓ ContextOS ${expectedVersion} 已安装并通过内容一致性核验。`);
 console.log("  MCP server 在会话启动时加载，需新开会话才生效。");

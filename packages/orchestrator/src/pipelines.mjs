@@ -2219,22 +2219,21 @@ function readReceiptStillValid(projectRoot, relativePath, receipt) {
 function numberCodeLines(text, fallbackStartLine = 1) {
   const lines = String(text ?? '').split('\n');
   const headerIndex = lines.findIndex((line) => /\[L(\d+)-L(\d+)\]/.test(line));
-  const header = headerIndex >= 0 ? lines[headerIndex] : '';
-  const match = /\[L(\d+)-L(\d+)\]/.exec(header);
-  const startLine = match ? Number(match[1]) : fallbackStartLine;
-  let bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
-  if (bodyStart < lines.length && /^\/\/ \[L\d+-L\d+\]$/.test(lines[bodyStart].trim())) {
-    bodyStart += 1;
-  }
+  const match = headerIndex >= 0 ? /\[L(\d+)-L(\d+)\]/.exec(lines[headerIndex]) : null;
+  let lineNumber = match ? Number(match[1]) : fallbackStartLine;
+  const bodyStart = headerIndex >= 0 ? headerIndex + 1 : 0;
   const closingFence = lines.lastIndexOf('```');
   const bodyEnd = closingFence > bodyStart ? closingFence : lines.length;
-  const prefix = headerIndex >= 0 ? lines.slice(0, bodyStart) : [];
-  const body = lines.slice(bodyStart, bodyEnd);
-  const suffix = lines.slice(bodyEnd);
-  const numbered = body
-    .map((line, index) => `${String(startLine + index).padStart(4, ' ')} | ${line}`)
-    .join('\n');
-  return [...prefix, numbered, ...suffix].filter((line, index, values) => line !== '' || index === values.length - 1).join('\n');
+  const numbered = lines.slice(bodyStart, bodyEnd).map((line) => {
+    const range = /^\/\/ \[L(\d+)-L(\d+)\]$/.exec(line.trim());
+    if (range) {
+      lineNumber = Number(range[1]);
+      return line;
+    }
+    return `${String(lineNumber++).padStart(4, ' ')} | ${line}`;
+  });
+  return [...lines.slice(0, bodyStart), ...numbered, ...lines.slice(bodyEnd)]
+    .filter((line, index, values) => line !== '' || index === values.length - 1).join('\n');
 }
 
 export async function inspectPipeline(ctx, input = {}) {
@@ -3330,7 +3329,8 @@ function guardBatchInspectAction(normalized, enabled) {
   if (!enabled || normalized?.tool !== 'inspect' || !normalized.input || typeof normalized.input !== 'object') {
     return normalized;
   }
-  if (normalized.input.allowExplicitBatchInspect === true && inspectHasExplicitTarget(normalized.input)) return normalized;
+  // Explicit symbols/ranges are already bounded; preserve them without a hidden opt-in.
+  if (inspectHasExplicitTarget(normalized.input)) return normalized;
   const requestedMax = Number(normalized.input.maxChars);
   return {
     ...normalized,

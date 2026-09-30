@@ -1,0 +1,525 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-09-30T10:29:46.210Z",
+  "version": "2.7.1",
+  "baseCommit": "7c8e04364ccb6b21e006a1de2ae8374f9020a6a4",
+  "workingTreeModified": true,
+  "serverSha256": "92e67e5b7c9b68a1ecc4846a449275a541d507b5349c473574053055890af853",
+  "source": {
+    "path": "packages/orchestrator/src/pipelines.mjs",
+    "sha256": "f18dd7e669147f5b948e4673611104301465941f031761e28ccb72a9bb59995d",
+    "characters": 173649,
+    "symbol": "guardBatchInspectAction"
+  },
+  "environment": {
+    "node": "v22.22.1",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "methodology": {
+    "tokenizer": "o200k_base",
+    "library": "js-tiktoken",
+    "libraryVersion": "1.0.21",
+    "runs": 5,
+    "aggregation": "median",
+    "metric": "Tool response text tokens; OS request tokens reported separately",
+    "baseline": "Same source/log: whole-file and efficient native symbol-slice controls; logs are explicitly synthetic",
+    "limitations": [
+      "No LLM requests, reasoning tokens, provider billing, cached-input costs, or total task savings measured.",
+      "Fixed plugin schema, server instructions, and skill overhead are additional context; host schemas and pre-existing prompt are excluded.",
+      "Noisy-log fixtures illustrate compression, not typical project performance.",
+      "Source and tokenizer hashes/version allow auditing; dynamic receipt ids may shift a few tokens."
+    ]
+  },
+  "definitions": {
+    "compactToolCount": 1,
+    "legacyToolCount": 7,
+    "compactSchemaTokens": 1056,
+    "legacySchemaTokens": 2922,
+    "skillTokens": 1350,
+    "serverInstructionsTokens": 98,
+    "fixedContextTokens": 2504
+  },
+  "scenarios": [
+    {
+      "id": "source_whole_file_vs_symbol",
+      "baselineOutputTokens": 43031,
+      "osOutputTokens": 280,
+      "outputReductionPercent": 99.35,
+      "osRequestTokens": 30,
+      "medianDurationMs": 85
+    },
+    {
+      "id": "source_precise_native_slice_vs_symbol",
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 280,
+      "outputReductionPercent": -69.7,
+      "osRequestTokens": 30,
+      "medianDurationMs": 85
+    },
+    {
+      "id": "router_whole_file_vs_symbol",
+      "baselineOutputTokens": 1459,
+      "osOutputTokens": 336,
+      "outputReductionPercent": 76.97,
+      "osRequestTokens": 27,
+      "medianDurationMs": 5
+    },
+    {
+      "id": "router_precise_native_slice_vs_symbol",
+      "baselineOutputTokens": 220,
+      "osOutputTokens": 336,
+      "outputReductionPercent": -52.73,
+      "osRequestTokens": 27,
+      "medianDurationMs": 5
+    },
+    {
+      "id": "repeat_symbol_read",
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 36,
+      "outputReductionPercent": 78.18,
+      "osRequestTokens": 30,
+      "medianDurationMs": 2
+    },
+    {
+      "id": "tiny_file_read",
+      "baselineOutputTokens": 6,
+      "osOutputTokens": 66,
+      "outputReductionPercent": -1000,
+      "osRequestTokens": 23,
+      "medianDurationMs": 3
+    },
+    {
+      "id": "synthetic_success_log",
+      "baselineOutputTokens": 14003,
+      "osOutputTokens": 83,
+      "outputReductionPercent": 99.41,
+      "osRequestTokens": 24,
+      "medianDurationMs": 95
+    },
+    {
+      "id": "synthetic_failure_log",
+      "baselineOutputTokens": 14016,
+      "osOutputTokens": 150,
+      "outputReductionPercent": 98.93,
+      "osRequestTokens": 29,
+      "medianDurationMs": 85
+    }
+  ],
+  "qualityChecks": [
+    "source_whole_file_vs_symbol",
+    "source_precise_native_slice_vs_symbol",
+    "router_whole_file_vs_symbol",
+    "router_precise_native_slice_vs_symbol",
+    "repeat_symbol_read",
+    "tiny_file_read",
+    "fresh_read_after_disk_change",
+    "multi_range_source_line_numbers",
+    "batched_explicit_ranges",
+    "synthetic_success_log",
+    "synthetic_failure_log",
+    "failed_command_halts_chain"
+  ],
+  "samples": [
+    {
+      "id": "source_whole_file_vs_symbol",
+      "run": 1,
+      "baselineOutputTokens": 43031,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 85,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "source_precise_native_slice_vs_symbol",
+      "run": 1,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 85,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "router_whole_file_vs_symbol",
+      "run": 1,
+      "baselineOutputTokens": 1459,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 5,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "router_precise_native_slice_vs_symbol",
+      "run": 1,
+      "baselineOutputTokens": 220,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 5,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "repeat_symbol_read",
+      "run": 1,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 36,
+      "osRequestTokens": 30,
+      "durationMs": 3,
+      "responseSha256": "ace6478932a500c34fadcd504808af3c989e3524957e206262ae16eefd394f88",
+      "qualityPass": true
+    },
+    {
+      "id": "tiny_file_read",
+      "run": 1,
+      "baselineOutputTokens": 6,
+      "osOutputTokens": 66,
+      "osRequestTokens": 23,
+      "durationMs": 3,
+      "responseSha256": "7086b4e63f8c7b0c675c14c46122686cf2ccbdb24a742e0669b25c9d377abfe6",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_success_log",
+      "run": 1,
+      "baselineOutputTokens": 14003,
+      "osOutputTokens": 83,
+      "osRequestTokens": 24,
+      "durationMs": 94,
+      "responseSha256": "b5944fc448d51e011e3857b7ec6453064f8d96f79c238768d810de51a809d6e3",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_failure_log",
+      "run": 1,
+      "baselineOutputTokens": 14016,
+      "osOutputTokens": 150,
+      "osRequestTokens": 29,
+      "durationMs": 86,
+      "responseSha256": "319fd463c9e7ff0392bbb794274e36623a764c980a25dbee8c85ad2c0d5170d0",
+      "qualityPass": true
+    },
+    {
+      "id": "source_whole_file_vs_symbol",
+      "run": 2,
+      "baselineOutputTokens": 43031,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 85,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "source_precise_native_slice_vs_symbol",
+      "run": 2,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 85,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "router_whole_file_vs_symbol",
+      "run": 2,
+      "baselineOutputTokens": 1459,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 6,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "router_precise_native_slice_vs_symbol",
+      "run": 2,
+      "baselineOutputTokens": 220,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 6,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "repeat_symbol_read",
+      "run": 2,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 36,
+      "osRequestTokens": 30,
+      "durationMs": 3,
+      "responseSha256": "ace6478932a500c34fadcd504808af3c989e3524957e206262ae16eefd394f88",
+      "qualityPass": true
+    },
+    {
+      "id": "tiny_file_read",
+      "run": 2,
+      "baselineOutputTokens": 6,
+      "osOutputTokens": 66,
+      "osRequestTokens": 23,
+      "durationMs": 3,
+      "responseSha256": "7086b4e63f8c7b0c675c14c46122686cf2ccbdb24a742e0669b25c9d377abfe6",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_success_log",
+      "run": 2,
+      "baselineOutputTokens": 14003,
+      "osOutputTokens": 87,
+      "osRequestTokens": 24,
+      "durationMs": 95,
+      "responseSha256": "d0e6d281cffd634dd53fb1a931ba29f479b2eb3642b925e92e478b77b0ef8cc9",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_failure_log",
+      "run": 2,
+      "baselineOutputTokens": 14016,
+      "osOutputTokens": 154,
+      "osRequestTokens": 29,
+      "durationMs": 85,
+      "responseSha256": "c5e4f2a2c921065287f4f7ad2727e8851d5304f945bc3ed310ce4802081665e5",
+      "qualityPass": true
+    },
+    {
+      "id": "source_whole_file_vs_symbol",
+      "run": 3,
+      "baselineOutputTokens": 43031,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 85,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "source_precise_native_slice_vs_symbol",
+      "run": 3,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 85,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "router_whole_file_vs_symbol",
+      "run": 3,
+      "baselineOutputTokens": 1459,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 5,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "router_precise_native_slice_vs_symbol",
+      "run": 3,
+      "baselineOutputTokens": 220,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 5,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "repeat_symbol_read",
+      "run": 3,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 36,
+      "osRequestTokens": 30,
+      "durationMs": 2,
+      "responseSha256": "ace6478932a500c34fadcd504808af3c989e3524957e206262ae16eefd394f88",
+      "qualityPass": true
+    },
+    {
+      "id": "tiny_file_read",
+      "run": 3,
+      "baselineOutputTokens": 6,
+      "osOutputTokens": 66,
+      "osRequestTokens": 23,
+      "durationMs": 3,
+      "responseSha256": "7086b4e63f8c7b0c675c14c46122686cf2ccbdb24a742e0669b25c9d377abfe6",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_success_log",
+      "run": 3,
+      "baselineOutputTokens": 14003,
+      "osOutputTokens": 83,
+      "osRequestTokens": 24,
+      "durationMs": 97,
+      "responseSha256": "3ce92640f6857bae305573273769331544cc221f714501a5f6143b4ba7f73171",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_failure_log",
+      "run": 3,
+      "baselineOutputTokens": 14016,
+      "osOutputTokens": 150,
+      "osRequestTokens": 29,
+      "durationMs": 84,
+      "responseSha256": "ed4369551cab9318cbc2faa92116c0b76b7bc02211638048b0e2dc8ab0884789",
+      "qualityPass": true
+    },
+    {
+      "id": "source_whole_file_vs_symbol",
+      "run": 4,
+      "baselineOutputTokens": 43031,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 87,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "source_precise_native_slice_vs_symbol",
+      "run": 4,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 87,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "router_whole_file_vs_symbol",
+      "run": 4,
+      "baselineOutputTokens": 1459,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 5,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "router_precise_native_slice_vs_symbol",
+      "run": 4,
+      "baselineOutputTokens": 220,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 5,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "repeat_symbol_read",
+      "run": 4,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 36,
+      "osRequestTokens": 30,
+      "durationMs": 2,
+      "responseSha256": "ace6478932a500c34fadcd504808af3c989e3524957e206262ae16eefd394f88",
+      "qualityPass": true
+    },
+    {
+      "id": "tiny_file_read",
+      "run": 4,
+      "baselineOutputTokens": 6,
+      "osOutputTokens": 66,
+      "osRequestTokens": 23,
+      "durationMs": 2,
+      "responseSha256": "7086b4e63f8c7b0c675c14c46122686cf2ccbdb24a742e0669b25c9d377abfe6",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_success_log",
+      "run": 4,
+      "baselineOutputTokens": 14003,
+      "osOutputTokens": 86,
+      "osRequestTokens": 24,
+      "durationMs": 97,
+      "responseSha256": "49eee1d901cee28ae992e14fa6ecccb5516793fcbe0e86b833af2d35d6f82060",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_failure_log",
+      "run": 4,
+      "baselineOutputTokens": 14016,
+      "osOutputTokens": 155,
+      "osRequestTokens": 29,
+      "durationMs": 85,
+      "responseSha256": "52756ce6152f0cb084f86c646e96c69b6f8a8f7d08f01c414d09e87ccd992b86",
+      "qualityPass": true
+    },
+    {
+      "id": "source_whole_file_vs_symbol",
+      "run": 5,
+      "baselineOutputTokens": 43031,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 87,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "source_precise_native_slice_vs_symbol",
+      "run": 5,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 280,
+      "osRequestTokens": 30,
+      "durationMs": 87,
+      "responseSha256": "23ed9d8216d6473376b792bc2a1f514f5605c1b34585d8426e4bdac24e0d917d",
+      "qualityPass": true
+    },
+    {
+      "id": "router_whole_file_vs_symbol",
+      "run": 5,
+      "baselineOutputTokens": 1459,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 5,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "router_precise_native_slice_vs_symbol",
+      "run": 5,
+      "baselineOutputTokens": 220,
+      "osOutputTokens": 336,
+      "osRequestTokens": 27,
+      "durationMs": 5,
+      "responseSha256": "6f2658ad6758f24bf71638b12e6072b87036714c73c77079f9ce5df92b306496",
+      "qualityPass": true
+    },
+    {
+      "id": "repeat_symbol_read",
+      "run": 5,
+      "baselineOutputTokens": 165,
+      "osOutputTokens": 36,
+      "osRequestTokens": 30,
+      "durationMs": 2,
+      "responseSha256": "ace6478932a500c34fadcd504808af3c989e3524957e206262ae16eefd394f88",
+      "qualityPass": true
+    },
+    {
+      "id": "tiny_file_read",
+      "run": 5,
+      "baselineOutputTokens": 6,
+      "osOutputTokens": 66,
+      "osRequestTokens": 23,
+      "durationMs": 3,
+      "responseSha256": "7086b4e63f8c7b0c675c14c46122686cf2ccbdb24a742e0669b25c9d377abfe6",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_success_log",
+      "run": 5,
+      "baselineOutputTokens": 14003,
+      "osOutputTokens": 83,
+      "osRequestTokens": 24,
+      "durationMs": 94,
+      "responseSha256": "262238888e091365450555f6e266b283b33f363d162c8a9054d05706fc87698a",
+      "qualityPass": true
+    },
+    {
+      "id": "synthetic_failure_log",
+      "run": 5,
+      "baselineOutputTokens": 14016,
+      "osOutputTokens": 150,
+      "osRequestTokens": 29,
+      "durationMs": 86,
+      "responseSha256": "4f44166c7374404287dfd60ced4f46d21b1485f22dc55c99952d930c0c8c9b66",
+      "qualityPass": true
+    }
+  ]
+}

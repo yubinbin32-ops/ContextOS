@@ -23,3 +23,7 @@ assets/截屏*.png
 .wrangler/
 .agents/mcp_config.json
 *.bak
+
+# Generated standalone plugin parser assets
+plugins/contextos/server/web-tree-sitter.wasm
+plugins/contextos/grammars/

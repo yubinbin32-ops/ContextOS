@@ -2380,7 +2380,7 @@ test('change strips ContextOS inspect metadata headers from edit targets', async
   service.close();
 });
 
-test('pipeline forces multi-inspect batches to outline even when full is requested', async () => {
+test('pipeline keeps path-only multi-inspect batches outlined even when full is requested', async () => {
   const projectRoot = makeTempProject();
   fs.writeFileSync(path.join(projectRoot, 'src', 'large.txt'), `BEGIN\n${'x'.repeat(12000)}\nEND_MARKER\n`);
   const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
@@ -2391,7 +2391,7 @@ test('pipeline forces multi-inspect batches to outline even when full is request
     maxChars: 50000,
     steps: [{
       parallel: [
-        { inspect: { path: 'src/large.txt', ranges: [{ startLine: 1, endLine: 20 }], budget: 'full' } },
+        { inspect: { path: 'src/large.txt', budget: 'full' } },
         { inspect: { path: 'src/math.mjs', budget: 'full' } },
       ],
     }],
