@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1323,
-  "exportedAt": "2026-09-30T21:27:30.921Z",
+  "graphRevision": 1324,
+  "exportedAt": "2026-09-30T21:41:48.251Z",
   "data": {
     "plans": [
       {
@@ -4175,61 +4175,6 @@
             "manifest": null
           },
           {
-            "path": "scripts/development_tasks.py",
-            "symbol": "task_spec",
-            "anchorKind": "symbol",
-            "startLine": 9,
-            "endLine": 24,
-            "hash": "b4b4f2d4bd0524cd",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/development_tasks.py",
-            "symbol": "grader_command",
-            "anchorKind": "symbol",
-            "startLine": 26,
-            "endLine": 29,
-            "hash": "a434f3e4047bdfe0",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/development_tasks.py",
-            "symbol": "changed_tests",
-            "anchorKind": "symbol",
-            "startLine": 31,
-            "endLine": 32,
-            "hash": "fdd24e795bdc7554",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/development_tasks.py",
-            "symbol": "allowed",
-            "anchorKind": "symbol",
-            "startLine": 34,
-            "endLine": 35,
-            "hash": "c13cbc017e5ebb7d",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/development_tasks.py",
-            "symbol": "run_tests",
-            "anchorKind": "symbol",
-            "startLine": 37,
-            "endLine": 41,
-            "hash": "f30775a2a8259a4f",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "scripts/benchmark-development.py",
             "symbol": "sha",
             "anchorKind": "symbol",
@@ -4390,6 +4335,61 @@
             "startLine": 5,
             "endLine": 46,
             "hash": "9c3e6a118f6d7243",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development_tasks.py",
+            "symbol": "task_spec",
+            "anchorKind": "symbol",
+            "startLine": 9,
+            "endLine": 24,
+            "hash": "a60c073b24bd3b82",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development_tasks.py",
+            "symbol": "grader_command",
+            "anchorKind": "symbol",
+            "startLine": 26,
+            "endLine": 29,
+            "hash": "a434f3e4047bdfe0",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development_tasks.py",
+            "symbol": "changed_tests",
+            "anchorKind": "symbol",
+            "startLine": 31,
+            "endLine": 32,
+            "hash": "fdd24e795bdc7554",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development_tasks.py",
+            "symbol": "allowed",
+            "anchorKind": "symbol",
+            "startLine": 34,
+            "endLine": 35,
+            "hash": "c13cbc017e5ebb7d",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development_tasks.py",
+            "symbol": "run_tests",
+            "anchorKind": "symbol",
+            "startLine": 37,
+            "endLine": 41,
+            "hash": "f30775a2a8259a4f",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
