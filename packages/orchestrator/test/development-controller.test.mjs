@@ -26,9 +26,11 @@ usage=dict(input_tokens=1000,cached_input_tokens=700,output_tokens=30,reasoning_
 print(json.dumps(dict(type='thread.started',thread_id='offline-thread')),flush=True)
 print(json.dumps(dict(type='turn.completed',usage=usage)),flush=True)
 `); fs.chmodSync(bin, 0o755);
+    const driver = path.join(root, 'driver.py');
+    fs.writeFileSync(driver, `import runpy,shutil,sys\nshutil.which=lambda name:None\nsys.argv=[${JSON.stringify(path.join(repo, 'scripts/benchmark-development.py'))},*sys.argv[1:]]\nsys.path.insert(0,${JSON.stringify(path.join(repo, 'scripts'))})\nrunpy.run_path(sys.argv[0],run_name='__main__')\n`);
     const output = path.join(root, 'result');
     try {
-    execFileSync('python3', [path.join(repo, 'scripts/benchmark-development.py'), '--arms', 'native', '--codex', bin, '--output', output], {
+    execFileSync('python3', [driver, '--arms', 'native', '--codex', bin, '--output', output], {
       cwd: repo, env: { ...process.env, CODEX_HOME: auth, CONTROLLER_TEST_SOURCE: repo }, timeout: 60000, stdio: 'pipe',
     });
     } catch (error) {

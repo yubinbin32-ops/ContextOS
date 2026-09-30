@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1320,
-  "exportedAt": "2026-09-30T20:53:41.938Z",
+  "graphRevision": 1321,
+  "exportedAt": "2026-09-30T21:06:02.550Z",
   "data": {
     "plans": [
       {
@@ -2316,17 +2316,6 @@
             "manifest": null
           },
           {
-            "path": "packages/orchestrator/test/development-controller.test.mjs",
-            "symbol": "development-controller.test.mjs",
-            "anchorKind": "file",
-            "startLine": 1,
-            "endLine": 51,
-            "hash": "1841c69d2909dd72",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "packages/orchestrator/test/development-evaluation.test.mjs",
             "symbol": "usage",
             "anchorKind": "symbol",
@@ -2377,6 +2366,17 @@
             "startLine": 1,
             "endLine": 85,
             "hash": "a3b1deb681df4012",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/development-controller.test.mjs",
+            "symbol": "development-controller.test.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 53,
+            "hash": "83cdae798700784b",
             "role": "implementation",
             "hashMode": null,
             "manifest": null

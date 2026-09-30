@@ -36,6 +36,7 @@ print(json.dumps(dict(type='turn.completed',usage=usage)),flush=True)
   fs.writeFileSync(driver,`import importlib.util,json,pathlib,subprocess,sys
 source=pathlib.Path(${JSON.stringify(repo)});sys.path.insert(0,str(source/'scripts'))
 spec=importlib.util.spec_from_file_location('controller',source/'scripts/benchmark-development.py');module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+module.shutil.which=lambda name:None
 real_run=subprocess.run
 # Stub only the independent resume oracle here; its asset behavior is checked separately.
 def run(argv,*args,**kwargs):

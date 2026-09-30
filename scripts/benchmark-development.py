@@ -257,6 +257,9 @@ def main():
     parser.add_argument('--chatgpt-http', action='store_true')
     parser.add_argument('--output', type=pathlib.Path)
     args = parser.parse_args()
+    if not args.codex:
+        parser.error('An execution CLI is required; provide --codex when codex is not on PATH')
+    args.setup_codex = args.setup_codex or args.codex
     requested = {'requests': args.max_requests, 'inputTokens': args.max_input_tokens,
                  'uncachedInputTokens': args.max_uncached_input_tokens,
                  'outputTokens': args.max_output_tokens, 'seconds': args.timeout}
