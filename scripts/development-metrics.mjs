@@ -70,5 +70,5 @@ const report = { schemaVersion: 2, arm: run.arm, pairId: run.pairId ?? null, tas
     osErrors: osItems.filter((item) => item.error || item.result?.isError || item.result?.is_error || outcome(item)?.errorCode).length,
     mutationRejections: outcomes.filter((result) => result.status === 'blocked').length,
     verifiedMutations, lastMutationStatus: outcomes.at(-1)?.status ?? null, compactionRecords },
-  contextSizeHintsIgnored: rollout.contextSizeHintsIgnored, warnings: [...rollout.warnings, ...eventWarnings].map(safe) };
+  contextSizeHintsIgnored: rollout.contextSizeHintsIgnored, duplicateSnapshotsIgnored: rollout.duplicateSnapshotsIgnored, warnings: [...rollout.warnings, ...eventWarnings].map(safe) };
 console.log(JSON.stringify(report, null, 2));

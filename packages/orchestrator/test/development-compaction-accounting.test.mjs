@@ -31,3 +31,13 @@ test('invalid primary accounting cannot be hidden by a compaction marker',()=>{
   const result=parseDevelopmentRollouts([file]);assert.equal(result.ok,false);assert.match(result.warnings.join('\n'),/total tokens/);
  } finally {fs.rmSync(root,{recursive:true,force:true});}
 });
+
+test('repeated cumulative views do not double-count an actual provider response',()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'dev-usage-test-'));
+ try {
+  const file=path.join(root,'repeat.jsonl');fs.writeFileSync(file,trace(primary,count(),count(),marker,count(zero)));
+  const result=parseDevelopmentRollouts([file]);assert.equal(result.ok,true);assert.equal(result.duplicateSnapshotsIgnored,1);assert.equal(result.contextSizeHintsIgnored,1);
+  assert.equal(result.metrics.requestCount,1);assert.equal(result.metrics.totalTokens,110);
+  assert.equal(stripCompactionContextHints(trace(count(),count(usage,{...usage,input_tokens:200,total_tokens:220}))).duplicateSnapshots,0);
+ } finally {fs.rmSync(root,{recursive:true,force:true});}
+});

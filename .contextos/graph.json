@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1325,
-  "exportedAt": "2026-09-30T22:11:41.188Z",
+  "graphRevision": 1327,
+  "exportedAt": "2026-09-30T22:35:19.166Z",
   "data": {
     "plans": [
       {
@@ -4301,7 +4301,7 @@
             "anchorKind": "symbol",
             "startLine": 9,
             "endLine": 24,
-            "hash": "a60c073b24bd3b82",
+            "hash": "4fb9068044c8dc35",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4346,6 +4346,50 @@
             "startLine": 37,
             "endLine": 41,
             "hash": "f30775a2a8259a4f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development-rollout.mjs",
+            "symbol": "stripCompactionContextHints",
+            "anchorKind": "symbol",
+            "startLine": 8,
+            "endLine": 32,
+            "hash": "f365032bec9aa59d",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development-rollout.mjs",
+            "symbol": "parseDevelopmentRollouts",
+            "anchorKind": "symbol",
+            "startLine": 33,
+            "endLine": 45,
+            "hash": "382aff474bea29c2",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/development-compaction-accounting.test.mjs",
+            "symbol": "count",
+            "anchorKind": "symbol",
+            "startLine": 8,
+            "endLine": 8,
+            "hash": "254cac573324fdf4",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/development-compaction-accounting.test.mjs",
+            "symbol": "trace",
+            "anchorKind": "symbol",
+            "startLine": 12,
+            "endLine": 12,
+            "hash": "381022438bcf8d79",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
