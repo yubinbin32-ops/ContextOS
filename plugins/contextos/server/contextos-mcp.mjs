@@ -32878,6 +32878,8 @@ ${text2}`;
       return [
         "# ContextOS change",
         "",
+        "status=" + JSON.stringify({ schemaVersion: 1, operation: "change", status: "blocked", changed: false, verified: false, errorCode: "ARCHITECTURE_REJECTED" }),
+        "",
         "## Next",
         "\u{1F449} fix the architecture contract error, then retry the same change call; no files were modified.",
         "",
@@ -32919,6 +32921,8 @@ ${text2}`;
       { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
     );
     return `# ContextOS change
+
+status=${JSON.stringify({ schemaVersion: 1, operation: "change", status: "blocked", changed: false, verified: false, errorCode: "EDIT_REJECTED" })}
 
 ${text2}`;
   }
@@ -32990,10 +32994,12 @@ ${diag}`);
     }
   }
   const liveChangedPaths = changedFiles.filter((file) => !file.deleted).map((file) => file.path);
+  let architectureReady = verifyPassed;
   if (!verifyPassed && (liveChangedPaths.length || input.architecture)) {
     resultLines.push("- Architecture binding skipped because verification failed.");
   } else if (liveChangedPaths.length || input.architecture) {
     const architectureResult = await bindChangedArchitecture(caps, liveChangedPaths, input.architecture);
+    architectureReady = architectureResult.ok && !(architectureResult.gaps || []).length;
     tracer.step("architecture", {
       ok: architectureResult.ok,
       refreshed: architectureResult.refreshed,
@@ -33029,7 +33035,7 @@ ${diag}`);
       }
     }
   }
-  const nextLines = verifyCommands.length ? verifyPassed ? ["done: verified and shipped; finalize now. Do not make speculative follow-up edits without a failing check or unmet requirement."] : [`\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to repair and verify again`] : [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
+  const nextLines = verifyCommands.length ? verifyPassed ? ["done: verified; finalize the bounded repair. Do not make speculative follow-up edits without a failing check or unmet requirement."] : [`\u{1F449} change(${JSON.stringify({ intent: input.intent || "<fix the failure>" })}) to repair and verify again`] : [`\u{1F449} ${computeNext({ session, changedCount: touched.length, profile, stage: "change", intent: input.intent })}`];
   const touchedLines = touched.slice(-8).map((filePath) => `- \`${filePath}\` (edit)`);
   const sections = [
     { key: "next", title: "Next", priority: 0, lines: nextLines },
@@ -33048,7 +33054,19 @@ ${diag}`);
   }
   sections.push({ key: "touched", title: "Touched", priority: 4, lines: touchedLines });
   const { text } = fitSections(sections, { maxChars: resolveBudget(input.depth, ctx.profile?.budget) });
+  const reverted = !verifyPassed && input.autoRevert === true;
+  const outcome = {
+    schemaVersion: 1,
+    operation: "change",
+    status: reverted ? "reverted" : verifyCommands.length && verifyPassed ? "verified" : "applied",
+    changed: touched.length > 0 && !reverted,
+    verified: verifyCommands.length > 0 && verifyPassed,
+    architectureReady,
+    ...!verifyPassed ? { errorCode: "VERIFY_FAILED" } : {}
+  };
   return `# ContextOS change
+
+status=${JSON.stringify(outcome)}
 
 ${text}`;
 }
@@ -34088,6 +34106,7 @@ async function workPipeline(ctx, input = {}) {
         args: {
           ...probe,
           allowExplicitBatchInspect: true,
+          ...probe.symbol || probe.ranges || probe.startLine ? { full: true, budget: probe.budget ?? "full", maxChars: probe.maxChars ?? INSPECT_RECOVERY_MAX_CHARS } : {},
           ...nestedFull && probe.full === void 0 ? { full: true } : {},
           ...nestedMaxChars2 && probe.maxChars === void 0 ? { maxChars: nestedMaxChars2 } : {}
         }
@@ -34112,6 +34131,34 @@ async function workPipeline(ctx, input = {}) {
         const searchSpec = { ...spec };
         if (root !== void 0 && root !== null && String(root).trim()) searchSpec.root = root;
         else delete searchSpec.root;
+        if (spec.contextLines !== void 0) {
+          if (!Number.isInteger(spec.contextLines) || spec.contextLines < 1 || spec.contextLines > 40) {
+            throw new Error("work.search.contextLines must be an integer from 1 to 40");
+          }
+          const search = await ctx.service.code({ ...searchSpec, action: "search", format: "json", limit: Math.max(1, Math.min(Number(spec.maxResults) || 8, 8)) });
+          ctx.tracer?.step("searchContext", { query: spec.query, root, matches: search.text?.length || 0 });
+          const byPath = /* @__PURE__ */ new Map();
+          for (const hit of search.text || []) {
+            if (!byPath.has(hit.path)) byPath.set(hit.path, []);
+            byPath.get(hit.path).push([Math.max(1, hit.line - spec.contextLines), hit.line + spec.contextLines]);
+          }
+          for (const [target, ranges] of byPath) {
+            ranges.sort((a, b) => a[0] - b[0]);
+            const merged = [];
+            for (const range of ranges) {
+              const previous = merged.at(-1);
+              if (previous && range[0] <= previous[1] + 1) previous[1] = Math.max(previous[1], range[1]);
+              else merged.push([...range]);
+            }
+            const boundedRanges = merged.flatMap(([first, last]) => {
+              const chunks = [];
+              for (let start2 = first; start2 <= last; start2 += MAX_INSPECT_RANGE_LINES) chunks.push([start2, Math.min(last, start2 + MAX_INSPECT_RANGE_LINES - 1)]);
+              return chunks;
+            });
+            preflight.push({ action: "inspect", args: { path: target, ranges: boundedRanges, full: true, budget: "full", allowExplicitBatchInspect: true, maxChars: nestedMaxChars2 || INSPECT_RECOVERY_MAX_CHARS } });
+          }
+          if (byPath.size) continue;
+        }
         const searchAction = { search: searchSpec };
         if (nestedMaxChars2) searchAction.maxChars = nestedMaxChars2;
         preflight.push(searchAction);
@@ -34145,10 +34192,11 @@ async function workPipeline(ctx, input = {}) {
   if (!steps.length) {
     return "# ContextOS work\n- No work supplied. Pass inspect, create/edits, and/or verify in one call.";
   }
-  const responseBudget = Number.isFinite(input.maxChars) && input.maxChars > 0 ? Math.floor(input.maxChars) : RESPONSE_BUDGETS.work || RESPONSE_BUDGETS.inspect;
+  const focusedReadPackage = !hasMutation && preflight.some((step) => step.action === "inspect");
+  const responseBudget = Number.isFinite(input.maxChars) && input.maxChars > 0 ? Math.floor(input.maxChars) : focusedReadPackage ? PIPELINE_DECISION_RESPONSE_BUDGET : RESPONSE_BUDGETS.work || RESPONSE_BUDGETS.inspect;
   const result = await pipelinePipeline(ctx, {
     steps,
-    mode: input.mode || (input.full === true ? "full" : "summary"),
+    mode: input.mode || (input.full === true || focusedReadPackage ? "full" : "summary"),
     maxChars: responseBudget,
     branches: input.branches,
     budget: input.budget,
@@ -34620,6 +34668,12 @@ async function pipelinePipeline(ctx, input = {}) {
     if (!detail) return "";
     if (item.tool === "explore" || item.tool === "inspect") return `
 ${detail}`;
+    const outcome = String(item.output || "").split(/\r?\n/).find((line) => line.startsWith("status="));
+    if (outcome && ["change", "work"].includes(item.tool)) {
+      return `
+${outcome}
+${detail.replace(/^status=.*$/m, "").replace(/\r?\n/g, " | ")}`;
+    }
     return detail.replace(/\r?\n/g, " | ");
   }
   function formatPipelineFailure(item) {
@@ -34648,6 +34702,8 @@ ${detail}`;
   const pipelineStatus = halted ? "HALTED" : failureCount ? recovered ? "RECOVERED" : continueOnFailure ? "PARTIAL" : "FAIL" : "OK";
   const lines = [`pipeline=${pipelineStatus} actions=${totalActions}/${totalSteps}${receiptMode ? " mode=receipt" : ""}`];
   if (halted && haltReason) lines.push(`stop=${haltReason}`);
+  const mutationStatus = results.flatMap((result) => result.items || [result]).flatMap((item) => String(item.output || "").split(/\r?\n/).filter((line) => line.startsWith("status="))).at(-1);
+  if (mutationStatus) lines.push(mutationStatus);
   for (const r of results) {
     if (r.kind === "parallel") {
       const body2 = r.items.map((item) => {
@@ -34673,12 +34729,13 @@ ${detail}`;
     }).join(" -> ");
     lines.push(`branch#${r.index} ${r.ok ? "OK" : "FAIL"} :: ${body2}`);
   }
-  const summaryTruncated = !renderFull && results.some((result) => {
+  const summaryTruncated = results.some((result) => {
     const items = result.items || [result];
     return items.some((item) => {
       if (!item?.ok) return false;
       const completeExplore = isCompleteExploreDecision(item);
-      if (/\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? "")) && !completeExplore) {
+      if (/^\[(?:response truncated|action output truncated|TRUNCATED: budget exceeded|body not inlined)/m.test(String(item.output ?? ""))) return true;
+      if (!renderFull && /\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? "")) && !completeExplore) {
         return true;
       }
       return outputLength(item.output) > actionRenderBudget(item);
@@ -34693,14 +34750,23 @@ ${detail}`;
       return /\bread_complete=true\b/.test(output) && !isCompleteExploreDecision(item);
     });
   });
-  const decisionReady = decisionPackage && !exploreIncomplete && !summaryTruncated && lines.join("\n").length <= responseBudget;
+  const readItems = results.flatMap((result) => result.items || [result]).filter((item) => item.tool === "inspect" || item.tool === "explore");
+  const completeExploreSeen = readItems.some(isCompleteExploreDecision);
+  const sourceEvidenceComplete = readItems.length > 0 && readItems.every((item) => {
+    if (!item.ok) return false;
+    if (item.tool === "explore") return isCompleteExploreDecision(item);
+    const output = String(item.output || "");
+    if (completeExploreSeen && /Skipped redundant inspect: the prior explore decision package/.test(output)) return true;
+    return /\[L\d+-L\d+\]/.test(output) && !/✗|\[body not inlined|\[response truncated|Symbol .* not found/.test(output);
+  });
+  const decisionReady = decisionPackage && failureCount === 0 && sourceEvidenceComplete && !exploreIncomplete && !summaryTruncated && lines.join("\n").length <= responseBudget;
   if (decisionReady) {
     for (let index = 0; index < lines.length; index += 1) {
       lines[index] = lines[index].replace(/\s+artifact=[A-Za-z0-9._-]+/g, "");
     }
     lines[0] += " decision=complete";
-    lines.push("decision=complete read_complete=true do_not_reread=true native_mutation=forbidden after_read_complete=change_or_work_only next=change({edits,verify,architecture}); after_pass=finalize_without_speculative_edits");
-  } else if (decisionPackage && exploreIncomplete) {
+    lines.push("decision=complete read_complete=true do_not_reread=true native_mutation=forbidden after_read_complete=change_or_work_only next=change({edits,verify}); after_pass=finalize_without_speculative_edits");
+  } else if (decisionPackage) {
     lines[0] += " decision=partial";
     lines.push("decision=partial read_complete=false; perform the named bounded recovery read, then mutate or verify.");
   }
@@ -34724,7 +34790,7 @@ ${detail}`;
 
 <!-- os-budget ${meta2.chars} chars ~${meta2.estimatedTokens} tokens${meta2.truncated ? " truncated" : ""}${receiptMode ? " mode=receipt" : ""} -->`;
 }
-var OUTLINE_CLIP, INSPECT_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_FILES, SMALL_WORKSPACE_MAX_CHARS, SMALL_WORKSPACE_MAX_FILES, SMALL_WORKSPACE_CRITICAL_MAX_FILES, DECISION_SOURCE_FILE_MAX_CHARS, DECISION_SOURCE_TOTAL_MAX_CHARS, INSPECT_RECOVERY_OUTPUT_MAX_CHARS, MAX_INSPECT_RANGE_LINES, MAX_FOCUS_SEARCH_IDENTIFIERS, MAX_FOCUS_PATH_CANDIDATES, MAX_FOCUS_SLICE_SYMBOLS, SEARCH_CLIP, PIPELINE_DEFAULT_OUTPUT_CLIP, PIPELINE_EXPLORE_OUTPUT_CLIP, PIPELINE_MAX_OUTPUT_CLIP, PIPELINE_RECEIPT_OUTPUT_CLIP, PIPELINE_RECEIPT_RESPONSE_BUDGET, PIPELINE_DECISION_RESPONSE_BUDGET, PIPELINE_DEFAULT_PARALLEL_CONCURRENCY, PIPELINE_MAX_PARALLEL_CONCURRENCY, MICRO_TRIAGE_MIN_CHARS, PROCESS_VERIFY_MODES, INDEX_IMPORT_EXTENSIONS, NON_ARCHITECTURE_PREFIXES, NON_ARCHITECTURE_EXTENSIONS, INSPECT_SKIP_DIRS;
+var OUTLINE_CLIP, INSPECT_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_CHARS, INSPECT_BATCH_INLINE_MAX_FILES, SMALL_WORKSPACE_MAX_CHARS, SMALL_WORKSPACE_MAX_FILES, SMALL_WORKSPACE_CRITICAL_MAX_FILES, DECISION_SOURCE_FILE_MAX_CHARS, DECISION_SOURCE_TOTAL_MAX_CHARS, INSPECT_RECOVERY_MAX_CHARS, INSPECT_RECOVERY_OUTPUT_MAX_CHARS, MAX_INSPECT_RANGE_LINES, MAX_FOCUS_SEARCH_IDENTIFIERS, MAX_FOCUS_PATH_CANDIDATES, MAX_FOCUS_SLICE_SYMBOLS, SEARCH_CLIP, PIPELINE_DEFAULT_OUTPUT_CLIP, PIPELINE_EXPLORE_OUTPUT_CLIP, PIPELINE_MAX_OUTPUT_CLIP, PIPELINE_RECEIPT_OUTPUT_CLIP, PIPELINE_RECEIPT_RESPONSE_BUDGET, PIPELINE_DECISION_RESPONSE_BUDGET, PIPELINE_DEFAULT_PARALLEL_CONCURRENCY, PIPELINE_MAX_PARALLEL_CONCURRENCY, MICRO_TRIAGE_MIN_CHARS, PROCESS_VERIFY_MODES, INDEX_IMPORT_EXTENSIONS, NON_ARCHITECTURE_PREFIXES, NON_ARCHITECTURE_EXTENSIONS, INSPECT_SKIP_DIRS;
 var init_pipelines = __esm({
   async "packages/orchestrator/src/pipelines.mjs"() {
     init_context_budget();
@@ -34744,6 +34810,7 @@ var init_pipelines = __esm({
     SMALL_WORKSPACE_CRITICAL_MAX_FILES = SMALL_WORKSPACE_MAX_FILES;
     DECISION_SOURCE_FILE_MAX_CHARS = 8e3;
     DECISION_SOURCE_TOTAL_MAX_CHARS = 18e3;
+    INSPECT_RECOVERY_MAX_CHARS = 16e3;
     INSPECT_RECOVERY_OUTPUT_MAX_CHARS = 32e3;
     MAX_INSPECT_RANGE_LINES = 240;
     MAX_FOCUS_SEARCH_IDENTIFIERS = 4;
@@ -35759,6 +35826,9 @@ async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxRes
   });
 }
 async function runMicroTask(config2 = {}, options = {}) {
+  if (process.env.CONTEXTOS_DISABLE_MICRO === "1") {
+    return { ok: false, errorCode: "MICRO_DISABLED", error: "Micro execution is disabled for this evaluation; no provider request was sent.", durationMs: 0, providerUsage: null };
+  }
   const start2 = Date.now();
   const requestedDelivery = ["immediate", "defer", "errors-only", "auto"].includes(options.delivery) ? options.delivery : "immediate";
   const prompt = String(options.prompt ?? options.task ?? "").trim();
@@ -54975,10 +55045,11 @@ var Orchestrator = class {
       const nestedRequests = nestedResponseRequests(input);
       const requestedMaxChars = nestedMaxChars(nestedRequests);
       const responseMaxChars = typeof input.maxChars === "number" ? input.maxChars : typeof responseArgs.maxChars === "number" ? responseArgs.maxChars : requestedMaxChars ?? void 0;
+      const focusedWorkRead = tool === "work" && (input.inspect !== void 0 || input.read !== void 0) && ![...MUTATION_INPUT_KEYS].some((key) => input[key] !== void 0);
       const explicitInspectWiden = tool === "inspect" && responseMaxChars !== void 0;
-      const decisionPackageBudget = explicitInspectWiden ? Math.min(responseMaxChars, INSPECT_RESPONSE_HARD_CAP) : decisionPackage && responseMaxChars === void 0 ? RESPONSE_BUDGETS.pipelineDecision : responseMaxChars;
+      const decisionPackageBudget = focusedWorkRead ? Math.min(responseMaxChars ?? RESPONSE_BUDGETS.pipelineDecision, INSPECT_RESPONSE_HARD_CAP) : explicitInspectWiden ? Math.min(responseMaxChars, INSPECT_RESPONSE_HARD_CAP) : decisionPackage && responseMaxChars === void 0 ? RESPONSE_BUDGETS.pipelineDecision : responseMaxChars;
       const nestedFull = nestedFullRequest(nestedRequests);
-      const allowWiden = input.allowWiden === true || responseArgs.allowWiden === true || nestedFull || explicitInspectWiden || Boolean(decisionPackage);
+      const allowWiden = input.allowWiden === true || responseArgs.allowWiden === true || nestedFull || explicitInspectWiden || focusedWorkRead || Boolean(decisionPackage);
       const full = input.full === true || input.budget === "full" || input.mode === "full" || responseArgs.full === true || responseArgs.budget === "full" || nestedFull || tool === "ops" && responseArgs.format === "json" || isJsonValueString(response);
       const finalized = finalizeResponse(response, {
         projectRoot: this.projectRoot,
@@ -63349,7 +63420,7 @@ import path34 from "node:path";
 // package.json
 var package_default = {
   name: "contextos",
-  version: "2.7.1",
+  version: "2.7.2",
   description: "ContextOS is a context-governance MCP runtime for AI coding agents, with bounded repository I/O, receipt-first verification, and a multi-turn Micro subagent.",
   license: "MIT",
   type: "module",
@@ -63524,6 +63595,22 @@ async function runDoctor(input) {
       cloudHealth = `\u{1F534} Connection failed: ${err2.message}`;
     }
   }
+  let graphIntegrity = "No saved graph (cold start)";
+  const graphPath = path34.join(root, ".contextos", "graph.json");
+  if (fs33.existsSync(graphPath)) {
+    try {
+      const graph = JSON.parse(fs33.readFileSync(graphPath, "utf8"));
+      const blocks = graph.data?.blocks;
+      if (!Array.isArray(blocks)) graphIntegrity = "Invalid graph: missing data.blocks array";
+      else {
+        const legacyRefs = Array.isArray(graph.data?.source_refs) ? graph.data.source_refs : [];
+        const unanchored = blocks.filter((block) => !(Array.isArray(block.artifactRefs) && block.artifactRefs.length) && !legacyRefs.some((ref) => (ref.blockId || ref.block_id) === block.id));
+        graphIntegrity = unanchored.length ? `Invalid graph: ${unanchored.length} unanchored Block(s): ${unanchored.slice(0, 5).map((b) => b.id).join(", ")}. Restore real source references before normal operations; saved data was not changed.` : "Anchors present (normal source validation still required)";
+      }
+    } catch (err2) {
+      graphIntegrity = `Invalid graph JSON: ${err2.message}`;
+    }
+  }
   const platforms = detectInstalledPlatforms();
   const contextosHome = process.env.CONTEXTOS_HOME || path34.join(os3.homedir(), ".contextos");
   const globalProfilePath2 = path34.join(contextosHome, "profile.json");
@@ -63539,6 +63626,7 @@ async function runDoctor(input) {
     `- **Cloud Hub URL**: \`${cloudUrl}\``,
     `- **Global Cloud Config**: ${globalCloud ? `Configured (\`${globalCloud.cloudUrl}\`)` : "None"}`,
     `- **Cloud Hub Connectivity**: ${cloudHealth}`,
+    `- **Saved Graph Integrity**: ${graphIntegrity}`,
     ``,
     `## Detected Editors on System:`,
     editorStatuses
@@ -63644,6 +63732,18 @@ function textResult(content) {
   const text = typeof content === "string" ? content : JSON.stringify(content);
   return { content: [{ type: "text", text }] };
 }
+function mutationResult(content) {
+  const result = textResult(content);
+  const line = result.content[0].text.split(/\r?\n/).find((value) => value.startsWith("status="));
+  if (!line) return result;
+  try {
+    const status = JSON.parse(line.slice(7));
+    if (status.schemaVersion !== 1 || status.operation !== "change") return result;
+    return { ...result, structuredContent: status, ...status.errorCode ? { isError: true } : {} };
+  } catch {
+    return result;
+  }
+}
 var editSpec = object2({
   slot: string2().optional().describe('Action slot identifier from explore (e.g. "S1").'),
   path: string2().optional().describe("Relative file path to modify (optional if slot is provided)."),
@@ -63682,11 +63782,14 @@ function createV3Server({
   const server = new McpServer(
     { name: "contextos", version: VERSION },
     {
-      instructions: "ContextOS is the repository execution layer and exoskeleton. For non-trivial repo work: first call one pipeline containing explore plus baseline verify; then one change/work containing all edits, verify, architecture, and ship. Search with work.search or pipeline search; do not run native cat/sed/rg/npm test between OS calls. After read_complete=true, mutate directly; after a passing verify/ship, finalize. Use micro only for >2KB raw evidence or an explicit assignment."
+      instructions: "ContextOS executes repository work. For a one-function repair plus focused tests whose complete touched source/test files total at most 120 lines with no ownership change, prefer native tools. Batch known reads and relevant tests/diff checks, use the available interpreter, then finish. Known paths need no broad source search. For a bounded task with known paths, use work with focused inspect plus a relevant baseline check, then change with edits and verify. Existing owners refresh automatically; omit architecture unless adding a boundary or fixing a named gap. Use explore only when paths are unknown. After read_complete, mutate directly. A verified change is sufficient for a bounded repair; ship closes larger sessions. On blocked status, use the returned recovery receipt for one corrected retry. Use Micro only when explicitly assigned. Do not repeat successful reads or checks, or use native file reads/tests between OS calls."
     }
   );
   const dispatch = async (tool, input) => {
     const root = requireProjectRoot(input.projectRoot);
+    if (tool === "ops" && input.capability === "system" && input.action === "doctor") {
+      return runDoctor({ ...input.args || {}, projectRoot: root });
+    }
     ensureWorkspace(root);
     const service = getService(root);
     const orchestrator = new Orchestrator({
@@ -63701,48 +63804,12 @@ function createV3Server({
     server.registerTool(
       "contextos",
       {
-        description: "Repository execution exoskeleton. Non-trivial: one pipeline (explore + baseline verify) directly, then one change/work (edits + verify + architecture + ship). Search via work.search/pipeline; no native cat/sed/rg/npm test between OS calls. After read_complete=true mutate; PASS is final. Micro evidence/delivery only for >2KB or explicit assignment. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; ops for advanced capabilities. Expand with full/maxChars.",
-        inputSchema: {
+        description: "Repository work. Known paths: work({inspect:[{path,symbol|ranges}],verify:{commands}}), then change({edits,verify}). Work preserves bounded source bodies; use symbols or ranges up to 240 lines. Existing owners refresh automatically; omit architecture for preserved boundaries. Unknown paths: explore/pipeline. Verified repair: finish. Blocked: retry once using its receipt. Search via work.search; ops for advanced capabilities. Micro only when explicitly assigned. projectRoot is absolute; parameters belong inside args.",
+        inputSchema: object2({
           action: _enum(["explore", "inspect", "change", "verify", "ship", "pipeline", "work", "micro", "resume", "ops", "search", "create"]),
-          capability: string2().optional(),
-          args: record(any()).optional(),
-          arguments: record(any()).optional(),
-          projectRoot: string2().describe("Absolute repository root."),
-          refresh: boolean2().optional().describe("Force a fresh read instead of reusing a compact receipt."),
-          dedupeReads: boolean2().optional().describe("Set false to bypass read deduplication."),
-          full: boolean2().optional().describe("Request the full, unbounded payload."),
-          budget: string2().optional().describe('Named output budget, e.g. "full".'),
-          maxChars: number2().optional().describe("Explicit output character cap."),
-          intent: string2().optional(),
-          verify: union([string2(), array(string2()), record(any())]).optional(),
-          commands: array(string2()).optional(),
-          architecture: architectureSpec.optional(),
-          edits: array(record(any())).optional(),
-          create: array(record(any())).optional(),
-          delete: array(record(any())).optional(),
-          ship: union([boolean2(), string2(), record(any())]).optional(),
-          maxLogBytes: number2().optional().describe("Bound persisted command/process log bytes; keeps the tail and marks truncation."),
-          search: union([string2(), record(any()), array(any())]).optional(),
-          inspect: union([string2(), record(any()), array(any())]).optional(),
-          path: string2().optional(),
-          paths: array(string2()).optional(),
-          symbol: string2().optional(),
-          query: string2().optional(),
-          ranges: array(union([array(number2()), record(any())])).optional(),
-          startLine: number2().optional(),
-          endLine: number2().optional(),
-          preset: string2().optional(),
-          task: string2().optional(),
-          pipeline: record(any()).optional(),
-          pipelines: any().optional(),
-          withOS: boolean2().optional(),
-          invocation: record(any()).optional(),
-          delivery: string2().optional(),
-          provider: record(any()).optional(),
-          inputRef: string2().optional(),
-          inputArtifact: string2().optional(),
-          inputReceipt: string2().optional()
-        }
+          args: record(any()).optional().describe("Action parameters; advanced operations use capability/action/args."),
+          projectRoot: string2().describe("Absolute repository root.")
+        }).passthrough()
       },
       async (input) => {
         const args2 = { ...input.arguments || {}, ...input.args || {} };
@@ -63896,6 +63963,18 @@ function createV3Server({
             }));
           }
         }
+        const normalizeProbe = (probe) => {
+          if (!probe || typeof probe !== "object" || typeof probe.ranges !== "string") return probe;
+          const ranges = probe.ranges.split(",").map((part) => {
+            const match = part.trim().match(/^(\d+)\s*[-:]\s*(\d+)$/);
+            if (!match || Number(match[1]) < 1 || Number(match[2]) < Number(match[1])) {
+              throw new Error('Invalid ranges: use [[startLine,endLine]] or "start-end"; no source was read.');
+            }
+            return { startLine: Number(match[1]), endLine: Number(match[2]) };
+          });
+          return { ...probe, ranges };
+        };
+        if (args2.inspect) args2.inspect = Array.isArray(args2.inspect) ? args2.inspect.map(normalizeProbe) : normalizeProbe(args2.inspect);
         if (Array.isArray(args2.edits)) {
           args2.edits = args2.edits.map((spec) => {
             if (!spec || typeof spec !== "object" || Array.isArray(spec)) return spec;
@@ -63987,7 +64066,8 @@ function createV3Server({
         if (compactAction === "resume") {
           return textResult(await dispatch("ops", { ...payload, capability: "session", action: "resume" }));
         }
-        return textResult(await dispatch(compactAction, payload));
+        const output = await dispatch(compactAction, payload);
+        return ["change", "work"].includes(compactAction) ? mutationResult(output) : textResult(output);
       }
     );
     return server;
@@ -64069,7 +64149,7 @@ function createV3Server({
         projectRoot: string2().describe("Absolute path of the active workspace.")
       }
     },
-    async (input) => textResult(await dispatch("change", input))
+    async (input) => mutationResult(await dispatch("change", input))
   );
   server.registerTool(
     "verify",

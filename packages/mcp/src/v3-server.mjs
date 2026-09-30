@@ -24,6 +24,17 @@ function textResult(content) {
   return { content: [{ type: 'text', text }] };
 }
 
+function mutationResult(content) {
+  const result = textResult(content);
+  const line = result.content[0].text.split(/\r?\n/).find((value) => value.startsWith('status='));
+  if (!line) return result;
+  try {
+    const status = JSON.parse(line.slice(7));
+    if (status.schemaVersion !== 1 || status.operation !== 'change') return result;
+    return { ...result, structuredContent: status, ...(status.errorCode ? { isError: true } : {}) };
+  } catch { return result; }
+}
+
 const editSpec = z.object({
   slot: z.string().optional().describe('Action slot identifier from explore (e.g. "S1").'),
   path: z.string().optional().describe('Relative file path to modify (optional if slot is provided).'),
@@ -70,12 +81,16 @@ export function createV3Server({
     { name: 'contextos', version: VERSION },
     {
       instructions:
-        'ContextOS is the repository execution layer and exoskeleton. For non-trivial repo work: first call one pipeline containing explore plus baseline verify; then one change/work containing all edits, verify, architecture, and ship. Search with work.search or pipeline search; do not run native cat/sed/rg/npm test between OS calls. After read_complete=true, mutate directly; after a passing verify/ship, finalize. Use micro only for >2KB raw evidence or an explicit assignment.',
+        'ContextOS executes repository work. For a one-function repair plus focused tests whose complete touched source/test files total at most 120 lines with no ownership change, prefer native tools. Batch known reads and relevant tests/diff checks, use the available interpreter, then finish. Known paths need no broad source search. For a bounded task with known paths, use work with focused inspect plus a relevant baseline check, then change with edits and verify. Existing owners refresh automatically; omit architecture unless adding a boundary or fixing a named gap. Use explore only when paths are unknown. After read_complete, mutate directly. A verified change is sufficient for a bounded repair; ship closes larger sessions. On blocked status, use the returned recovery receipt for one corrected retry. Use Micro only when explicitly assigned. Do not repeat successful reads or checks, or use native file reads/tests between OS calls.',
     }
   );
 
   const dispatch = async (tool, input) => {
     const root = requireProjectRoot(input.projectRoot);
+    // Diagnostics must remain available when context import itself is invalid.
+    if (tool === 'ops' && input.capability === 'system' && input.action === 'doctor') {
+      return runDoctor({ ...(input.args || {}), projectRoot: root });
+    }
     ensureWorkspace(root);
     const service = getService(root);
     const orchestrator = new Orchestrator({
@@ -91,48 +106,12 @@ export function createV3Server({
     server.registerTool(
       'contextos',
       {
-        description: 'Repository execution exoskeleton. Non-trivial: one pipeline (explore + baseline verify) directly, then one change/work (edits + verify + architecture + ship). Search via work.search/pipeline; no native cat/sed/rg/npm test between OS calls. After read_complete=true mutate; PASS is final. Micro evidence/delivery only for >2KB or explicit assignment. work={search,inspect,create,edits,verify,architecture}; change={edits,create,delete,verify,architecture,ship}; inspect={path|paths,symbol,ranges,budget}; ops for advanced capabilities. Expand with full/maxChars.',
-        inputSchema: {
+        description: 'Repository work. Known paths: work({inspect:[{path,symbol|ranges}],verify:{commands}}), then change({edits,verify}). Work preserves bounded source bodies; use symbols or ranges up to 240 lines. Existing owners refresh automatically; omit architecture for preserved boundaries. Unknown paths: explore/pipeline. Verified repair: finish. Blocked: retry once using its receipt. Search via work.search; ops for advanced capabilities. Micro only when explicitly assigned. projectRoot is absolute; parameters belong inside args.',
+        inputSchema: z.object({
           action: z.enum(['explore', 'inspect', 'change', 'verify', 'ship', 'pipeline', 'work', 'micro', 'resume', 'ops', 'search', 'create']),
-          capability: z.string().optional(),
-          args: z.record(z.any()).optional(),
-          arguments: z.record(z.any()).optional(),
+          args: z.record(z.any()).optional().describe('Action parameters; advanced operations use capability/action/args.'),
           projectRoot: z.string().describe('Absolute repository root.'),
-          refresh: z.boolean().optional().describe('Force a fresh read instead of reusing a compact receipt.'),
-          dedupeReads: z.boolean().optional().describe('Set false to bypass read deduplication.'),
-          full: z.boolean().optional().describe('Request the full, unbounded payload.'),
-          budget: z.string().optional().describe('Named output budget, e.g. "full".'),
-          maxChars: z.number().optional().describe('Explicit output character cap.'),
-          intent: z.string().optional(),
-          verify: z.union([z.string(), z.array(z.string()), z.record(z.any())]).optional(),
-          commands: z.array(z.string()).optional(),
-          architecture: architectureSpec.optional(),
-          edits: z.array(z.record(z.any())).optional(),
-          create: z.array(z.record(z.any())).optional(),
-          delete: z.array(z.record(z.any())).optional(),
-          ship: z.union([z.boolean(), z.string(), z.record(z.any())]).optional(),
-          maxLogBytes: z.number().optional().describe('Bound persisted command/process log bytes; keeps the tail and marks truncation.'),
-          search: z.union([z.string(), z.record(z.any()), z.array(z.any())]).optional(),
-          inspect: z.union([z.string(), z.record(z.any()), z.array(z.any())]).optional(),
-          path: z.string().optional(),
-          paths: z.array(z.string()).optional(),
-          symbol: z.string().optional(),
-          query: z.string().optional(),
-          ranges: z.array(z.union([z.array(z.number()), z.record(z.any())])).optional(),
-          startLine: z.number().optional(),
-          endLine: z.number().optional(),
-          preset: z.string().optional(),
-          task: z.string().optional(),
-          pipeline: z.record(z.any()).optional(),
-          pipelines: z.any().optional(),
-          withOS: z.boolean().optional(),
-          invocation: z.record(z.any()).optional(),
-          delivery: z.string().optional(),
-          provider: z.record(z.any()).optional(),
-          inputRef: z.string().optional(),
-          inputArtifact: z.string().optional(),
-          inputReceipt: z.string().optional(),
-        },
+        }).passthrough(),
       },
       async (input) => {
         const args = { ...(input.arguments || {}), ...(input.args || {}) };
@@ -263,6 +242,19 @@ export function createV3Server({
             }));
           }
         }
+        const normalizeProbe = (probe) => {
+            if (!probe || typeof probe !== 'object' || typeof probe.ranges !== 'string') return probe;
+            const ranges = probe.ranges.split(',').map((part) => {
+              const match = part.trim().match(/^(\d+)\s*[-:]\s*(\d+)$/);
+              if (!match || Number(match[1]) < 1 || Number(match[2]) < Number(match[1])) {
+                throw new Error('Invalid ranges: use [[startLine,endLine]] or "start-end"; no source was read.');
+              }
+              return { startLine:Number(match[1]), endLine:Number(match[2]) };
+            });
+            return { ...probe, ranges };
+          };
+          if (args.inspect) args.inspect = Array.isArray(args.inspect)
+            ? args.inspect.map(normalizeProbe) : normalizeProbe(args.inspect);
         if (Array.isArray(args.edits)) {
           args.edits = args.edits.map((spec) => {
             if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return spec;
@@ -360,7 +352,8 @@ export function createV3Server({
         if (compactAction === 'resume') {
           return textResult(await dispatch('ops', { ...payload, capability: 'session', action: 'resume' }));
         }
-        return textResult(await dispatch(compactAction, payload));
+        const output = await dispatch(compactAction, payload);
+        return ['change', 'work'].includes(compactAction) ? mutationResult(output) : textResult(output);
       }
     );
     return server;
@@ -445,7 +438,7 @@ export function createV3Server({
         projectRoot: z.string().describe('Absolute path of the active workspace.'),
       },
     },
-    async (input) => textResult(await dispatch('change', input))
+    async (input) => mutationResult(await dispatch('change', input))
   );
 
   server.registerTool(

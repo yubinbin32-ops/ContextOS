@@ -1135,8 +1135,12 @@ export class Orchestrator {
         : (typeof responseArgs.maxChars === 'number'
             ? responseArgs.maxChars
             : (requestedMaxChars ?? undefined));
+      const focusedWorkRead = tool === 'work' && (input.inspect !== undefined || input.read !== undefined)
+        && ![...MUTATION_INPUT_KEYS].some((key) => input[key] !== undefined);
       const explicitInspectWiden = tool === 'inspect' && responseMaxChars !== undefined;
-      const decisionPackageBudget = explicitInspectWiden
+      const decisionPackageBudget = focusedWorkRead
+        ? Math.min(responseMaxChars ?? RESPONSE_BUDGETS.pipelineDecision, INSPECT_RESPONSE_HARD_CAP)
+        : explicitInspectWiden
         ? Math.min(responseMaxChars, INSPECT_RESPONSE_HARD_CAP)
         : (decisionPackage && responseMaxChars === undefined
             ? RESPONSE_BUDGETS.pipelineDecision
@@ -1146,6 +1150,7 @@ export class Orchestrator {
         || responseArgs.allowWiden === true
         || nestedFull
         || explicitInspectWiden
+        || focusedWorkRead
         || Boolean(decisionPackage);
       const full = input.full === true || input.budget === 'full' || input.mode === 'full'
         || responseArgs.full === true || responseArgs.budget === 'full'

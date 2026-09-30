@@ -1951,6 +1951,8 @@ export async function changePipeline(ctx, input = {}) {
       return [
         '# ContextOS change',
         '',
+        'status=' + JSON.stringify({ schemaVersion: 1, operation: 'change', status: 'blocked', changed: false, verified: false, errorCode: 'ARCHITECTURE_REJECTED' }),
+        '',
         '## Next',
         '👉 fix the architecture contract error, then retry the same change call; no files were modified.',
         '',
@@ -1999,7 +2001,7 @@ export async function changePipeline(ctx, input = {}) {
       ],
       { maxChars: resolveBudget(input.depth, ctx.profile?.budget) }
     );
-    return `# ContextOS change\n\n${text}`;
+    return `# ContextOS change\n\nstatus=${JSON.stringify({ schemaVersion: 1, operation: 'change', status: 'blocked', changed: false, verified: false, errorCode: 'EDIT_REJECTED' })}\n\n${text}`;
   }
 
   const changedFiles = Array.isArray(changeset.data?.files) ? changeset.data.files : [];
@@ -2072,10 +2074,12 @@ export async function changePipeline(ctx, input = {}) {
   }
 
   const liveChangedPaths = changedFiles.filter((file) => !file.deleted).map((file) => file.path);
+  let architectureReady = verifyPassed;
   if (!verifyPassed && (liveChangedPaths.length || input.architecture)) {
     resultLines.push('- Architecture binding skipped because verification failed.');
   } else if (liveChangedPaths.length || input.architecture) {
     const architectureResult = await bindChangedArchitecture(caps, liveChangedPaths, input.architecture);
+    architectureReady = architectureResult.ok && !(architectureResult.gaps || []).length;
     tracer.step('architecture', {
       ok: architectureResult.ok,
       refreshed: architectureResult.refreshed,
@@ -2122,7 +2126,7 @@ export async function changePipeline(ctx, input = {}) {
 
   const nextLines = verifyCommands.length
     ? (verifyPassed
-        ? ['done: verified and shipped; finalize now. Do not make speculative follow-up edits without a failing check or unmet requirement.']
+        ? ['done: verified; finalize the bounded repair. Do not make speculative follow-up edits without a failing check or unmet requirement.']
         : [`👉 change(${JSON.stringify({ intent: input.intent || '<fix the failure>' })}) to repair and verify again`])
     : [`👉 ${computeNext({ session, changedCount: touched.length, profile, stage: 'change', intent: input.intent })}`];
 
@@ -2146,7 +2150,12 @@ export async function changePipeline(ctx, input = {}) {
   sections.push({ key: 'touched', title: 'Touched', priority: 4, lines: touchedLines });
 
   const { text } = fitSections(sections, { maxChars: resolveBudget(input.depth, ctx.profile?.budget) });
-  return `# ContextOS change\n\n${text}`;
+  const reverted = !verifyPassed && input.autoRevert === true;
+  const outcome = { schemaVersion: 1, operation: 'change',
+    status: reverted ? 'reverted' : (verifyCommands.length && verifyPassed ? 'verified' : 'applied'),
+    changed: touched.length > 0 && !reverted, verified: verifyCommands.length > 0 && verifyPassed,
+    architectureReady, ...(!verifyPassed ? { errorCode: 'VERIFY_FAILED' } : {}) };
+  return `# ContextOS change\n\nstatus=${JSON.stringify(outcome)}\n\n${text}`;
 }
 
 const INSPECT_SKIP_DIRS = new Set(['.git', '.contextos', 'node_modules', 'dist', 'build', 'coverage', 'tmp']);
@@ -3413,6 +3422,7 @@ export async function workPipeline(ctx, input = {}) {
         args: {
           ...probe,
           allowExplicitBatchInspect: true,
+          ...(probe.symbol || probe.ranges || probe.startLine ? { full: true, budget: probe.budget ?? 'full', maxChars: probe.maxChars ?? INSPECT_RECOVERY_MAX_CHARS } : {}),
           ...(nestedFull && probe.full === undefined ? { full: true } : {}),
           ...(nestedMaxChars && probe.maxChars === undefined ? { maxChars: nestedMaxChars } : {}),
         },
@@ -3442,6 +3452,34 @@ export async function workPipeline(ctx, input = {}) {
         const searchSpec = { ...spec };
         if (root !== undefined && root !== null && String(root).trim()) searchSpec.root = root;
         else delete searchSpec.root;
+        if (spec.contextLines !== undefined) {
+          if (!Number.isInteger(spec.contextLines) || spec.contextLines < 1 || spec.contextLines > 40) {
+            throw new Error('work.search.contextLines must be an integer from 1 to 40');
+          }
+          const search = await ctx.service.code({ ...searchSpec, action: 'search', format: 'json', limit: Math.max(1, Math.min(Number(spec.maxResults) || 8, 8)) });
+          ctx.tracer?.step('searchContext', { query: spec.query, root, matches: search.text?.length || 0 });
+          const byPath = new Map();
+          for (const hit of search.text || []) {
+            if (!byPath.has(hit.path)) byPath.set(hit.path, []);
+            byPath.get(hit.path).push([Math.max(1, hit.line - spec.contextLines), hit.line + spec.contextLines]);
+          }
+          for (const [target, ranges] of byPath) {
+            ranges.sort((a, b) => a[0] - b[0]);
+            const merged = [];
+            for (const range of ranges) {
+              const previous = merged.at(-1);
+              if (previous && range[0] <= previous[1] + 1) previous[1] = Math.max(previous[1], range[1]);
+              else merged.push([...range]);
+            }
+            const boundedRanges = merged.flatMap(([first, last]) => {
+              const chunks = [];
+              for (let start = first; start <= last; start += MAX_INSPECT_RANGE_LINES) chunks.push([start, Math.min(last, start + MAX_INSPECT_RANGE_LINES - 1)]);
+              return chunks;
+            });
+            preflight.push({ action: 'inspect', args: { path: target, ranges: boundedRanges, full: true, budget: 'full', allowExplicitBatchInspect: true, maxChars: nestedMaxChars || INSPECT_RECOVERY_MAX_CHARS } });
+          }
+          if (byPath.size) continue;
+        }
         const searchAction = { search: searchSpec };
         if (nestedMaxChars) searchAction.maxChars = nestedMaxChars;
         preflight.push(searchAction);
@@ -3479,12 +3517,13 @@ export async function workPipeline(ctx, input = {}) {
     return '# ContextOS work\n- No work supplied. Pass inspect, create/edits, and/or verify in one call.';
   }
 
+  const focusedReadPackage = !hasMutation && preflight.some((step) => step.action === 'inspect');
   const responseBudget = Number.isFinite(input.maxChars) && input.maxChars > 0
     ? Math.floor(input.maxChars)
-    : (RESPONSE_BUDGETS.work || RESPONSE_BUDGETS.inspect);
+    : (focusedReadPackage ? PIPELINE_DECISION_RESPONSE_BUDGET : (RESPONSE_BUDGETS.work || RESPONSE_BUDGETS.inspect));
   const result = await pipelinePipeline(ctx, {
     steps,
-    mode: input.mode || (input.full === true ? 'full' : 'summary'),
+    mode: input.mode || (input.full === true || focusedReadPackage ? 'full' : 'summary'),
     maxChars: responseBudget,
     branches: input.branches,
     budget: input.budget,
@@ -4023,6 +4062,10 @@ export async function pipelinePipeline(ctx, input = {}) {
     // Flattening fences with " | " makes a bounded package look corrupted and
     // forces the host to reread it through a different tool.
     if (item.tool === 'explore' || item.tool === 'inspect') return `\n${detail}`;
+    const outcome = String(item.output || '').split(/\r?\n/).find((line) => line.startsWith('status='));
+    if (outcome && ['change', 'work'].includes(item.tool)) {
+      return `\n${outcome}\n${detail.replace(/^status=.*$/m, '').replace(/\r?\n/g, ' | ')}`;
+    }
     return detail.replace(/\r?\n/g, ' | ');
   }
 
@@ -4075,6 +4118,9 @@ export async function pipelinePipeline(ctx, input = {}) {
         : 'OK');
   const lines = [`pipeline=${pipelineStatus} actions=${totalActions}/${totalSteps}${receiptMode ? ' mode=receipt' : ''}`];
   if (halted && haltReason) lines.push(`stop=${haltReason}`);
+  const mutationStatus = results.flatMap((result) => result.items || [result])
+    .flatMap((item) => String(item.output || '').split(/\r?\n/).filter((line) => line.startsWith('status='))).at(-1);
+  if (mutationStatus) lines.push(mutationStatus);
 
   for (const r of results) {
     if (r.kind === 'parallel') {
@@ -4110,12 +4156,13 @@ export async function pipelinePipeline(ctx, input = {}) {
     lines.push(`branch#${r.index} ${r.ok ? 'OK' : 'FAIL'} :: ${body}`);
   }
 
-  const summaryTruncated = !renderFull && results.some((result) => {
+  const summaryTruncated = results.some((result) => {
     const items = result.items || [result];
     return items.some((item) => {
       if (!item?.ok) return false;
       const completeExplore = isCompleteExploreDecision(item);
-      if (/\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? '')) && !completeExplore) {
+      if (/^\[(?:response truncated|action output truncated|TRUNCATED: budget exceeded|body not inlined)/m.test(String(item.output ?? ''))) return true;
+      if (!renderFull && /\bos-response\b[^\n]*\bartifact=/.test(String(item.output ?? '')) && !completeExplore) {
         return true;
       }
       return outputLength(item.output) > actionRenderBudget(item);
@@ -4130,7 +4177,20 @@ export async function pipelinePipeline(ctx, input = {}) {
       return /\bread_complete=true\b/.test(output) && !isCompleteExploreDecision(item);
     });
   });
+  const readItems = results.flatMap((result) => result.items || [result])
+    .filter((item) => item.tool === 'inspect' || item.tool === 'explore');
+  const completeExploreSeen = readItems.some(isCompleteExploreDecision);
+  const sourceEvidenceComplete = readItems.length > 0 && readItems.every((item) => {
+    if (!item.ok) return false;
+    if (item.tool === 'explore') return isCompleteExploreDecision(item);
+    const output = String(item.output || '');
+    if (completeExploreSeen && /Skipped redundant inspect: the prior explore decision package/.test(output)) return true;
+    return /\[L\d+-L\d+\]/.test(output)
+      && !/✗|\[body not inlined|\[response truncated|Symbol .* not found/.test(output);
+  });
   const decisionReady = decisionPackage
+    && failureCount === 0
+    && sourceEvidenceComplete
     && !exploreIncomplete
     && !summaryTruncated
     && lines.join('\n').length <= responseBudget;
@@ -4139,8 +4199,8 @@ export async function pipelinePipeline(ctx, input = {}) {
       lines[index] = lines[index].replace(/\s+artifact=[A-Za-z0-9._-]+/g, '');
     }
     lines[0] += ' decision=complete';
-    lines.push('decision=complete read_complete=true do_not_reread=true native_mutation=forbidden after_read_complete=change_or_work_only next=change({edits,verify,architecture}); after_pass=finalize_without_speculative_edits');
-  } else if (decisionPackage && exploreIncomplete) {
+    lines.push('decision=complete read_complete=true do_not_reread=true native_mutation=forbidden after_read_complete=change_or_work_only next=change({edits,verify}); after_pass=finalize_without_speculative_edits');
+  } else if (decisionPackage) {
     lines[0] += ' decision=partial';
     lines.push('decision=partial read_complete=false; perform the named bounded recovery read, then mutate or verify.');
   }

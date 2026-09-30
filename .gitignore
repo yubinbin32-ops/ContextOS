@@ -30,3 +30,6 @@ plugins/contextos/grammars/
 
 # Private real-development traces and isolated auth/runtime homes
 .contextos/benchmarks/
+# Python benchmark runner bytecode
+__pycache__/
+*.pyc

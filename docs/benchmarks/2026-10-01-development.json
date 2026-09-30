@@ -1,0 +1,5595 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-01",
+  "qualification": {
+    "qualified": false,
+    "status": "pending frozen candidate9 campaign"
+  },
+  "protocol": {
+    "schemaVersion": 1,
+    "campaign": "frozen-candidate9-source-context-20261001",
+    "candidate": {
+      "version": "2.7.2",
+      "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+      "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34"
+    },
+    "model": "gpt-6-luna",
+    "effort": "max",
+    "serial": true,
+    "tasks": [
+      "alignment-types",
+      "ownership-refresh",
+      "installer-json-resume"
+    ],
+    "thresholds": {
+      "minimumPairs": 3,
+      "totalSavings": 0.2,
+      "peakSavings": 0.1,
+      "maximumPairRegression": 0.1,
+      "medianUncachedInputMustNotIncrease": true,
+      "longSessionObservedCompactionRequired": true
+    },
+    "limits": {
+      "runs": 6,
+      "inputTokens": 2600000,
+      "uncachedInputTokens": 500000,
+      "outputTokens": 100000,
+      "seconds": 4600
+    },
+    "perTask": {
+      "alignment-types": {
+        "requests": 8,
+        "inputTokens": 100000,
+        "uncachedInputTokens": 30000,
+        "outputTokens": 6000,
+        "seconds": 300,
+        "arms": [
+          "native",
+          "contextos"
+        ]
+      },
+      "ownership-refresh": {
+        "requests": 18,
+        "inputTokens": 450000,
+        "uncachedInputTokens": 100000,
+        "outputTokens": 24000,
+        "seconds": 900,
+        "arms": [
+          "contextos",
+          "native"
+        ]
+      },
+      "installer-json-resume": {
+        "requests": 24,
+        "inputTokens": 650000,
+        "uncachedInputTokens": 110000,
+        "outputTokens": 24000,
+        "seconds": 1000,
+        "arms": [
+          "native",
+          "contextos"
+        ]
+      }
+    },
+    "policy": "Every launched group remains in this campaign, including interruptions. No savings assigned to incomplete runs. Prior candidates remain historical diagnostic results. No runtime/skill changes during the campaign; no stronger models.",
+    "protocolRevision": "Source-context search bundles match windows in one call; ownership output bound raised symmetrically after a prior 10,302-reasoning-token response. All old failed runs stay historical."
+  },
+  "results": [],
+  "diagnosticHistory": {
+    "schemaVersion": 1,
+    "classification": "diagnostic campaigns; never select only favorable pairs",
+    "results": [
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": null,
+        "task": null,
+        "scenario": null,
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+        "candidateSnapshot": {
+          "bundleSha256": "6a72e25fb037ef353c2fd9211a47cf9e849981157192198ba037e17b210f8469",
+          "skillSha256": "123ecc48a8c0279ebfd34e9be435dd8d147a4048b2cf24b7a9fbdf04ceeb56fe",
+          "version": "2.7.1"
+        },
+        "inputTree": null,
+        "allowNativeFallback": null,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 250.21,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": null,
+        "modelVerified": null,
+        "observedModels": null,
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": null,
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 11,
+          "inputTokens": 214714,
+          "cachedInputTokens": 177408,
+          "outputTokens": 9119,
+          "reasoningOutputTokens": 6944,
+          "totalTokens": 223833,
+          "peakRequestInputTokens": 32497,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 37306,
+          "peakInputWindowPercent": 12.58
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11639,
+            "cached_input_tokens": 1792,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 241,
+            "reasoning_output_tokens": 37,
+            "total_tokens": 11880
+          },
+          {
+            "input_tokens": 13030,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 141,
+            "reasoning_output_tokens": 96,
+            "total_tokens": 13171
+          },
+          {
+            "input_tokens": 14147,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 408,
+            "reasoning_output_tokens": 282,
+            "total_tokens": 14555
+          },
+          {
+            "input_tokens": 15404,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 368,
+            "reasoning_output_tokens": 241,
+            "total_tokens": 15772
+          },
+          {
+            "input_tokens": 16504,
+            "cached_input_tokens": 15104,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 214,
+            "reasoning_output_tokens": 114,
+            "total_tokens": 16718
+          },
+          {
+            "input_tokens": 17527,
+            "cached_input_tokens": 16128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1519,
+            "reasoning_output_tokens": 1355,
+            "total_tokens": 19046
+          },
+          {
+            "input_tokens": 19779,
+            "cached_input_tokens": 17152,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 305,
+            "reasoning_output_tokens": 247,
+            "total_tokens": 20084
+          },
+          {
+            "input_tokens": 22286,
+            "cached_input_tokens": 19200,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 595,
+            "reasoning_output_tokens": 499,
+            "total_tokens": 22881
+          },
+          {
+            "input_tokens": 24319,
+            "cached_input_tokens": 21248,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 326,
+            "reasoning_output_tokens": 142,
+            "total_tokens": 24645
+          },
+          {
+            "input_tokens": 27582,
+            "cached_input_tokens": 23296,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 4595,
+            "reasoning_output_tokens": 3684,
+            "total_tokens": 32177
+          },
+          {
+            "input_tokens": 32497,
+            "cached_input_tokens": 27392,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 407,
+            "reasoning_output_tokens": 247,
+            "total_tokens": 32904
+          }
+        ],
+        "tools": {
+          "commands": 1,
+          "fileChanges": 0,
+          "osCalls": 8,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 1,
+          "lastMutationStatus": "verified",
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-qualification-smoke-20260930",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "3958ece77304",
+        "task": "canonical-parser-integrity",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "bounded-repair"
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+        "candidateSnapshot": {
+          "bundleSha256": "66e0e9df78ffe8462790e47fcfeaf7837b1aa984939789dc7558cd6f4c325e1c",
+          "skillSha256": "123ecc48a8c0279ebfd34e9be435dd8d147a4048b2cf24b7a9fbdf04ceeb56fe",
+          "version": "2.7.1"
+        },
+        "inputTree": null,
+        "allowNativeFallback": null,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 241.79,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": null,
+        "modelVerified": null,
+        "observedModels": null,
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": null,
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 10,
+          "inputTokens": 219688,
+          "cachedInputTokens": 188928,
+          "outputTokens": 7023,
+          "reasoningOutputTokens": 4529,
+          "totalTokens": 226711,
+          "peakRequestInputTokens": 30855,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 30760,
+          "peakInputWindowPercent": 11.94
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11445,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 165,
+            "reasoning_output_tokens": 40,
+            "total_tokens": 11610
+          },
+          {
+            "input_tokens": 11662,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 208,
+            "reasoning_output_tokens": 21,
+            "total_tokens": 11870
+          },
+          {
+            "input_tokens": 13339,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 226,
+            "reasoning_output_tokens": 17,
+            "total_tokens": 13565
+          },
+          {
+            "input_tokens": 18900,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2709,
+            "reasoning_output_tokens": 2538,
+            "total_tokens": 21609
+          },
+          {
+            "input_tokens": 24091,
+            "cached_input_tokens": 18176,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1272,
+            "reasoning_output_tokens": 875,
+            "total_tokens": 25363
+          },
+          {
+            "input_tokens": 25387,
+            "cached_input_tokens": 23296,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1150,
+            "reasoning_output_tokens": 297,
+            "total_tokens": 26537
+          },
+          {
+            "input_tokens": 26561,
+            "cached_input_tokens": 24320,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 322,
+            "reasoning_output_tokens": 90,
+            "total_tokens": 26883
+          },
+          {
+            "input_tokens": 28550,
+            "cached_input_tokens": 26368,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 60,
+            "reasoning_output_tokens": 13,
+            "total_tokens": 28610
+          },
+          {
+            "input_tokens": 28898,
+            "cached_input_tokens": 28416,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 646,
+            "reasoning_output_tokens": 539,
+            "total_tokens": 29544
+          },
+          {
+            "input_tokens": 30855,
+            "cached_input_tokens": 28416,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 265,
+            "reasoning_output_tokens": 99,
+            "total_tokens": 31120
+          }
+        ],
+        "tools": {
+          "commands": 10,
+          "fileChanges": 2,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-qualification-pair-20260930",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "3958ece77304",
+        "task": "canonical-parser-integrity",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "bounded-repair"
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+        "candidateSnapshot": {
+          "bundleSha256": "66e0e9df78ffe8462790e47fcfeaf7837b1aa984939789dc7558cd6f4c325e1c",
+          "skillSha256": "123ecc48a8c0279ebfd34e9be435dd8d147a4048b2cf24b7a9fbdf04ceeb56fe",
+          "version": "2.7.1"
+        },
+        "inputTree": null,
+        "allowNativeFallback": null,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 177.52,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": null,
+        "modelVerified": null,
+        "observedModels": null,
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": null,
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 5,
+          "inputTokens": 106518,
+          "cachedInputTokens": 76544,
+          "outputTokens": 7236,
+          "reasoningOutputTokens": 5022,
+          "totalTokens": 113754,
+          "peakRequestInputTokens": 32281,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 29974,
+          "peakInputWindowPercent": 12.49
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11639,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 222,
+            "reasoning_output_tokens": 36,
+            "total_tokens": 11861
+          },
+          {
+            "input_tokens": 17845,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 104,
+            "reasoning_output_tokens": 68,
+            "total_tokens": 17949
+          },
+          {
+            "input_tokens": 18898,
+            "cached_input_tokens": 17152,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 375,
+            "reasoning_output_tokens": 166,
+            "total_tokens": 19273
+          },
+          {
+            "input_tokens": 25855,
+            "cached_input_tokens": 18176,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 6131,
+            "reasoning_output_tokens": 4499,
+            "total_tokens": 31986
+          },
+          {
+            "input_tokens": 32281,
+            "cached_input_tokens": 25344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 404,
+            "reasoning_output_tokens": 253,
+            "total_tokens": 32685
+          }
+        ],
+        "tools": {
+          "commands": 1,
+          "fileChanges": 0,
+          "osCalls": 2,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 1,
+          "lastMutationStatus": "verified",
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-qualification-pair-20260930",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "8eb8de4895df",
+        "task": "canonical-parser-integrity",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "bounded-repair",
+          "contextMode": "curated-local"
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+        "candidateSnapshot": {
+          "bundleSha256": "43413988ebd58c13d35fab5773ebfc26af79ad39739b59ceaca939f00ea5ba75",
+          "skillSha256": "2c0ea7fb3947ea1f406d8c2b44d106597abbf21fccd92a8d7c73c76c168d3740",
+          "version": "2.7.2"
+        },
+        "inputTree": "41d5ef2a1e13d1ae62244bd88b624f421aaf5295",
+        "allowNativeFallback": false,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 174.2,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": null,
+        "modelVerified": null,
+        "observedModels": null,
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": null,
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 12,
+          "inputTokens": 261519,
+          "cachedInputTokens": 231424,
+          "outputTokens": 5910,
+          "reasoningOutputTokens": 3216,
+          "totalTokens": 267429,
+          "peakRequestInputTokens": 28575,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 30095,
+          "peakInputWindowPercent": 11.06
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11436,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 171,
+            "reasoning_output_tokens": 28,
+            "total_tokens": 11607
+          },
+          {
+            "input_tokens": 11658,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 100,
+            "reasoning_output_tokens": 19,
+            "total_tokens": 11758
+          },
+          {
+            "input_tokens": 13964,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 108,
+            "reasoning_output_tokens": 10,
+            "total_tokens": 14072
+          },
+          {
+            "input_tokens": 19407,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 882,
+            "reasoning_output_tokens": 777,
+            "total_tokens": 20289
+          },
+          {
+            "input_tokens": 21141,
+            "cached_input_tokens": 19200,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2289,
+            "reasoning_output_tokens": 1106,
+            "total_tokens": 23430
+          },
+          {
+            "input_tokens": 23454,
+            "cached_input_tokens": 20224,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 315,
+            "reasoning_output_tokens": 233,
+            "total_tokens": 23769
+          },
+          {
+            "input_tokens": 24939,
+            "cached_input_tokens": 23296,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 563,
+            "reasoning_output_tokens": 238,
+            "total_tokens": 25502
+          },
+          {
+            "input_tokens": 25526,
+            "cached_input_tokens": 24320,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 89,
+            "reasoning_output_tokens": 7,
+            "total_tokens": 25615
+          },
+          {
+            "input_tokens": 25914,
+            "cached_input_tokens": 25344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 177,
+            "reasoning_output_tokens": 80,
+            "total_tokens": 26091
+          },
+          {
+            "input_tokens": 27324,
+            "cached_input_tokens": 25344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 833,
+            "reasoning_output_tokens": 551,
+            "total_tokens": 28157
+          },
+          {
+            "input_tokens": 28181,
+            "cached_input_tokens": 26368,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 94,
+            "reasoning_output_tokens": 7,
+            "total_tokens": 28275
+          },
+          {
+            "input_tokens": 28575,
+            "cached_input_tokens": 27392,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 289,
+            "reasoning_output_tokens": 160,
+            "total_tokens": 28864
+          }
+        ],
+        "tools": {
+          "commands": 8,
+          "fileChanges": 3,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-final-installer-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "8eb8de4895df",
+        "task": "canonical-parser-integrity",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "bounded-repair",
+          "contextMode": "curated-local"
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+        "candidateSnapshot": {
+          "bundleSha256": "43413988ebd58c13d35fab5773ebfc26af79ad39739b59ceaca939f00ea5ba75",
+          "skillSha256": "2c0ea7fb3947ea1f406d8c2b44d106597abbf21fccd92a8d7c73c76c168d3740",
+          "version": "2.7.2"
+        },
+        "inputTree": "41d5ef2a1e13d1ae62244bd88b624f421aaf5295",
+        "allowNativeFallback": false,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 224.56,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": null,
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 7,
+          "inputTokens": 158916,
+          "cachedInputTokens": 128256,
+          "outputTokens": 9840,
+          "reasoningOutputTokens": 5957,
+          "totalTokens": 168756,
+          "peakRequestInputTokens": 32233,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 30660,
+          "peakInputWindowPercent": 12.47
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11617,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 224,
+            "reasoning_output_tokens": 47,
+            "total_tokens": 11841
+          },
+          {
+            "input_tokens": 15967,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 87,
+            "reasoning_output_tokens": 51,
+            "total_tokens": 16054
+          },
+          {
+            "input_tokens": 16473,
+            "cached_input_tokens": 15104,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 297,
+            "reasoning_output_tokens": 153,
+            "total_tokens": 16770
+          },
+          {
+            "input_tokens": 23315,
+            "cached_input_tokens": 16128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 5246,
+            "reasoning_output_tokens": 3766,
+            "total_tokens": 28561
+          },
+          {
+            "input_tokens": 28593,
+            "cached_input_tokens": 22272,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2093,
+            "reasoning_output_tokens": 1152,
+            "total_tokens": 30686
+          },
+          {
+            "input_tokens": 30718,
+            "cached_input_tokens": 28416,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1248,
+            "reasoning_output_tokens": 304,
+            "total_tokens": 31966
+          },
+          {
+            "input_tokens": 32233,
+            "cached_input_tokens": 30464,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 645,
+            "reasoning_output_tokens": 484,
+            "total_tokens": 32878
+          }
+        ],
+        "tools": {
+          "commands": 1,
+          "fileChanges": 0,
+          "osCalls": 2,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 1,
+          "lastMutationStatus": "verified",
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-final-installer-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "5691c4a0b08b",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "43413988ebd58c13d35fab5773ebfc26af79ad39739b59ceaca939f00ea5ba75",
+          "skillSha256": "2c0ea7fb3947ea1f406d8c2b44d106597abbf21fccd92a8d7c73c76c168d3740",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 69.72,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": null,
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 7,
+          "inputTokens": 88992,
+          "cachedInputTokens": 81152,
+          "outputTokens": 1676,
+          "reasoningOutputTokens": 710,
+          "totalTokens": 90668,
+          "peakRequestInputTokens": 13938,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 7840,
+          "peakInputWindowPercent": 5.39
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11416,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 134,
+            "reasoning_output_tokens": 41,
+            "total_tokens": 11550
+          },
+          {
+            "input_tokens": 11605,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 175,
+            "reasoning_output_tokens": 39,
+            "total_tokens": 11780
+          },
+          {
+            "input_tokens": 12230,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 874,
+            "reasoning_output_tokens": 469,
+            "total_tokens": 13104
+          },
+          {
+            "input_tokens": 13128,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 96,
+            "reasoning_output_tokens": 37,
+            "total_tokens": 13224
+          },
+          {
+            "input_tokens": 13262,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 108,
+            "reasoning_output_tokens": 15,
+            "total_tokens": 13370
+          },
+          {
+            "input_tokens": 13413,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 78,
+            "reasoning_output_tokens": 22,
+            "total_tokens": 13491
+          },
+          {
+            "input_tokens": 13938,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 211,
+            "reasoning_output_tokens": 87,
+            "total_tokens": 14149
+          }
+        ],
+        "tools": {
+          "commands": 7,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-final-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "5691c4a0b08b",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "43413988ebd58c13d35fab5773ebfc26af79ad39739b59ceaca939f00ea5ba75",
+          "skillSha256": "2c0ea7fb3947ea1f406d8c2b44d106597abbf21fccd92a8d7c73c76c168d3740",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 111.22,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "contextos",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 6,
+          "inputTokens": 83693,
+          "cachedInputTokens": 67072,
+          "outputTokens": 4257,
+          "reasoningOutputTokens": 3292,
+          "totalTokens": 87950,
+          "peakRequestInputTokens": 18085,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 16621,
+          "peakInputWindowPercent": 7
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11596,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 204,
+            "reasoning_output_tokens": 42,
+            "total_tokens": 11800
+          },
+          {
+            "input_tokens": 12313,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 173,
+            "reasoning_output_tokens": 101,
+            "total_tokens": 12486
+          },
+          {
+            "input_tokens": 12905,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 333,
+            "reasoning_output_tokens": 215,
+            "total_tokens": 13238
+          },
+          {
+            "input_tokens": 13897,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 314,
+            "reasoning_output_tokens": 209,
+            "total_tokens": 14211
+          },
+          {
+            "input_tokens": 14897,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2827,
+            "reasoning_output_tokens": 2451,
+            "total_tokens": 17724
+          },
+          {
+            "input_tokens": 18085,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 406,
+            "reasoning_output_tokens": 274,
+            "total_tokens": 18491
+          }
+        ],
+        "tools": {
+          "commands": 1,
+          "fileChanges": 0,
+          "osCalls": 3,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 1,
+          "lastMutationStatus": "verified",
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-final-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "ac05f8012809",
+        "task": "ownership-refresh",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "cross-file",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "1a808cf6d360f7c2af2df3da082ed05cda2e9ec4fa625061c1652c198ad1e2ca",
+        "candidateSnapshot": {
+          "bundleSha256": "43413988ebd58c13d35fab5773ebfc26af79ad39739b59ceaca939f00ea5ba75",
+          "skillSha256": "2c0ea7fb3947ea1f406d8c2b44d106597abbf21fccd92a8d7c73c76c168d3740",
+          "version": "2.7.2"
+        },
+        "inputTree": "41d5ef2a1e13d1ae62244bd88b624f421aaf5295",
+        "allowNativeFallback": false,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": -15,
+        "stopReason": "inputTokens budget",
+        "elapsedSeconds": 190.77,
+        "complete": false,
+        "accountingMatches": false,
+        "accountingMode": null,
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native",
+        "validForComparison": false,
+        "metrics": null,
+        "observedPartialMetrics": {
+          "requestCount": 10,
+          "inputTokens": 304606,
+          "cachedInputTokens": 265728,
+          "outputTokens": 7774,
+          "reasoningOutputTokens": 4606,
+          "totalTokens": 312380,
+          "peakRequestInputTokens": 42458,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 38878,
+          "peakInputWindowPercent": 16.43
+        },
+        "requests": [
+          {
+            "input_tokens": 11437,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 173,
+            "reasoning_output_tokens": 27,
+            "total_tokens": 11610
+          },
+          {
+            "input_tokens": 16245,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 336,
+            "reasoning_output_tokens": 29,
+            "total_tokens": 16581
+          },
+          {
+            "input_tokens": 25793,
+            "cached_input_tokens": 16128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1375,
+            "reasoning_output_tokens": 1116,
+            "total_tokens": 27168
+          },
+          {
+            "input_tokens": 28919,
+            "cached_input_tokens": 25344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 872,
+            "reasoning_output_tokens": 580,
+            "total_tokens": 29791
+          },
+          {
+            "input_tokens": 32825,
+            "cached_input_tokens": 28416,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 467,
+            "reasoning_output_tokens": 343,
+            "total_tokens": 33292
+          },
+          {
+            "input_tokens": 34498,
+            "cached_input_tokens": 32512,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1097,
+            "reasoning_output_tokens": 1014,
+            "total_tokens": 35595
+          },
+          {
+            "input_tokens": 36169,
+            "cached_input_tokens": 33536,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 129,
+            "reasoning_output_tokens": 16,
+            "total_tokens": 36298
+          },
+          {
+            "input_tokens": 36635,
+            "cached_input_tokens": 35584,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2968,
+            "reasoning_output_tokens": 1356,
+            "total_tokens": 39603
+          },
+          {
+            "input_tokens": 39627,
+            "cached_input_tokens": 35584,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 238,
+            "reasoning_output_tokens": 54,
+            "total_tokens": 39865
+          },
+          {
+            "input_tokens": 42458,
+            "cached_input_tokens": 38656,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 119,
+            "reasoning_output_tokens": 71,
+            "total_tokens": 42577
+          }
+        ],
+        "tools": {
+          "commands": 15,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-final-ownership-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "scoped refresh true",
+              "pass": true
+            },
+            {
+              "name": "scoped refresh false",
+              "pass": true
+            },
+            {
+              "name": "legacy full replacement remains full",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "3e408eb473ce",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "6c6f32f29a315fdddc7030c96099c13fa7c27b78fa543f16ec664dbe2ab2e106",
+          "skillSha256": "1bc993e140aa460ae949438646074c6a4c3fb5a6c6e4cd5c4814fe679637ed84",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 125000,
+          "uncachedInputTokens": 20000,
+          "outputTokens": 6000,
+          "seconds": 400
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 95.95,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 7,
+          "inputTokens": 94423,
+          "cachedInputTokens": 84224,
+          "outputTokens": 2976,
+          "reasoningOutputTokens": 1500,
+          "totalTokens": 97399,
+          "peakRequestInputTokens": 15713,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 10199,
+          "peakInputWindowPercent": 6.08
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11425,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 163,
+            "reasoning_output_tokens": 39,
+            "total_tokens": 11588
+          },
+          {
+            "input_tokens": 11978,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 672,
+            "reasoning_output_tokens": 264,
+            "total_tokens": 12650
+          },
+          {
+            "input_tokens": 12674,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 283,
+            "reasoning_output_tokens": 59,
+            "total_tokens": 12957
+          },
+          {
+            "input_tokens": 13405,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 862,
+            "reasoning_output_tokens": 782,
+            "total_tokens": 14267
+          },
+          {
+            "input_tokens": 14310,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 584,
+            "reasoning_output_tokens": 269,
+            "total_tokens": 14894
+          },
+          {
+            "input_tokens": 14918,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 269,
+            "reasoning_output_tokens": 39,
+            "total_tokens": 15187
+          },
+          {
+            "input_tokens": 15713,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 143,
+            "reasoning_output_tokens": 48,
+            "total_tokens": 15856
+          }
+        ],
+        "tools": {
+          "commands": 6,
+          "fileChanges": 2,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-adaptive-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "3e408eb473ce",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "6c6f32f29a315fdddc7030c96099c13fa7c27b78fa543f16ec664dbe2ab2e106",
+          "skillSha256": "1bc993e140aa460ae949438646074c6a4c3fb5a6c6e4cd5c4814fe679637ed84",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 125000,
+          "uncachedInputTokens": 20000,
+          "outputTokens": 6000,
+          "seconds": 400
+        },
+        "status": -15,
+        "stopReason": "uncachedInputTokens budget",
+        "elapsedSeconds": 89.96,
+        "complete": false,
+        "accountingMatches": false,
+        "accountingMode": null,
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native-fallback",
+        "validForComparison": false,
+        "metrics": null,
+        "observedPartialMetrics": {
+          "requestCount": 6,
+          "inputTokens": 85502,
+          "cachedInputTokens": 65280,
+          "outputTokens": 2839,
+          "reasoningOutputTokens": 1611,
+          "totalTokens": 88341,
+          "peakRequestInputTokens": 16516,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 20222,
+          "peakInputWindowPercent": 6.39
+        },
+        "requests": [
+          {
+            "input_tokens": 11606,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 239,
+            "reasoning_output_tokens": 45,
+            "total_tokens": 11845
+          },
+          {
+            "input_tokens": 12592,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 295,
+            "reasoning_output_tokens": 152,
+            "total_tokens": 12887
+          },
+          {
+            "input_tokens": 13485,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1683,
+            "reasoning_output_tokens": 1166,
+            "total_tokens": 15168
+          },
+          {
+            "input_tokens": 15192,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 222,
+            "reasoning_output_tokens": 104,
+            "total_tokens": 15414
+          },
+          {
+            "input_tokens": 16111,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 139,
+            "reasoning_output_tokens": 42,
+            "total_tokens": 16250
+          },
+          {
+            "input_tokens": 16516,
+            "cached_input_tokens": 15104,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 261,
+            "reasoning_output_tokens": 102,
+            "total_tokens": 16777
+          }
+        ],
+        "tools": {
+          "commands": 8,
+          "fileChanges": 2,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-adaptive-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "db60ef97e2aa",
+        "task": "canonical-parser-integrity",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "bounded-repair",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+        "candidateSnapshot": {
+          "bundleSha256": "6c6f32f29a315fdddc7030c96099c13fa7c27b78fa543f16ec664dbe2ab2e106",
+          "skillSha256": "1bc993e140aa460ae949438646074c6a4c3fb5a6c6e4cd5c4814fe679637ed84",
+          "version": "2.7.2"
+        },
+        "inputTree": "9bf8d4028c4a94e24cc026777caff16df199f42d",
+        "allowNativeFallback": false,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 12,
+          "inputTokens": 300000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 600
+        },
+        "status": -15,
+        "stopReason": "requests budget",
+        "elapsedSeconds": 169.16,
+        "complete": false,
+        "accountingMatches": false,
+        "accountingMode": null,
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": false,
+        "scopePass": true,
+        "workflowRoute": "native-fallback",
+        "validForComparison": false,
+        "metrics": null,
+        "observedPartialMetrics": {
+          "requestCount": 12,
+          "inputTokens": 245754,
+          "cachedInputTokens": 221184,
+          "outputTokens": 6273,
+          "reasoningOutputTokens": 3997,
+          "totalTokens": 252027,
+          "peakRequestInputTokens": 26480,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 24570,
+          "peakInputWindowPercent": 10.25
+        },
+        "requests": [
+          {
+            "input_tokens": 11627,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 267,
+            "reasoning_output_tokens": 68,
+            "total_tokens": 11894
+          },
+          {
+            "input_tokens": 12504,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 288,
+            "reasoning_output_tokens": 170,
+            "total_tokens": 12792
+          },
+          {
+            "input_tokens": 17210,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 798,
+            "reasoning_output_tokens": 601,
+            "total_tokens": 18008
+          },
+          {
+            "input_tokens": 18618,
+            "cached_input_tokens": 16128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 341,
+            "reasoning_output_tokens": 256,
+            "total_tokens": 18959
+          },
+          {
+            "input_tokens": 19189,
+            "cached_input_tokens": 18176,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 167,
+            "reasoning_output_tokens": 43,
+            "total_tokens": 19356
+          },
+          {
+            "input_tokens": 20470,
+            "cached_input_tokens": 18176,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2050,
+            "reasoning_output_tokens": 1650,
+            "total_tokens": 22520
+          },
+          {
+            "input_tokens": 22544,
+            "cached_input_tokens": 20224,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1156,
+            "reasoning_output_tokens": 622,
+            "total_tokens": 23700
+          },
+          {
+            "input_tokens": 23724,
+            "cached_input_tokens": 22272,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 176,
+            "reasoning_output_tokens": 43,
+            "total_tokens": 23900
+          },
+          {
+            "input_tokens": 23962,
+            "cached_input_tokens": 23296,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 60,
+            "reasoning_output_tokens": 12,
+            "total_tokens": 24022
+          },
+          {
+            "input_tokens": 24363,
+            "cached_input_tokens": 23296,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 676,
+            "reasoning_output_tokens": 449,
+            "total_tokens": 25039
+          },
+          {
+            "input_tokens": 25063,
+            "cached_input_tokens": 23296,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 237,
+            "reasoning_output_tokens": 74,
+            "total_tokens": 25300
+          },
+          {
+            "input_tokens": 26480,
+            "cached_input_tokens": 24320,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 57,
+            "reasoning_output_tokens": 9,
+            "total_tokens": 26537
+          }
+        ],
+        "tools": {
+          "commands": 8,
+          "fileChanges": 3,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-adaptive-installer-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "acddff2fdf30",
+        "task": "canonical-parser-integrity",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "bounded-repair",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "8286ea37b84ace8360a3fb9c6a05dbc862a53e19bcc4a33137b71803ca59881b",
+        "candidateSnapshot": {
+          "bundleSha256": "4cdee19679b3761dcc2f41c4cda28bce153982824ac3b191064ab7b2289f8470",
+          "skillSha256": "4aad5eda61e9423f1ecf0fb8ff9fa9dbf2c7756abab05db2cec169f8d066e186",
+          "version": "2.7.2"
+        },
+        "inputTree": "1f79bd0adbca89d0a86e23c66871b31fce8434a9",
+        "allowNativeFallback": false,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 350000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 700
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 144.59,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "contextos",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 4,
+          "inputTokens": 70545,
+          "cachedInputTokens": 49152,
+          "outputTokens": 5357,
+          "reasoningOutputTokens": 4095,
+          "totalTokens": 75902,
+          "peakRequestInputTokens": 24912,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 21393,
+          "peakInputWindowPercent": 9.64
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11650,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 341,
+            "reasoning_output_tokens": 125,
+            "total_tokens": 11991
+          },
+          {
+            "input_tokens": 13511,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 685,
+            "reasoning_output_tokens": 545,
+            "total_tokens": 14196
+          },
+          {
+            "input_tokens": 20472,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 4121,
+            "reasoning_output_tokens": 3320,
+            "total_tokens": 24593
+          },
+          {
+            "input_tokens": 24912,
+            "cached_input_tokens": 20224,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 210,
+            "reasoning_output_tokens": 105,
+            "total_tokens": 25122
+          }
+        ],
+        "tools": {
+          "commands": 1,
+          "fileChanges": 0,
+          "osCalls": 2,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 1,
+          "lastMutationStatus": "verified",
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-qualified-installer-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "acddff2fdf30",
+        "task": "canonical-parser-integrity",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "bounded-repair",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "8286ea37b84ace8360a3fb9c6a05dbc862a53e19bcc4a33137b71803ca59881b",
+        "candidateSnapshot": {
+          "bundleSha256": "4cdee19679b3761dcc2f41c4cda28bce153982824ac3b191064ab7b2289f8470",
+          "skillSha256": "4aad5eda61e9423f1ecf0fb8ff9fa9dbf2c7756abab05db2cec169f8d066e186",
+          "version": "2.7.2"
+        },
+        "inputTree": "1f79bd0adbca89d0a86e23c66871b31fce8434a9",
+        "allowNativeFallback": false,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 350000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 12000,
+          "seconds": 700
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 317.32,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 12,
+          "inputTokens": 260406,
+          "cachedInputTokens": 233472,
+          "outputTokens": 7942,
+          "reasoningOutputTokens": 5061,
+          "totalTokens": 268348,
+          "peakRequestInputTokens": 29541,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 26934,
+          "peakInputWindowPercent": 11.43
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11469,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 150,
+            "reasoning_output_tokens": 57,
+            "total_tokens": 11619
+          },
+          {
+            "input_tokens": 11643,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 119,
+            "reasoning_output_tokens": 26,
+            "total_tokens": 11762
+          },
+          {
+            "input_tokens": 12322,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 309,
+            "reasoning_output_tokens": 51,
+            "total_tokens": 12631
+          },
+          {
+            "input_tokens": 17979,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1211,
+            "reasoning_output_tokens": 909,
+            "total_tokens": 19190
+          },
+          {
+            "input_tokens": 19661,
+            "cached_input_tokens": 17152,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 160,
+            "reasoning_output_tokens": 70,
+            "total_tokens": 19821
+          },
+          {
+            "input_tokens": 21605,
+            "cached_input_tokens": 19200,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 3290,
+            "reasoning_output_tokens": 2124,
+            "total_tokens": 24895
+          },
+          {
+            "input_tokens": 24919,
+            "cached_input_tokens": 21248,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 436,
+            "reasoning_output_tokens": 297,
+            "total_tokens": 25355
+          },
+          {
+            "input_tokens": 25653,
+            "cached_input_tokens": 24320,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 381,
+            "reasoning_output_tokens": 221,
+            "total_tokens": 26034
+          },
+          {
+            "input_tokens": 27487,
+            "cached_input_tokens": 25344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1352,
+            "reasoning_output_tokens": 1147,
+            "total_tokens": 28839
+          },
+          {
+            "input_tokens": 28863,
+            "cached_input_tokens": 26368,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 104,
+            "reasoning_output_tokens": 22,
+            "total_tokens": 28967
+          },
+          {
+            "input_tokens": 29264,
+            "cached_input_tokens": 28416,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 152,
+            "reasoning_output_tokens": 47,
+            "total_tokens": 29416
+          },
+          {
+            "input_tokens": 29541,
+            "cached_input_tokens": 28416,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 278,
+            "reasoning_output_tokens": 90,
+            "total_tokens": 29819
+          }
+        ],
+        "tools": {
+          "commands": 14,
+          "fileChanges": 2,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-qualified-installer-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "09e9ae16f4a6",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "4cdee19679b3761dcc2f41c4cda28bce153982824ac3b191064ab7b2289f8470",
+          "skillSha256": "4aad5eda61e9423f1ecf0fb8ff9fa9dbf2c7756abab05db2cec169f8d066e186",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 200000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 8000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 79.86,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 6,
+          "inputTokens": 77129,
+          "cachedInputTokens": 65024,
+          "outputTokens": 2045,
+          "reasoningOutputTokens": 1113,
+          "totalTokens": 79174,
+          "peakRequestInputTokens": 14179,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 12105,
+          "peakInputWindowPercent": 5.49
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11416,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 172,
+            "reasoning_output_tokens": 48,
+            "total_tokens": 11588
+          },
+          {
+            "input_tokens": 11978,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 984,
+            "reasoning_output_tokens": 593,
+            "total_tokens": 12962
+          },
+          {
+            "input_tokens": 12986,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 190,
+            "reasoning_output_tokens": 51,
+            "total_tokens": 13176
+          },
+          {
+            "input_tokens": 13214,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 99,
+            "reasoning_output_tokens": 20,
+            "total_tokens": 13313
+          },
+          {
+            "input_tokens": 13356,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 380,
+            "reasoning_output_tokens": 303,
+            "total_tokens": 13736
+          },
+          {
+            "input_tokens": 14179,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 220,
+            "reasoning_output_tokens": 98,
+            "total_tokens": 14399
+          }
+        ],
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-qualified-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "09e9ae16f4a6",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "4cdee19679b3761dcc2f41c4cda28bce153982824ac3b191064ab7b2289f8470",
+          "skillSha256": "4aad5eda61e9423f1ecf0fb8ff9fa9dbf2c7756abab05db2cec169f8d066e186",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 200000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 8000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 107.22,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native-fallback",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 7,
+          "inputTokens": 102446,
+          "cachedInputTokens": 91392,
+          "outputTokens": 3769,
+          "reasoningOutputTokens": 2340,
+          "totalTokens": 106215,
+          "peakRequestInputTokens": 16871,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 11054,
+          "peakInputWindowPercent": 6.53
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11596,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 287,
+            "reasoning_output_tokens": 111,
+            "total_tokens": 11883
+          },
+          {
+            "input_tokens": 12504,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 342,
+            "reasoning_output_tokens": 164,
+            "total_tokens": 12846
+          },
+          {
+            "input_tokens": 13275,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2083,
+            "reasoning_output_tokens": 1513,
+            "total_tokens": 15358
+          },
+          {
+            "input_tokens": 15382,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 206,
+            "reasoning_output_tokens": 44,
+            "total_tokens": 15588
+          },
+          {
+            "input_tokens": 16156,
+            "cached_input_tokens": 15104,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 463,
+            "reasoning_output_tokens": 323,
+            "total_tokens": 16619
+          },
+          {
+            "input_tokens": 16662,
+            "cached_input_tokens": 15104,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 168,
+            "reasoning_output_tokens": 102,
+            "total_tokens": 16830
+          },
+          {
+            "input_tokens": 16871,
+            "cached_input_tokens": 16128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 220,
+            "reasoning_output_tokens": 83,
+            "total_tokens": 17091
+          }
+        ],
+        "tools": {
+          "commands": 9,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-qualified-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": null,
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "4cdee19679b3761dcc2f41c4cda28bce153982824ac3b191064ab7b2289f8470",
+          "skillSha256": "582287ae2090e57e116368be4bbccfbec5e45715b39a3b1a6767afeb7115d62f",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 10,
+          "inputTokens": 150000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 7000,
+          "seconds": 500
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 125.35,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native-fallback",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 6,
+          "inputTokens": 80352,
+          "cachedInputTokens": 67072,
+          "outputTokens": 2303,
+          "reasoningOutputTokens": 1375,
+          "totalTokens": 82655,
+          "peakRequestInputTokens": 14690,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 13280,
+          "peakInputWindowPercent": 5.68
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11633,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 164,
+            "reasoning_output_tokens": 49,
+            "total_tokens": 11797
+          },
+          {
+            "input_tokens": 12187,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1548,
+            "reasoning_output_tokens": 1124,
+            "total_tokens": 13735
+          },
+          {
+            "input_tokens": 13759,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 172,
+            "reasoning_output_tokens": 25,
+            "total_tokens": 13931
+          },
+          {
+            "input_tokens": 13969,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 102,
+            "reasoning_output_tokens": 19,
+            "total_tokens": 14071
+          },
+          {
+            "input_tokens": 14114,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 95,
+            "reasoning_output_tokens": 15,
+            "total_tokens": 14209
+          },
+          {
+            "input_tokens": 14690,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 222,
+            "reasoning_output_tokens": 143,
+            "total_tokens": 14912
+          }
+        ],
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-lazy-trigger-smoke-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "9dc8aeefd10a",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "4cdee19679b3761dcc2f41c4cda28bce153982824ac3b191064ab7b2289f8470",
+          "skillSha256": "582287ae2090e57e116368be4bbccfbec5e45715b39a3b1a6767afeb7115d62f",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 200000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 8000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 133.52,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 5,
+          "inputTokens": 66491,
+          "cachedInputTokens": 59136,
+          "outputTokens": 2903,
+          "reasoningOutputTokens": 1655,
+          "totalTokens": 69394,
+          "peakRequestInputTokens": 14701,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 7355,
+          "peakInputWindowPercent": 5.69
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11425,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 407,
+            "reasoning_output_tokens": 106,
+            "total_tokens": 11832
+          },
+          {
+            "input_tokens": 12271,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1308,
+            "reasoning_output_tokens": 847,
+            "total_tokens": 13579
+          },
+          {
+            "input_tokens": 13603,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 346,
+            "reasoning_output_tokens": 61,
+            "total_tokens": 13949
+          },
+          {
+            "input_tokens": 14491,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 166,
+            "reasoning_output_tokens": 85,
+            "total_tokens": 14657
+          },
+          {
+            "input_tokens": 14701,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 676,
+            "reasoning_output_tokens": 556,
+            "total_tokens": 15377
+          }
+        ],
+        "tools": {
+          "commands": 6,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-finalq-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "9dc8aeefd10a",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "f4643a66d7639842d9766647396dc7d81ce78ac0c4f01f091a5f64cbe134f73e",
+        "candidateSnapshot": {
+          "bundleSha256": "4cdee19679b3761dcc2f41c4cda28bce153982824ac3b191064ab7b2289f8470",
+          "skillSha256": "582287ae2090e57e116368be4bbccfbec5e45715b39a3b1a6767afeb7115d62f",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 200000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 8000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 84.89,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native-fallback",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 6,
+          "inputTokens": 81315,
+          "cachedInputTokens": 72192,
+          "outputTokens": 2515,
+          "reasoningOutputTokens": 1490,
+          "totalTokens": 83830,
+          "peakRequestInputTokens": 15006,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 9123,
+          "peakInputWindowPercent": 5.81
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11613,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 209,
+            "reasoning_output_tokens": 73,
+            "total_tokens": 11822
+          },
+          {
+            "input_tokens": 12212,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1718,
+            "reasoning_output_tokens": 1266,
+            "total_tokens": 13930
+          },
+          {
+            "input_tokens": 13954,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 175,
+            "reasoning_output_tokens": 16,
+            "total_tokens": 14129
+          },
+          {
+            "input_tokens": 14168,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 150,
+            "reasoning_output_tokens": 31,
+            "total_tokens": 14318
+          },
+          {
+            "input_tokens": 14362,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 128,
+            "reasoning_output_tokens": 43,
+            "total_tokens": 14490
+          },
+          {
+            "input_tokens": 15006,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 135,
+            "reasoning_output_tokens": 61,
+            "total_tokens": 15141
+          }
+        ],
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-finalq-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "38360a452f59",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "91af61e2af76cbe19544d57ad2b48ee15a92bcac5a164879c25de23469f9f73b",
+        "candidateSnapshot": {
+          "bundleSha256": "1996b00c5664c36c68df27f3bf81f2e1cd95aa9b9ca2c770664307baf6aef009",
+          "skillSha256": "f4ef1a369667edeb84e6e46f7c9acbe6f6d756031d1e9d3738ad1eee87c430d2",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 200000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 8000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 115.26,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 4,
+          "inputTokens": 53666,
+          "cachedInputTokens": 46080,
+          "outputTokens": 3021,
+          "reasoningOutputTokens": 1914,
+          "totalTokens": 56687,
+          "peakRequestInputTokens": 14958,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 7586,
+          "peakInputWindowPercent": 5.79
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11488,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 823,
+            "reasoning_output_tokens": 516,
+            "total_tokens": 12311
+          },
+          {
+            "input_tokens": 12756,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1684,
+            "reasoning_output_tokens": 1209,
+            "total_tokens": 14440
+          },
+          {
+            "input_tokens": 14464,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 374,
+            "reasoning_output_tokens": 125,
+            "total_tokens": 14838
+          },
+          {
+            "input_tokens": 14958,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 140,
+            "reasoning_output_tokens": 64,
+            "total_tokens": 15098
+          }
+        ],
+        "tools": {
+          "commands": 3,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-batched-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "38360a452f59",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "91af61e2af76cbe19544d57ad2b48ee15a92bcac5a164879c25de23469f9f73b",
+        "candidateSnapshot": {
+          "bundleSha256": "1996b00c5664c36c68df27f3bf81f2e1cd95aa9b9ca2c770664307baf6aef009",
+          "skillSha256": "f4ef1a369667edeb84e6e46f7c9acbe6f6d756031d1e9d3738ad1eee87c430d2",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 200000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 8000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 128.4,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native-fallback",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 5,
+          "inputTokens": 72029,
+          "cachedInputTokens": 57088,
+          "outputTokens": 4127,
+          "reasoningOutputTokens": 2777,
+          "totalTokens": 76156,
+          "peakRequestInputTokens": 16706,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 14941,
+          "peakInputWindowPercent": 6.47
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11688,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 188,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 11876
+          },
+          {
+            "input_tokens": 12295,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2263,
+            "reasoning_output_tokens": 1963,
+            "total_tokens": 14558
+          },
+          {
+            "input_tokens": 15140,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1036,
+            "reasoning_output_tokens": 603,
+            "total_tokens": 16176
+          },
+          {
+            "input_tokens": 16200,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 448,
+            "reasoning_output_tokens": 151,
+            "total_tokens": 16648
+          },
+          {
+            "input_tokens": 16706,
+            "cached_input_tokens": 15104,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 192,
+            "reasoning_output_tokens": 60,
+            "total_tokens": 16898
+          }
+        ],
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-batched-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "native",
+        "pairId": "87abdc93fdc4",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "b105f4e9abea95d6de982457d310efc54277b2e79209428998f2d5f5ca639d2e",
+        "candidateSnapshot": {
+          "bundleSha256": "1996b00c5664c36c68df27f3bf81f2e1cd95aa9b9ca2c770664307baf6aef009",
+          "skillSha256": "c11d14d1b4b130b00c7c426d45346847aab08130f2ab4dd39dd4f48213912b1b",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 200000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 8000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 65.72,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 4,
+          "inputTokens": 52116,
+          "cachedInputTokens": 29696,
+          "outputTokens": 2261,
+          "reasoningOutputTokens": 1256,
+          "totalTokens": 54377,
+          "peakRequestInputTokens": 14248,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 22420,
+          "peakInputWindowPercent": 5.51
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11522,
+            "cached_input_tokens": 3840,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 460,
+            "reasoning_output_tokens": 226,
+            "total_tokens": 11982
+          },
+          {
+            "input_tokens": 12565,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1192,
+            "reasoning_output_tokens": 676,
+            "total_tokens": 13757
+          },
+          {
+            "input_tokens": 13781,
+            "cached_input_tokens": 1792,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 392,
+            "reasoning_output_tokens": 270,
+            "total_tokens": 14173
+          },
+          {
+            "input_tokens": 14248,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 217,
+            "reasoning_output_tokens": 84,
+            "total_tokens": 14465
+          }
+        ],
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-preflight-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "87abdc93fdc4",
+        "task": "alignment-types",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "promptSha256": "b105f4e9abea95d6de982457d310efc54277b2e79209428998f2d5f5ca639d2e",
+        "candidateSnapshot": {
+          "bundleSha256": "1996b00c5664c36c68df27f3bf81f2e1cd95aa9b9ca2c770664307baf6aef009",
+          "skillSha256": "c11d14d1b4b130b00c7c426d45346847aab08130f2ab4dd39dd4f48213912b1b",
+          "version": "2.7.2"
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "allowNativeFallback": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 16,
+          "inputTokens": 200000,
+          "uncachedInputTokens": 50000,
+          "outputTokens": 8000,
+          "seconds": 600
+        },
+        "status": 0,
+        "stopReason": null,
+        "elapsedSeconds": 72.78,
+        "complete": true,
+        "accountingMatches": true,
+        "accountingMode": "cumulative-cli",
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": true,
+        "scopePass": true,
+        "workflowRoute": "native-fallback",
+        "validForComparison": true,
+        "metrics": {
+          "requestCount": 4,
+          "inputTokens": 53869,
+          "cachedInputTokens": 41984,
+          "outputTokens": 2645,
+          "reasoningOutputTokens": 1749,
+          "totalTokens": 56514,
+          "peakRequestInputTokens": 14898,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 11885,
+          "peakInputWindowPercent": 5.77
+        },
+        "observedPartialMetrics": null,
+        "requests": [
+          {
+            "input_tokens": 11729,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 383,
+            "reasoning_output_tokens": 206,
+            "total_tokens": 12112
+          },
+          {
+            "input_tokens": 12655,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1908,
+            "reasoning_output_tokens": 1393,
+            "total_tokens": 14563
+          },
+          {
+            "input_tokens": 14587,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 189,
+            "reasoning_output_tokens": 57,
+            "total_tokens": 14776
+          },
+          {
+            "input_tokens": 14898,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 165,
+            "reasoning_output_tokens": 93,
+            "total_tokens": 15063
+          }
+        ],
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-preflight-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "schemaVersion": 2,
+        "arm": "contextos",
+        "pairId": "ee77941198e0",
+        "task": "ownership-refresh",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "cross-file",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "model": "gpt-6-luna",
+        "effort": "max",
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "promptSha256": "19c51edc08ca7d0555bb42fe9123d4b0c54b37625f544ed40eb0831f4f1b872b",
+        "candidateSnapshot": {
+          "bundleSha256": "1996b00c5664c36c68df27f3bf81f2e1cd95aa9b9ca2c770664307baf6aef009",
+          "skillSha256": "c11d14d1b4b130b00c7c426d45346847aab08130f2ab4dd39dd4f48213912b1b",
+          "version": "2.7.2"
+        },
+        "inputTree": "bf9a4395abd71124ed44ffe9347f3a39a3b99352",
+        "allowNativeFallback": false,
+        "cliVersion": "codex-cli 0.159.2",
+        "provider": "chatgpt-http",
+        "bounds": {
+          "requests": 18,
+          "inputTokens": 450000,
+          "uncachedInputTokens": 65000,
+          "outputTokens": 18000,
+          "seconds": 900
+        },
+        "status": -15,
+        "stopReason": "uncachedInputTokens budget",
+        "elapsedSeconds": 309.13,
+        "complete": false,
+        "accountingMatches": false,
+        "accountingMode": null,
+        "modelVerified": true,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "osUsed": false,
+        "scopePass": true,
+        "workflowRoute": "contextos",
+        "validForComparison": false,
+        "metrics": null,
+        "observedPartialMetrics": {
+          "requestCount": 9,
+          "inputTokens": 227160,
+          "cachedInputTokens": 150272,
+          "outputTokens": 14850,
+          "reasoningOutputTokens": 10930,
+          "totalTokens": 242010,
+          "peakRequestInputTokens": 46214,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 76888,
+          "peakInputWindowPercent": 17.88
+        },
+        "requests": [
+          {
+            "input_tokens": 11721,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 364,
+            "reasoning_output_tokens": 183,
+            "total_tokens": 12085
+          },
+          {
+            "input_tokens": 13206,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 915,
+            "reasoning_output_tokens": 740,
+            "total_tokens": 14121
+          },
+          {
+            "input_tokens": 14435,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 736,
+            "reasoning_output_tokens": 607,
+            "total_tokens": 15171
+          },
+          {
+            "input_tokens": 15856,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1572,
+            "reasoning_output_tokens": 1393,
+            "total_tokens": 17428
+          },
+          {
+            "input_tokens": 22824,
+            "cached_input_tokens": 15104,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 819,
+            "reasoning_output_tokens": 626,
+            "total_tokens": 23643
+          },
+          {
+            "input_tokens": 27965,
+            "cached_input_tokens": 22272,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1003,
+            "reasoning_output_tokens": 838,
+            "total_tokens": 28968
+          },
+          {
+            "input_tokens": 33928,
+            "cached_input_tokens": 27392,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2457,
+            "reasoning_output_tokens": 2248,
+            "total_tokens": 36385
+          },
+          {
+            "input_tokens": 41011,
+            "cached_input_tokens": 33536,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 5170,
+            "reasoning_output_tokens": 3823,
+            "total_tokens": 46181
+          },
+          {
+            "input_tokens": 46214,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1814,
+            "reasoning_output_tokens": 472,
+            "total_tokens": 48028
+          }
+        ],
+        "tools": {
+          "commands": 1,
+          "fileChanges": 0,
+          "osCalls": 6,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "warnings": [],
+        "campaign": "contextos-preflight-ownership-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "scoped refresh true",
+              "pass": true
+            },
+            {
+              "name": "scoped refresh false",
+              "pass": true
+            },
+            {
+              "name": "legacy full replacement remains full",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "metrics": {
+          "requestCount": 4,
+          "inputTokens": 51855,
+          "cachedInputTokens": 45056,
+          "outputTokens": 2301,
+          "reasoningOutputTokens": 1278,
+          "totalTokens": 54156,
+          "peakRequestInputTokens": 14083,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 6799,
+          "peakInputWindowPercent": 5.45
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "schemaVersion": 2,
+        "bounds": {
+          "requests": 8,
+          "inputTokens": 100000,
+          "uncachedInputTokens": 30000,
+          "outputTokens": 6000,
+          "seconds": 300
+        },
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "scopePass": true,
+        "provider": "chatgpt-http",
+        "observedPartialMetrics": null,
+        "status": 0,
+        "allowNativeFallback": true,
+        "elapsedSeconds": 69.74,
+        "osUsed": true,
+        "task": "alignment-types",
+        "arm": "native",
+        "cliVersion": "codex-cli 0.159.2",
+        "modelVerified": true,
+        "workflowRoute": "native",
+        "accountingMode": "cumulative-cli",
+        "tools": {
+          "commands": 5,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "complete": true,
+        "validForComparison": true,
+        "effort": "max",
+        "stopReason": null,
+        "model": "gpt-6-luna",
+        "warnings": [],
+        "pairId": "5b4447cc90e4",
+        "accountingMatches": true,
+        "promptSha256": "b105f4e9abea95d6de982457d310efc54277b2e79209428998f2d5f5ca639d2e",
+        "candidateSnapshot": {
+          "bundleSha256": "3ec0663e0ab791931a21bc29f51335f93ad7f01a22472f64b18832574af28fc5",
+          "skillSha256": "c8eea88f37d5bc4c900bb9406e00adff78e582fb14a1c460f5f6ececccb26b88",
+          "version": "2.7.2"
+        },
+        "requests": [
+          {
+            "input_tokens": 11531,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 491,
+            "reasoning_output_tokens": 287,
+            "total_tokens": 12022
+          },
+          {
+            "input_tokens": 12422,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1373,
+            "reasoning_output_tokens": 856,
+            "total_tokens": 13795
+          },
+          {
+            "input_tokens": 13819,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 208,
+            "reasoning_output_tokens": 36,
+            "total_tokens": 14027
+          },
+          {
+            "input_tokens": 14083,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 229,
+            "reasoning_output_tokens": 99,
+            "total_tokens": 14312
+          }
+        ],
+        "campaign": "contextos-frozen7-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          },
+          "resume": {
+            "pass": null
+          }
+        }
+      },
+      {
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "metrics": {
+          "requestCount": 4,
+          "inputTokens": 53040,
+          "cachedInputTokens": 46080,
+          "outputTokens": 2500,
+          "reasoningOutputTokens": 1482,
+          "totalTokens": 55540,
+          "peakRequestInputTokens": 14496,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 6960,
+          "peakInputWindowPercent": 5.61
+        },
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "schemaVersion": 2,
+        "bounds": {
+          "requests": 8,
+          "inputTokens": 100000,
+          "uncachedInputTokens": 30000,
+          "outputTokens": 6000,
+          "seconds": 300
+        },
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "scopePass": true,
+        "provider": "chatgpt-http",
+        "observedPartialMetrics": null,
+        "status": 0,
+        "allowNativeFallback": true,
+        "elapsedSeconds": 103.05,
+        "osUsed": true,
+        "task": "alignment-types",
+        "arm": "contextos",
+        "cliVersion": "codex-cli 0.159.2",
+        "modelVerified": true,
+        "workflowRoute": "native-fallback",
+        "accountingMode": "cumulative-cli",
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "complete": true,
+        "validForComparison": true,
+        "effort": "max",
+        "stopReason": null,
+        "model": "gpt-6-luna",
+        "warnings": [],
+        "pairId": "5b4447cc90e4",
+        "accountingMatches": true,
+        "promptSha256": "b105f4e9abea95d6de982457d310efc54277b2e79209428998f2d5f5ca639d2e",
+        "candidateSnapshot": {
+          "bundleSha256": "3ec0663e0ab791931a21bc29f51335f93ad7f01a22472f64b18832574af28fc5",
+          "skillSha256": "c8eea88f37d5bc4c900bb9406e00adff78e582fb14a1c460f5f6ececccb26b88",
+          "version": "2.7.2"
+        },
+        "requests": [
+          {
+            "input_tokens": 11739,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 425,
+            "reasoning_output_tokens": 187,
+            "total_tokens": 12164
+          },
+          {
+            "input_tokens": 12563,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1655,
+            "reasoning_output_tokens": 1141,
+            "total_tokens": 14218
+          },
+          {
+            "input_tokens": 14242,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 211,
+            "reasoning_output_tokens": 62,
+            "total_tokens": 14453
+          },
+          {
+            "input_tokens": 14496,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 209,
+            "reasoning_output_tokens": 92,
+            "total_tokens": 14705
+          }
+        ],
+        "campaign": "contextos-frozen7-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          },
+          "resume": {
+            "pass": null
+          }
+        }
+      },
+      {
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "cross-file",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "metrics": {
+          "requestCount": 11,
+          "inputTokens": 278910,
+          "cachedInputTokens": 234752,
+          "outputTokens": 14334,
+          "reasoningOutputTokens": 11278,
+          "totalTokens": 293244,
+          "peakRequestInputTokens": 39700,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 44158,
+          "peakInputWindowPercent": 15.36
+        },
+        "inputTree": "e3bb0dcb6a23aa61e8e8c97be2849581fa011b6c",
+        "schemaVersion": 2,
+        "bounds": {
+          "requests": 18,
+          "inputTokens": 450000,
+          "uncachedInputTokens": 100000,
+          "outputTokens": 18000,
+          "seconds": 900
+        },
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "scopePass": true,
+        "provider": "chatgpt-http",
+        "observedPartialMetrics": null,
+        "status": 0,
+        "allowNativeFallback": false,
+        "elapsedSeconds": 322.07,
+        "osUsed": true,
+        "task": "ownership-refresh",
+        "arm": "contextos",
+        "cliVersion": "codex-cli 0.159.2",
+        "modelVerified": true,
+        "workflowRoute": "contextos",
+        "accountingMode": "cumulative-cli",
+        "tools": {
+          "commands": 1,
+          "fileChanges": 0,
+          "osCalls": 4,
+          "osErrors": 1,
+          "mutationRejections": 0,
+          "verifiedMutations": 1,
+          "lastMutationStatus": "verified",
+          "compactionRecords": 0
+        },
+        "complete": true,
+        "validForComparison": true,
+        "effort": "max",
+        "stopReason": null,
+        "model": "gpt-6-luna",
+        "warnings": [],
+        "pairId": "b677aee3481c",
+        "accountingMatches": true,
+        "promptSha256": "19c51edc08ca7d0555bb42fe9123d4b0c54b37625f544ed40eb0831f4f1b872b",
+        "candidateSnapshot": {
+          "bundleSha256": "3ec0663e0ab791931a21bc29f51335f93ad7f01a22472f64b18832574af28fc5",
+          "skillSha256": "c8eea88f37d5bc4c900bb9406e00adff78e582fb14a1c460f5f6ececccb26b88",
+          "version": "2.7.2"
+        },
+        "requests": [
+          {
+            "input_tokens": 11731,
+            "cached_input_tokens": 1792,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 279,
+            "reasoning_output_tokens": 157,
+            "total_tokens": 12010
+          },
+          {
+            "input_tokens": 12705,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 70,
+            "reasoning_output_tokens": 32,
+            "total_tokens": 12775
+          },
+          {
+            "input_tokens": 13249,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 608,
+            "reasoning_output_tokens": 508,
+            "total_tokens": 13857
+          },
+          {
+            "input_tokens": 14309,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 444,
+            "reasoning_output_tokens": 291,
+            "total_tokens": 14753
+          },
+          {
+            "input_tokens": 18503,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 7793,
+            "reasoning_output_tokens": 6660,
+            "total_tokens": 26296
+          },
+          {
+            "input_tokens": 26327,
+            "cached_input_tokens": 18176,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1246,
+            "reasoning_output_tokens": 214,
+            "total_tokens": 27573
+          },
+          {
+            "input_tokens": 28257,
+            "cached_input_tokens": 25344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 534,
+            "reasoning_output_tokens": 446,
+            "total_tokens": 28791
+          },
+          {
+            "input_tokens": 37445,
+            "cached_input_tokens": 27392,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 65,
+            "reasoning_output_tokens": 27,
+            "total_tokens": 37510
+          },
+          {
+            "input_tokens": 37572,
+            "cached_input_tokens": 36608,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 855,
+            "reasoning_output_tokens": 765,
+            "total_tokens": 38427
+          },
+          {
+            "input_tokens": 39112,
+            "cached_input_tokens": 36608,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 274,
+            "reasoning_output_tokens": 108,
+            "total_tokens": 39386
+          },
+          {
+            "input_tokens": 39700,
+            "cached_input_tokens": 38656,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2166,
+            "reasoning_output_tokens": 2070,
+            "total_tokens": 41866
+          }
+        ],
+        "campaign": "contextos-frozen7-ownership-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "scoped refresh true",
+              "pass": true
+            },
+            {
+              "name": "scoped refresh false",
+              "pass": true
+            },
+            {
+              "name": "legacy full replacement remains full",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          },
+          "resume": {
+            "pass": null
+          }
+        }
+      },
+      {
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "cross-file",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "metrics": {
+          "requestCount": 11,
+          "inputTokens": 329676,
+          "cachedInputTokens": 292096,
+          "outputTokens": 11311,
+          "reasoningOutputTokens": 8295,
+          "totalTokens": 340987,
+          "peakRequestInputTokens": 41240,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 37580,
+          "peakInputWindowPercent": 15.96
+        },
+        "inputTree": "e3bb0dcb6a23aa61e8e8c97be2849581fa011b6c",
+        "schemaVersion": 2,
+        "bounds": {
+          "requests": 18,
+          "inputTokens": 450000,
+          "uncachedInputTokens": 100000,
+          "outputTokens": 18000,
+          "seconds": 900
+        },
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "scopePass": true,
+        "provider": "chatgpt-http",
+        "observedPartialMetrics": null,
+        "status": 0,
+        "allowNativeFallback": false,
+        "elapsedSeconds": 255.8,
+        "osUsed": true,
+        "task": "ownership-refresh",
+        "arm": "native",
+        "cliVersion": "codex-cli 0.159.2",
+        "modelVerified": true,
+        "workflowRoute": "native",
+        "accountingMode": "cumulative-cli",
+        "tools": {
+          "commands": 8,
+          "fileChanges": 2,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "complete": true,
+        "validForComparison": true,
+        "effort": "max",
+        "stopReason": null,
+        "model": "gpt-6-luna",
+        "warnings": [],
+        "pairId": "b677aee3481c",
+        "accountingMatches": true,
+        "promptSha256": "19c51edc08ca7d0555bb42fe9123d4b0c54b37625f544ed40eb0831f4f1b872b",
+        "candidateSnapshot": {
+          "bundleSha256": "3ec0663e0ab791931a21bc29f51335f93ad7f01a22472f64b18832574af28fc5",
+          "skillSha256": "c8eea88f37d5bc4c900bb9406e00adff78e582fb14a1c460f5f6ececccb26b88",
+          "version": "2.7.2"
+        },
+        "requests": [
+          {
+            "input_tokens": 11522,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 281,
+            "reasoning_output_tokens": 99,
+            "total_tokens": 11803
+          },
+          {
+            "input_tokens": 14377,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 228,
+            "reasoning_output_tokens": 74,
+            "total_tokens": 14605
+          },
+          {
+            "input_tokens": 20549,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 373,
+            "reasoning_output_tokens": 214,
+            "total_tokens": 20922
+          },
+          {
+            "input_tokens": 25499,
+            "cached_input_tokens": 20224,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2002,
+            "reasoning_output_tokens": 1858,
+            "total_tokens": 27501
+          },
+          {
+            "input_tokens": 30444,
+            "cached_input_tokens": 25344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 4436,
+            "reasoning_output_tokens": 3792,
+            "total_tokens": 34880
+          },
+          {
+            "input_tokens": 34904,
+            "cached_input_tokens": 29440,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1164,
+            "reasoning_output_tokens": 75,
+            "total_tokens": 36068
+          },
+          {
+            "input_tokens": 36092,
+            "cached_input_tokens": 34560,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 284,
+            "reasoning_output_tokens": 143,
+            "total_tokens": 36376
+          },
+          {
+            "input_tokens": 37103,
+            "cached_input_tokens": 35584,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 79,
+            "reasoning_output_tokens": 32,
+            "total_tokens": 37182
+          },
+          {
+            "input_tokens": 37650,
+            "cached_input_tokens": 36608,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 969,
+            "reasoning_output_tokens": 792,
+            "total_tokens": 38619
+          },
+          {
+            "input_tokens": 40296,
+            "cached_input_tokens": 36608,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 608,
+            "reasoning_output_tokens": 537,
+            "total_tokens": 40904
+          },
+          {
+            "input_tokens": 41240,
+            "cached_input_tokens": 39680,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 887,
+            "reasoning_output_tokens": 679,
+            "total_tokens": 42127
+          }
+        ],
+        "campaign": "contextos-frozen7-ownership-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "scoped refresh true",
+              "pass": true
+            },
+            {
+              "name": "scoped refresh false",
+              "pass": true
+            },
+            {
+              "name": "legacy full replacement remains full",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          },
+          "resume": {
+            "pass": null
+          }
+        }
+      },
+      {
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "long-session",
+          "contextMode": "curated-local",
+          "compactTokenLimit": 32000
+        },
+        "metrics": null,
+        "inputTree": "e3bb0dcb6a23aa61e8e8c97be2849581fa011b6c",
+        "schemaVersion": 2,
+        "bounds": {
+          "requests": 24,
+          "inputTokens": 650000,
+          "uncachedInputTokens": 110000,
+          "outputTokens": 24000,
+          "seconds": 1000
+        },
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "scopePass": true,
+        "provider": "chatgpt-http",
+        "observedPartialMetrics": {
+          "requestCount": 9,
+          "inputTokens": 192337,
+          "cachedInputTokens": 161536,
+          "outputTokens": 6265,
+          "reasoningOutputTokens": 4040,
+          "totalTokens": 198602,
+          "peakRequestInputTokens": 30001,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 30801,
+          "peakInputWindowPercent": 11.61
+        },
+        "status": -15,
+        "allowNativeFallback": false,
+        "elapsedSeconds": 240.34,
+        "osUsed": true,
+        "task": "installer-json-resume",
+        "arm": "native",
+        "cliVersion": "codex-cli 0.159.2",
+        "modelVerified": true,
+        "workflowRoute": "native",
+        "accountingMode": "cumulative-cli",
+        "tools": {
+          "commands": 10,
+          "fileChanges": 2,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "complete": false,
+        "validForComparison": false,
+        "effort": "max",
+        "stopReason": null,
+        "model": "gpt-6-luna",
+        "warnings": [],
+        "pairId": "a0c77c2ae2fe",
+        "accountingMatches": true,
+        "promptSha256": "a4d8220dcbee6b24745cb20af9f490bd492aa9441ba1835a56d976cd248ff5b7",
+        "candidateSnapshot": {
+          "bundleSha256": "3ec0663e0ab791931a21bc29f51335f93ad7f01a22472f64b18832574af28fc5",
+          "skillSha256": "c8eea88f37d5bc4c900bb9406e00adff78e582fb14a1c460f5f6ececccb26b88",
+          "version": "2.7.2"
+        },
+        "requests": [
+          {
+            "input_tokens": 11521,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 226,
+            "reasoning_output_tokens": 116,
+            "total_tokens": 11747
+          },
+          {
+            "input_tokens": 11771,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 215,
+            "reasoning_output_tokens": 39,
+            "total_tokens": 11986
+          },
+          {
+            "input_tokens": 16981,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 307,
+            "reasoning_output_tokens": 88,
+            "total_tokens": 17288
+          },
+          {
+            "input_tokens": 20504,
+            "cached_input_tokens": 16128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 103,
+            "reasoning_output_tokens": 28,
+            "total_tokens": 20607
+          },
+          {
+            "input_tokens": 21910,
+            "cached_input_tokens": 20224,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 2975,
+            "reasoning_output_tokens": 2581,
+            "total_tokens": 24885
+          },
+          {
+            "input_tokens": 24909,
+            "cached_input_tokens": 21248,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1400,
+            "reasoning_output_tokens": 598,
+            "total_tokens": 26309
+          },
+          {
+            "input_tokens": 26333,
+            "cached_input_tokens": 24320,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 231,
+            "reasoning_output_tokens": 73,
+            "total_tokens": 26564
+          },
+          {
+            "input_tokens": 28407,
+            "cached_input_tokens": 25344,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 528,
+            "reasoning_output_tokens": 426,
+            "total_tokens": 28935
+          },
+          {
+            "input_tokens": 30001,
+            "cached_input_tokens": 27392,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 280,
+            "reasoning_output_tokens": 91,
+            "total_tokens": 30281
+          }
+        ],
+        "campaign": "contextos-frozen7-resume-20261001",
+        "quality": {
+          "pass": false,
+          "checks": [
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "server/web-tree-sitter.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-python.wasm",
+              "kind": "stale",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "missing",
+              "pass": true
+            },
+            {
+              "asset": "grammars/tree-sitter-javascript.wasm",
+              "kind": "stale",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          },
+          "resume": {
+            "pass": false
+          }
+        }
+      },
+      {
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "model": "gpt-6-luna",
+        "status": 0,
+        "validForComparison": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "pairId": "d7e8f867e85b",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "stopReason": null,
+        "scopePass": true,
+        "warnings": [],
+        "allowNativeFallback": true,
+        "accountingMode": "cumulative-cli",
+        "task": "alignment-types",
+        "candidateSnapshot": {
+          "bundleSha256": "3ec0663e0ab791931a21bc29f51335f93ad7f01a22472f64b18832574af28fc5",
+          "skillSha256": "9f05854a28d7a246cbdd9a8abf4d0b9c122e54bd458eb2b62b9a622d1e6a3e73",
+          "version": "2.7.2"
+        },
+        "modelVerified": true,
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "workflowRoute": "native",
+        "promptSha256": "b105f4e9abea95d6de982457d310efc54277b2e79209428998f2d5f5ca639d2e",
+        "schemaVersion": 2,
+        "effort": "max",
+        "elapsedSeconds": 60.6,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "observedPartialMetrics": null,
+        "osUsed": true,
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "accountingMatches": true,
+        "provider": "chatgpt-http",
+        "requests": [
+          {
+            "input_tokens": 11531,
+            "cached_input_tokens": 4864,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 243,
+            "reasoning_output_tokens": 56,
+            "total_tokens": 11774
+          },
+          {
+            "input_tokens": 12171,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1153,
+            "reasoning_output_tokens": 710,
+            "total_tokens": 13324
+          },
+          {
+            "input_tokens": 13348,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 269,
+            "reasoning_output_tokens": 38,
+            "total_tokens": 13617
+          },
+          {
+            "input_tokens": 13670,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 247,
+            "reasoning_output_tokens": 127,
+            "total_tokens": 13917
+          }
+        ],
+        "complete": true,
+        "bounds": {
+          "requests": 8,
+          "inputTokens": 100000,
+          "uncachedInputTokens": 30000,
+          "outputTokens": 6000,
+          "seconds": 300
+        },
+        "arm": "native",
+        "metrics": {
+          "requestCount": 4,
+          "inputTokens": 50720,
+          "cachedInputTokens": 40960,
+          "outputTokens": 1912,
+          "reasoningOutputTokens": 931,
+          "totalTokens": 52632,
+          "peakRequestInputTokens": 13670,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 9760,
+          "peakInputWindowPercent": 5.29
+        },
+        "campaign": "contextos-frozen8-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "tools": {
+          "commands": 4,
+          "fileChanges": 1,
+          "osCalls": 0,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "model": "gpt-6-luna",
+        "status": 0,
+        "validForComparison": true,
+        "cliVersion": "codex-cli 0.159.2",
+        "pairId": "d7e8f867e85b",
+        "scenario": {
+          "repo": "private-python-project",
+          "kind": "small-repair",
+          "contextMode": "cold-local",
+          "compactTokenLimit": null
+        },
+        "stopReason": null,
+        "scopePass": true,
+        "warnings": [],
+        "allowNativeFallback": true,
+        "accountingMode": "cumulative-cli",
+        "task": "alignment-types",
+        "candidateSnapshot": {
+          "bundleSha256": "3ec0663e0ab791931a21bc29f51335f93ad7f01a22472f64b18832574af28fc5",
+          "skillSha256": "9f05854a28d7a246cbdd9a8abf4d0b9c122e54bd458eb2b62b9a622d1e6a3e73",
+          "version": "2.7.2"
+        },
+        "modelVerified": true,
+        "inputTree": "b8c4b7b9997a7974d1b38211e61b7e2b48d0f1dc",
+        "workflowRoute": "native-fallback",
+        "promptSha256": "b105f4e9abea95d6de982457d310efc54277b2e79209428998f2d5f5ca639d2e",
+        "schemaVersion": 2,
+        "effort": "max",
+        "elapsedSeconds": 77.84,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "observedPartialMetrics": null,
+        "osUsed": true,
+        "baseCommit": "56091a28cdb1b2dced3c45b7450e26d3396e9ed3",
+        "accountingMatches": true,
+        "provider": "chatgpt-http",
+        "requests": [
+          {
+            "input_tokens": 11739,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 372,
+            "reasoning_output_tokens": 195,
+            "total_tokens": 12111
+          },
+          {
+            "input_tokens": 12509,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1855,
+            "reasoning_output_tokens": 1408,
+            "total_tokens": 14364
+          },
+          {
+            "input_tokens": 14388,
+            "cached_input_tokens": 12032,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 326,
+            "reasoning_output_tokens": 85,
+            "total_tokens": 14714
+          },
+          {
+            "input_tokens": 14768,
+            "cached_input_tokens": 14080,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 356,
+            "reasoning_output_tokens": 212,
+            "total_tokens": 15124
+          }
+        ],
+        "complete": true,
+        "bounds": {
+          "requests": 8,
+          "inputTokens": 100000,
+          "uncachedInputTokens": 30000,
+          "outputTokens": 6000,
+          "seconds": 300
+        },
+        "arm": "contextos",
+        "metrics": {
+          "requestCount": 4,
+          "inputTokens": 53404,
+          "cachedInputTokens": 46080,
+          "outputTokens": 2909,
+          "reasoningOutputTokens": 1900,
+          "totalTokens": 56313,
+          "peakRequestInputTokens": 14768,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 7324,
+          "peakInputWindowPercent": 5.72
+        },
+        "campaign": "contextos-frozen8-python-20261001",
+        "quality": {
+          "pass": true,
+          "checks": [
+            {
+              "name": "nested-dict",
+              "pass": true
+            },
+            {
+              "name": "nested-list",
+              "pass": true
+            },
+            {
+              "name": "raw-container-types",
+              "pass": true
+            },
+            {
+              "name": "scalar-types",
+              "pass": true
+            },
+            {
+              "name": "invalid-top-level",
+              "pass": true
+            },
+            {
+              "name": "malformed-json",
+              "pass": true
+            },
+            {
+              "name": "null",
+              "pass": true
+            },
+            {
+              "name": "valid-layout",
+              "pass": true
+            },
+            {
+              "name": "unknown-value",
+              "pass": true
+            },
+            {
+              "name": "line-limit",
+              "pass": true
+            },
+            {
+              "name": "trim-defaults",
+              "pass": true
+            },
+            {
+              "name": "all-defaults",
+              "pass": true
+            },
+            {
+              "name": "empty-answer",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": true
+          }
+        }
+      },
+      {
+        "tools": {
+          "commands": 1,
+          "fileChanges": 0,
+          "osCalls": 9,
+          "osErrors": 0,
+          "mutationRejections": 0,
+          "verifiedMutations": 0,
+          "lastMutationStatus": null,
+          "compactionRecords": 0
+        },
+        "model": "gpt-6-luna",
+        "status": -15,
+        "validForComparison": false,
+        "cliVersion": "codex-cli 0.159.2",
+        "pairId": "05dbfe46610a",
+        "scenario": {
+          "repo": "ContextOS",
+          "kind": "cross-file",
+          "contextMode": "curated-local",
+          "compactTokenLimit": null
+        },
+        "stopReason": "outputTokens budget",
+        "scopePass": true,
+        "warnings": [],
+        "allowNativeFallback": false,
+        "accountingMode": null,
+        "task": "ownership-refresh",
+        "candidateSnapshot": {
+          "bundleSha256": "3ec0663e0ab791931a21bc29f51335f93ad7f01a22472f64b18832574af28fc5",
+          "skillSha256": "9f05854a28d7a246cbdd9a8abf4d0b9c122e54bd458eb2b62b9a622d1e6a3e73",
+          "version": "2.7.2"
+        },
+        "modelVerified": true,
+        "inputTree": "092e648121289bb2fb88a383bd7a657ca0de7462",
+        "workflowRoute": "contextos",
+        "promptSha256": "19c51edc08ca7d0555bb42fe9123d4b0c54b37625f544ed40eb0831f4f1b872b",
+        "schemaVersion": 2,
+        "effort": "max",
+        "elapsedSeconds": 688.83,
+        "observedModels": [
+          "gpt-6-luna"
+        ],
+        "observedPartialMetrics": {
+          "requestCount": 11,
+          "inputTokens": 288264,
+          "cachedInputTokens": 251136,
+          "outputTokens": 20365,
+          "reasoningOutputTokens": 17533,
+          "totalTokens": 308629,
+          "peakRequestInputTokens": 38849,
+          "modelContextWindow": 258400,
+          "uncachedInputTokens": 37128,
+          "peakInputWindowPercent": 15.03
+        },
+        "osUsed": false,
+        "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+        "accountingMatches": false,
+        "provider": "chatgpt-http",
+        "requests": [
+          {
+            "input_tokens": 11731,
+            "cached_input_tokens": 8960,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 226,
+            "reasoning_output_tokens": 77,
+            "total_tokens": 11957
+          },
+          {
+            "input_tokens": 13555,
+            "cached_input_tokens": 11008,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 674,
+            "reasoning_output_tokens": 553,
+            "total_tokens": 14229
+          },
+          {
+            "input_tokens": 16281,
+            "cached_input_tokens": 13056,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 460,
+            "reasoning_output_tokens": 331,
+            "total_tokens": 16741
+          },
+          {
+            "input_tokens": 17259,
+            "cached_input_tokens": 16128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 1622,
+            "reasoning_output_tokens": 1461,
+            "total_tokens": 18881
+          },
+          {
+            "input_tokens": 21807,
+            "cached_input_tokens": 16128,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 3031,
+            "reasoning_output_tokens": 2901,
+            "total_tokens": 24838
+          },
+          {
+            "input_tokens": 28383,
+            "cached_input_tokens": 21248,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 611,
+            "reasoning_output_tokens": 425,
+            "total_tokens": 28994
+          },
+          {
+            "input_tokens": 31330,
+            "cached_input_tokens": 27392,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 945,
+            "reasoning_output_tokens": 846,
+            "total_tokens": 32275
+          },
+          {
+            "input_tokens": 34423,
+            "cached_input_tokens": 30464,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 523,
+            "reasoning_output_tokens": 424,
+            "total_tokens": 34946
+          },
+          {
+            "input_tokens": 37053,
+            "cached_input_tokens": 33536,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 246,
+            "reasoning_output_tokens": 153,
+            "total_tokens": 37299
+          },
+          {
+            "input_tokens": 37593,
+            "cached_input_tokens": 36608,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 170,
+            "reasoning_output_tokens": 60,
+            "total_tokens": 37763
+          },
+          {
+            "input_tokens": 38849,
+            "cached_input_tokens": 36608,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 11857,
+            "reasoning_output_tokens": 10302,
+            "total_tokens": 50706
+          }
+        ],
+        "complete": false,
+        "bounds": {
+          "requests": 18,
+          "inputTokens": 450000,
+          "uncachedInputTokens": 100000,
+          "outputTokens": 18000,
+          "seconds": 900
+        },
+        "arm": "contextos",
+        "metrics": null,
+        "campaign": "contextos-frozen8-ownership-20261001",
+        "quality": {
+          "pass": false,
+          "checks": [
+            {
+              "name": "scoped refresh true",
+              "pass": false
+            },
+            {
+              "name": "scoped refresh false",
+              "pass": false
+            },
+            {
+              "name": "legacy full replacement remains full",
+              "pass": true
+            }
+          ],
+          "regression": {
+            "pass": false
+          }
+        }
+      }
+    ],
+    "stopNotes": [
+      {
+        "campaign": "frozen-candidate7-20261001",
+        "reason": "The first two completed pairs made the predeclared three-pair median performance gates unattainable. The third task was stopped after diagnosing avoidable tool-inventory output. Counts and interrupted status are retained; not a savings result."
+      }
+    ]
+  }
+}

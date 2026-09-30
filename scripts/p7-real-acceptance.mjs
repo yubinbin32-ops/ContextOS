@@ -59,7 +59,7 @@ try {
   assert.ok(fileSearch.text.some((hit) => hit.path === 'src/math.mjs'));
 
   const beforeMath = fixture.read('src/math.mjs');
-  const rejected = await call('change', {
+  const rejected = await callExpectError('change', {
     edits: [
       { path: 'src/math.mjs', target: 'return a + b;', replacement: 'return a + b + 1;' },
       { path: 'src/strings.mjs', target: 'this target does not exist', replacement: 'never' },

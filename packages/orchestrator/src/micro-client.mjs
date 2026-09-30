@@ -869,6 +869,9 @@ async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxRes
  * @returns {Promise<object>} Result { ok, content, reasoning, usage, durationMs, withOS?, steps?, toolCalls?, error? }
  */
 export async function runMicroTask(config = {}, options = {}) {
+  if (process.env.CONTEXTOS_DISABLE_MICRO === '1') {
+    return { ok: false, errorCode: 'MICRO_DISABLED', error: 'Micro execution is disabled for this evaluation; no provider request was sent.', durationMs: 0, providerUsage: null };
+  }
   const start = Date.now();
   const requestedDelivery = ['immediate', 'defer', 'errors-only', 'auto'].includes(options.delivery)
     ? options.delivery

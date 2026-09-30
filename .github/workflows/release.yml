@@ -30,6 +30,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -105,6 +107,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -203,6 +207,20 @@ jobs:
           echo "version=$release_version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Package complete standalone plugin and evaluation data
+        shell: bash
+        run: |
+          set -euo pipefail
+          plugin_package="$(mktemp -d)"
+          cp -R plugins/contextos "$plugin_package/contextos-plugin"
+          (
+            cd "$plugin_package"
+            zip -qr "$GITHUB_WORKSPACE/release-assets/contextos-plugin-${{ steps.version.outputs.version }}.zip" contextos-plugin
+          )
+          rm -rf "$plugin_package"
+          cp docs/benchmarks/2026-10-01-development.json release-assets/development-evaluation.json
+          cp docs/DEVELOPMENT_QUALIFICATION.md release-assets/DEVELOPMENT_QUALIFICATION.md
 
       - name: Build combined checksums
         shell: bash

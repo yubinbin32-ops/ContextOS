@@ -8,9 +8,9 @@
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)](https://nodejs.org)
 [![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<p>当前版本：<span id="contextos-version">2.7.1</span> · 本地 MCP 服务 · AST 切片 · 验证回执 · 持久化项目状态</p>
+<p>当前版本：<span id="contextos-version">2.7.2</span> · 本地 MCP 服务 · AST 切片 · 验证回执 · 持久化项目状态</p>
 
-[**快速安装**](#快速安装) · [**完整测评**](docs/BENCHMARK.md) · [**发布页**](https://github.com/yubinbin32-ops/ContextOS/releases) · [**English**](README.md)
+[**快速安装**](#快速安装) · [**真实开发测评**](docs/DEVELOPMENT_QUALIFICATION.md) · [**发布页**](https://github.com/yubinbin32-ops/ContextOS/releases) · [**English**](README.md)
 </div>
 
 ContextOS 是 AI 编码智能体与代码仓库之间的开源执行层。它返回指定函数和代码区间，在对话之外执行命令，再把简短的验证回执和必要的失败诊断送回模型。项目状态保存在 `.contextos/`，供后续开发复用。
@@ -32,7 +32,7 @@ ContextOS 是 AI 编码智能体与代码仓库之间的开源执行层。它返
 
 默认 MCP 接口只有一个 **`contextos` 工具**。Codex 可按插件加载，其他 MCP 宿主可运行同一个本地服务。桌面端提供架构地铁图；Micro 是可选的外接执行器，核心功能和本次基准都不需要模型 API key。
 
-## 实测结果与适用范围
+## 2.7.1 工具响应对照与适用范围
 
 五次独立临时工作区运行，使用 `o200k_base` 分词器，报告中位数。**下表只计算工具响应正文。**
 
@@ -52,7 +52,7 @@ ContextOS 是 AI 编码智能体与代码仓库之间的开源执行层。它返
 
 ## 真实开发任务测评
 
-使用 **`gpt-6-luna` / `max`** 修复真实安装缺陷：原生对照完成（190,287 输入、6,444 输出 token，独立检查 6/6 通过）；OS 两次运行均未完成。**目前尚未证明完整任务的 token 节省。** 已补充搜索范围、精确读取和编辑恢复的回归修复，并新增限制请求数、token 和时间的测评脚本。[真实用量、上下文占用、缺陷与复现](docs/REAL_DEVELOPMENT_BENCHMARK.md)
+2.7.2 测评使用 **`gpt-6-luna` / `max`** 执行完整开发任务，统计提供方真实输入、输出与缓存用量，并独立检查修复质量。小任务、未完成试验和负收益都会保留。[配对结果、合格门槛与复现](docs/DEVELOPMENT_QUALIFICATION.md) · [最初的 2.7.1 中断试验](docs/REAL_DEVELOPMENT_BENCHMARK.md)
 
 ## 快速安装
 
@@ -101,8 +101,8 @@ npm run plugin:install:check
 
 ```js
 contextos({
-  action: "inspect",
-  args: { path: "src/cart.ts", symbol: "calculateTotal" },
+  action: "work",
+  args: { inspect: [{ path: "src/cart.ts", symbol: "calculateTotal" }] },
   projectRoot: "/absolute/path/to/project"
 })
 
@@ -117,16 +117,17 @@ contextos({
 })
 ```
 
-复杂任务按技能中的流程批量探索、精确读取和验证，再集中修改。需要更多证据时，可显式请求符号、区间或恢复读取。
+用 `work` 一次读取目标函数与相关测试，再用 `change` 同轮修改和验证。位置未知时搜索一个精确标识符。成功日志留在磁盘，编辑被拒绝时回执会指出需要修正的字段。若只修复一个函数，且完整源码文件和测试文件都不超过 120 行，技能会使用原生工具，避免额外准备开销。
 
-## 2.7.1 修复了什么？
+## 2.7.2 更新内容
 
-- 批量读取保留指定的符号和行区间，无需隐藏参数才能生效。
-- 不连续的多个源码区间分别保留原始行号。
-- 安装时刷新 Codex 注册版本，核验真实文件，并保留未启用的历史缓存。
-- `--check` 只读检查，拒绝过期注册信息和旧 bundle。
-- 插件构建与安装附带解析器 WASM 和语法资源，离开源码目录后仍保留 Python 方法哈希与调用信息。
-- 新增公开基准，包含精确原生对照、负收益场景、固定开销与质量断言。
+- MCP 公共参数缩减到三个字段，精简技能，小型修复走原生工具回退。
+- `work` 保留有界源码正文；搜索和提纲不再提前标记读取完成。
+- 结构化修改结果区分编辑被拒绝、已应用、验证通过和回滚。
+- 用失败回执直接读取有界日志，保留 oldText/newText 编辑兼容。
+- 局部归属刷新保留未修改引用与 Chain 成员；`doctor` 可只读诊断旧图，不删除节点。
+- 只读安装检查覆盖服务端、解析器运行时和全部随包语法文件。
+- 真实任务 A/B 记录提供方用量、缓存、推理、峰值输入、质量和压缩续接，限制请求、token 与时间；CI 验证这些协议时不调用模型。
 
 [发布说明](.github/RELEASE_NOTES.md) · [最新发布页](https://github.com/yubinbin32-ops/ContextOS/releases/latest)
 

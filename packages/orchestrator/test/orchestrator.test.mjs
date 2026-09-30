@@ -1811,8 +1811,9 @@ test('pipeline preserves artifacts and honors nested full output requests', asyn
 
   const full = await orchestrator.dispatch('pipeline', {
     parallel: [{ inspect: { path: 'src/large.mjs', budget: 'full' } }],
+    full: true,
   });
-  assert.ok(full.includes('x'.repeat(1000)));
+  assert.ok(full.includes('x'.repeat(6000)));
   assert.doesNotMatch(full, /artifact=/);
 
   service.close();
@@ -1974,9 +1975,8 @@ test('work search accepts paths aliases without falling back to native rg', asyn
     search: { query: 'add', paths: ['src'] },
   });
   assert.match(result, /work=OK/);
-  assert.match(result, /decision=complete/);
-  assert.match(result, /read_complete=true/);
-  assert.match(result, /next=change/);
+  assert.match(result, /decision=partial/);
+  assert.match(result, /read_complete=false/);
   assert.ok(searchArgs.some((args) => args.root === 'src'), 'work.search.paths must map to the search root');
 
   service.close();

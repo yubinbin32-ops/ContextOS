@@ -1,73 +1,32 @@
 ---
 name: contextos
-description: MUST be used for non-trivial repository engineering (architecture exploration, multi-file edits, in-session verification, refactoring). For a trivial 1-line edit, use direct change or native tools to avoid fixed context overhead.
+description: "Use ContextOS for repository exploration, cross-module changes, and larger repairs. Skip this skill for small local function repairs; use native tools directly. Resolve ancestor/nested instructions and known reads once; batch tests/diff checks and use python3 on macOS."
 ---
 
 # ContextOS
 
-Default transport: `contextos({action,args,projectRoot})`.
-
-## Hard gates
-- Use OS for non-trivial repository work. Do not replace it with per-file `cat`/`sed`/`rg`, ad-hoc `npm test`, or native `apply_patch` loops.
-- If the compact tool is not visible, call `tool_search` once with `ContextOS compact repository tool`; do not call `list_mcp_resources`.
-- Load this Skill once. Do not reread it, shell-read for recovery, or call host `update_plan`.
-- A/B/C launchers must install/enable the plugin and export `CONTEXTOS_HOME` before `codex exec`; do not spend a turn checking it.
-- After `decision=complete` or `read_complete=true`, use `change`/`work`; native mutation/reads/tests violate the protocol. Passing verify is final evidence.
-- After a complete decision package, prefer `change`/`work`; if a named path is genuinely missing, use one explicit bounded recovery read with `full:true`/`refresh:true`, then mutate.
+Call `contextos({action,args,projectRoot})`; projectRoot is absolute. Load this skill once. If the tool is missing, search once.
 
 ## Route work
-- Trivial one-line change: one `change({edits,verify})`; skip `explore` and `ship`.
-- Complex task: first call one `pipeline` with `explore`, known exact `inspect`, and baseline `verify`. Then one `change`/`work` with all edits, verify, architecture, and ship. No standalone opening call or directory-wide `inspect` (`paths:["."]`); exploration supplies the map.
-- After `change` reports `verified and shipped`, finalize immediately; do not issue another `change` unless a failing check or an unmet requirement is explicitly present.
-- A decision packet is final: do not call `resume` or replay raw artifacts. After `read_complete=true`, mutate directly; after `false`, make only the named bounded recovery read.
-- Search with `work.search` or pipeline `{tool:"search",args:{query,root|paths}}`; use `maxLogBytes` on noisy commands. Do not place native `sed`/`cat`/`rg`/`npm test` between OS calls.
-- `verify.commands` is an array of command strings; pass a top-level `maxLogBytes` when the batch may be noisy.
-- Public surface: if `explore` reports a barrel gap, include the entrypoint/barrel update in the same change when the new capability is public.
 
-## Inspection
-- Prefer exact `inspect({path,symbol|ranges:[{startLine,endLine}]})`. Explicit ranges are honored exactly; do not ask for a whole file when a slice is enough.
-- Use `inspect({paths,budget:"shallow"})` for maps. A multi-file inspect returns outlines and locators.
-- Use `budget:"full"` only for one bounded file or symbol. Whole-file replacement belongs in `change`/`work` edit payloads.
-- Read a large file once. Do not reconstruct it with many 80-line slices.
+For a local repair to one function plus focused tests, whose complete touched source and test files together contain at most 120 lines (count whole files, not changed lines) and no ownership change, prefer native tools and finish after the relevant check. Resolve all applicable ancestor/nested AGENTS and known reads once; trust an explicit launcher preflight. Do not re-read source while rechecking instructions. Run the relevant tests and diff check together, then finish. This avoids plugin execution overhead.
 
-## Micro
-- Micro executes explicitly assigned work outside the main context.
-- Health: `ops({capability:"micro",action:"doctor"})` validates URL/model/key.
-- Run shape: `micro({preset:"triage",task:"...",pipeline:{steps:[...]},withOS:true,invocation:{tools:{enabled:true,allowCommands:true},provider:{maxRequests:5}}})`. Do not call `ops.micro.help` before an assigned run.
-- Attach evidence with `pipeline:{steps:[...]}` on the first Micro call; avoid copying raw output.
-- Use Micro when raw failure/log evidence exceeds 2,000 characters; not for trivial edits or already triaged evidence.
-- Use `delivery:"defer"` or `"auto"` when the host can continue; `"immediate"` only when the next decision depends on it; `"errors-only"` for fire-and-forget.
-- Use the executor settings above; check `providerRequests`, `toolRounds`, `toolCalls`, and `executionMode`.
+Known task paths need no code search or repository map. The initial native call may load this skill and locate AGENTS.md; do not append broad source searches. Known paths: one `work` with `inspect:[{path,symbol|ranges}]` and `verify:{commands:["relevant check"]}`. Unknown paths: one scoped `pipeline` with `explore`, `inspect`, baseline `verify`. Use symbols or `ranges:[[startLine,endLine]]` up to 240 lines, and read only what the repair needs. Use the project's available interpreter (commonly python3 on macOS). Keep new regression coverage focused; do not draft speculative helper frameworks.
 
-## Architecture
-- Blocks are semantic ownership boundaries; Chains group Blocks; Links express directed relationships.
-- Use semantic ids/kinds for ownership; never `mod-*` or `kind:"module"`.
-- After changing business code, include `architecture.blocks` and `architecture.chains` in the same `change`/`work`. A state-only `change({architecture})` is valid.
-- Bind only touched paths. One semantic Block and Chain suffice for a bounded repair; split for real ownership boundaries.
-- Every tracked source path needs exactly one curated Block and at least one Chain membership.
-- A failing `verify` blocks `ship` unless `allowUnverified:true`. A blocked architecture contract must not leave partial ownership.
-- Compact shape:
+Then `change({edits,verify})`. Use the shortest unique source target; omit unchanged code. Forms:
 ```js
-architecture:{blocks:[{id,title,kind,paths,summary}],chains:[{id,title,memberIds}]}
+edits:[{path,target:"old source",replacement:"new source"}]
+create:[{path,content}]
+delete:[{path}]
 ```
-- Discover with `ops({capability:"architecture",action:"list|open|search"})`; `block.get` and `block.inspect` alias `open`.
+Aliases: oldText/newText, targetContent/replacementContent. Also supported: symbol/replacementContent, startLine/endLine/replacementContent, append, fullFile/content.
 
-## Advanced
-Legal capabilities: `os_context`, `plan`, `task`, `block`, `chain`, `architecture`, `code`, `run_command`, `process`, `knowledge`, `session`, `system`, `profile`, `micro`, `artifact`, `telemetry`. Route them through `ops({capability: "...", action: "...", args: {...}})`; do not shell-read capability source.
+Existing ownership refreshes automatically; omit architecture for preserved boundaries. For new ownership, use `architecture:{blocks:[{id,title,paths}],chains:[{id,memberIds}]}`. Reuse receipt IDs/titles, never mod-* identities.
 
-## Scoped calls and architecture ownership
+For a failed command, recover its existing receipt with `verify({mode:"logs",id:"receipt-...",lines:80,maxChars:4000})`; correct the reported failure, then verify the repair. Do not search the tool inventory for receipts or repeat the failing command just to get its log.
 
-Put the task intent and known file paths in `explore`; an empty exploration can select unrelated files. Use explicit `symbol` or `ranges` for a batch read; `paths` plus `full:true` can still return outlines. A focused test/check command is enough for the baseline.
+After read_complete=true, mutate. If partial, make one named recovery read. status=blocked means no changes: correct the named fields and retry once using its receipt. status=verified means finish; use ship for session archival. Do not repeat successful reads/checks, open graphs to recover known owners, or use native reads/tests between OS calls.
 
-Example first call (replace the paths and ranges with this task's targets):
-```json
-{"action":"pipeline","args":{"steps":[{"explore":{"intent":"repair the installer check","paths":["scripts/install-plugin.mjs","packages/mcp/test/plugin-install.test.mjs"]}},{"parallel":[{"inspect":{"path":"scripts/install-plugin.mjs","symbol":"assertInstalledMatchesBuild"}},{"inspect":{"path":"packages/mcp/test/plugin-install.test.mjs","ranges":[[1,120]]}}]},{"verify":{"commands":["node --test packages/mcp/test/plugin-install.test.mjs"]}}]},"projectRoot":"/absolute/repository"}
-```
+Start unknown locations with one exact identifier and bounded source context: `work({search:{query:"identifier",paths:["known/source"],contextLines:20},inspect:[{path:"focused/test",ranges:[[1,120]]}]})`. Matching source ranges are merged and returned in that call. Read only a named missing dependency next; batch remaining source and tests, then mutate. Do not perform serial single-range discovery when a batch can resolve it. Search matches and outlines are locators; read_complete requires source bodies. maxLogBytes bounds verification logs. Precise work returns bounded source bodies; paths alone may return outlines.
 
-Use `ownership` instead of graph listings. Blocks need **id, title, paths**. Preserve Chain members (omit `replaceMembers`):
-```json
-{"architecture":{"blocks":[{"id":"existing-semantic-block-id","title":"Existing title","paths":["relative/task-file.mjs"]}],"chains":[{"id":"existing-chain-id","memberIds":["existing-semantic-block-id"]}]}}
-```
-Reuse the returned owner ids and titles for already owned paths; do not invent a new owner. If no owner exists, choose a semantic Block and Chain for the new responsibility. A rejected architecture transaction changes no files; use its `ownership` receipt and retry the same edits without opening Blocks or repeating discovery.
-
-Exact text mutation: `edits:[{path, target:"old text", replacement:"new text"}]` (`oldText/newText` also accepted). Keep the source text exact; attach `verify:{commands:["node --test path/to/relevant.test.mjs"]}` and the architecture payload to the same call.
+Advanced ops use `ops({capability:"block",action:"open",args:{id}})`. Legal capabilities: architecture, block, chain, telemetry, micro, run_command. See [capabilities](references/capabilities.md). Micro runs only when explicitly assigned; load its reference then. Launchers install/enable the plugin before testing.

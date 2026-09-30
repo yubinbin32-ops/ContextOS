@@ -112,6 +112,23 @@ export async function runDoctor(input) {
     }
   }
 
+  let graphIntegrity = 'No saved graph (cold start)';
+  const graphPath = path.join(root, '.contextos', 'graph.json');
+  if (fs.existsSync(graphPath)) {
+    try {
+      const graph = JSON.parse(fs.readFileSync(graphPath, 'utf8'));
+      const blocks = graph.data?.blocks;
+      if (!Array.isArray(blocks)) graphIntegrity = 'Invalid graph: missing data.blocks array';
+      else {
+        const legacyRefs = Array.isArray(graph.data?.source_refs) ? graph.data.source_refs : [];
+        const unanchored = blocks.filter((block) => !(Array.isArray(block.artifactRefs) && block.artifactRefs.length) &&
+          !legacyRefs.some((ref) => (ref.blockId || ref.block_id) === block.id));
+        graphIntegrity = unanchored.length
+          ? `Invalid graph: ${unanchored.length} unanchored Block(s): ${unanchored.slice(0, 5).map((b) => b.id).join(', ')}. Restore real source references before normal operations; saved data was not changed.`
+          : 'Anchors present (normal source validation still required)';
+      }
+    } catch (err) { graphIntegrity = `Invalid graph JSON: ${err.message}`; }
+  }
   const platforms = detectInstalledPlatforms();
   const contextosHome = process.env.CONTEXTOS_HOME || path.join(os.homedir(), '.contextos');
   const globalProfilePath = path.join(contextosHome, 'profile.json');
@@ -130,6 +147,7 @@ export async function runDoctor(input) {
     `- **Cloud Hub URL**: \`${cloudUrl}\``,
     `- **Global Cloud Config**: ${globalCloud ? `Configured (\`${globalCloud.cloudUrl}\`)` : 'None'}`,
     `- **Cloud Hub Connectivity**: ${cloudHealth}`,
+    `- **Saved Graph Integrity**: ${graphIntegrity}`,
     ``,
     `## Detected Editors on System:`,
     editorStatuses,

@@ -64,15 +64,15 @@ test("V3 default surface exposes one compact transport tool", async () => {
   const listing = await client.listTools();
   assert.deepEqual(listing.tools.map((tool) => tool.name), ["contextos"]);
   assert.match(JSON.stringify(listing.tools[0].inputSchema), /work/);
-  assert.match(listing.tools[0].description, /pipeline.*direct/i);
-  assert.match(listing.tools[0].description, /delivery/i);
+  assert.match(listing.tools[0].description, /Known paths.*work/i);
+  assert.match(listing.tools[0].description, /Micro only when explicitly assigned/i);
   assert.ok(
     listing.tools[0].description.length < 600,
     `the per-request compact tool description must stay below 600 chars, got ${listing.tools[0].description.length}`,
   );
-  for (const field of ['pipeline', 'withOS', 'invocation', 'preset', 'task', 'delivery', 'provider']) {
-    assert.ok(listing.tools[0].inputSchema.properties[field], `compact micro field ${field} must remain visible`);
-  }
+  assert.deepEqual(Object.keys(listing.tools[0].inputSchema.properties).sort(), ['action', 'args', 'projectRoot']);
+  assert.notEqual(listing.tools[0].inputSchema.additionalProperties, false, 'legacy sibling aliases must still be accepted');
+  assert.ok(JSON.stringify(listing.tools[0].inputSchema).length < 1000, 'lean transport schema must stay below 1000 characters');
   const fixture = createFixtureProject({ prefix: "ctxos-v3-lean-work" });
   const work = await client.callTool({
     name: "contextos",

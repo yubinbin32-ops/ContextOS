@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "campaign": "frozen-candidate9-source-context-20261001",
+  "candidate": {
+    "version": "2.7.2",
+    "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
+    "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34"
+  },
+  "model": "gpt-6-luna",
+  "effort": "max",
+  "serial": true,
+  "tasks": [
+    "alignment-types",
+    "ownership-refresh",
+    "installer-json-resume"
+  ],
+  "thresholds": {
+    "minimumPairs": 3,
+    "totalSavings": 0.2,
+    "peakSavings": 0.1,
+    "maximumPairRegression": 0.1,
+    "medianUncachedInputMustNotIncrease": true,
+    "longSessionObservedCompactionRequired": true
+  },
+  "limits": {
+    "runs": 6,
+    "inputTokens": 2600000,
+    "uncachedInputTokens": 500000,
+    "outputTokens": 100000,
+    "seconds": 4600
+  },
+  "perTask": {
+    "alignment-types": {
+      "requests": 8,
+      "inputTokens": 100000,
+      "uncachedInputTokens": 30000,
+      "outputTokens": 6000,
+      "seconds": 300,
+      "arms": [
+        "native",
+        "contextos"
+      ]
+    },
+    "ownership-refresh": {
+      "requests": 18,
+      "inputTokens": 450000,
+      "uncachedInputTokens": 100000,
+      "outputTokens": 24000,
+      "seconds": 900,
+      "arms": [
+        "contextos",
+        "native"
+      ]
+    },
+    "installer-json-resume": {
+      "requests": 24,
+      "inputTokens": 650000,
+      "uncachedInputTokens": 110000,
+      "outputTokens": 24000,
+      "seconds": 1000,
+      "arms": [
+        "native",
+        "contextos"
+      ]
+    }
+  },
+  "policy": "Every launched group remains in this campaign, including interruptions. No savings assigned to incomplete runs. Prior candidates remain historical diagnostic results. No runtime/skill changes during the campaign; no stronger models.",
+  "protocolRevision": "Source-context search bundles match windows in one call; ownership output bound raised symmetrically after a prior 10,302-reasoning-token response. All old failed runs stay historical."
+}

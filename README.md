@@ -8,9 +8,9 @@
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)](https://nodejs.org)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<p>Current Version: <span id="contextos-version">2.7.1</span> · Local MCP runtime · AST slices · Verification receipts · Persistent project state</p>
+<p>Current Version: <span id="contextos-version">2.7.2</span> · Local MCP runtime · AST slices · Verification receipts · Persistent project state</p>
 
-[**Get started**](#get-started) · [**See the measurements**](docs/BENCHMARK.md) · [**Releases**](https://github.com/yubinbin32-ops/ContextOS/releases) · [**中文**](README_zh.md)
+[**Get started**](#get-started) · [**Real development evaluation**](docs/DEVELOPMENT_QUALIFICATION.md) · [**Releases**](https://github.com/yubinbin32-ops/ContextOS/releases) · [**中文**](README_zh.md)
 </div>
 
 ContextOS is an open-source execution layer between an AI coding agent and your repository. It returns focused source slices, runs commands outside the conversation, and brings back compact verification receipts with actionable failure details. Project state stays in `.contextos/` so later work can reuse it.
@@ -32,7 +32,7 @@ ContextOS is an open-source execution layer between an AI coding agent and your 
 
 The default MCP surface exposes **one `contextos` tool**. Codex can load it as a plugin; other MCP hosts can run the same local server. Optional desktop apps show the architecture as a Metro Map. Micro is an optional external executor; the benchmark and core workflow need no model API key.
 
-## Measured results
+## Response-only controls from 2.7.1
 
 Five fresh-workspace runs, `o200k_base` tokenizer, medians. **The table measures response text only.**
 
@@ -50,9 +50,9 @@ Five fresh-workspace runs, `o200k_base` tokenizer, medians. **The table measures
 
 The compact tool definition uses 1,056 tokens versus 2,922 for the seven-tool compatibility surface. [Full evaluation, fixed costs, and remaining opportunities](docs/BENCHMARK.md).
 
-## Real development pilot
+## Real development evaluation
 
-A real installer repair was tested with **`gpt-6-luna` / `max`**. Native completed (190,287 input, 6,444 output tokens; six independent checks passed). Released OS and a development candidate stopped without completing the task. **Complete-task savings are not established.** The failures led to scoped-search, precise-inspection and edit-recovery fixes, plus a reproducible runner with request/token/time limits. [Actual usage, context occupancy, defects and reproduction](docs/REAL_DEVELOPMENT_BENCHMARK.md)
+The 2.7.2 evaluation uses **`gpt-6-luna` / `max`** on completed coding tasks, counts primary provider input/output and cache usage, and checks repairs independently. Small tasks, interruptions and regressions stay in the published data. [Matched results, qualification gates and reproduction](docs/DEVELOPMENT_QUALIFICATION.md) · [Original 2.7.1 interrupted pilot](docs/REAL_DEVELOPMENT_BENCHMARK.md)
 
 ## Get started
 
@@ -101,8 +101,8 @@ These are MCP calls made by your agent, using an absolute `projectRoot`:
 
 ```js
 contextos({
-  action: "inspect",
-  args: { path: "src/cart.ts", symbol: "calculateTotal" },
+  action: "work",
+  args: { inspect: [{ path: "src/cart.ts", symbol: "calculateTotal" }] },
   projectRoot: "/absolute/path/to/project"
 })
 
@@ -117,16 +117,17 @@ contextos({
 })
 ```
 
-For larger tasks, the skill routes exploration, precise inspection, verification, and edits through the pipeline. Files remain editable with ordinary tools. Successful receipts avoid replaying logs; explicit ranges and recovery reads provide detail when needed.
+Read the owning function and focused tests together with `work`, then edit and verify in one `change`. Search one exact identifier when the location is unknown. Successful receipts keep logs off the conversation; blocked edits name the fields to correct. For a one-function repair whose complete source and test files are each at most 120 lines, the skill uses ordinary tools to avoid setup overhead.
 
-## What's new in 2.7.1?
+## What’s new in 2.7.2?
 
-- Batched inspections honor explicit symbols and line ranges without an undocumented opt-in.
-- Non-contiguous code slices preserve each range's original source line numbers.
-- Installation refreshes Codex's registered version, checks actual file contents, and preserves inactive historical caches.
-- A read-only install check rejects stale registrations or bundles.
-- Plugin builds and installs include parser WASM and grammars, preserving Python method hashes and call information outside the source checkout.
-- A public benchmark includes efficient native controls, negative results, fixed overhead, and quality assertions.
+- A lean three-field MCP surface and shorter skill, with ordinary-tool fallback for small repairs.
+- Bounded `work` reads preserve source bodies; search and outlines remain incomplete until the needed source is read.
+- Structured mutation outcomes distinguish blocked edits, applied changes, successful verification and reverts.
+- Named failure receipts provide bounded logs for recovery; oldText/newText edits remain supported.
+- Scoped ownership refresh preserves untouched references and Chain membership; `doctor` diagnoses invalid saved graphs without deleting them.
+- Read-only installation checks cover the canonical server, parser runtime and every shipped grammar.
+- Real-task A/B tooling records provider usage, cache, reasoning, peak input, quality and compaction under request/token/time limits. CI tests the contracts without model calls.
 
 [Release notes](.github/RELEASE_NOTES.md) · [Latest release](https://github.com/yubinbin32-ops/ContextOS/releases/latest)
 
