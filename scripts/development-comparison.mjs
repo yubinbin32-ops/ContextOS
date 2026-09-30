@@ -20,6 +20,7 @@ export function compareDevelopment(runs, { minimumPairs = 3, totalSavings = 0.2,
       }
       if (native.model !== 'gpt-6-luna' || native.effort !== 'max') errors.push('Unsupported evaluation model');
       if (!native.scenario || JSON.stringify(native.scenario) !== JSON.stringify(os.scenario)) errors.push('Missing or mismatched scenario');
+      if (!native.bounds || JSON.stringify(native.bounds) !== JSON.stringify(os.bounds)) errors.push('Missing or mismatched bounds');
       for (const key of ['bundleSha256','skillSha256','version']) {
         if (!native.candidateSnapshot?.[key] || native.candidateSnapshot[key] !== os.candidateSnapshot?.[key]) errors.push('Missing or mismatched candidate ' + key);
       }

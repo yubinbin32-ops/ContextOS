@@ -2624,6 +2624,7 @@ test('ops supports micro capability and verify triggers micro triage on failure'
           micro: {
             url: `http://127.0.0.1:${port}`,
             model: 'mock-micro-model',
+            key: 'mock-key',
           },
         },
         null,

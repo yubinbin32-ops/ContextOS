@@ -3,7 +3,7 @@ import test from 'node:test';
 import { compareDevelopment } from '../../../scripts/development-comparison.mjs';
 function pair(id='one', task='parser', repo='ContextOS') {
   const base = { pairId:id, inputTree:'prepared-code', baseCommit:'commit', promptSha256:'prompt', model:'gpt-6-luna', effort:'max', cliVersion:'cli', provider:'http', task, scenario:{repo,kind:'bounded-repair'},
-    candidateSnapshot:{bundleSha256:'bundle',skillSha256:'skill',version:'2.7.1'}, validForComparison:true,accountingMatches:true,quality:{pass:true},scopePass:true, elapsedSeconds:100 };
+    bounds:{requests:16,inputTokens:300000,uncachedInputTokens:50000,outputTokens:12000,seconds:600}, candidateSnapshot:{bundleSha256:'bundle',skillSha256:'skill',version:'2.7.1'}, validForComparison:true,accountingMatches:true,quality:{pass:true},scopePass:true, elapsedSeconds:100 };
   return [{...base,arm:'native',metrics:{inputTokens:1000,totalTokens:1100,uncachedInputTokens:300,peakRequestInputTokens:100}},
     {...base,arm:'contextos',metrics:{inputTokens:700,totalTokens:800,uncachedInputTokens:250,peakRequestInputTokens:80}}];
 }
@@ -12,7 +12,7 @@ test('comparison computes completed matched-pair savings and retains qualificati
   assert.equal(r.gates.totalTokens,true);assert.equal(r.gates.completePairs,false);assert.equal(r.qualified,false);
 });
 test('comparison refuses interrupted, unmatched or different-candidate arms',()=>{
-  for(const modify of [r=>r.validForComparison=false,r=>r.cliVersion='different',r=>r.candidateSnapshot={...r.candidateSnapshot,skillSha256:'different'}]){
+  for(const modify of [r=>r.validForComparison=false,r=>r.cliVersion='different',r=>r.bounds={...r.bounds,inputTokens:100000},r=>r.candidateSnapshot={...r.candidateSnapshot,skillSha256:'different'}]){
     const rows=pair();modify(rows[1]);const r=compareDevelopment(rows);assert.equal(r.pairs.length,0);assert.equal(r.excluded.length,1);assert.equal(r.qualified,false);
   }
   assert.equal(compareDevelopment(pair().slice(0,1)).pairs.length,0);

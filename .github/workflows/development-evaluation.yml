@@ -23,5 +23,7 @@ jobs:
       - run: npm ci
       - name: Offline budgets, accounting, recovery and MCP contracts
         run: node --test packages/orchestrator/test/development-*.test.mjs packages/orchestrator/test/micro-budget.test.mjs packages/mcp/test/compact-change-recovery.test.mjs packages/mcp/test/compact-mutation-status.test.mjs packages/mcp/test/compact-work-evidence.test.mjs packages/mcp/test/invalid-graph-doctor.test.mjs
+      - name: Full local fixture suite (no model credentials)
+        run: npm test
       - name: Verify shipped transport
         run: npm run plugin:verify

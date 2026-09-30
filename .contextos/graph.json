@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1321,
-  "exportedAt": "2026-09-30T21:06:02.550Z",
+  "graphRevision": 1323,
+  "exportedAt": "2026-09-30T21:27:30.921Z",
   "data": {
     "plans": [
       {
@@ -2272,28 +2272,6 @@
             "manifest": null
           },
           {
-            "path": "packages/orchestrator/test/orchestrator.test.mjs",
-            "symbol": "makeTempProject",
-            "anchorKind": "symbol",
-            "startLine": 19,
-            "endLine": 34,
-            "hash": "77328cf58f0c71e1",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "packages/orchestrator/test/orchestrator.test.mjs",
-            "symbol": "fakeService",
-            "anchorKind": "symbol",
-            "startLine": 335,
-            "endLine": 402,
-            "hash": "699381b4a7516571",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "packages/orchestrator/test/micro-budget.test.mjs",
             "symbol": "micro-budget.test.mjs",
             "anchorKind": "file",
@@ -2338,17 +2316,6 @@
             "manifest": null
           },
           {
-            "path": "packages/orchestrator/test/development-comparison.test.mjs",
-            "symbol": "pair",
-            "anchorKind": "symbol",
-            "startLine": 4,
-            "endLine": 9,
-            "hash": "d4ebb7177d2a4b78",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "packages/orchestrator/test/development-resume-controller.test.mjs",
             "symbol": "development-resume-controller.test.mjs",
             "anchorKind": "file",
@@ -2377,6 +2344,39 @@
             "startLine": 1,
             "endLine": 53,
             "hash": "83cdae798700784b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/development-comparison.test.mjs",
+            "symbol": "pair",
+            "anchorKind": "symbol",
+            "startLine": 4,
+            "endLine": 9,
+            "hash": "7fab3c051076281b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/orchestrator.test.mjs",
+            "symbol": "makeTempProject",
+            "anchorKind": "symbol",
+            "startLine": 19,
+            "endLine": 34,
+            "hash": "77328cf58f0c71e1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/orchestrator.test.mjs",
+            "symbol": "fakeService",
+            "anchorKind": "symbol",
+            "startLine": 335,
+            "endLine": 402,
+            "hash": "699381b4a7516571",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -4175,28 +4175,6 @@
             "manifest": null
           },
           {
-            "path": "scripts/development-comparison.mjs",
-            "symbol": "median",
-            "anchorKind": "symbol",
-            "startLine": 3,
-            "endLine": 3,
-            "hash": "3af7a05bf6b3875b",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/development-comparison.mjs",
-            "symbol": "compareDevelopment",
-            "anchorKind": "symbol",
-            "startLine": 5,
-            "endLine": 45,
-            "hash": "696998b10a8ceecd",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "scripts/development_tasks.py",
             "symbol": "task_spec",
             "anchorKind": "symbol",
@@ -4393,6 +4371,28 @@
             "role": "implementation",
             "hashMode": null,
             "manifest": null
+          },
+          {
+            "path": "scripts/development-comparison.mjs",
+            "symbol": "median",
+            "anchorKind": "symbol",
+            "startLine": 3,
+            "endLine": 3,
+            "hash": "3af7a05bf6b3875b",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development-comparison.mjs",
+            "symbol": "compareDevelopment",
+            "anchorKind": "symbol",
+            "startLine": 5,
+            "endLine": 46,
+            "hash": "9c3e6a118f6d7243",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
           }
         ],
         "history": [],
@@ -4559,8 +4559,8 @@
             "symbol": "development-evaluation.yml",
             "anchorKind": "file",
             "startLine": 1,
-            "endLine": 28,
-            "hash": "bf4fc4656794d1c9",
+            "endLine": 30,
+            "hash": "a3a098a638844ad7",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
