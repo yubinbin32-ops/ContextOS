@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1324,
-  "exportedAt": "2026-09-30T21:41:48.251Z",
+  "graphRevision": 1325,
+  "exportedAt": "2026-09-30T22:11:41.188Z",
   "data": {
     "plans": [
       {
@@ -4241,50 +4241,6 @@
             "manifest": null
           },
           {
-            "path": "scripts/development-metrics.mjs",
-            "symbol": "records",
-            "anchorKind": "symbol",
-            "startLine": 6,
-            "endLine": 13,
-            "hash": "ab030fb537450ff3",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/development-metrics.mjs",
-            "symbol": "matches",
-            "anchorKind": "symbol",
-            "startLine": 19,
-            "endLine": 19,
-            "hash": "bd104c4674a3dcd3",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/development-metrics.mjs",
-            "symbol": "outcome",
-            "anchorKind": "symbol",
-            "startLine": 26,
-            "endLine": 37,
-            "hash": "3d30f79ee140de82",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "scripts/development-metrics.mjs",
-            "symbol": "safe",
-            "anchorKind": "symbol",
-            "startLine": 61,
-            "endLine": 61,
-            "hash": "fea9a2451617dc66",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "docs/DEVELOPMENT_QUALIFICATION.md",
             "symbol": "DEVELOPMENT_QUALIFICATION.md",
             "anchorKind": "file",
@@ -4390,6 +4346,50 @@
             "startLine": 37,
             "endLine": 41,
             "hash": "f30775a2a8259a4f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development-metrics.mjs",
+            "symbol": "records",
+            "anchorKind": "symbol",
+            "startLine": 6,
+            "endLine": 13,
+            "hash": "ab030fb537450ff3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development-metrics.mjs",
+            "symbol": "matches",
+            "anchorKind": "symbol",
+            "startLine": 19,
+            "endLine": 19,
+            "hash": "bd104c4674a3dcd3",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development-metrics.mjs",
+            "symbol": "outcome",
+            "anchorKind": "symbol",
+            "startLine": 26,
+            "endLine": 37,
+            "hash": "3d30f79ee140de82",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/development-metrics.mjs",
+            "symbol": "safe",
+            "anchorKind": "symbol",
+            "startLine": 61,
+            "endLine": 61,
+            "hash": "fea9a2451617dc66",
             "role": "implementation",
             "hashMode": null,
             "manifest": null

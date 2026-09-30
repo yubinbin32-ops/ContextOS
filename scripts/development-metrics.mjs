@@ -1,6 +1,6 @@
 /** Summarize provider usage and completed-task evidence without imputing missing usage. */
 import fs from 'node:fs';
-import { parseRolloutTelemetry } from '../packages/orchestrator/src/rollout-telemetry.mjs';
+import { parseDevelopmentRollouts } from './development-rollout.mjs';
 const run = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const eventWarnings = [];
 function records(file, warnings = eventWarnings) {
@@ -13,7 +13,7 @@ function records(file, warnings = eventWarnings) {
 }
 const events = records(run.events);
 const completed = events.filter((event) => event.type === 'turn.completed').at(-1);
-const rollout = parseRolloutTelemetry(run.rollouts);
+const rollout = parseDevelopmentRollouts(run.rollouts);
 const fields = { inputTokens: 'input_tokens', cachedInputTokens: 'cached_input_tokens', outputTokens: 'output_tokens', reasoningOutputTokens: 'reasoning_output_tokens' };
 const completions = events.filter((event) => event.type === 'turn.completed');
 const matches = (usage) => usage && rollout.ok && Object.entries(fields).every(([key,field]) => usage[field] === rollout.metrics[key]);
@@ -70,5 +70,5 @@ const report = { schemaVersion: 2, arm: run.arm, pairId: run.pairId ?? null, tas
     osErrors: osItems.filter((item) => item.error || item.result?.isError || item.result?.is_error || outcome(item)?.errorCode).length,
     mutationRejections: outcomes.filter((result) => result.status === 'blocked').length,
     verifiedMutations, lastMutationStatus: outcomes.at(-1)?.status ?? null, compactionRecords },
-  warnings: [...rollout.warnings, ...eventWarnings].map(safe) };
+  contextSizeHintsIgnored: rollout.contextSizeHintsIgnored, warnings: [...rollout.warnings, ...eventWarnings].map(safe) };
 console.log(JSON.stringify(report, null, 2));
