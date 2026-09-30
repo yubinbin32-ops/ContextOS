@@ -1279,6 +1279,17 @@ export async function explorePipeline(ctx, input = {}) {
   if (!decisionComplete && missingDecisionPaths.length) {
     decisionLines.push(`- missing=${missingDecisionPaths.slice(0, 4).join(',')}`);
   }
+  if (blocks.ok && chains.ok) {
+    const ownership = uniquePaths([...focus.paths, ...paths, ...filePaths]).slice(0, 8).map((target) => {
+      const owners = (blocks.data || []).filter((block) => !String(block.id).startsWith('mod-')
+        && (block.artifactRefs || []).some((ref) => ref.path === target));
+      return { path: target, owners: owners.map((block) => ({
+        id: block.id, title: block.title,
+        chainIds: (chains.data || []).filter((chain) => (chain.memberIds || []).includes(block.id)).map((chain) => chain.id),
+      })) };
+    });
+    if (ownership.length) decisionLines.push(`- ownership=${JSON.stringify(ownership)}`);
+  }
   const sections = [
     {
       key: 'decision',
@@ -1616,7 +1627,14 @@ async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRu
   }
 
   if (errors.length) {
-    return { ok: false, error: errors.join('; '), refreshed: 0, bound: 0, composed: 0, gaps: [] };
+    const ownership = uniquePaths(changedPaths || []).slice(0, 8).map((target) => ({
+      path: target,
+      owners: initialBlocks.filter((block) => isCuratedArchitectureBlock(block) && blockCoversGraphPath(block, normalizeGraphPath(target))).slice(0, 4).map((block) => ({
+        id: block.id, title: block.title, kind: block.kind,
+        chainIds: (initialChainsResult.data || []).filter((chain) => (chain.memberIds || []).includes(block.id)).map((chain) => chain.id),
+      })),
+    }));
+    return { ok: false, error: errors.join('; '), ownership, refreshed: 0, bound: 0, composed: 0, gaps: [] };
   }
   if (dryRun) {
     return { ok: true, refreshed: 0, bound: 0, composed: 0, gaps: [] };
@@ -1633,7 +1651,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRu
       id: spec.id,
       paths: spec.paths,
       symbols: spec.symbols,
-      replacePaths: true,
+      refreshPaths: true,
       blockData: spec.blockData,
       format: 'json',
     };
@@ -1666,7 +1684,7 @@ async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRu
       action: 'bind_auto',
       id,
       paths,
-      replacePaths: true,
+      refreshPaths: true,
       format: 'json',
     });
     if (result.ok) refreshed += 1;
@@ -1902,8 +1920,8 @@ export async function changePipeline(ctx, input = {}) {
     ...edits.map((spec) => ({
       kind: 'edit',
       path: spec?.path,
-      target: stripInspectMetadata(spec?.target ?? spec?.targetContent),
-      replacement: spec?.replacement ?? spec?.replacementContent ?? (spec?.fullFile ? spec?.content : ''),
+      target: stripInspectMetadata(spec?.target ?? spec?.targetContent ?? spec?.oldText),
+      replacement: spec?.replacement ?? spec?.replacementContent ?? spec?.newText ?? (spec?.fullFile ? spec?.content : ''),
       startLine: spec?.startLine,
       endLine: spec?.endLine,
       symbol: spec?.symbol,
@@ -1926,7 +1944,8 @@ export async function changePipeline(ctx, input = {}) {
     if (!architecturePreflight.ok) {
       const lines = [
         '- Architecture contract rejected before changeset: ' + clip(architecturePreflight.error || 'invalid contract', 300),
-        '- No files were modified. Fix the Block/Chain payload, then retry the same change call.',
+        '- No files were modified. Reuse the existing owner id/title and a listed Chain; retry the same edits without opening the graph.',
+        ...(architecturePreflight.ownership?.length ? ['- ownership=' + JSON.stringify(architecturePreflight.ownership)] : []),
       ];
       tracer.step('architecture_preflight', { ok: false, error: architecturePreflight.error || 'invalid contract' });
       return [
@@ -3253,6 +3272,10 @@ function normalizeAction(action, projectRoot) {
 
 function applyPipelineControls(normalized, input = {}) {
   if (!normalized?.input || typeof normalized.input !== 'object') return normalized;
+  if (normalized.tool === 'explore' && !normalized.input.intent
+    && !normalized.input.paths?.length && input.inheritedExplorePaths?.length) {
+    normalized.input.paths = [...input.inheritedExplorePaths];
+  }
   for (const key of ['refresh', 'dedupeReads']) {
     if (input[key] !== undefined && normalized.input[key] === undefined) {
       normalized.input[key] = input[key];
@@ -3314,6 +3337,9 @@ function pipelineHasBaselineVerify(steps, profile, projectRoot) {
     if (!explicitCommands.length) return true;
     const normalizedExplicit = explicitCommands.map(normalizeVerificationCommand);
     if (configured.some((command) => normalizedExplicit.includes(command))) return true;
+    // A caller-selected focused check is a baseline, even when it differs from
+    // the profile's full suite. Navigation commands still need a real check.
+    if (normalizedExplicit.some((command) => /(?:^|[\s/:_-])(?:test|check|build|lint|typecheck|pytest|vitest|jest|tsc)(?:$|[\s/:_-])/.test(command))) return true;
   }
   return false;
 }
@@ -3499,7 +3525,7 @@ function requestedInspectPaths(input = {}) {
 
 function inspectCoveredByDecision(normalized, coveredPaths) {
   if (normalized?.tool !== 'inspect' || !coveredPaths?.size) return false;
-  if (normalized.input?.allowExplicitBatchInspect === true) return false;
+  if (normalized.input?.allowExplicitBatchInspect === true || inspectHasExplicitTarget(normalized.input)) return false;
   const requested = requestedInspectPaths(normalized.input);
   return requested.length > 0 && requested.every((target) => coveredPaths.has(target));
 }
@@ -3515,6 +3541,13 @@ export async function pipelinePipeline(ctx, input = {}) {
     return '# ContextOS pipeline\n- No steps provided in pipeline. Pass `steps: [...]`, `chain: [...]`, or `parallel: [...]`.';
   }
 
+  const inheritedExplorePaths = uniquePaths(collectPipelineActionSpecs(steps).flatMap((step) => {
+    try {
+      const action = normalizeAction(step, ctx.projectRoot);
+      return action.tool === 'inspect' ? requestedInspectPaths(action.input) : [];
+    } catch (_) { return []; }
+  })).filter((target) => !/[*?{}]/.test(target));
+  input = { ...input, inheritedExplorePaths };
   let autoBaselineVerify = false;
   const initialExploreCount = countPipelineTool(steps, 'explore', ctx.projectRoot);
   const initialMutationCount = ['change', 'work', 'ship']

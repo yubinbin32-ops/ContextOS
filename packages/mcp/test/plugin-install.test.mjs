@@ -15,7 +15,7 @@ function fixture(version = '2.6.0', sourceIsRepo = false) {
   const contextosHome = path.join(root, 'contextos');
   const plugin = path.join(repo, 'plugins/contextos');
   const state = path.join(root, 'state.json');
-  const files = { 'server/web-tree-sitter.wasm': 'runtime-wasm', 'grammars/tree-sitter-python.wasm': 'python-grammar', 'server/contextos-mcp.mjs': 'new bundle\n', 'skills/contextos/SKILL.md': 'new skill\n', '.codex-plugin/plugin.json': '{"name":"contextos","version":"2.7.1"}', '.mcp.json': '{}' };
+  const files = { 'server/web-tree-sitter.wasm': 'runtime-wasm', 'grammars/tree-sitter-python.wasm': 'python-grammar', 'grammars/tree-sitter-javascript.wasm': 'javascript-grammar', 'server/contextos-mcp.mjs': 'new bundle\n', 'skills/contextos/SKILL.md': 'new skill\n', '.codex-plugin/plugin.json': '{"name":"contextos","version":"2.7.1"}', '.mcp.json': '{}' };
   for (const target of [plugin, source, path.join(codexHome, 'plugins/cache/personal/contextos', version)]) {
     for (const [relative, content] of Object.entries(files)) {
       fs.mkdirSync(path.dirname(path.join(target, relative)), { recursive: true });
@@ -35,7 +35,7 @@ else process.exit(2);
 `);
   fs.chmodSync(bin, 0o755);
   const run = (...args) => spawnSync(process.execPath, [installer, ...args], { cwd: repo, encoding: 'utf8', env: { ...process.env, CODEX_HOME: codexHome, CONTEXTOS_HOME: contextosHome, CONTEXTOS_CODEX_BIN: bin, INSTALL_TEST_STATE: state, INSTALL_TEST_SOURCE: source } });
-  return { root, codexHome, state, run };
+  return { root, codexHome, contextosHome, state, run };
 }
 
 test('installation refreshes the Codex registered version after synchronizing local source', () => {
@@ -66,6 +66,42 @@ test('check is read-only and rejects stale registration or stale bundle bytes', 
     const drifted = f.run('--check');
     assert.notEqual(drifted.status, 0);
     assert.match(drifted.stderr, /differs from this build/);
+  } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('check rejects missing or stale canonical parser assets without repairing them', () => {
+  const f = fixture();
+  try {
+    const installed = f.run();
+    assert.equal(installed.status, 0, installed.stderr);
+
+    const pluginDir = path.join(f.root, 'repo/plugins/contextos');
+    const grammarDir = path.join(pluginDir, 'grammars');
+    const assets = [
+      'server/web-tree-sitter.wasm',
+      ...fs.readdirSync(grammarDir).filter((name) => name.endsWith('.wasm')).map((name) => `grammars/${name}`),
+    ];
+    for (const relative of assets) {
+      const expected = fs.readFileSync(path.join(pluginDir, relative));
+      const canonical = path.join(f.contextosHome, relative);
+
+      fs.rmSync(canonical, { force: true });
+      const missing = f.run('--check');
+      assert.notEqual(missing.status, 0, `${relative} should be required`);
+      assert.ok(missing.stderr.includes(canonical), `missing diagnostic should name ${canonical}: ${missing.stderr}`);
+      assert.equal(fs.existsSync(canonical), false, '--check must leave missing files missing');
+
+      const stale = Buffer.from(`stale ${relative}`);
+      fs.writeFileSync(canonical, stale);
+      const drifted = f.run('--check');
+      assert.notEqual(drifted.status, 0, `${relative} should be compared byte-for-byte`);
+      assert.ok(drifted.stderr.includes(canonical), `stale diagnostic should name ${canonical}: ${drifted.stderr}`);
+      assert.deepEqual(fs.readFileSync(canonical), stale, '--check must leave stale bytes untouched');
+
+      fs.writeFileSync(canonical, expected);
+    }
+    assert.equal(f.run('--check').status, 0);
+    assert.deepEqual(JSON.parse(fs.readFileSync(f.state)), { version: '2.7.1', adds: 1 });
   } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 });
 

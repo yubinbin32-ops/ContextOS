@@ -151,8 +151,21 @@ export function createV3Server({
         ]) {
           if (input[field] !== undefined) args[field] = input[field];
         }
-        if (input.action === 'search' && args.search === undefined) {
-          args.search = { query: input.query ?? input.search ?? '' };
+        if (input.action === 'search') {
+          const scope = {};
+          for (const field of ['paths', 'root', 'maxResults', 'caseSensitive']) {
+            if (args[field] !== undefined) scope[field] = args[field];
+          }
+          if (args.path !== undefined && scope.root === undefined) scope.root = args.path;
+          const normalizeSearch = (value) => typeof value === 'string'
+            ? { ...scope, query: value }
+            : { ...scope, ...(value || {}), query: value?.query ?? args.query ?? '' };
+          args.search = Array.isArray(args.search)
+            ? args.search.map(normalizeSearch)
+            : normalizeSearch(args.search);
+          // Search paths constrain the query; they must not become work.inspect.
+          delete args.paths;
+          delete args.path;
         }
         const compactAction = input.action === 'search' || (input.action === 'explore' && input.search !== undefined)
           ? 'work'

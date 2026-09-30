@@ -43,3 +43,20 @@ test('non-contiguous source slices preserve original line numbers and markers', 
     assert.doesNotMatch(result, /^\s*5 \| export const first_90/m);
   } finally { service.close?.(); fs.rmSync(root, { recursive: true, force: true }); }
 });
+
+
+test('complete explore never substitutes other symbols for an explicitly requested inspection', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-explore-precision-'));
+  fs.writeFileSync(path.join(root, 'package.json'), '{"name":"precise-explore","type":"module"}');
+  fs.writeFileSync(path.join(root, 'large.mjs'), 'export function alpha() { return "ALPHA_FOCUS"; }\n' + '// padding\n'.repeat(5000) + 'export function beta() { return "BETA_SLICE_REQUIRED"; }\n');
+  const service = new ContextOSV2Service({ projectRoot: root });
+  const orchestrator = new Orchestrator({ projectRoot: root, service });
+  try {
+    const result = await orchestrator.dispatch('pipeline', { autoVerify: false, mode: 'full', maxChars: 18000, steps: [
+      { explore: { intent: 'Inspect alpha in large.mjs', paths: ['large.mjs'] } },
+      { inspect: { path: 'large.mjs', symbol: 'beta', maxChars: 3000 } },
+    ] });
+    assert.match(result, /BETA_SLICE_REQUIRED/);
+    assert.doesNotMatch(result, /Skipped redundant inspect/);
+  } finally { service.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});

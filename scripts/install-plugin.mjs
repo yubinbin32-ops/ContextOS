@@ -137,16 +137,19 @@ function findLocalSourceInstalls() {
     .filter((target) => target && path.resolve(target) !== path.resolve(pluginDir) && fs.existsSync(target));
 }
 
+function shippedGrammarFiles() {
+  const grammarDir = path.join(pluginDir, "grammars");
+  return fs.existsSync(grammarDir) ? fs.readdirSync(grammarDir)
+    .filter((name) => name.endsWith(".wasm")).map((name) => `grammars/${name}`) : [];
+}
+
 function assertInstalledMatchesBuild(plugins) {
   for (const plugin of plugins) {
     if (plugin.version !== expectedVersion) {
       throw new Error(`Installed ${plugin.pluginId} is ${plugin.version}; expected ${expectedVersion}. Run npm run plugin:install to refresh the registered version.`);
     }
     const target = path.join(codexHome, "plugins", "cache", plugin.marketplaceName || plugin.pluginId.split("@").at(-1), "contextos", plugin.version);
-    const grammarDir = path.join(pluginDir, "grammars");
-    const grammarFiles = fs.existsSync(grammarDir) ? fs.readdirSync(grammarDir)
-      .filter((name) => name.endsWith(".wasm")).map((name) => `grammars/${name}`) : [];
-    for (const relative of ["server/contextos-mcp.mjs", "server/web-tree-sitter.wasm", "skills/contextos/SKILL.md", ".codex-plugin/plugin.json", ".mcp.json", ...grammarFiles]) {
+    for (const relative of ["server/contextos-mcp.mjs", "server/web-tree-sitter.wasm", "skills/contextos/SKILL.md", ".codex-plugin/plugin.json", ".mcp.json", ...shippedGrammarFiles()]) {
       const expected = path.join(pluginDir, relative);
       if (!fs.existsSync(expected)) continue;
       const actual = path.join(target, relative);
@@ -158,6 +161,16 @@ function assertInstalledMatchesBuild(plugins) {
   const canonicalBundle = path.join(contextosHome, "server", "contextos-mcp.mjs");
   if (!fs.existsSync(canonicalBundle) || !fs.readFileSync(canonicalBundle).equals(fs.readFileSync(bundle))) {
     throw new Error(`Canonical server differs from this build: ${canonicalBundle}. Run npm run plugin:install.`);
+  }
+  for (const relative of ["server/web-tree-sitter.wasm", ...shippedGrammarFiles()]) {
+    const expected = path.join(pluginDir, relative);
+    const actual = path.join(contextosHome, relative);
+    if (!fs.existsSync(expected)) {
+      throw new Error(`Build parser asset is missing: ${expected}. Run npm run plugin:build.`);
+    }
+    if (!fs.existsSync(actual) || !fs.readFileSync(actual).equals(fs.readFileSync(expected))) {
+      throw new Error(`Canonical parser asset is missing or differs from this build: ${actual}. Run npm run plugin:install.`);
+    }
   }
 }
 

@@ -46,9 +46,13 @@ Five fresh-workspace runs, `o200k_base` tokenizer, medians. **The table measures
 | Efficient native slice of the same large-file symbol | 165 | 280 | 115 more |
 | Tiny file | 6 | 66 | 60 more |
 
-**Use it where the saved context outweighs the setup.** The measured compact tool definition, server instructions, and skill add about **2,504 tokens** when loaded together. Exact native slices can be cheaper on a first read; trivial edits should skip the full exploration lifecycle. Synthetic log results show compression under controlled noise, not typical project performance. Provider usage, reasoning tokens, cache discounts, and task completion quality require a separate agent A/B study.
+**Use it where the saved context outweighs the setup.** The measured compact tool definition, server instructions, and skill add about **2,504 tokens** when loaded together. Exact native slices can be cheaper on a first read; trivial edits should skip the full exploration lifecycle. Synthetic log results show compression under controlled noise, not typical project performance. The 2,504-token figure applies to the released 2.7.1 skill. An actual coding-task pilot now records provider usage, reasoning, cache and completion quality below.
 
 The compact tool definition uses 1,056 tokens versus 2,922 for the seven-tool compatibility surface. [Full evaluation, fixed costs, and remaining opportunities](docs/BENCHMARK.md).
+
+## Real development pilot
+
+A real installer repair was tested with **`gpt-6-luna` / `max`**. Native completed (190,287 input, 6,444 output tokens; six independent checks passed). Released OS and a development candidate stopped without completing the task. **Complete-task savings are not established.** The failures led to scoped-search, precise-inspection and edit-recovery fixes, plus a reproducible runner with request/token/time limits. [Actual usage, context occupancy, defects and reproduction](docs/REAL_DEVELOPMENT_BENCHMARK.md)
 
 ## Get started
 

@@ -1,0 +1,544 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-30",
+  "task": "canonical-parser-integrity",
+  "model": "gpt-6-luna",
+  "reasoningEffort": "max",
+  "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+  "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+  "prompt": "Fix a real installation integrity bug in this repository. scripts/install-plugin.mjs --check verifies the canonical server bundle but currently accepts missing or stale canonical parser assets. It must reject missing or byte-different server/web-tree-sitter.wasm and all shipped grammars/*.wasm under CONTEXTOS_HOME, identify the affected path, and remain read-only. Preserve active-cache and registered-version checks and source-equals-plugin installation support. Add meaningful regression coverage and run the relevant installer tests. Make the smallest complete repair. Do not publish, commit, change unrelated code, or delegate to other agents. Finish with a concise summary and test results.",
+  "environment": {
+    "platform": "macOS arm64",
+    "node": "v22.22.1",
+    "executionCli": "0.159.2",
+    "pluginSetupCli": "0.150.1",
+    "provider": "saved ChatGPT auth, HTTP/SSE",
+    "reportedModelContextWindow": 258400
+  },
+  "runDesign": "One completed native control, one manually stopped released-plugin diagnostic, one budget-capped candidate diagnostic; not a completed matched pair.",
+  "candidateLimits": {
+    "requestCount": 12,
+    "inputTokens": 300000,
+    "outputTokens": 12000,
+    "elapsedSeconds": 600,
+    "enforcement": "between recorded responses; may overshoot by an in-flight request"
+  },
+  "results": [
+    {
+      "schemaVersion": 1,
+      "arm": "native",
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+      "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+      "cliVersion": "codex-cli 0.159.2",
+      "status": 0,
+      "stopReason": null,
+      "elapsedSeconds": 206.83,
+      "complete": true,
+      "accountingMatches": true,
+      "osUsed": true,
+      "quality": {
+        "pass": true,
+        "checks": [
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "stale",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "stale",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "missing",
+            "pass": true
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "stale",
+            "pass": true
+          }
+        ]
+      },
+      "scopePass": true,
+      "validForComparison": true,
+      "metrics": {
+        "requestCount": 9,
+        "inputTokens": 190287,
+        "cachedInputTokens": 162560,
+        "outputTokens": 6444,
+        "reasoningOutputTokens": 3811,
+        "totalTokens": 196731,
+        "peakRequestInputTokens": 28659,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 27727,
+        "peakInputWindowPercent": 11.09
+      },
+      "observedPartialMetrics": null,
+      "requests": [
+        {
+          "input_tokens": 11420,
+          "cached_input_tokens": 4864,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 164,
+          "reasoning_output_tokens": 32,
+          "total_tokens": 11584
+        },
+        {
+          "input_tokens": 12128,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 215,
+          "reasoning_output_tokens": 38,
+          "total_tokens": 12343
+        },
+        {
+          "input_tokens": 12377,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 238,
+          "reasoning_output_tokens": 47,
+          "total_tokens": 12615
+        },
+        {
+          "input_tokens": 20542,
+          "cached_input_tokens": 12032,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 3119,
+          "reasoning_output_tokens": 2324,
+          "total_tokens": 23661
+        },
+        {
+          "input_tokens": 23685,
+          "cached_input_tokens": 20224,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1816,
+          "reasoning_output_tokens": 937,
+          "total_tokens": 25501
+        },
+        {
+          "input_tokens": 25525,
+          "cached_input_tokens": 23296,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 157,
+          "reasoning_output_tokens": 35,
+          "total_tokens": 25682
+        },
+        {
+          "input_tokens": 27752,
+          "cached_input_tokens": 25344,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 160,
+          "reasoning_output_tokens": 113,
+          "total_tokens": 27912
+        },
+        {
+          "input_tokens": 28199,
+          "cached_input_tokens": 27392,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 372,
+          "reasoning_output_tokens": 243,
+          "total_tokens": 28571
+        },
+        {
+          "input_tokens": 28659,
+          "cached_input_tokens": 27392,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 203,
+          "reasoning_output_tokens": 42,
+          "total_tokens": 28862
+        }
+      ],
+      "tools": {
+        "commands": 7,
+        "fileChanges": 2,
+        "osCalls": 0,
+        "osErrors": 0
+      },
+      "warnings": [],
+      "runLabel": "native-complete"
+    },
+    {
+      "schemaVersion": 1,
+      "arm": "contextos",
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+      "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+      "plugin": {
+        "version": "2.7.1",
+        "bundleSha256": "92e67e5b7c9b68a1ecc4846a449275a541d507b5349c473574053055890af853",
+        "skillSha256": "7db013a62c63e5bda2d4afe0d7a3f2885a2bcb346c9708fe325df8a67331f9f7"
+      },
+      "cliVersion": "codex-cli 0.159.2",
+      "status": -15,
+      "stopReason": "cost regression stop after 12 requests",
+      "elapsedSeconds": 576.61,
+      "complete": false,
+      "accountingMatches": false,
+      "osUsed": true,
+      "quality": {
+        "pass": false,
+        "checks": [
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "missing",
+            "pass": false,
+            "error": "check accepted missing server/web-tree-sitter.wasm"
+          },
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "stale",
+            "pass": false,
+            "error": "check accepted stale server/web-tree-sitter.wasm"
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "missing",
+            "pass": false,
+            "error": "check accepted missing grammars/tree-sitter-python.wasm"
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "stale",
+            "pass": false,
+            "error": "check accepted stale grammars/tree-sitter-python.wasm"
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "missing",
+            "pass": false,
+            "error": "check accepted missing grammars/tree-sitter-javascript.wasm"
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "stale",
+            "pass": false,
+            "error": "check accepted stale grammars/tree-sitter-javascript.wasm"
+          }
+        ]
+      },
+      "scopePass": true,
+      "validForComparison": false,
+      "metrics": null,
+      "observedPartialMetrics": {
+        "requestCount": 13,
+        "inputTokens": 402770,
+        "cachedInputTokens": 359168,
+        "outputTokens": 17106,
+        "reasoningOutputTokens": 12584,
+        "totalTokens": 419876,
+        "peakRequestInputTokens": 45578,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 43602,
+        "peakInputWindowPercent": 17.64
+      },
+      "requests": [
+        {
+          "input_tokens": 11628,
+          "cached_input_tokens": 8960,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 294,
+          "reasoning_output_tokens": 40,
+          "total_tokens": 11922
+        },
+        {
+          "input_tokens": 13612,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 103,
+          "reasoning_output_tokens": 61,
+          "total_tokens": 13715
+        },
+        {
+          "input_tokens": 14671,
+          "cached_input_tokens": 13056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 512,
+          "reasoning_output_tokens": 345,
+          "total_tokens": 15183
+        },
+        {
+          "input_tokens": 22012,
+          "cached_input_tokens": 14080,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1280,
+          "reasoning_output_tokens": 1182,
+          "total_tokens": 23292
+        },
+        {
+          "input_tokens": 24024,
+          "cached_input_tokens": 21248,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1492,
+          "reasoning_output_tokens": 1384,
+          "total_tokens": 25516
+        },
+        {
+          "input_tokens": 26535,
+          "cached_input_tokens": 23296,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1496,
+          "reasoning_output_tokens": 1365,
+          "total_tokens": 28031
+        },
+        {
+          "input_tokens": 32191,
+          "cached_input_tokens": 26368,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 6880,
+          "reasoning_output_tokens": 5411,
+          "total_tokens": 39071
+        },
+        {
+          "input_tokens": 39206,
+          "cached_input_tokens": 31488,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 483,
+          "reasoning_output_tokens": 271,
+          "total_tokens": 39689
+        },
+        {
+          "input_tokens": 40668,
+          "cached_input_tokens": 38656,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 718,
+          "reasoning_output_tokens": 641,
+          "total_tokens": 41386
+        },
+        {
+          "input_tokens": 43558,
+          "cached_input_tokens": 39680,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 458,
+          "reasoning_output_tokens": 261,
+          "total_tokens": 44016
+        },
+        {
+          "input_tokens": 44147,
+          "cached_input_tokens": 42752,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 405,
+          "reasoning_output_tokens": 328,
+          "total_tokens": 44552
+        },
+        {
+          "input_tokens": 44940,
+          "cached_input_tokens": 43776,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 324,
+          "reasoning_output_tokens": 126,
+          "total_tokens": 45264
+        },
+        {
+          "input_tokens": 45578,
+          "cached_input_tokens": 44800,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 2661,
+          "reasoning_output_tokens": 1169,
+          "total_tokens": 48239
+        }
+      ],
+      "tools": {
+        "commands": 2,
+        "fileChanges": 0,
+        "osCalls": 16,
+        "osErrors": 0
+      },
+      "warnings": [],
+      "runLabel": "released-2.7.1-stopped"
+    },
+    {
+      "schemaVersion": 1,
+      "arm": "contextos",
+      "model": "gpt-6-luna",
+      "effort": "max",
+      "baseCommit": "8c1500a98ca4be8d43d318521e6dd41ec423001e",
+      "promptSha256": "2da47ff593abb9e1bedb9f71c0a3c3b709bf3e3176bc96335c6fe50e39170276",
+      "plugin": {
+        "bundleSha256": "3f1fecb19fd27cd27c5f1ca30ba189d80752d7f5780d6a6cfa8fbb9c67d4f815",
+        "skillSha256": "d851a0f16f8b860c69b7ff9f9d7d1cab346f4d4922454f49c0925009089d9d84",
+        "version": "2.7.1"
+      },
+      "cliVersion": "codex-cli 0.159.2",
+      "status": -15,
+      "stopReason": "output token budget",
+      "elapsedSeconds": 297.42,
+      "complete": false,
+      "accountingMatches": false,
+      "osUsed": true,
+      "quality": {
+        "pass": false,
+        "checks": [
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "missing",
+            "pass": false,
+            "error": "check accepted missing server/web-tree-sitter.wasm"
+          },
+          {
+            "asset": "server/web-tree-sitter.wasm",
+            "kind": "stale",
+            "pass": false,
+            "error": "check accepted stale server/web-tree-sitter.wasm"
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "missing",
+            "pass": false,
+            "error": "check accepted missing grammars/tree-sitter-python.wasm"
+          },
+          {
+            "asset": "grammars/tree-sitter-python.wasm",
+            "kind": "stale",
+            "pass": false,
+            "error": "check accepted stale grammars/tree-sitter-python.wasm"
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "missing",
+            "pass": false,
+            "error": "check accepted missing grammars/tree-sitter-javascript.wasm"
+          },
+          {
+            "asset": "grammars/tree-sitter-javascript.wasm",
+            "kind": "stale",
+            "pass": false,
+            "error": "check accepted stale grammars/tree-sitter-javascript.wasm"
+          }
+        ]
+      },
+      "scopePass": true,
+      "validForComparison": false,
+      "metrics": null,
+      "observedPartialMetrics": {
+        "requestCount": 7,
+        "inputTokens": 175789,
+        "cachedInputTokens": 138496,
+        "outputTokens": 13088,
+        "reasoningOutputTokens": 10070,
+        "totalTokens": 188877,
+        "peakRequestInputTokens": 39606,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 37293,
+        "peakInputWindowPercent": 15.33
+      },
+      "requests": [
+        {
+          "input_tokens": 11635,
+          "cached_input_tokens": 4864,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 243,
+          "reasoning_output_tokens": 55,
+          "total_tokens": 11878
+        },
+        {
+          "input_tokens": 17385,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 233,
+          "reasoning_output_tokens": 143,
+          "total_tokens": 17618
+        },
+        {
+          "input_tokens": 18574,
+          "cached_input_tokens": 17152,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 547,
+          "reasoning_output_tokens": 348,
+          "total_tokens": 19121
+        },
+        {
+          "input_tokens": 22040,
+          "cached_input_tokens": 18176,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 702,
+          "reasoning_output_tokens": 556,
+          "total_tokens": 22742
+        },
+        {
+          "input_tokens": 28758,
+          "cached_input_tokens": 21248,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 8898,
+          "reasoning_output_tokens": 7793,
+          "total_tokens": 37656
+        },
+        {
+          "input_tokens": 37791,
+          "cached_input_tokens": 28416,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 836,
+          "reasoning_output_tokens": 665,
+          "total_tokens": 38627
+        },
+        {
+          "input_tokens": 39606,
+          "cached_input_tokens": 37632,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 1629,
+          "reasoning_output_tokens": 510,
+          "total_tokens": 41235
+        }
+      ],
+      "tools": {
+        "commands": 1,
+        "fileChanges": 0,
+        "osCalls": 6,
+        "osErrors": 0
+      },
+      "warnings": [],
+      "runLabel": "candidate-1-stopped"
+    }
+  ],
+  "excludedRuns": [
+    "gpt-6.1-sol unsupported by the execution route",
+    "gpt-6-sol stopped at the user model change; not used in comparison",
+    "Plugin-discovery/setup and unapproved MCP probes; no valid coding-task result"
+  ],
+  "conclusion": "No completed-task token or context reduction established. OS arms did not complete; their usage is observed partial accounting, not a savings denominator.",
+  "postCandidateRepairs": {
+    "testedByModel": false,
+    "changes": [
+      "Accept oldText/newText exact edits, including empty replacements",
+      "Return existing owner id/title/kind/Chain IDs on architecture rejection for retry without graph reads",
+      "Scoped ownership refresh preserves untouched paths and removes stale symbols from edited paths; explicit complete replacement remains supported"
+    ],
+    "verification": "Real in-memory MCP regression: rejection leaves the file unchanged; returned receipt alone permits a passing edit/verify retry.",
+    "finalVerification": {
+      "unitTests": 408,
+      "passed": 408,
+      "failed": 0,
+      "skipped": 0,
+      "pluginSmoke": "pass",
+      "independentInstallerCasesPassed": 6,
+      "skillValidation": "pass",
+      "skillCharacters": 6792,
+      "ownershipRegressionBeforeRelease": "0/1 pass",
+      "ownershipRegressionAfterRepair": "1/1 pass"
+    },
+    "finalBundleSha256": "1c74e9f635e8331a743933f7cad7b054b1e744822a5657fa26ee69381e57b60a",
+    "finalSkillSha256": "6f8c48ad343bd4cd13a9c6c184b3030edee4343f04801b8e660214ac986da2f1"
+  },
+  "limitations": [
+    "One small real repair in ContextOS itself; not a cross-repository study.",
+    "No compaction records; peak inputs used 11.09%-17.64% of the reported window, not a long-window stress test.",
+    "Input includes cached input; reasoning is included in output. Counts do not imply currency billing.",
+    "Interrupted records are observed lower bounds; no turn.completed usage to reconcile.",
+    "Runs were not randomized and service load/prompt cache were uncontrolled.",
+    "Raw events, rollout files, copied authentication and isolated local paths are not published."
+  ]
+}

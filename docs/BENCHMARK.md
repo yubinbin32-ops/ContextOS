@@ -4,6 +4,8 @@
 
 **结论：大文件、重复读取和高噪声日志有明确的返回上下文收益；首次精确读取与极小任务存在额外开销。尚未测量完整开发任务的模型账单。**
 
+Actual coding-task usage and failed runs are reported separately in [the real development pilot](REAL_DEVELOPMENT_BENCHMARK.md). Complete-task savings remain unproven. The response-only and fixed-cost figures here describe released 2.7.1.
+
 ## 测量范围与复现
 
 基准通过真实 stdio MCP 客户端调用发布 bundle。源码来自本仓库的 `pipelines.mjs` 与 `intent-router.mjs`；在临时项目中按相同符号读取。成功、失败日志是明确标注的 1,000 行合成构建日志，不使用外部模型或 API key。

@@ -2968,3 +2968,38 @@ test('inspect accepts nested payloads and change accepts targetContent aliases',
   assert.match(changeResult, /edited `src\/math\.mjs`/);
   service.close();
 });
+
+
+test('focused baseline checks do not expand into the configured full test suite', async () => {
+  const projectRoot = makeTempProject();
+  const service = fakeService({ exitCode: 0 });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  try {
+    await orchestrator.dispatch('pipeline', { steps: [
+      { explore: { intent: 'repair src/math.mjs' } },
+      { verify: { commands: ['node --check src/math.mjs'] } },
+    ] });
+    assert.deepEqual(service.calls.filter((call) => call.capability === 'run').map((call) => call.args.command), ['node --check src/math.mjs']);
+  } finally { fs.rmSync(projectRoot, { recursive: true, force: true }); }
+});
+
+test('unscoped pipeline exploration inherits exact inspect paths and returns reusable ownership', async () => {
+  const projectRoot = makeTempProject();
+  const service = new ContextOSV2Service({ projectRoot, projectId: 'fixture' });
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  try {
+    const changed = await orchestrator.dispatch('change', {
+      edits: [{ path: 'src/math.mjs', target: 'a + b', replacement: 'a + b + 0' }],
+      architecture: { blocks: [{ id: 'block-math', title: 'Math helpers', paths: ['src/math.mjs'] }], chains: [{ id: 'chain-math', title: 'Math validation', memberIds: ['block-math'] }] },
+    });
+    assert.doesNotMatch(changed, /contract rejected|No files were modified/);
+    const result = await orchestrator.dispatch('pipeline', { autoVerify: false, mode: 'full', maxChars: 18000, steps: [
+      { explore: {} }, { inspect: { path: 'src/math.mjs', ranges: [[1, 3]] } },
+    ] });
+    const line = result.split('\n').find((entry) => entry.startsWith('- ownership='));
+    assert.ok(line, result);
+    const ownership = JSON.parse(line.slice('- ownership='.length));
+    const math = ownership.find((entry) => entry.path === 'src/math.mjs');
+    assert.deepEqual(math.owners, [{ id: 'block-math', title: 'Math helpers', chainIds: ['chain-math'] }]);
+  } finally { service.close(); fs.rmSync(projectRoot, { recursive: true, force: true }); }
+});

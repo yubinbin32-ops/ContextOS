@@ -986,6 +986,7 @@ export class ContextOSV2Service {
     hashMode = null,
     manifest = null,
     replacePaths = false,
+    refreshPaths = false,
     includeRefs = false,
     limit,
     offset,
@@ -1226,9 +1227,12 @@ export class ContextOSV2Service {
         // own files that were moved or deleted, which creates duplicate
         // owners and stale graph references.  The default remains additive
         // for callers that intentionally bind one more path.
+        // A scoped refresh replaces locators only for the parsed paths.
+        // Keep unrelated ownership; remove old symbols from edited files.
+        const refreshedPaths = new Set(autoArtifactRefs.map((ref) => ref.path));
         const existingRefs = replacePaths
           ? []
-          : dedupeArtifactRefs(existing.artifactRefs || []);
+          : dedupeArtifactRefs(existing.artifactRefs || []).filter((ref) => !refreshPaths || !refreshedPaths.has(ref.path));
         const mergedRefs = [...existingRefs];
         for (const autoRef of autoArtifactRefs) {
           const idx = mergedRefs.findIndex((r) => r.path === autoRef.path && r.symbol === autoRef.symbol);
