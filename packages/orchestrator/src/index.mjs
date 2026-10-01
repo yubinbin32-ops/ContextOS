@@ -1138,8 +1138,14 @@ export class Orchestrator {
       const focusedWorkRead = tool === 'work' && (input.inspect !== undefined || input.read !== undefined)
         && ![...MUTATION_INPUT_KEYS].some((key) => input[key] !== undefined);
       const explicitInspectWiden = tool === 'inspect' && responseMaxChars !== undefined;
+      const receiptLogRecovery = tool === 'verify' && input.mode === 'logs' && responseMaxChars !== undefined;
+      const failureSourceRecovery = tool === 'change' && /(?:^|\n)## Failure source\n/.test(response);
       const decisionPackageBudget = focusedWorkRead
         ? Math.min(responseMaxChars ?? RESPONSE_BUDGETS.pipelineDecision, INSPECT_RESPONSE_HARD_CAP)
+        : receiptLogRecovery
+        ? Math.min(responseMaxChars, 8000)
+        : failureSourceRecovery
+        ? Math.min(responseMaxChars ?? 4000, 4000)
         : explicitInspectWiden
         ? Math.min(responseMaxChars, INSPECT_RESPONSE_HARD_CAP)
         : (decisionPackage && responseMaxChars === undefined
@@ -1150,6 +1156,8 @@ export class Orchestrator {
         || responseArgs.allowWiden === true
         || nestedFull
         || explicitInspectWiden
+        || receiptLogRecovery
+        || failureSourceRecovery
         || focusedWorkRead
         || Boolean(decisionPackage);
       const full = input.full === true || input.budget === 'full' || input.mode === 'full'

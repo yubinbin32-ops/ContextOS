@@ -117,7 +117,7 @@ contextos({
 })
 ```
 
-Read the owning function and focused tests together with `work`, then edit and verify in one `change`. Search one exact identifier when the location is unknown. Successful receipts keep logs off the conversation; blocked edits name the fields to correct. For a one-function repair whose complete source and test files are each at most 120 lines, the skill uses ordinary tools to avoid setup overhead.
+Read the owning function and focused tests together with `work`, then edit and verify in one `change`. Search one exact identifier when the location is unknown. Successful receipts keep logs off the conversation; blocked edits name the fields to correct. For a one-function repair whose complete source and test files together total at most 120 lines, the skill uses ordinary tools to avoid setup overhead.
 
 ## What’s new in 2.7.2?
 

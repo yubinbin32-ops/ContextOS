@@ -1,6 +1,6 @@
 # Real development qualification — 2.7.2 candidate
 
-**Performance qualification is pending.** Functional verification has passed 426 tests. The source-context candidate is frozen; its final matched campaign is still running. This document distinguishes functional correctness from token/context qualification.
+**Performance qualification is pending.** Functional verification passes 432 tests. Candidate9 completed all three matched tasks but failed the declared savings and regression gates: total tokens increased by 3.14% on the small repair and 37.37% on the long session. [Its complete failed matrix](benchmarks/2026-10-01-candidate9.json) remains public. Candidate10 fixes source-marker false partials, direct failure-log recovery and compact edit guidance; all six evaluation arms run again on the frozen candidate. Functional correctness and token/context qualification are reported separately.
 
 ## What is being tested
 
@@ -63,8 +63,8 @@ Historical response-only measurements remain in [BENCHMARK.md](BENCHMARK.md). Th
 ```json
 {
   "version": "2.7.2",
-  "bundleSha256": "26fb9bad9ba30eeaada1744c6717802b0afbd7de3543f4043933fb0474059e0a",
-  "skillSha256": "ff5accba2e77302620722fc85ebc182b606f3753e03d39a3a457a0ce172a3d34"
+  "bundleSha256": "37596a491c59efeefcfc482fbf17f8b9521d333a5404cd244f0dd59db50f57dc",
+  "skillSha256": "c637b5ba97a61d73e0e3e9ce1f2fed087e3535f689d064ca70b90b2c70cebd9c"
 }
 ```
 

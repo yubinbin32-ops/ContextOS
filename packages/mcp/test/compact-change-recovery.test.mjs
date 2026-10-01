@@ -56,3 +56,50 @@ test('failed change names the failing receipt and recovers logs without rerunnin
   assert.match(logs.content[0].text,/CTX_EXISTING_FAILURE_LOG/);assert.equal(fs.readFileSync(path.join(fixture.root,'checks.count'),'utf8'),'x');
  } finally {await client.close();fixture.cleanup();}
 });
+
+async function withReceiptRecoveryClient(run) {
+ const fixture=createFixtureProject({prefix:'ctxos-receipt-recovery'});
+ const client=new Client({name:'receipt-recovery',version:'1'}),server=createV3Server();
+ const [ct,st]=InMemoryTransport.createLinkedPair();await Promise.all([server.connect(st),client.connect(ct)]);
+ const call=async(action,args)=>{
+  const result=await client.callTool({name:'contextos',arguments:{action,projectRoot:fixture.root,args}});
+  return result.content.map(c=>c.text||'').join('\n');
+ };
+ try {await run({fixture,call});} finally {await client.close();fixture.cleanup();}
+}
+test('explicit receipt log recovery honors a finite budget and keeps its hard cap',async()=>withReceiptRecoveryClient(async({fixture,call})=>{
+ const command=`node -e "for(let i=0;i<32;i++)console.error('row-'+i+'-'+ 'x'.repeat(80));process.exit(1)"`;
+ const failed=await call('verify',{commands:[command],autoTriage:false});
+ const id=failed.match(/receipt (receipt-[A-Za-z0-9-]+)/)[1];
+ const logs=await call('verify',{mode:'logs',id,lines:40,maxChars:4000});
+ assert.match(logs,/row-16-/);assert.doesNotMatch(logs,/response truncated/);assert.ok(logs.length<=4000);
+ const more=await call('verify',{commands:[`node -e "for(let i=0;i<240;i++)console.error('cap-'+i+'-'+ 'y'.repeat(80));process.exit(1)"`],autoTriage:false});
+ const moreId=more.match(/receipt (receipt-[A-Za-z0-9-]+)/)[1];
+ const capped=await call('verify',{mode:'logs',id:moreId,lines:300,maxChars:100000});
+ assert.ok(capped.length<=8000);assert.match(capped,/response truncated/);
+}));
+test('receipt logs without an id recover the latest active failure without executing it again',async()=>withReceiptRecoveryClient(async({fixture,call})=>{
+ const empty=await call('verify',{mode:'logs'});assert.doesNotMatch(empty,/undefined/);assert.match(empty,/receipt/i);
+ const command=`node -e "require('node:fs').appendFileSync('recovery-count','x');console.error('LATEST_RECEIPT_RECOVERY');process.exit(1)"`;
+ const failed=await call('verify',{commands:[command],autoTriage:false});
+ const id=failed.match(/receipt (receipt-[A-Za-z0-9-]+)/)[1];
+ const logs=await call('verify',{mode:'logs',lines:30,maxChars:4000});
+ assert.match(logs,new RegExp(id));assert.match(logs,/LATEST_RECEIPT_RECOVERY/);
+ assert.equal(fs.readFileSync(path.join(fixture.root,'recovery-count'),'utf8'),'x');
+}));
+test('a failed change includes the failing local source frame for direct repair',async()=>withReceiptRecoveryClient(async({fixture,call})=>{
+ fixture.write('src/source-frame.mjs','const FRAME_LOCAL_CONST = 1;\nthrow new Error("FRAME_FAILURE");\n');
+ const failed=await call('change',{edits:[{path:'src/source-frame.mjs',target:'FRAME_LOCAL_CONST = 1',replacement:'FRAME_LOCAL_CONST = 2'}],verify:['node src/source-frame.mjs'],autoRevert:false});
+ assert.match(failed,/Failure source/);assert.match(failed,/FRAME_LOCAL_CONST = 2/);assert.match(failed,/src\/source-frame\.mjs/);
+}));
+test('failure source recovery does not follow a symlink outside the repository',async()=>withReceiptRecoveryClient(async({fixture,call})=>{
+ const outside=fs.mkdtempSync(path.join(path.dirname(fixture.root),'ctxos-frame-outside-'));
+ try {
+  const secret=path.join(outside,'private.mjs');fs.writeFileSync(secret,'const EXTERNAL_PRIVATE_SOURCE_MARKER = true;\n');
+  fs.mkdirSync(path.join(fixture.root,'src'),{recursive:true});fs.symlinkSync(secret,path.join(fixture.root,'src','linked.mjs'));
+  fixture.write('src/touched.mjs','export const value = 1;\n');
+  const command=`node -e "console.error('at Example ('+require('node:path').resolve('src/linked.mjs')+':1:1)');process.exit(1)"`;
+  const failed=await call('change',{edits:[{path:'src/touched.mjs',target:'value = 1',replacement:'value = 2'}],verify:[command],autoRevert:false});
+  assert.doesNotMatch(failed,/EXTERNAL_PRIVATE_SOURCE_MARKER/);
+ } finally {fs.rmSync(outside,{recursive:true,force:true});}
+}));

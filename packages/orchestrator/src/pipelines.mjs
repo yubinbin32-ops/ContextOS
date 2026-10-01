@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { fitSections, resolveBudget } from './context-budget.mjs';
 import { RESPONSE_BUDGETS, estimateTokens, finalizeResponse, recordMicroUsage, summarizeActionResult } from './response-budget.mjs';
 import { observe } from './observer.mjs';
@@ -186,6 +187,34 @@ function isFailureYamlLabel(line) {
 
 function isFailureStackFrame(line) {
   return /^(?:at\s+)?\S.*(?:\(|at\s+).*:\d+:\d+\)?$/.test(line);
+}
+
+function failureSourceFrame(ctx, diagnostics) {
+  const rows = String(diagnostics || '').split(/\r?\n/);
+  const candidates = [...rows.filter((line) => /^\s*at\b/.test(line)), ...rows];
+  for (const row of candidates) {
+    const match = row.match(/(?:\(|\s|^)((?:file:\/\/|\/|[A-Za-z]:[\\/])[^)'\n]+):(\d+):\d+\)?['\s]*$/);
+    if (!match) continue;
+    try {
+      const file = match[1].startsWith('file:') ? fileURLToPath(match[1]) : match[1];
+      const relative = path.relative(ctx.projectRoot, file);
+      const realRelative = path.relative(fs.realpathSync(ctx.projectRoot), fs.realpathSync(file));
+      if ([relative, realRelative].some((value) => value.startsWith('..') || path.isAbsolute(value))
+          || /(?:^|[\\/])(?:node_modules|\.git|\.contextos)(?:[\\/]|$)/.test(relative)
+          || !/\.(?:[cm]?[jt]sx?|py|rs|go|swift|java|c|cpp|h)$/.test(file)
+          || fs.statSync(file).size > 512000) continue;
+      const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+      const focus = Number(match[2]) - 1;
+      if (!Number.isSafeInteger(focus) || focus < 0 || focus >= lines.length) continue;
+      let start = Math.max(0, focus - 18), end = Math.min(lines.length, focus + 7);
+      const body = () => lines.slice(start, end).map((line, index) => `${start + index + 1} | ${line.length > 180 ? line.slice(0, 180) + ' [line clipped]' : line}`).join('\n');
+      while (body().length > 1700 && end - start > 1) {
+        if (end > focus + 1) end -= 1; else start += 1;
+      }
+      return `- ${relative.replaceAll('\\', '/')}:${focus + 1} (bounded source frame)\n\`\`\`text\n${body()}\n\`\`\``;
+    } catch (_) { /* A missing or foreign frame must not block log recovery. */ }
+  }
+  return null;
 }
 
 export function extractFailureEvidence(text) {
@@ -2024,6 +2053,7 @@ export async function changePipeline(ctx, input = {}) {
   const failureLines = [];
   let verifyPassed = true;
   let failedReceiptId = null;
+  const failureSourceLines = [];
 
   const verifyCommands = verifyCommandsFromInput(input.verify, profile);
 
@@ -2055,6 +2085,10 @@ export async function changePipeline(ctx, input = {}) {
             ? receipt.diagnostics.join('\n\n---\n\n')
             : (receipt.errors && receipt.errors.length ? receipt.errors.slice(0, 5).join('\n') : clip(receipt.summary || 'failed', 240));
           failureLines.push(`### \`${label}\`\n${diag}`);
+          if (!failureSourceLines.length) {
+            const frame = failureSourceFrame(ctx, diag);
+            if (frame) failureSourceLines.push(frame);
+          }
         }
         tracer.step('change_verify', { command: cmd, exitCode: receipt.exitCode });
       }
@@ -2140,6 +2174,9 @@ export async function changePipeline(ctx, input = {}) {
     { key: 'next', title: 'Next', priority: 0, lines: nextLines },
     { key: 'result', title: 'Result', priority: 1, lines: resultLines },
   ];
+  if (failureSourceLines.length) {
+    sections.splice(1, 0, { key: 'failure_source', title: 'Failure source', priority: 0, lines: failureSourceLines });
+  }
   if (verifyLines.length) {
     sections.push({
       key: 'verdict',
@@ -2153,7 +2190,7 @@ export async function changePipeline(ctx, input = {}) {
   }
   sections.push({ key: 'touched', title: 'Touched', priority: 4, lines: touchedLines });
 
-  const { text } = fitSections(sections, { maxChars: resolveBudget(input.depth, ctx.profile?.budget) });
+  const { text } = fitSections(sections, { maxChars: failureSourceLines.length ? Math.max(4000, resolveBudget(input.depth, ctx.profile?.budget)) : resolveBudget(input.depth, ctx.profile?.budget) });
   const reverted = !verifyPassed && input.autoRevert === true;
   const outcome = { schemaVersion: 1, operation: 'change',
     status: reverted ? 'reverted' : (verifyCommands.length && verifyPassed ? 'verified' : 'applied'),
@@ -2648,8 +2685,13 @@ export async function verifyPipeline(ctx, input = {}) {
   const mode = input.mode === 'summary' ? 'once' : (input.mode || 'once');
   const isFull = input.full === true || mode === 'full' || input.budget === 'full';
 
-  if (mode === 'logs' && input.id && /^[A-Za-z0-9._-]+$/.test(input.id)) {
-    const logPath = path.join(ctx.projectRoot, '.contextos', 'logs', `${input.id}.log`);
+  const receipts = [...(store.current?.receipts || [])].reverse();
+  const logsId = input.id || (mode === 'logs' ? (receipts.find((receipt) => receipt.exitCode !== 0 && receipt.status !== 'superseded') || receipts[0])?.id : null);
+  if (mode === 'logs' && !logsId) {
+    return '# ContextOS verify (logs)\n\nNo verification receipt is available. Pass the receipt id returned by the failed check; do not rerun a command merely to recover its log.';
+  }
+  if (mode === 'logs' && logsId && /^[A-Za-z0-9._-]+$/.test(logsId)) {
+    const logPath = path.join(ctx.projectRoot, '.contextos', 'logs', `${logsId}.log`);
     if (fs.existsSync(logPath)) {
       const lines = fs.readFileSync(logPath, 'utf8').split(/\r?\n/);
       const filtered = input.grep
@@ -2657,8 +2699,10 @@ export async function verifyPipeline(ctx, input = {}) {
         : lines;
       const limit = Math.max(1, Number(input.lines) || 50);
       const selected = filtered.slice(-limit);
-      tracer.step('receipt_logs', { id: input.id, lines: selected.length });
-      return `# ContextOS verify (logs)\n\n- Receipt: \`${input.id}\`\n- Log: \`.contextos/logs/${input.id}.log\`\n- Lines: ${selected.length}/${filtered.length}\n\n\`\`\`text\n${selected.join('\n')}\n\`\`\``;
+      tracer.step('receipt_logs', { id: logsId, lines: selected.length });
+      const frame = failureSourceFrame(ctx, selected.join('\n'));
+      const source = frame ? `\n\n## Failure source\n${frame}` : '';
+      return `# ContextOS verify (logs)\n\n- Receipt: \`${logsId}\`\n- Log: \`.contextos/logs/${logsId}.log\`\n- Lines: ${selected.length}/${filtered.length}${source}\n\n\`\`\`text\n${selected.join('\n')}\n\`\`\``;
     }
   }
 
@@ -2666,7 +2710,7 @@ export async function verifyPipeline(ctx, input = {}) {
     const res = await caps.process({
       action: mode === 'serve' ? 'start' : mode,
       command: input.command || (input.commands || [])[0],
-      id: input.id,
+      id: logsId || input.id,
       lines: input.lines ?? 50,
       grep: input.grep,
       maxLogBytes: input.maxLogBytes,
