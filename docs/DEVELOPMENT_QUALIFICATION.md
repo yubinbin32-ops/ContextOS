@@ -1,6 +1,6 @@
 # Real development qualification — 2.7.2 candidate
 
-**Performance qualification is pending.** Functional verification passes 432 tests. Candidate9 completed all three matched tasks but failed the declared savings and regression gates: total tokens increased by 3.14% on the small repair and 37.37% on the long session. [Its complete failed matrix](benchmarks/2026-10-01-candidate9.json) remains public. Candidate10 fixes source-marker false partials, direct failure-log recovery and compact edit guidance; all six evaluation arms run again on the frozen candidate. Functional correctness and token/context qualification are reported separately.
+**Performance qualification is pending.** Candidate10 completed all three matched tasks but failed the declared gates: the cross-file repair used 73.19% fewer total tokens, the small repair 1.31% fewer, and the long session 10.90% more. Median total-token reduction was 1.31%; peak-input reduction was 3.57%. [The complete candidate10 comparison](benchmarks/2026-10-01-candidate10-comparison.json) remains public. The new lean/API+CLI refactor is a different candidate and has not inherited those results. Functional checks and token/context qualification are reported separately.
 
 ## What is being tested
 

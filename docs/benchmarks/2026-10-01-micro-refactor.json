@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "purpose": "engineering diagnostics, not matched complete-task savings",
+  "tokenDivisor": 7,
+  "assumption": "User relative-price assumption, not invoice or universal price",
+  "tasks": [
+    {
+      "id": "initial-probe",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 27210,
+      "mainEquivalentTokens": 3887.1428571428573,
+      "taskAccepted": false
+    },
+    {
+      "id": "hub-1",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 56772,
+      "mainEquivalentTokens": 8110.285714285715,
+      "taskAccepted": false
+    },
+    {
+      "id": "hub-2",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 113413,
+      "mainEquivalentTokens": 16201.857142857143,
+      "taskAccepted": false
+    },
+    {
+      "id": "hub-3",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 133925,
+      "mainEquivalentTokens": 19132.14285714286,
+      "taskAccepted": false
+    },
+    {
+      "id": "hub-4",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 5454116,
+      "mainEquivalentTokens": 779159.4285714285,
+      "taskAccepted": false
+    },
+    {
+      "id": "bounded-review-timeout",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 102843,
+      "mainEquivalentTokens": 14691.857142857143,
+      "taskAccepted": false
+    },
+    {
+      "id": "bounded-analysis-pass",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 34779,
+      "mainEquivalentTokens": 4968.428571428572,
+      "taskAccepted": true
+    },
+    {
+      "id": "implementation-denied-1",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 174308,
+      "mainEquivalentTokens": 24901.14285714286,
+      "taskAccepted": false
+    },
+    {
+      "id": "implementation-denied-2",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 71706,
+      "mainEquivalentTokens": 10243.714285714286,
+      "taskAccepted": false
+    }
+  ],
+  "knownMicroTokens": 6169072,
+  "knownMainEquivalentTokens": 881295.9999999999,
+  "totalsComplete": false,
+  "missingUsage": [
+    "bounded review interrupted when desktop settings deleted the worktree"
+  ],
+  "limitations": [
+    "Host engineering-conversation tokens are not included",
+    "CLI request count and request-input peak remain unavailable",
+    "Permission-denied and timed-out usage is retained",
+    "One real analysis task passed; real implementation acceptance has not passed"
+  ]
+}

@@ -11,3 +11,11 @@ The real-task evaluation uses `gpt-6-luna` / `max`, serial fresh workspaces, pri
 Requires Node.js 22+. Start a new chat after updating an installed plugin. Complete standalone archives must include the server bundle, parser runtime and grammars; final release assets and checksums will be verified before publication.
 
 If these receipts help your development workflow, [star ContextOS](https://github.com/yubinbin32-ops/ContextOS) and contribute a reproducible task benchmark. Measurements where it costs more are welcome.
+
+## Unreleased lean refactor
+
+Hub and cloud deployment are removed; local metadata migration preserves local data and configuration backups. The main skill permits focused OS or native work without mandatory graph governance.
+
+Generic CLI Micro adapters join the existing Key/API transport. Keep both, switch CLI-first/API-first priority, inject bounded task manifests, and independently verify implementation work in a separate workspace. Usage retains provider/cache/reasoning semantics and supports a configurable personal relative-cost divisor. Unknown billing and failed tasks remain visible.
+
+The live AGY Flash/high analysis task passed. AGY implementation attempts were denied before editing and remain unqualified; other CLIs require their own adapter validation. Windows frontend builds pass; the new Windows native settings bridge still needs Windows validation. Complete-task performance qualification remains pending. [Accounting and limitations](https://github.com/yubinbin32-ops/ContextOS/blob/codex/lean-micro-refactor/docs/MICRO_COST_ACCOUNTING.md).

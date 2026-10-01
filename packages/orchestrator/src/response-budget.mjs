@@ -295,7 +295,7 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     estimatedCompletionTokens: result.estimatedUsage ? Number(estimatedUsage.completion_tokens) || 0 : null,
     estimatedTotalTokens: result.estimatedUsage ? Number(estimatedUsage.total_tokens) || 0 : null,
     hostSessionId: hostSessionId || result.hostSessionId || null,
-    estimatedCostUsd: result.provider === 'cli' && cost.estimatedUsd == null ? null : (Number(cost.estimatedUsd) || 0),
+    estimatedCostUsd: cost.estimatedUsd == null || cost.pricingConfigured === false ? null : (Number(cost.estimatedUsd) || 0),
     ...(result.provider === 'cli' ? { provider: 'cli', usageRaw: result.usageRaw || null, cachedInputTokens: usage.cached_input_tokens ?? null, uncachedInputTokens: usage.uncached_input_tokens ?? null } : {}),
     maxProviderTokens: Number(budget.maxProviderTokens) || null,
     maxCostUsd: Number(budget.maxCostUsd) || null,
@@ -404,7 +404,7 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     totals.deduplicatedToolCallCount += Number(entry.deduplicatedToolCallCount) || 0;
     if (entry.provider === 'cli' && entry.providerRequests == null) totals.providerRequestsUnknownCalls += 1;
     else totals.providerRequests += Number(entry.providerRequests) || 0;
-    if (entry.provider === 'cli' && entry.estimatedCostUsd == null) totals.costUnknownCalls += 1;
+    if (entry.estimatedCostUsd == null) totals.costUnknownCalls += 1;
     totals.toolRounds += Number(entry.toolRounds) || 0;
     if (entry.shortCircuited) totals.shortCircuitedCalls += 1;
     if (hasProviderUsage) {
@@ -435,6 +435,8 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
   }
   return {
     ...totals,
+    totalTokensComplete: totals.usageUnavailableCalls === 0 && totals.estimatedUsageEntries === 0 && totals.mixedUsageEntries === 0,
+    mainEquivalentTokensComplete: totals.costEstimateUnavailableCalls === 0 && totals.usageUnavailableCalls === 0 && totals.estimatedUsageEntries === 0 && totals.mixedUsageEntries === 0,
     ...(totals.costUnknownCalls ? { estimatedCostUsd: null } : {}),
     deliveryOutcomes,
     byPreset: [...byPreset.values()].sort((a, b) => b.totalTokens - a.totalTokens),

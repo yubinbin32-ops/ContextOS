@@ -1,0 +1,33 @@
+{
+  "candidate": "lean-refactor11",
+  "bundleSha256": "817efca20931e0f2c0d01b09d28f46b46190e4d4e35ba6fa486ce2a17675ab91",
+  "skillSha256": "8c39ab512104435439e33b26531602a28a9ceb2879e692fc412b5266bea60750",
+  "functionalTests": 454,
+  "model": "gpt-6-luna",
+  "effort": "max",
+  "microEnabled": false,
+  "hooksEnabled": false,
+  "limits": {
+    "runs": 6,
+    "inputTokens": 2800000,
+    "uncachedInputTokens": 650000,
+    "outputTokens": 150000,
+    "seconds": 10000
+  },
+  "gates": {
+    "minimumPairs": 3,
+    "totalMedianReduction": 0.2,
+    "peakMedianReduction": 0.1,
+    "uncachedInputMedianMustNotIncrease": true,
+    "maximumPairRegression": 0.1,
+    "requireIndependentQuality": true,
+    "requireRealCompactionAndResume": true
+  },
+  "tasks": [
+    "installer-json-resume",
+    "ownership-refresh",
+    "alignment-types"
+  ],
+  "baselineRef": "v2.7.1",
+  "privateFixturePublished": false
+}

@@ -177,7 +177,9 @@ test('Micro provider usage is recorded separately from host usage', () => {
     assert.equal(summary.estimatedUsageCalls, 1);
     assert.equal(summary.estimatedTotalTokens, 3);
     assert.equal(summary.usageUnavailableCalls, 0);
-    assert.equal(summary.estimatedCostUsd, 0.001);
+    assert.equal(summary.estimatedCostUsd, null);
+    assert.equal(summary.costUnknownCalls, 1);
+    assert.equal(summary.totalTokensComplete, false);
     assert.equal(summary.byPreset[0].preset, 'triage');
     assert.equal(summary.byModel[0].model, 'deepseek-v4.1-flash');
   } finally {
@@ -266,4 +268,15 @@ test('Micro usage records requested delivery, effective outcome, and preload met
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('missing task usage marks totals incomplete and unknown pricing stays unknown', () => {
+ const root=makeTempProject();try {
+  recordMicroUsage(root,{ok:false,provider:'cli',usageSource:'unavailable',cost:{estimatedUsd:null}},'missing');
+  recordMicroUsage(root,{ok:true,provider:'api',usageSource:'provider',providerUsage:{prompt_tokens:7,completion_tokens:0,total_tokens:7},cost:{estimatedUsd:0,pricingConfigured:false},costEstimate:{mainEquivalentTokens:1}},'known');
+  const summary=summarizeMicroUsage(root);
+  assert.equal(summary.totalTokens,7);assert.equal(summary.mainEquivalentTokens,1);
+  assert.equal(summary.totalTokensComplete,false);assert.equal(summary.mainEquivalentTokensComplete,false);
+  assert.equal(summary.estimatedCostUsd,null);assert.equal(summary.costUnknownCalls,2);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
 });

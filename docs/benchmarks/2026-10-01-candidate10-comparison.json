@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "qualified": false,
+  "thresholds": {
+    "minimumPairs": 3,
+    "totalSavings": 0.2,
+    "peakSavings": 0.1,
+    "maximumPairRegression": 0.1
+  },
+  "gates": {
+    "sameCandidate": true,
+    "completePairs": true,
+    "matchedGroups": true,
+    "totalTokens": false,
+    "peakContext": false,
+    "uncachedInput": true,
+    "regressionGuard": false,
+    "taskDiversity": true,
+    "repoDiversity": true,
+    "longSession": true
+  },
+  "pairs": [
+    {
+      "pairId": "baa645b3f002",
+      "task": "alignment-types",
+      "scenario": {
+        "repo": "private-python-project",
+        "kind": "small-repair",
+        "contextMode": "cold-local",
+        "compactTokenLimit": null
+      },
+      "candidateSnapshot": {
+        "bundleSha256": "37596a491c59efeefcfc482fbf17f8b9521d333a5404cd244f0dd59db50f57dc",
+        "skillSha256": "c637b5ba97a61d73e0e3e9ce1f2fed087e3535f689d064ca70b90b2c70cebd9c",
+        "version": "2.7.2"
+      },
+      "native": {
+        "requestCount": 4,
+        "inputTokens": 52901,
+        "cachedInputTokens": 41984,
+        "outputTokens": 2882,
+        "reasoningOutputTokens": 1817,
+        "totalTokens": 55783,
+        "peakRequestInputTokens": 14633,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 10917,
+        "peakInputWindowPercent": 5.66
+      },
+      "contextos": {
+        "requestCount": 4,
+        "inputTokens": 52640,
+        "cachedInputTokens": 45056,
+        "outputTokens": 2414,
+        "reasoningOutputTokens": 1424,
+        "totalTokens": 55054,
+        "peakRequestInputTokens": 14396,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 7584,
+        "peakInputWindowPercent": 5.57
+      },
+      "savings": {
+        "inputTokens": 0.004933744163626352,
+        "totalTokens": 0.013068497570944526,
+        "uncachedInputTokens": 0.3053036548502336,
+        "peakRequestInputTokens": 0.0161962687077154,
+        "elapsedSeconds": 0.3527361778280117
+      }
+    },
+    {
+      "pairId": "b3849676ea33",
+      "task": "ownership-refresh",
+      "scenario": {
+        "repo": "ContextOS",
+        "kind": "cross-file",
+        "contextMode": "curated-local",
+        "compactTokenLimit": null
+      },
+      "candidateSnapshot": {
+        "bundleSha256": "37596a491c59efeefcfc482fbf17f8b9521d333a5404cd244f0dd59db50f57dc",
+        "skillSha256": "c637b5ba97a61d73e0e3e9ce1f2fed087e3535f689d064ca70b90b2c70cebd9c",
+        "version": "2.7.2"
+      },
+      "native": {
+        "requestCount": 10,
+        "inputTokens": 305261,
+        "cachedInputTokens": 230912,
+        "outputTokens": 10474,
+        "reasoningOutputTokens": 6321,
+        "totalTokens": 315735,
+        "peakRequestInputTokens": 45934,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 74349,
+        "peakInputWindowPercent": 17.78
+      },
+      "contextos": {
+        "requestCount": 4,
+        "inputTokens": 72155,
+        "cachedInputTokens": 47104,
+        "outputTokens": 12480,
+        "reasoningOutputTokens": 10886,
+        "totalTokens": 84635,
+        "peakRequestInputTokens": 28447,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 25051,
+        "peakInputWindowPercent": 11.01
+      },
+      "savings": {
+        "inputTokens": 0.763628501511821,
+        "totalTokens": 0.7319429268215434,
+        "uncachedInputTokens": 0.6630620452191691,
+        "peakRequestInputTokens": 0.3806983933469761,
+        "elapsedSeconds": -0.3823176533862893
+      }
+    },
+    {
+      "pairId": "4433f9d6abb2",
+      "task": "installer-json-resume",
+      "scenario": {
+        "repo": "ContextOS",
+        "kind": "long-session",
+        "contextMode": "curated-local",
+        "compactTokenLimit": 32000
+      },
+      "candidateSnapshot": {
+        "bundleSha256": "37596a491c59efeefcfc482fbf17f8b9521d333a5404cd244f0dd59db50f57dc",
+        "skillSha256": "c637b5ba97a61d73e0e3e9ce1f2fed087e3535f689d064ca70b90b2c70cebd9c",
+        "version": "2.7.2"
+      },
+      "native": {
+        "requestCount": 26,
+        "inputTokens": 594378,
+        "cachedInputTokens": 462336,
+        "outputTokens": 27870,
+        "reasoningOutputTokens": 17900,
+        "totalTokens": 622248,
+        "peakRequestInputTokens": 31812,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 132042,
+        "peakInputWindowPercent": 12.31
+      },
+      "contextos": {
+        "requestCount": 33,
+        "inputTokens": 647737,
+        "cachedInputTokens": 470784,
+        "outputTokens": 42346,
+        "reasoningOutputTokens": 33397,
+        "totalTokens": 690083,
+        "peakRequestInputTokens": 30676,
+        "modelContextWindow": 258400,
+        "uncachedInputTokens": 176953,
+        "peakInputWindowPercent": 11.87
+      },
+      "savings": {
+        "inputTokens": -0.08977283816022807,
+        "totalTokens": -0.10901601933634186,
+        "uncachedInputTokens": -0.34012662637645596,
+        "peakRequestInputTokens": 0.035709795045894666,
+        "elapsedSeconds": -0.17253568542957165
+      }
+    }
+  ],
+  "excluded": [],
+  "medianSavings": {
+    "inputTokens": 0.004933744163626352,
+    "totalTokens": 0.013068497570944526,
+    "uncachedInputTokens": 0.3053036548502336,
+    "peakRequestInputTokens": 0.035709795045894666,
+    "elapsedSeconds": -0.17253568542957165
+  },
+  "limitations": [
+    "Provider usage counts are not currency.",
+    "Only completed matched pairs contribute to savings.",
+    "Small samples do not establish universal savings.",
+    "Long-session qualification requires observed compaction and independent resume validation."
+  ]
+}

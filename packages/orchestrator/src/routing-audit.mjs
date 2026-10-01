@@ -96,7 +96,9 @@ function microSnapshot(summary, sessionId) {
     providerUsageCalls,
     estimatedUsageCalls,
     deduplicatedToolCallCount: Number(summary.deduplicatedToolCallCount) || 0,
-    providerRequests: Number(summary.providerRequests) || 0,
+    providerRequests: summary.providerRequestsUnknownCalls ? null : (Number(summary.providerRequests) || 0),
+    providerRequestsUnknownCalls: Number(summary.providerRequestsUnknownCalls) || 0,
+    mainEquivalentTokens: calls === 0 ? 0 : (summary.mainEquivalentTokensComplete ? summary.mainEquivalentTokens : null),
     pipelineRuns: Number(summary.pipelineRuns) || 0,
     preloadCacheHits: Number(summary.preloadCacheHits) || 0,
     toolRounds: Number(summary.toolRounds) || 0,
@@ -159,7 +161,8 @@ function deltaSnapshot(right, left) {
       providerActualTokens: deltaNumber(right.micro.providerActualTokens, left.micro.providerActualTokens),
       estimatedProviderTokens: deltaNumber(right.micro.estimatedProviderTokens, left.micro.estimatedProviderTokens),
       deduplicatedToolCallCount: right.micro.deduplicatedToolCallCount - left.micro.deduplicatedToolCallCount,
-      providerRequests: right.micro.providerRequests - left.micro.providerRequests,
+      providerRequests: deltaNumber(right.micro.providerRequests, left.micro.providerRequests),
+      mainEquivalentTokens: deltaNumber(right.micro.mainEquivalentTokens, left.micro.mainEquivalentTokens),
       pipelineRuns: right.micro.pipelineRuns - left.micro.pipelineRuns,
       preloadCacheHits: right.micro.preloadCacheHits - left.micro.preloadCacheHits,
       toolRounds: right.micro.toolRounds - left.micro.toolRounds,
@@ -232,11 +235,21 @@ export function auditRouting(projectRoot, { sessionId, baselineSessionId = null,
   const bounded = boundedLimit(limit);
   const right = snapshot(projectRoot, rightId, bounded);
   const baseline = baselineId ? snapshot(projectRoot, baselineId, bounded) : null;
+  const equivalent = totalTokens(right, 'actualTokens', 'mainEquivalentTokens');
+  const baselineEquivalent = baseline ? totalTokens(baseline, 'actualTokens', 'mainEquivalentTokens') : null;
+  const savedEquivalent = baselineEquivalent === null || equivalent === null ? null : baselineEquivalent - equivalent;
   const result = {
     sessionId: rightId,
     host: right.host,
     internal: right.internal,
     micro: right.micro,
+    personalCostEstimate: {
+      mainEquivalentTokens: equivalent,
+      baselineMainEquivalentTokens: baselineEquivalent,
+      savedMainEquivalentTokens: savedEquivalent,
+      savedPercent: percent(savedEquivalent, baselineEquivalent),
+      assumption: 'per-call configured relative token price; recorded session usage only, not an actual bill',
+    },
     warnings: routingWarnings(right),
     savings: baseline
       ? savings(baseline, right)

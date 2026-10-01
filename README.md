@@ -117,7 +117,7 @@ contextos({
 })
 ```
 
-Read the owning function and focused tests together with `work`, then edit and verify in one `change`. Search one exact identifier when the location is unknown. Successful receipts keep logs off the conversation; blocked edits name the fields to correct. For a one-function repair whose complete source and test files together total at most 120 lines, the skill uses ordinary tools to avoid setup overhead.
+Read the owning function and focused tests together with `work`, then edit and verify in one `change`. Search one exact identifier when the location is unknown. Successful receipts keep logs off the conversation; blocked edits name the fields to correct. Use native tools when the relevant code and checks are already available; no exploration, graph binding or Micro step is mandatory.
 
 ## What’s new in 2.7.2?
 
@@ -136,6 +136,14 @@ Read the owning function and focused tests together with `work`, then edit and v
 Project state stays local. Cloud Hub has been removed and no Hooks are installed. Optional Micro supports an existing API/Key or an AI-configured CLI adapter; see [setup](AI_SETUP.md). Workers receive bounded task context and the host verifies their results.
 
 Desktop downloads and their supported platforms are listed per release. The 2.7.1 measurements cover the MCP runtime on macOS arm64; they do not establish Windows desktop performance or Micro savings.
+
+## Lean refactor in development
+
+This branch removes Hub, shortens the default skill and adds generic CLI Micro adapters. Keep API and CLI configuration together; choose `micro.priority: "cli-first"` or `"api-first"`. A started task never silently retries through the other provider. AI checks the selected CLI and configures installation/login guidance, model, effort and its actual headless protocol.
+
+Workers receive an objective, workspace, allowed paths, acceptance checks, current state and necessary evidence. They can fetch missing context with OS or native tools. Implementation runs in a separate workspace; the host verifies and integrates it. Existing Key/API configurations remain supported. See [adapter setup](plugins/contextos/skills/contextos-ops/references/micro-setup.md).
+
+Raw tokens, peak context and personal cost estimates are separate metrics. `micro.cost.tokenDivisor` expresses a user assumption; a personal ÷7 estimate is not a universal savings claim. AGY has passed a real bounded analysis task; other CLI mappings need their own validation. Complete-task performance remains unqualified, and the new Windows native bridge has not been validated on Windows.
 
 ## Reproduce and contribute
 

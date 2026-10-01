@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
+import http from 'node:http';
 import path from 'node:path';
 import { runMicroTask, runMicroTasksParallel } from '../src/micro-client.mjs';
 import { selectMicroProvider } from '../src/micro-provider.mjs';
@@ -143,3 +144,38 @@ test('lost worker log directory returns failure and stops the child instead of c
   assert.equal(result.errorCode,'CLI_SESSION_UNAVAILABLE');assert.equal(result.providerUsage.total_tokens,110);
  }finally{f.cleanup();}
  });
+
+test('stream decoding preserves Unicode split across byte chunks', async () => {
+ const f=fixture();try {
+  const config=f.config('normal');
+  fs.writeFileSync(config.cli.args[0], `process.stdin.once('data',()=>{
+   console.log(JSON.stringify({event:'init',init:{model:process.argv[2]}}));
+   const wire=Buffer.from(JSON.stringify({event:'result',result:{status:'SUCCESS',response:'完成🙂'}})+'\\n');
+   const split=wire.indexOf(Buffer.from('完成'))+1;
+   process.stdout.write(wire.subarray(0,split));
+   setTimeout(()=>{process.stdout.write(wire.subarray(split));process.stdin.pause();process.exit(0);},25);
+  });`);
+  const result=await runMicroTask(config,{projectRoot:f.root,task:'bounded task'});
+  assert.equal(result.ok,true);assert.equal(result.content,'完成🙂');
+ }finally{f.cleanup();}
+});
+
+test('switching priority executes only the selected transport with its own model and weighted usage', async () => {
+ const f=fixture(), requests=[];
+ const server=http.createServer((req,res)=>{let body='';req.on('data',c=>body+=c);req.on('end',()=>{
+  requests.push(JSON.parse(body));res.setHeader('content-type','application/json');
+  res.end(JSON.stringify({choices:[{message:{content:'API completed'}}],usage:{prompt_tokens:14,completion_tokens:7}}));
+ });});
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try {
+  const config={...f.config('normal'),priority:'api-first',cost:{tokenDivisor:7},api:{url:'http://127.0.0.1:'+server.address().port,model:'api-model'}};
+  config.cli.model='fixture-model';
+  const api=await runMicroTask(config,{projectRoot:f.root,task:'bounded task'});
+  assert.equal(api.ok,true);assert.equal(api.provider,'api');assert.equal(api.costEstimate.mainEquivalentTokens,3);
+  assert.equal(requests[0].model,'api-model');assert.equal(fs.existsSync(path.join(f.root,'received.json')),false);
+  config.priority='cli-first';
+  const cli=await runMicroTask(config,{projectRoot:f.root,task:'bounded task'});
+  assert.equal(cli.ok,true);assert.equal(cli.actualModel,'fixture-model');assert.equal(cli.costEstimate.mainEquivalentTokens,110/7);
+  assert.equal(requests.length,1);assert.equal(config.api.model,'api-model');
+ }finally{await new Promise(resolve=>server.close(resolve));f.cleanup();}
+});

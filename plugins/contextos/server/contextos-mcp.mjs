@@ -7419,6 +7419,8 @@ async function runCliMicro(config2 = {}, options = {}) {
       if (options.signal?.aborted) abort2();
       child.stdin.on("error", () => {
       });
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
       child.on("error", (error2) => {
         clearTimeout(timer);
         options.signal?.removeEventListener("abort", abort2);
@@ -7430,7 +7432,7 @@ async function runCliMicro(config2 = {}, options = {}) {
         resolve({ code: code2, signal });
       });
       child.stdout.on("data", (chunk) => {
-        rawBytes += chunk.length;
+        rawBytes += Buffer.byteLength(chunk);
         if (rawBytes > maxBytes) {
           stop2("output-limit");
           return;
@@ -7458,7 +7460,7 @@ async function runCliMicro(config2 = {}, options = {}) {
         }
       });
       child.stderr.on("data", (chunk) => {
-        rawBytes += chunk.length;
+        rawBytes += Buffer.byteLength(chunk);
         if (rawBytes > maxBytes) {
           stop2("output-limit");
           return;
@@ -7490,10 +7492,6 @@ async function runCliMicro(config2 = {}, options = {}) {
       usage = cumulative && priorSession.usage ? Object.fromEntries(Object.entries(cumulative).map(([key, value]) => [key, value - priorSession.usage[key]])) : null;
       if (usage && Object.values(usage).some((value) => !Number.isFinite(value) || value < 0)) usage = null;
     }
-    if (cliSessionId) {
-      fs2.mkdirSync(sessionDir, { recursive: true, mode: 448 });
-      fs2.writeFileSync(sessionFile(cliSessionId), JSON.stringify({ workspace, model, command: executable, usage: cumulative, jobId }), { mode: 384 });
-    }
     const extra = {
       jobId,
       logPath: path.relative(projectRoot, rawFile),
@@ -7517,12 +7515,27 @@ async function runCliMicro(config2 = {}, options = {}) {
     if (cli.output.format !== "text" && (!terminal || records.length !== 1)) return fail("CLI_TERMINAL_MISSING", "Expected one terminal task result; no automatic retry was made.", extra);
     if (cli.output.modelPath && !actualModel) return fail("CLI_MODEL_UNVERIFIED", "The configured model mapping produced no actual model.", extra);
     if (actualModel && actualModel !== model) return fail("CLI_MODEL_MISMATCH", `Requested ${model}, received ${actualModel}.`, extra);
+    if (cliSessionId) {
+      const file = sessionFile(cliSessionId), temporary = `${file}.${crypto.randomUUID()}.tmp`;
+      try {
+        fs2.mkdirSync(sessionDir, { recursive: true, mode: 448 });
+        fs2.writeFileSync(temporary, JSON.stringify({ workspace, model, command: executable, usage: cumulative, jobId }), { mode: 384 });
+        fs2.renameSync(temporary, file);
+      } catch (error2) {
+        try {
+          fs2.unlinkSync(temporary);
+        } catch {
+        }
+        return fail("CLI_SESSION_UNAVAILABLE", error2.message, extra);
+      }
+    }
     const denied = get(terminal, cli.output.deniedPath);
     if (Array.isArray(denied) && denied.length || denied === true) return fail("CLI_PERMISSION_DENIED", "The CLI denied a required action; its success label does not establish completion.", extra);
     const status = get(terminal, cli.output.statusPath);
     if (cli.output.statusPath && !(cli.output.successValues || ["SUCCESS"]).includes(status)) return fail("CLI_TASK_FAILED", `CLI terminal status: ${status}`, extra);
     if (config2.maxProviderTokens && usage?.total_tokens > config2.maxProviderTokens) return fail("CLI_BUDGET_EXCEEDED", "Reported total token budget exceeded; this CLI reports terminal usage, so the check is after execution.", extra);
     const structured = get(terminal, cli.output.structuredPath) ?? null;
+    if (get(terminal, cli.output.blockedPath) === true) return fail("CLI_TASK_BLOCKED", "The worker reported an incomplete assignment.", { ...extra, structured });
     const content = cli.output.format === "text" ? stdout.trim() : structured ? JSON.stringify(structured) : String(get(terminal, cli.output.contentPath) || "").trim();
     if (!content) return fail("CLI_EMPTY_RESULT", "The CLI returned no usable final result.", extra);
     return {
@@ -7554,7 +7567,10 @@ var init_micro_cli = __esm({
   "packages/orchestrator/src/micro-cli.mjs"() {
     active = /* @__PURE__ */ new Set();
     get = (value, dotted) => typeof dotted === "string" ? dotted.split(".").filter(Boolean).reduce((v, k) => v?.[k], value) : void 0;
-    number3 = (value) => Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+    number3 = (value) => {
+      if (typeof value !== "number" && !(typeof value === "string" && value.trim())) return null;
+      return Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+    };
     limit = (value, fallback) => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
   }
 });
@@ -9244,7 +9260,7 @@ function recordMicroUsage(projectRoot, result, receiptId, {
     estimatedCompletionTokens: result.estimatedUsage ? Number(estimatedUsage.completion_tokens) || 0 : null,
     estimatedTotalTokens: result.estimatedUsage ? Number(estimatedUsage.total_tokens) || 0 : null,
     hostSessionId: hostSessionId || result.hostSessionId || null,
-    estimatedCostUsd: result.provider === "cli" && cost.estimatedUsd == null ? null : Number(cost.estimatedUsd) || 0,
+    estimatedCostUsd: cost.estimatedUsd == null || cost.pricingConfigured === false ? null : Number(cost.estimatedUsd) || 0,
     ...result.provider === "cli" ? { provider: "cli", usageRaw: result.usageRaw || null, cachedInputTokens: usage.cached_input_tokens ?? null, uncachedInputTokens: usage.uncached_input_tokens ?? null } : {},
     maxProviderTokens: Number(budget.maxProviderTokens) || null,
     maxCostUsd: Number(budget.maxCostUsd) || null,
@@ -9350,7 +9366,7 @@ function summarizeMicroUsage(projectRoot, { limit: limit2 = 500, hostSessionId =
     totals.deduplicatedToolCallCount += Number(entry.deduplicatedToolCallCount) || 0;
     if (entry.provider === "cli" && entry.providerRequests == null) totals.providerRequestsUnknownCalls += 1;
     else totals.providerRequests += Number(entry.providerRequests) || 0;
-    if (entry.provider === "cli" && entry.estimatedCostUsd == null) totals.costUnknownCalls += 1;
+    if (entry.estimatedCostUsd == null) totals.costUnknownCalls += 1;
     totals.toolRounds += Number(entry.toolRounds) || 0;
     if (entry.shortCircuited) totals.shortCircuitedCalls += 1;
     if (hasProviderUsage) {
@@ -9381,6 +9397,8 @@ function summarizeMicroUsage(projectRoot, { limit: limit2 = 500, hostSessionId =
   }
   return {
     ...totals,
+    totalTokensComplete: totals.usageUnavailableCalls === 0 && totals.estimatedUsageEntries === 0 && totals.mixedUsageEntries === 0,
+    mainEquivalentTokensComplete: totals.costEstimateUnavailableCalls === 0 && totals.usageUnavailableCalls === 0 && totals.estimatedUsageEntries === 0 && totals.mixedUsageEntries === 0,
     ...totals.costUnknownCalls ? { estimatedCostUsd: null } : {},
     deliveryOutcomes: deliveryOutcomes2,
     byPreset: [...byPreset.values()].sort((a, b) => b.totalTokens - a.totalTokens),
@@ -54402,7 +54420,9 @@ function microSnapshot(summary, sessionId) {
     providerUsageCalls,
     estimatedUsageCalls,
     deduplicatedToolCallCount: Number(summary.deduplicatedToolCallCount) || 0,
-    providerRequests: Number(summary.providerRequests) || 0,
+    providerRequests: summary.providerRequestsUnknownCalls ? null : Number(summary.providerRequests) || 0,
+    providerRequestsUnknownCalls: Number(summary.providerRequestsUnknownCalls) || 0,
+    mainEquivalentTokens: calls === 0 ? 0 : summary.mainEquivalentTokensComplete ? summary.mainEquivalentTokens : null,
     pipelineRuns: Number(summary.pipelineRuns) || 0,
     preloadCacheHits: Number(summary.preloadCacheHits) || 0,
     toolRounds: Number(summary.toolRounds) || 0,
@@ -54461,7 +54481,8 @@ function deltaSnapshot(right, left) {
       providerActualTokens: deltaNumber(right.micro.providerActualTokens, left.micro.providerActualTokens),
       estimatedProviderTokens: deltaNumber(right.micro.estimatedProviderTokens, left.micro.estimatedProviderTokens),
       deduplicatedToolCallCount: right.micro.deduplicatedToolCallCount - left.micro.deduplicatedToolCallCount,
-      providerRequests: right.micro.providerRequests - left.micro.providerRequests,
+      providerRequests: deltaNumber(right.micro.providerRequests, left.micro.providerRequests),
+      mainEquivalentTokens: deltaNumber(right.micro.mainEquivalentTokens, left.micro.mainEquivalentTokens),
       pipelineRuns: right.micro.pipelineRuns - left.micro.pipelineRuns,
       preloadCacheHits: right.micro.preloadCacheHits - left.micro.preloadCacheHits,
       toolRounds: right.micro.toolRounds - left.micro.toolRounds,
@@ -54513,11 +54534,21 @@ function auditRouting(projectRoot, { sessionId, baselineSessionId = null, limit:
   const bounded = boundedLimit(limit2);
   const right = snapshot(projectRoot, rightId, bounded);
   const baseline = baselineId ? snapshot(projectRoot, baselineId, bounded) : null;
+  const equivalent = totalTokens(right, "actualTokens", "mainEquivalentTokens");
+  const baselineEquivalent = baseline ? totalTokens(baseline, "actualTokens", "mainEquivalentTokens") : null;
+  const savedEquivalent = baselineEquivalent === null || equivalent === null ? null : baselineEquivalent - equivalent;
   const result = {
     sessionId: rightId,
     host: right.host,
     internal: right.internal,
     micro: right.micro,
+    personalCostEstimate: {
+      mainEquivalentTokens: equivalent,
+      baselineMainEquivalentTokens: baselineEquivalent,
+      savedMainEquivalentTokens: savedEquivalent,
+      savedPercent: percent(savedEquivalent, baselineEquivalent),
+      assumption: "per-call configured relative token price; recorded session usage only, not an actual bill"
+    },
     warnings: routingWarnings(right),
     savings: baseline ? savings(baseline, right) : { actualTokens: null, actualPercent: null, estimatedTokens: null, estimatedPercent: null }
   };
@@ -63131,6 +63162,12 @@ function deployCanonicalServer(sourceScriptPath = null) {
   }
   return canonicalScript;
 }
+function antigravitySkillPaths(home = HOME) {
+  const paths = [path33.join(home, ".gemini", "antigravity-cli", "skills", "contextos")];
+  const legacy = path33.join(home, ".gemini", "config", "skills", "contextos");
+  if (fs32.existsSync(legacy)) paths.push(legacy);
+  return paths;
+}
 function copyDirectoryRecursive(src, dest) {
   if (!fs32.existsSync(src)) return;
   fs32.mkdirSync(dest, { recursive: true });
@@ -63419,6 +63456,7 @@ function detectInstalledPlatforms() {
     isInstalled: antigravityAppExists || fs32.existsSync(path33.join(HOME, ".local", "bin", "agy")),
     configPath: path33.join(geminiDir, "mcp_config.json"),
     skillPath: path33.join(HOME, ".gemini", "antigravity-cli", "skills", "contextos"),
+    skillPaths: antigravitySkillPaths(),
     type: "json"
   });
   const opencodeDir = path33.join(HOME, ".config/opencode");
@@ -63492,11 +63530,12 @@ function syncAllPlatforms({
       modified.push(installCodexPlugin({ serverScript, nodePath, env, pluginSource }));
       continue;
     }
-    if (platform.skillPath && skillSource && fs32.existsSync(skillSource)) {
-      copyDirectoryRecursive(skillSource, platform.skillPath);
+    for (const skillPath of platform.skillPaths || (platform.skillPath ? [platform.skillPath] : [])) {
+      if (!skillSource || !fs32.existsSync(skillSource)) continue;
+      copyDirectoryRecursive(skillSource, skillPath);
       const parentSource = path33.dirname(skillSource);
       const opsSource = path33.join(parentSource, "contextos-ops");
-      const opsTarget = path33.join(path33.dirname(platform.skillPath), "contextos-ops");
+      const opsTarget = path33.join(path33.dirname(skillPath), "contextos-ops");
       if (fs32.existsSync(opsSource)) {
         copyDirectoryRecursive(opsSource, opsTarget);
       }

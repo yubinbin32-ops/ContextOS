@@ -6,7 +6,10 @@ import { spawn } from 'node:child_process';
 
 const active = new Set();
 const get = (value, dotted) => typeof dotted === 'string' ? dotted.split('.').filter(Boolean).reduce((v, k) => v?.[k], value) : undefined;
-const number = value => Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+const number = value => {
+  if (typeof value !== 'number' && !(typeof value === 'string' && value.trim())) return null;
+  return Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+};
 const limit = (value, fallback) => Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : fallback;
 
 export function resolveCliExecutable(command) {
@@ -169,10 +172,12 @@ export async function runCliMicro(config = {}, options = {}) {
       options.signal?.addEventListener('abort', abort, { once: true });
       if (options.signal?.aborted) abort();
       child.stdin.on('error', () => {});
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
       child.on('error', error => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); resolve({ error }); });
       child.on('close', (code, signal) => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); resolve({ code, signal }); });
       child.stdout.on('data', chunk => {
-        rawBytes += chunk.length;
+        rawBytes += Buffer.byteLength(chunk);
         if (rawBytes > maxBytes) { stop('output-limit'); return; }
         try { fs.appendFileSync(rawFile, chunk); } catch { stop('log-unavailable'); }
         stdout += chunk;
@@ -189,7 +194,7 @@ export async function runCliMicro(config = {}, options = {}) {
         }
       });
       child.stderr.on('data', chunk => {
-        rawBytes += chunk.length;
+        rawBytes += Buffer.byteLength(chunk);
         if (rawBytes > maxBytes) { stop('output-limit'); return; }
         stderr = (stderr + chunk).slice(-2000);
       });
