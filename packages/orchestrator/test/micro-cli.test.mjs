@@ -170,9 +170,11 @@ test('switching priority executes only the selected transport with its own model
  try {
   const config={...f.config('normal'),priority:'api-first',cost:{tokenDivisor:7},api:{url:'http://127.0.0.1:'+server.address().port,model:'api-model'}};
   config.cli.model='fixture-model';
-  const api=await runMicroTask(config,{projectRoot:f.root,task:'bounded task'});
+  const api=await runMicroTask(config,{projectRoot:f.root,task:'bounded task',context:{allowedPaths:['src/target.mjs'],acceptance:['explain the defect'],state:'known failure'}});
   assert.equal(api.ok,true);assert.equal(api.provider,'api');assert.equal(api.costEstimate.mainEquivalentTokens,3);
-  assert.equal(requests[0].model,'api-model');assert.equal(fs.existsSync(path.join(f.root,'received.json')),false);
+  assert.equal(requests[0].model,'api-model');assert.ok(requests[0].messages.some(m=>m.content.includes('Task manifest:')&&m.content.includes('src/target.mjs')&&m.content.includes('known failure')));
+  const rejected=await runMicroTask(config,{projectRoot:f.root,task:'implement',execution:'implement'});assert.equal(rejected.errorCode,'MICRO_API_IMPLEMENTATION_UNSUPPORTED');
+  const oversized=await runMicroTask(config,{projectRoot:f.root,task:'bounded task',context:{state:'x'.repeat(20000)}});assert.equal(oversized.errorCode,'MICRO_CONTEXT_TOO_LARGE');assert.equal(requests.length,1);assert.equal(fs.existsSync(path.join(f.root,'received.json')),false);
   config.priority='cli-first';
   const cli=await runMicroTask(config,{projectRoot:f.root,task:'bounded task'});
   assert.equal(cli.ok,true);assert.equal(cli.actualModel,'fixture-model');assert.equal(cli.costEstimate.mainEquivalentTokens,110/7);

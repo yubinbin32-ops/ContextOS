@@ -143,7 +143,7 @@ contextos({
 
 子代理接收目标、工作区、允许路径、验收标准、当前状态和必要证据；缺资料时可用OS或原生工具补取。实现任务使用独立工作区，主代理验收后集成。已有Key配置继续可用。参见[配置说明](plugins/contextos/skills/contextos-ops/references/micro-setup.md)。
 
-原始token、上下文峰值和费用估算分别报告。可设置`micro.cost.tokenDivisor`，个人÷7估算不会被宣传为通用节省比例。AGY已完成真实有界分析验收；其他CLI需要验证各自映射。完整开发性能资格仍待验证，Windows新增原生桥接尚未在Windows验收。
+原始token、上下文峰值和费用估算分别报告。可设置`micro.cost.tokenDivisor`，个人÷7估算不会被宣传为通用节省比例。AGY已完成真实有界分析与实现验收；其他CLI需要验证各自映射。完整开发性能资格仍待验证，Windows新增原生桥接尚未在Windows验收。
 
 ## 复现与参与
 

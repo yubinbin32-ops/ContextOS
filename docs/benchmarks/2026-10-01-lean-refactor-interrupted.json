@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "candidate": "lean-refactor11",
+  "requestedModel": "gpt-6-luna",
+  "effort": "max",
+  "task": "installer-json-resume",
+  "arm": "contextos",
+  "status": -15,
+  "elapsedSeconds": 1013.27,
+  "validForComparison": false,
+  "metrics": null,
+  "observedPartialMetrics": null,
+  "usageComplete": false,
+  "campaignUsageUnknown": true,
+  "microEnabled": false,
+  "sourceChanged": false,
+  "reason": "Interrupted after more than 16 minutes with only an opening message, no observed tool execution or source change, and no provider usage receipt. No paired comparison was completed.",
+  "limitations": [
+    "Unknown usage is not zero cost",
+    "No OS benefit or regression can be inferred from this interrupted run",
+    "The campaign ledger blocks additional model launches while usage remains unknown"
+  ]
+}

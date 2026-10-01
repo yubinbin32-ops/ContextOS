@@ -75,10 +75,18 @@
       "rawTokens": 71706,
       "mainEquivalentTokens": 10243.714285714286,
       "taskAccepted": false
+    },
+    {
+      "id": "bounded-implementation-mcp-pass",
+      "provider": "agy",
+      "actualModel": "gemini-3.8-flash-high",
+      "rawTokens": 74822,
+      "mainEquivalentTokens": 10688.857142857143,
+      "taskAccepted": true
     }
   ],
-  "knownMicroTokens": 6169072,
-  "knownMainEquivalentTokens": 881295.9999999999,
+  "knownMicroTokens": 6243894,
+  "knownMainEquivalentTokens": 891984.857142857,
   "totalsComplete": false,
   "missingUsage": [
     "bounded review interrupted when desktop settings deleted the worktree"
@@ -87,6 +95,6 @@
     "Host engineering-conversation tokens are not included",
     "CLI request count and request-input peak remain unavailable",
     "Permission-denied and timed-out usage is retained",
-    "One real analysis task passed; real implementation acceptance has not passed"
+    "One bounded analysis task and one independently accepted bounded implementation task passed; complex-task savings remain unqualified"
   ]
 }

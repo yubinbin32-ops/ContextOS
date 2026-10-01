@@ -69,3 +69,7 @@ Historical response-only measurements remain in [BENCHMARK.md](BENCHMARK.md). Th
 ```
 
 [Protocol](benchmarks/2026-10-01-protocol.json) · [Primary usage and diagnostic history](benchmarks/2026-10-01-development.json)
+
+## Lean refactor11 diagnostic status
+
+The new candidate passes functional checks but remains unqualified. Its first long-session arm was interrupted after more than 16 minutes with no observed tool execution or source change and no provider usage receipt. No matched pair completed. Unknown usage is not zero cost and the campaign ledger blocks another launch. [Protocol](benchmarks/2026-10-01-lean-refactor-protocol.json) · [Interrupted run](benchmarks/2026-10-01-lean-refactor-interrupted.json). The later optional API manifest change is outside this frozen snapshot and inherits no performance result.

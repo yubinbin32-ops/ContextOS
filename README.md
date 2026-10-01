@@ -143,7 +143,7 @@ This branch removes Hub, shortens the default skill and adds generic CLI Micro a
 
 Workers receive an objective, workspace, allowed paths, acceptance checks, current state and necessary evidence. They can fetch missing context with OS or native tools. Implementation runs in a separate workspace; the host verifies and integrates it. Existing Key/API configurations remain supported. See [adapter setup](plugins/contextos/skills/contextos-ops/references/micro-setup.md).
 
-Raw tokens, peak context and personal cost estimates are separate metrics. `micro.cost.tokenDivisor` expresses a user assumption; a personal ÷7 estimate is not a universal savings claim. AGY has passed a real bounded analysis task; other CLI mappings need their own validation. Complete-task performance remains unqualified, and the new Windows native bridge has not been validated on Windows.
+Raw tokens, peak context and personal cost estimates are separate metrics. `micro.cost.tokenDivisor` expresses a user assumption; a personal ÷7 estimate is not a universal savings claim. AGY has passed real bounded analysis and implementation tasks; other CLI mappings need their own validation. Complete-task performance remains unqualified, and the new Windows native bridge has not been validated on Windows.
 
 ## Reproduce and contribute
 

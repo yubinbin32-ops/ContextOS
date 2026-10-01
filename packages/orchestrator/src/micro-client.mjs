@@ -922,6 +922,12 @@ async function runSelectedMicroTask(config = {}, options = {}) {
       inputSource: resolved.source, inputTruncated: resolved.truncated, preloadText });
   }
 
+  if (options.execution === 'implement') return {
+    ok: false, errorCode: 'MICRO_API_IMPLEMENTATION_UNSUPPORTED',
+    error: 'The API transport provides analysis and patch proposals. Choose a verified CLI implementation adapter for workspace edits.',
+    durationMs: Date.now() - start, providerUsage: null,
+  };
+
   const urlStr = resolveChatCompletionsUrl(options.url || config.url);
   if (!urlStr) {
     return {
@@ -991,6 +997,20 @@ async function runSelectedMicroTask(config = {}, options = {}) {
       ?? MICRO_INPUT_LIMITS[presetKey]
       ?? MICRO_INPUT_LIMITS.custom,
   });
+  const manifest = options.context ? {
+    objective: prompt || options.context.objective || '',
+    workspace: path.resolve(options.workspace || options.projectRoot || config.projectRoot || process.cwd()),
+    execution: 'analyze', allowedPaths: options.context.allowedPaths || [],
+    acceptance: options.context.acceptance || [], constraints: options.context.constraints || [],
+    state: options.context.state || null, baseRevision: options.context.baseRevision || null,
+    evidence: options.context.evidence || [],
+  } : null;
+  const manifestText = manifest ? `Task manifest: ${JSON.stringify(manifest)}\nComplete only this assignment, fetch only necessary missing evidence using available tools, and report actual results and blockers. Do not delegate again.` : '';
+  if (manifest && (resolvedInput.truncated || (manifestText.length + prompt.length + resolvedInput.input.length + preloadText.length) > (options.maxInputChars ?? config.maxInputChars ?? 16000))) return {
+    ok: false, errorCode: resolvedInput.truncated ? 'MICRO_INPUT_TRUNCATED' : 'MICRO_CONTEXT_TOO_LARGE',
+    error: 'The task context is incomplete or exceeds its limit; narrow the evidence before dispatch.',
+    durationMs: Date.now() - start, providerUsage: null,
+  };
   const inputSource = resolvedInput.source || (prompt ? 'task' : (preloadText ? 'preload' : 'none'));
   const preloadMeta = preloadContext
     ? {
@@ -1052,6 +1072,8 @@ async function runSelectedMicroTask(config = {}, options = {}) {
       : String(resolvedInput.input ?? '');
     if (userContent || !preloadText) messages.push({ role: 'user', content: userContent });
   }
+
+  if (manifestText) messages.push({ role: 'system', content: manifestText });
 
   // Parameters
   const rawMaxTokens = invocation.maxOutputTokens ?? options.maxTokens ?? config.maxTokens ?? 1024;

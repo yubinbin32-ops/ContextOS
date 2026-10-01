@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "provider": "agy",
+  "cliVersion": "1.2.14",
+  "actualModel": "gemini-3.8-flash-high",
+  "thinking": "high",
+  "task": "Fix unknown provider usage fields being coerced to zero; add and run regression coverage",
+  "ok": true,
+  "taskAccepted": true,
+  "isolatedWorkspace": true,
+  "businessChanged": [
+    "packages/orchestrator/src/micro-cli.mjs",
+    "packages/orchestrator/test/micro-cli-usage.test.mjs"
+  ],
+  "mcpCalls": 1,
+  "nativeSourceReads": 0,
+  "providerRequests": null,
+  "peakRequestInputTokens": null,
+  "providerUsage": {
+    "prompt_tokens": 60175,
+    "completion_tokens": 14647,
+    "total_tokens": 74822,
+    "cached_input_tokens": 0,
+    "uncached_input_tokens": 60175,
+    "reasoning_tokens": 12751
+  },
+  "usageRaw": {
+    "input_tokens": 60175,
+    "output_tokens": 14647,
+    "thinking_tokens": 12751,
+    "cache_read_tokens": 0,
+    "total_tokens": 74822
+  },
+  "costEstimate": {
+    "rawTokens": 74822,
+    "tokenDivisor": 7,
+    "mainEquivalentTokens": 10688.857142857143,
+    "assumption": "user-configured relative token price; not an actual bill"
+  },
+  "durationMs": 55125,
+  "verification": {
+    "workerReceipt": "receipt-1790827630792-05c080",
+    "workerExit": 0,
+    "hostRegressionTestsPassed": 5,
+    "buggySeedExit": 1,
+    "diffScopePassed": true
+  },
+  "integration": "Equivalent numeric guard is already present in the host repair; accepted patch and test remain preserved as independent implementation evidence.",
+  "limitations": [
+    "A bounded implementation task, not proof of complex-task savings",
+    "No matched main-model baseline",
+    "Earlier denied/interrupted attempt costs remain recorded"
+  ]
+}
