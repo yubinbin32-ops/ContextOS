@@ -4,16 +4,12 @@ export interface ProjectDescriptor {
   id: string;
   name: string;
   schemaVersion: number;
-  isCloud?: boolean;
-  cloudUrl?: string;
 }
 
 export interface RecentProject {
   id: string; // path
   path: string;
   name: string;
-  isCloud?: boolean;
-  cloudUrl?: string;
   lastOpened?: string;
 }
 

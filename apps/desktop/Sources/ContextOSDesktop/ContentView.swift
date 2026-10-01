@@ -336,7 +336,6 @@ struct ContentView: View {
 
     private var projectHeader: some View {
         VStack(alignment: .leading, spacing: 7) {
-            let isCloudProject = store.snapshot.project.name.contains("(Cloud)") || store.projectRoot.contains(".contextos/cloud_projects")
             HStack(alignment: .center, spacing: 6) {
                 Menu {
                     if !store.recentProjects.isEmpty {
@@ -346,10 +345,9 @@ struct ContentView: View {
                                     store.openProject(project)
                                 } label: {
                                     let isCurrent = project.path == store.projectRoot
-                                    let isCloud = project.name.contains("(Cloud)") || project.path.contains(".contextos/cloud_projects")
                                     Label(
                                         project.name,
-                                        systemImage: isCurrent ? "checkmark" : (isCloud ? "cloud" : "folder")
+                                        systemImage: isCurrent ? "checkmark" : "folder"
                                     )
                                 }
                             }
@@ -375,7 +373,7 @@ struct ContentView: View {
                     Button(store.text("openProject")) { store.chooseProject() }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: isCloudProject ? "cloud.fill" : "folder.fill")
+                        Image(systemName: "folder.fill")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(ContextOSTheme.focus)
                         Text(store.snapshot.project.name)
@@ -398,17 +396,6 @@ struct ContentView: View {
                 .menuIndicator(.hidden)
                 .help(store.activeLocale == "zh-Hans" ? "点击切换项目或查看最近项目 (⌘O 打开)" : "Click to switch project or view recents (⌘O to open)")
 
-                if isCloudProject {
-                    Button {
-                        Task { await store.refreshCloudProject() }
-                    } label: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(ContextOSTheme.focus)
-                    }
-                    .buttonStyle(.plain)
-                    .help(store.activeLocale == "zh-Hans" ? "从云端中枢拉取最新图谱" : "Sync latest graph from cloud")
-                }
                 Spacer()
             }
 
@@ -685,6 +672,15 @@ private struct SettingsView: View {
             HStack(alignment: .top, spacing: 16) {
                 // Left Column: 偏好设置 + 软件更新 + 数据内核
                 VStack(alignment: .leading, spacing: 12) {
+                    Text(store.activeLocale == "zh-Hans" ? "Micro 可选：在 AI 对话中说‘配置 API 或 CLI Micro’，由 AI 检测 CLI、引导安装/登录并写入项目 adapter。" : "Optional Micro: ask your AI assistant to configure API or CLI Micro. It detects the CLI, guides installation/login and writes the project adapter.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(ContextOSTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Picker(store.activeLocale == "zh-Hans" ? "Micro 优先级" : "Micro priority", selection: Binding(get: { store.microPriority }, set: { store.setMicroPriority($0) })) {
+                        Text(store.activeLocale == "zh-Hans" ? "CLI 优先" : "CLI first").tag("cli-first")
+                        Text(store.activeLocale == "zh-Hans" ? "Key / API 优先" : "Key / API first").tag("api-first")
+                    }
+                    .pickerStyle(.menu)
                     // Group 1: 偏好设置 (PREFERENCES)
                     VStack(alignment: .leading, spacing: 5) {
                         sectionHeader(store.activeLocale == "zh-Hans" ? "偏好设置" : "PREFERENCES")

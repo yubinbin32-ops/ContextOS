@@ -257,6 +257,7 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     statusCode: Number.isFinite(Number(result.statusCode)) ? Number(result.statusCode) : null,
     preset: result.preset || null,
     model: result.model || null,
+    ...(result.costEstimate ? { costEstimate: result.costEstimate } : {}),
     providerHost: result.providerHost || null,
     inputSource: result.inputSource || null,
     inputTruncated: Boolean(result.inputTruncated),
@@ -282,8 +283,8 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     providerUsageCalls: Number(result.providerUsageCalls) || 0,
     estimatedUsageCalls: Number(result.estimatedUsageCalls) || 0,
     deduplicatedToolCallCount: Number(result.deduplicatedToolCallCount) || 0,
-    providerRequests: Number(result.providerRequests ?? invocation.providerRequests)
-      || (Number(result.providerUsageCalls) || 0) + (Number(result.estimatedUsageCalls) || 0),
+    providerRequests: result.provider === 'cli' ? (result.providerRequests ?? null) : (Number(result.providerRequests ?? invocation.providerRequests)
+      || (Number(result.providerUsageCalls) || 0) + (Number(result.estimatedUsageCalls) || 0)),
     toolRounds,
     shortCircuited: Boolean(invocation.shortCircuited),
     shortCircuitReason: invocation.shortCircuitReason || null,
@@ -294,7 +295,8 @@ export function recordMicroUsage(projectRoot, result, receiptId, {
     estimatedCompletionTokens: result.estimatedUsage ? Number(estimatedUsage.completion_tokens) || 0 : null,
     estimatedTotalTokens: result.estimatedUsage ? Number(estimatedUsage.total_tokens) || 0 : null,
     hostSessionId: hostSessionId || result.hostSessionId || null,
-    estimatedCostUsd: Number(cost.estimatedUsd) || 0,
+    estimatedCostUsd: result.provider === 'cli' && cost.estimatedUsd == null ? null : (Number(cost.estimatedUsd) || 0),
+    ...(result.provider === 'cli' ? { provider: 'cli', usageRaw: result.usageRaw || null, cachedInputTokens: usage.cached_input_tokens ?? null, uncachedInputTokens: usage.uncached_input_tokens ?? null } : {}),
     maxProviderTokens: Number(budget.maxProviderTokens) || null,
     maxCostUsd: Number(budget.maxCostUsd) || null,
     budgetExceeded: result.budgetExceeded || null,
@@ -355,6 +357,10 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     estimatedUsageCalls: 0,
     deduplicatedToolCallCount: 0,
     providerRequests: 0,
+    providerRequestsUnknownCalls: 0,
+    costUnknownCalls: 0,
+    mainEquivalentTokens: 0,
+    costEstimateUnavailableCalls: 0,
     toolRounds: 0,
     shortCircuitedCalls: 0,
     providerUsageEntries: 0,
@@ -396,7 +402,9 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     totals.providerUsageCalls += Number(entry.providerUsageCalls) || 0;
     totals.estimatedUsageCalls += Number(entry.estimatedUsageCalls) || 0;
     totals.deduplicatedToolCallCount += Number(entry.deduplicatedToolCallCount) || 0;
-    totals.providerRequests += Number(entry.providerRequests) || 0;
+    if (entry.provider === 'cli' && entry.providerRequests == null) totals.providerRequestsUnknownCalls += 1;
+    else totals.providerRequests += Number(entry.providerRequests) || 0;
+    if (entry.provider === 'cli' && entry.estimatedCostUsd == null) totals.costUnknownCalls += 1;
     totals.toolRounds += Number(entry.toolRounds) || 0;
     if (entry.shortCircuited) totals.shortCircuitedCalls += 1;
     if (hasProviderUsage) {
@@ -411,6 +419,8 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
     }
     if (!hasProviderUsage && !hasEstimatedUsage) totals.usageUnavailableCalls += 1;
     totals.estimatedCostUsd += Number(entry.estimatedCostUsd) || 0;
+    if (entry.costEstimate) totals.mainEquivalentTokens += Number(entry.costEstimate.mainEquivalentTokens) || 0;
+    else totals.costEstimateUnavailableCalls += 1;
     totals.durationMs += Number(entry.durationMs) || 0;
     const presetKey = entry.preset || 'custom';
     const modelKey = entry.model || 'unknown';
@@ -425,6 +435,7 @@ export function summarizeMicroUsage(projectRoot, { limit = 500, hostSessionId = 
   }
   return {
     ...totals,
+    ...(totals.costUnknownCalls ? { estimatedCostUsd: null } : {}),
     deliveryOutcomes,
     byPreset: [...byPreset.values()].sort((a, b) => b.totalTokens - a.totalTokens),
     byModel: [...byModel.values()].sort((a, b) => b.totalTokens - a.totalTokens),
@@ -448,7 +459,7 @@ export function persistMicroArtifact(projectRoot, result, {
   try {
     fs.mkdirSync(logDir, { recursive: true });
     const detail = JSON.stringify({ ...result, receiptId }, null, 2) + '\n';
-    fs.writeFileSync(path.join(logDir, `${receiptId}.log`), detail, 'utf8');
+    fs.writeFileSync(path.join(logDir, `${receiptId}.log`), detail, { encoding: 'utf8', mode: 0o600 });
     storeArtifact(projectRoot, detail, {
       id: artifactId,
       kind: 'micro-result',
@@ -477,16 +488,19 @@ function projectProviderUsage(result) {
     estimatedUsage: project(result?.estimatedUsage),
     providerUsageCalls: Number(result?.providerUsageCalls) || 0,
     estimatedUsageCalls: Number(result?.estimatedUsageCalls) || 0,
-    providerRequests: Number(result?.providerRequests ?? invocation.providerRequests)
-      || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0),
+    providerRequests: result?.provider === 'cli' ? (result.providerRequests ?? null) : (Number(result?.providerRequests ?? invocation.providerRequests)
+      || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0)),
+    ...(result?.costEstimate ? { costEstimate: result.costEstimate } : {}),
+    ...(result?.routing ? { routing: result.routing } : {}),
+    ...(result?.provider === 'cli' ? { provider: 'cli', jobId: result.jobId, cliSessionId: result.cliSessionId || null } : {}),
     invocation: {
       evidenceMode: invocation.evidenceMode || (result?.preload ? 'pipeline' : 'none'),
       evidenceCacheHit: Boolean(invocation.evidenceCacheHit || result?.preload?.cacheHit),
       pipelineRuns: Number(invocation.pipelineRuns ?? result?.preload?.pipelineRuns) || 0,
       executionMode: result?.executionMode || invocation.executionMode || null,
       allowCommands: Boolean(invocation.allowCommands),
-      providerRequests: Number(invocation.providerRequests ?? result?.providerRequests)
-        || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0),
+      providerRequests: result?.provider === 'cli' ? (result.providerRequests ?? null) : (Number(invocation.providerRequests ?? result?.providerRequests)
+        || (Number(result?.providerUsageCalls) || 0) + (Number(result?.estimatedUsageCalls) || 0)),
       toolRounds: Number(invocation.toolRounds ?? result?.steps) || 0,
       toolCalls: Array.isArray(result?.toolCalls)
         ? result.toolCalls.length

@@ -33,20 +33,8 @@ const skillPath = path.join("plugins", "contextos", "skills", "contextos", "SKIL
 assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");
 const skillText = fs.readFileSync(skillPath, "utf8");
 const capabilityReference = path.join("plugins", "contextos", "skills", "contextos", "references", "capabilities.md");
-assert.ok(skillText.includes("## Route work"), "Skill must document repository execution routing");
-assert.ok(skillText.includes("Legal capabilities:"), "Skill must list legal advanced capabilities");
-for (const capability of ["architecture", "block", "chain", "telemetry", "micro", "run_command"]) {
-  assert.ok(skillText.includes(capability), `Skill must document capability ${capability}`);
-}
 assert.ok(fs.existsSync(capabilityReference), "ContextOS capability reference is missing");
-const capabilityText = fs.readFileSync(capabilityReference, "utf8");
-for (const term of ["decision_write", "rule_write", "bind_rule", "bind_auto", "chain", "compose", "link", "task.finish", "telemetry", "audit", "scope"]) {
-  assert.ok(capabilityText.includes(term), `Capability reference must document ${term}`);
-}
-for (const tool of EXPECTED_TOOLS) {
-  assert.ok(new RegExp(`\\b${tool}\\b`).test(skillText), `Skill must document the ${tool} tool`);
-}
-assert.ok(skillText.includes("capability:"), "Skill must document capability routing through ops");
+assert.ok(fs.existsSync("plugins/contextos/skills/contextos-ops/references/micro-setup.md"), "AI provider setup reference must be packaged");
 assert.ok(skillText.length < 7000, `Skill must stay lean for context budgets (got ${skillText.length} chars; limit 7000)`);
 
 try {

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const VERIFY_SCRIPT_PRIORITY = ['test', 'lint', 'build'];
 
@@ -73,11 +74,15 @@ export function saveProfile(projectRoot, patch = {}, { scope = 'project' } = {})
   const profilePath = scope === 'global'
     ? globalProfilePath()
     : path.join(projectRoot, '.contextos', 'profile.json');
-  const current = scope === 'global'
-    ? readJson(profilePath)
-    : loadProfile(projectRoot);
-  const next = { ...current, ...patch };
+  let current = {};
+  if (fs.existsSync(profilePath)) {
+    current = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
+    if (!current || typeof current !== 'object' || Array.isArray(current)) throw new Error('Invalid profile; settings were not changed.');
+  }
+  const next = mergeProfile(current, patch);
   fs.mkdirSync(path.dirname(profilePath), { recursive: true });
-  fs.writeFileSync(profilePath, JSON.stringify(next, null, 2) + '\n', 'utf8');
+  const temp = `${profilePath}.${randomUUID()}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(next, null, 2) + '\n', { mode: 0o600 });
+  fs.renameSync(temp, profilePath);
   return next;
 }

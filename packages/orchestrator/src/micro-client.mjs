@@ -4,6 +4,8 @@ import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { readArtifact } from './artifact-store.mjs';
+import { selectMicroProvider, microCostEstimate } from './micro-provider.mjs';
+import { runCliMicro } from './micro-cli.mjs';
 import { microPreloadPrompt } from './micro-preload.mjs';
 
 export const MICRO_PRESETS = Object.freeze({
@@ -749,7 +751,8 @@ export function resolveMicroInput(options = {}, { projectRoot = process.cwd(), m
       lineNumbers: false,
     });
     if (!artifact) throw new Error(`Micro input artifact not found: ${artifactId}`);
-    return finish(artifact.text, 'artifact');
+    const resolved = finish(artifact.text, 'artifact');
+    return { ...resolved, truncated: resolved.truncated || artifact.truncated === true };
   }
 
   if (!options.inputRef) return { input: '', source: null, truncated: false };
@@ -869,8 +872,21 @@ async function sendMicroRequest(endpoint, payloadObj, headers, timeoutMs, maxRes
  * @returns {Promise<object>} Result { ok, content, reasoning, usage, durationMs, withOS?, steps?, toolCalls?, error? }
  */
 export async function runMicroTask(config = {}, options = {}) {
+  if (process.env.CONTEXTOS_DISABLE_MICRO === '1') return { ok: false, errorCode: 'MICRO_DISABLED', error: 'Micro execution is disabled; no provider request was sent.', durationMs: 0, providerUsage: null };
+  const route = selectMicroProvider(config, options);
+  if (!route.ok) return { ok: false, errorCode: 'MICRO_PROVIDER_INVALID', error: route.error, providerUsage: null };
+  const selected = route.provider === 'cli' ? { ...config, maxProviderTokens: config.cli?.maxProviderTokens ?? ((config.url || config.api) ? undefined : config.maxProviderTokens), ...config.cli?.settings } : { ...config, ...config.api };
+  // Both transports retain their settings. Priority chooses before dispatch; failures never silently launch the other provider.
+  const result = await runSelectedMicroTask(selected, { ...options, provider: route.provider });
+  return { ...microCostEstimate(result, config), provider: route.provider, routing: route };
+}
+
+async function runSelectedMicroTask(config = {}, options = {}) {
   if (process.env.CONTEXTOS_DISABLE_MICRO === '1') {
     return { ok: false, errorCode: 'MICRO_DISABLED', error: 'Micro execution is disabled for this evaluation; no provider request was sent.', durationMs: 0, providerUsage: null };
+  }
+  if (options.provider || config.provider) {
+    if (!['api', 'cli'].includes(options.provider || config.provider)) return { ok: false, errorCode: 'MICRO_PROVIDER_INVALID', error: 'Micro provider must be api or cli; no provider was called.' };
   }
   const start = Date.now();
   const requestedDelivery = ['immediate', 'defer', 'errors-only', 'auto'].includes(options.delivery)
@@ -895,6 +911,15 @@ export async function runMicroTask(config = {}, options = {}) {
       inputSource: 'preload',
       delivery: requestedDelivery,
     };
+  }
+
+  if ((options.provider || config.provider) === 'cli') {
+    const resolved = resolveMicroInput(options, {
+      projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
+      maxInputChars: options.maxInputChars ?? config.maxInputChars ?? 16000,
+    });
+    return runCliMicro({ ...config, model: options.model || config.cli?.model || config.model }, { ...options, resolvedInput: resolved.input,
+      inputSource: resolved.source, inputTruncated: resolved.truncated, preloadText });
   }
 
   const urlStr = resolveChatCompletionsUrl(options.url || config.url);
@@ -1616,7 +1641,7 @@ export async function runMicroTasksParallel(config = {}, tasks = [], globalOptio
   // a cheaper route while actually increasing retries, rate-limit failures,
   // and durable artifact churn. Keep the batch complete, but bound in-flight
   // provider calls. `maxConcurrency` is a scheduler hint, not a per-task input.
-  const requestedConcurrency = Number(globalOptions?.maxConcurrency);
+  const requestedConcurrency = selectMicroProvider(config, globalOptions).provider === 'cli' ? 1 : Number(globalOptions?.maxConcurrency);
   const concurrency = Math.min(
     MICRO_BATCH_MAX_CONCURRENCY,
     Math.max(

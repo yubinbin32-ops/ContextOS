@@ -1,3 +1,5 @@
+import { selectMicroProvider } from './micro-provider.mjs';
+import { cliDoctor } from './micro-cli.mjs';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +21,8 @@ import { claimMicroDeliveries, completeMicroDeliveryClaims, createMicroJob, list
 export * from './context-budget.mjs';
 export * from './intent-router.mjs';
 export * from './micro-client.mjs';
+export * from './micro-cli.mjs';
+export * from './micro-provider.mjs';
 export * from './micro-delivery.mjs';
 export * from './micro-preload.mjs';
 export * from './micro-session.mjs';
@@ -1577,7 +1581,8 @@ export class Orchestrator {
         throw new Error(`Unknown telemetry action '${action}'. Available: summary, list, compare, audit, rollout`);
       }
       case 'micro': {
-        const microConfig = ctx.profile?.micro || {};
+        let microConfig = ctx.profile?.micro || {};
+        if (selectMicroProvider(microConfig, args).provider === 'api') microConfig = { ...microConfig, ...microConfig.api };
         if (action === 'help' || action === 'schema') {
           return render({
             ok: true,
@@ -1596,10 +1601,21 @@ export class Orchestrator {
           });
         }
         if (action === 'doctor') {
+          if (selectMicroProvider(microConfig, args).provider === 'cli') {
+            const report = cliDoctor({ ...microConfig, model: microConfig.cli?.model || microConfig.model });
+            report.routing = selectMicroProvider(microConfig, args);
+            if (args.probe === true && report.ok) {
+              const probe = await runMicroTask(microConfig, { projectRoot: this.projectRoot, prompt: 'Reply with exactly PONG. No tools are needed.', timeoutMs: args.timeoutMs || 60000 });
+              const projected = projectMicroResult(probe, { projectRoot: this.projectRoot, hostSessionId: ctx.sessionId, maxChars: 200 });
+              report.checks.push({ name: 'provider', ok: projected.ok === true && String(projected.content || '').trim() === 'PONG', value: projected.error || projected.content, receiptId: projected.receiptId });
+              report.ok = report.checks.at(-1).ok;
+            }
+            return render(report);
+          }
           const checks = [
             { name: 'url', ok: Boolean(microConfig.url), value: microConfig.url || null },
             { name: 'model', ok: Boolean(microConfig.model), value: microConfig.model || null },
-            { name: 'key', ok: Boolean(microConfig.key), value: microConfig.key ? 'configured' : 'missing' },
+            { name: 'key', ok: true, value: microConfig.key ? 'configured' : 'not configured (optional for unauthenticated endpoints)' },
           ];
           if (args.probe === true && checks.every((check) => check.ok)) {
             const probe = await runMicroTask(microConfig, {

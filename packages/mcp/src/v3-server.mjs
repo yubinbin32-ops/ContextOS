@@ -7,7 +7,7 @@ import * as z from 'zod/v4';
 import { OPS_CAPABILITIES, Orchestrator } from '../../orchestrator/src/index.mjs';
 import { runAdminCli } from './admin-cli.mjs';
 import { getService, requireProjectRoot } from './service-factory.mjs';
-import { runDoctor, runInit, runSwitch } from './system-tools.mjs';
+import { runDoctor, runInit } from './system-tools.mjs';
 import packageMetadata from '../../../package.json' with { type: 'json' };
 
 const VERSION = packageMetadata.version;
@@ -81,7 +81,7 @@ export function createV3Server({
     { name: 'contextos', version: VERSION },
     {
       instructions:
-        'ContextOS executes repository work. For a one-function repair plus focused tests whose complete touched source/test files total at most 120 lines with no ownership change, prefer native tools. Batch known reads and relevant tests/diff checks, use the available interpreter, then finish. Known paths need no broad source search. For a bounded task with known paths, use work with focused inspect plus a relevant baseline check, then change with edits and verify. Existing owners refresh automatically; omit architecture unless adding a boundary or fixing a named gap. Use explore only when paths are unknown. After read_complete, mutate directly. A verified change is sufficient for a bounded repair; ship closes larger sessions. On blocked status, use the returned recovery receipt for one corrected retry. Use Micro only when explicitly assigned. Do not repeat successful reads or checks, or use native file reads/tests between OS calls.',
+        'ContextOS provides focused repository reads, batched commands and failure receipts. Use native tools when simpler. Known paths need only the required source ranges and relevant checks; no mandatory explore, graph binding, Micro or ship sequence. Use Micro only when assigned. For missing or clipped evidence fetch the named range. After a failed check recover its receipt instead of rerunning to get logs. Return actual verification and remaining blockers.',
     }
   );
 
@@ -97,7 +97,7 @@ export function createV3Server({
       service,
       projectRoot: root,
       projectId: service.projectId,
-      system: { init: runInit, doctor: runDoctor, switch: runSwitch },
+      system: { init: runInit, doctor: runDoctor },
     });
     return orchestrator.dispatch(tool, input);
   };

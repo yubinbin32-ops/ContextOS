@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1331,
-  "exportedAt": "2026-09-30T23:42:14.817Z",
+  "graphRevision": 1332,
+  "exportedAt": "2026-10-01T03:23:43.644Z",
   "data": {
     "plans": [
       {
@@ -1937,162 +1937,6 @@
         "history": [],
         "createdAt": "2026-09-20T08:38:27.938Z",
         "updatedAt": "2026-09-20T08:38:27.938Z"
-      },
-      {
-        "id": "block-cloud-hub",
-        "projectId": "mdflow",
-        "title": "云端协作中枢",
-        "kind": "api",
-        "summary": "负责 Cloudflare Worker、云端客户端与混合本地云端同步入口。",
-        "details": "",
-        "artifactRefs": [
-          {
-            "path": "apps/cloud/src/index.mjs",
-            "symbol": "index.mjs",
-            "anchorKind": "file",
-            "startLine": 1,
-            "endLine": 3,
-            "hash": "d095f8907c63e6b7",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "packages/mcp/src/cloud-client.mjs",
-            "symbol": "ContextOSCloudClient",
-            "anchorKind": "symbol",
-            "startLine": 6,
-            "endLine": 144,
-            "hash": "04c1de4d74083956",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "packages/mcp/src/hybrid-service.mjs",
-            "symbol": "HybridContextOSService",
-            "anchorKind": "symbol",
-            "startLine": 9,
-            "endLine": 113,
-            "hash": "16319ad8c8bcd907",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "corsHeaders",
-            "anchorKind": "symbol",
-            "startLine": 17,
-            "endLine": 29,
-            "hash": "3b7af8ce905e80a5",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "jsonHeaders",
-            "anchorKind": "symbol",
-            "startLine": 31,
-            "endLine": 33,
-            "hash": "40dda990ba1dd65b",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "ensureDb",
-            "anchorKind": "symbol",
-            "startLine": 56,
-            "endLine": 73,
-            "hash": "f2d160ac89bf57aa",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "checkAuth",
-            "anchorKind": "symbol",
-            "startLine": 78,
-            "endLine": 99,
-            "hash": "cb5f439490252883",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "seedStarterProjectIfNeeded",
-            "anchorKind": "symbol",
-            "startLine": 102,
-            "endLine": 133,
-            "hash": "93b578586de3e376",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "parseJson",
-            "anchorKind": "symbol",
-            "startLine": 135,
-            "endLine": 143,
-            "hash": "56bbfe054a7afa13",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "buildCloudSnapshot",
-            "anchorKind": "symbol",
-            "startLine": 145,
-            "endLine": 340,
-            "hash": "95c9ed9fc685c8f7",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "replaceCloudSnapshot",
-            "anchorKind": "symbol",
-            "startLine": 342,
-            "endLine": 411,
-            "hash": "c07680e13d66f3e2",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "executeTool",
-            "anchorKind": "symbol",
-            "startLine": 413,
-            "endLine": 582,
-            "hash": "2b0c5ae3372be80e",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
-            "path": "worker.js",
-            "symbol": "handleJsonRpc",
-            "anchorKind": "symbol",
-            "startLine": 670,
-            "endLine": 742,
-            "hash": "4833ee845e0d8405",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          }
-        ],
-        "history": [],
-        "createdAt": "2026-09-20T08:38:28.593Z",
-        "updatedAt": "2026-09-20T08:38:28.593Z"
       },
       {
         "id": "block-command-gateway",
@@ -4459,6 +4303,17 @@
             "role": "implementation",
             "hashMode": null,
             "manifest": null
+          },
+          {
+            "path": "docs/REFACTOR_PLAN.md",
+            "symbol": "REFACTOR_PLAN.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 68,
+            "hash": "8438862417ab2b67",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
           }
         ],
         "history": [],
@@ -5147,6 +5002,149 @@
             "startLine": 1604,
             "endLine": 1674,
             "hash": "4fff5c0dad903013",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "get",
+            "anchorKind": "symbol",
+            "startLine": 8,
+            "endLine": 8,
+            "hash": "3d26db14b0c4ba54",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "number",
+            "anchorKind": "symbol",
+            "startLine": 9,
+            "endLine": 9,
+            "hash": "2fd06eb55d306804",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "limit",
+            "anchorKind": "symbol",
+            "startLine": 10,
+            "endLine": 10,
+            "hash": "47d1b4fee2b0680d",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "resolveCliExecutable",
+            "anchorKind": "symbol",
+            "startLine": 12,
+            "endLine": 20,
+            "hash": "0168ae2def7a8674",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "validateCliAdapter",
+            "anchorKind": "symbol",
+            "startLine": 22,
+            "endLine": 35,
+            "hash": "cc636109f5d4b76f",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "cliDoctor",
+            "anchorKind": "symbol",
+            "startLine": 37,
+            "endLine": 51,
+            "hash": "58d7d8720ce1bf92",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "template",
+            "anchorKind": "symbol",
+            "startLine": 53,
+            "endLine": 58,
+            "hash": "294c58d33685a7f5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "normalizeCliUsage",
+            "anchorKind": "symbol",
+            "startLine": 60,
+            "endLine": 71,
+            "hash": "945b84b7906d5047",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "taskContext",
+            "anchorKind": "symbol",
+            "startLine": 73,
+            "endLine": 94,
+            "hash": "2bcb09e5c077cef1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-cli.mjs",
+            "symbol": "runCliMicro",
+            "anchorKind": "symbol",
+            "startLine": 96,
+            "endLine": 243,
+            "hash": "9d452b0d911e82a5",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-provider.mjs",
+            "symbol": "selectMicroProvider",
+            "anchorKind": "symbol",
+            "startLine": 3,
+            "endLine": 16,
+            "hash": "7a219c8322132ecb",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/src/micro-provider.mjs",
+            "symbol": "microCostEstimate",
+            "anchorKind": "symbol",
+            "startLine": 18,
+            "endLine": 28,
+            "hash": "6251e9614cced447",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "packages/orchestrator/test/micro-cli.test.mjs",
+            "symbol": "fixture",
+            "anchorKind": "symbol",
+            "startLine": 11,
+            "endLine": 37,
+            "hash": "6285ee2d7b6e9e6f",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -7406,12 +7404,11 @@
       {
         "id": "chain-runtime-distribution",
         "projectId": "mdflow",
-        "title": "云端协作与运行时分发链",
-        "summary": "本地图谱同步到云端中枢，并由分发验证守住运行时边界。",
+        "title": "本地图谱与运行时分发链",
+        "summary": "本地图谱与独立运行时分发，共享本地存储和解析资源验证。",
         "kind": "linear",
         "memberIds": [
           "block-graph-sync",
-          "block-cloud-hub",
           "block-distribution-verification"
         ],
         "metadata": {},
@@ -7526,19 +7523,6 @@
         "revision": 1,
         "createdAt": "2026-09-20T08:38:28.731Z",
         "updatedAt": "2026-09-20T08:38:28.731Z"
-      },
-      {
-        "id": "block-cloud-hub->block-graph-sync",
-        "projectId": "mdflow",
-        "from": "block-cloud-hub",
-        "to": "block-graph-sync",
-        "kind": "depends_on",
-        "provenance": "authored",
-        "confidence": 1,
-        "reason": "云端快照与本地双写对账",
-        "revision": 1,
-        "createdAt": "2026-09-20T08:38:28.876Z",
-        "updatedAt": "2026-09-20T08:38:28.876Z"
       },
       {
         "id": "block-context-renderer->block-domain-models",

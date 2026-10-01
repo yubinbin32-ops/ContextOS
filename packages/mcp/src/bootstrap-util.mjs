@@ -125,6 +125,13 @@ export function deployCanonicalServer(sourceScriptPath = null) {
   return canonicalScript;
 }
 
+export function antigravitySkillPaths(home = HOME) {
+  const paths = [path.join(home, '.gemini', 'antigravity-cli', 'skills', 'contextos')];
+  const legacy = path.join(home, '.gemini', 'config', 'skills', 'contextos');
+  if (fs.existsSync(legacy)) paths.push(legacy);
+  return paths;
+}
+
 function copyDirectoryRecursive(src, dest) {
   if (!fs.existsSync(src)) return;
   fs.mkdirSync(dest, { recursive: true });
@@ -458,9 +465,10 @@ export function detectInstalledPlatforms() {
   platforms.push({
     id: 'antigravity',
     name: 'Antigravity',
-    isInstalled: antigravityAppExists,
+    isInstalled: antigravityAppExists || fs.existsSync(path.join(HOME, '.local', 'bin', 'agy')),
     configPath: path.join(geminiDir, 'mcp_config.json'),
-    skillPath: path.join(geminiDir, 'skills', 'contextos'),
+    skillPath: path.join(HOME, '.gemini', 'antigravity-cli', 'skills', 'contextos'),
+    skillPaths: antigravitySkillPaths(),
     type: 'json',
   });
 
@@ -568,11 +576,12 @@ export function syncAllPlatforms({
       continue;
     }
 
-    if (platform.skillPath && skillSource && fs.existsSync(skillSource)) {
-      copyDirectoryRecursive(skillSource, platform.skillPath);
+    for (const skillPath of platform.skillPaths || (platform.skillPath ? [platform.skillPath] : [])) {
+      if (!skillSource || !fs.existsSync(skillSource)) continue;
+      copyDirectoryRecursive(skillSource, skillPath);
       const parentSource = path.dirname(skillSource);
       const opsSource = path.join(parentSource, 'contextos-ops');
-      const opsTarget = path.join(path.dirname(platform.skillPath), 'contextos-ops');
+      const opsTarget = path.join(path.dirname(skillPath), 'contextos-ops');
       if (fs.existsSync(opsSource)) {
         copyDirectoryRecursive(opsSource, opsTarget);
       }
@@ -644,68 +653,24 @@ export function syncAllPlatforms({
   return modified;
 }
 
-export function getGlobalCloudConfig() {
-  const globalCloudPath = path.join(HOME, '.contextos', 'cloud.json');
-  if (fs.existsSync(globalCloudPath)) {
-    try {
-      return JSON.parse(fs.readFileSync(globalCloudPath, 'utf8'));
-    } catch (_) {}
-  }
-  return null;
-}
-
-export function saveGlobalCloudConfig({ cloudUrl, token, homeDir = HOME }) {
-  const dotContextos = path.join(homeDir, '.contextos');
-  fs.mkdirSync(dotContextos, { recursive: true, mode: 0o700 });
-  const globalCloudPath = path.join(dotContextos, 'cloud.json');
-  const existing = readJsonObject(globalCloudPath, 'global cloud config');
-  const config = {
-    ...existing,
-    cloudUrl: cloudUrl ? cloudUrl.replace(/\/+$/, '') : '',
-    token: token || '',
-    updatedAt: new Date().toISOString(),
-  };
-  writeFileAtomic(globalCloudPath, JSON.stringify(config, null, 2) + '\n', 0o600);
-  return config;
-}
-
-export function initProjectWorkspace({
-  projectRoot = process.cwd(),
-  mode = 'local',
-  cloudUrl = '',
-  token: _token = '',
-  projectId = null,
-}) {
+export function initProjectWorkspace({ projectRoot = process.cwd(), mode = 'local', projectId = null } = {}) {
+  if (mode !== 'local') throw new Error('Unsupported mode: only local storage is available.');
   const dotContextos = path.join(projectRoot, '.contextos');
   fs.mkdirSync(dotContextos, { recursive: true });
-
   const projectJsonPath = path.join(dotContextos, 'project.json');
   const existing = readJsonObject(projectJsonPath, 'project metadata');
   const resolvedProjectId = projectId || existing.id || deriveProjectId(projectRoot);
-
-  const isCloud = mode === 'cloud';
-  if (isCloud && !cloudUrl) {
-    throw new Error('Cloud mode requires a cloudUrl. Configure a compatible Cloud Hub before switching.');
-  }
   const projectConfig = {
-    ...existing,
-    id: resolvedProjectId || existing.id || 'contextos',
+    ...existing, id: resolvedProjectId,
     name: existing.name || (resolvedProjectId === 'contextos' ? 'ContextOS' : resolvedProjectId),
-    storage: isCloud ? 'cloud' : 'local',
-    isCloud: isCloud,
-    createdAt: existing.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    storage: 'local',
+    createdAt: existing.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString(),
   };
-  delete projectConfig.token;
-  delete projectConfig.cloudToken;
-
-  if (isCloud) {
-    if (cloudUrl) projectConfig.cloudUrl = cloudUrl.replace(/\/+$/, '');
-  } else {
-    delete projectConfig.cloudUrl;
-    delete projectConfig.token;
+  if (existing.storage === 'cloud' || existing.isCloud === true) {
+    projectConfig.localMigration = { from: 'cloud', remoteDataImported: false };
   }
-
-  writeFileAtomic(projectJsonPath, JSON.stringify(projectConfig, null, 2) + '\n');
+  for (const key of ['isCloud', 'cloudUrl', 'cloudToken', 'token']) delete projectConfig[key];
+  writeFileAtomic(projectJsonPath, JSON.stringify(projectConfig, null, 2) + '\n', 0o600);
+  if (fs.existsSync(projectJsonPath + '.contextos.bak')) fs.chmodSync(projectJsonPath + '.contextos.bak', 0o600);
   return projectConfig;
 }

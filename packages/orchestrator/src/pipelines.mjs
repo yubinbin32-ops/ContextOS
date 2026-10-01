@@ -197,13 +197,13 @@ function failureSourceFrame(ctx, diagnostics) {
     if (!match) continue;
     try {
       const file = match[1].startsWith('file:') ? fileURLToPath(match[1]) : match[1];
-      const relative = path.relative(ctx.projectRoot, file);
-      const realRelative = path.relative(fs.realpathSync(ctx.projectRoot), fs.realpathSync(file));
-      if ([relative, realRelative].some((value) => value.startsWith('..') || path.isAbsolute(value))
+      const realFile = fs.realpathSync(file);
+      const relative = path.relative(fs.realpathSync(ctx.projectRoot), realFile);
+      if (relative.startsWith('..') || path.isAbsolute(relative)
           || /(?:^|[\\/])(?:node_modules|\.git|\.contextos)(?:[\\/]|$)/.test(relative)
-          || !/\.(?:[cm]?[jt]sx?|py|rs|go|swift|java|c|cpp|h)$/.test(file)
-          || fs.statSync(file).size > 512000) continue;
-      const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+          || !/\.(?:[cm]?[jt]sx?|py|rs|go|swift|java|c|cpp|h)$/.test(realFile)
+          || fs.statSync(realFile).size > 512000) continue;
+      const lines = fs.readFileSync(realFile, 'utf8').split(/\r?\n/);
       const focus = Number(match[2]) - 1;
       if (!Number.isSafeInteger(focus) || focus < 0 || focus >= lines.length) continue;
       let start = Math.max(0, focus - 18), end = Math.min(lines.length, focus + 7);
@@ -1269,20 +1269,20 @@ export async function explorePipeline(ctx, input = {}) {
 
   const nextLines = [`👉 ${computeNext({ session, changedCount: dirty.length, profile, stage: 'explore', intent })}`];
   if (smallWorkspaceBundle) {
-    nextLines.push('The complete small-workspace source/test bundle is already in this response. Go directly to change/work; do not run `rg --files`, `cat`, `sed`, or per-file inspect first.');
+    nextLines.push('Relevant source and tests are included. Edit using OS or native tools; fetch only missing dependencies.');
   } else if (!decisionComplete && missingDecisionPaths.length) {
     nextLines.push(
       `Decision package is partial: the exact source for ${missingDecisionPaths.slice(0, 3).map((file) => `\`${file}\``).join(', ')} is not inlined. `
       + 'Use one bounded `inspect({path, full:true})` recovery read for the named file, then mutate; do not scan unrelated modules.'
     );
   } else if (decisionComplete) {
-    nextLines.push('The focused implementation source is already in this response. Go directly to change/work; do not reconstruct it with per-file reads.');
+    nextLines.push('Focused implementation source is included. Fetch only missing dependencies.');
   }
   const stubTargets = criticalCandidates
     .filter((candidate) => candidate.stub)
     .map((candidate) => `\`${candidate.target}\``);
   if (stubTargets.length) {
-    nextLines.push(`Exact implementation stubs are already included: ${stubTargets.join(', ')}. Build \`change\` directly; do not dump source with native \`rg\`/\`cat\`.`);
+    nextLines.push(`Exact implementation stubs are already included: ${stubTargets.join(', ')}. Edit from this evidence; fetch only missing dependencies.`);
   }
   if (publicSurfaceGaps.length) {
     nextLines.push('Public surface gap detected: include the entrypoint/barrel update in the same change when the new capability is public.');
@@ -1296,13 +1296,10 @@ export async function explorePipeline(ctx, input = {}) {
         : resolveBudget(input.depth, ctx.profile?.budget));
   const decisionLines = [
     `- read_complete=${decisionComplete ? 'true' : 'false'}`,
-    `- do_not_reread=${decisionComplete ? 'true' : 'false'}`,
-    `- native_mutation=forbidden${decisionComplete ? '-after-read-complete' : ''}`,
-    '- after_read_complete=change_or_work_only',
-    `- architecture=${architectureState}${architectureState === 'empty' ? '; change must bind blocks/chains (chain.memberIds=block ids; use semantic kinds, never kind:"module")' : ''}`,
+    `- architecture=${architectureState}${architectureState === 'empty' ? '; graph binding is optional for ordinary development' : ''}`,
     `- files=${filePaths.length}`,
     decisionComplete
-      ? '- next=change({edits,verify,architecture})'
+      ? '- next=edit and verify; native tools or change({edits,verify})'
       : '- next=inspect({path,full:true}) for the named missing target, then change({edits,verify})',
   ];
   if (!decisionComplete && missingDecisionPaths.length) {
@@ -2115,7 +2112,8 @@ export async function changePipeline(ctx, input = {}) {
     resultLines.push('- Architecture binding skipped because verification failed.');
   } else if (liveChangedPaths.length || input.architecture) {
     const architectureResult = await bindChangedArchitecture(caps, liveChangedPaths, input.architecture);
-    architectureReady = architectureResult.ok && !(architectureResult.gaps || []).length;
+    const requestedGovernance = input.architecture !== undefined || profile.strict || profile.strictArchitecture;
+    architectureReady = requestedGovernance ? architectureResult.ok && !(architectureResult.gaps || []).length : verifyPassed;
     tracer.step('architecture', {
       ok: architectureResult.ok,
       refreshed: architectureResult.refreshed,
@@ -2131,10 +2129,10 @@ export async function changePipeline(ctx, input = {}) {
     if (architectureResult.error) {
       resultLines.push('- Architecture update needs attention: ' + clip(architectureResult.error, 240));
     }
-    for (const gap of (architectureResult.gaps || []).slice(0, 6)) {
+    for (const gap of (requestedGovernance ? architectureResult.gaps || [] : []).slice(0, 6)) {
       resultLines.push(formatArchitectureGap(gap));
     }
-    if ((architectureResult.gaps || []).length > 6) {
+    if (requestedGovernance && (architectureResult.gaps || []).length > 6) {
       resultLines.push('- (' + (architectureResult.gaps.length - 6) + ' more architecture gap(s))');
     }
   }
@@ -4080,8 +4078,8 @@ export async function pipelinePipeline(ctx, input = {}) {
   function isCompleteExploreDecision(item) {
     if (item?.tool !== 'explore') return false;
     const output = String(item.output ?? '');
-    return /\bread_complete=true\b/.test(output)
-      && /\bnext=change\(/.test(output)
+    const decision = output.match(/## Decision Package\n([\s\S]*?)(?=\n##|$)/)?.[1] || '';
+    return /^- read_complete=true\b/m.test(decision)
       && !/\[response truncated\b/.test(output)
       && !/<!--\s*os-response\b[^\n]*\bartifact=/.test(output);
   }
@@ -4249,7 +4247,7 @@ export async function pipelinePipeline(ctx, input = {}) {
       lines[index] = lines[index].replace(/\s+artifact=[A-Za-z0-9._-]+/g, '');
     }
     lines[0] += ' decision=complete';
-    lines.push('decision=complete read_complete=true do_not_reread=true native_mutation=forbidden after_read_complete=change_or_work_only next=change({edits,verify}); after_pass=finalize_without_speculative_edits');
+    lines.push('decision=complete read_complete=true; edit and verify using OS or native tools.');
   } else if (decisionPackage) {
     lines[0] += ' decision=partial';
     lines.push('decision=partial read_complete=false; perform the named bounded recovery read, then mutate or verify.');

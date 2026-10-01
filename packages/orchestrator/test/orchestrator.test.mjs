@@ -1954,7 +1954,7 @@ test('work explicit ranges return bodies and a mutation handoff instead of outli
   assert.match(result, /HELPER_MARKER/);
   assert.doesNotMatch(result, /AST Outline/);
   assert.match(result, /decision=complete/);
-  assert.match(result, /next=change/);
+  assert.match(result, /read_complete=true/);
 
   service.close();
   fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -2029,7 +2029,7 @@ test('explore inlines every bounded implementation stub in the first decision pa
   assert.match(result, /src\/batch\.mjs.*implementation stub/);
   assert.match(result, /src\/audit\.mjs.*implementation stub/);
   assert.match(result, /Exact implementation stubs are already included/);
-  assert.match(result, /do not dump source with native/);
+  assert.doesNotMatch(result, /native_mutation=forbidden/);
   assert.match(result, /throw new Error\("batch replay is not implemented"\)/);
   assert.match(result, /throw new Error\("audit report is not implemented"\)/);
   assert.doesNotMatch(result, /\/\/ src\/batch\.mjs \[L\d+-L\d+\] \(hash:/);

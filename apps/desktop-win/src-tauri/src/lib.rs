@@ -31,6 +31,33 @@ fn get_project_root() -> String {
 }
 
 #[tauri::command]
+fn get_micro_priority(project_root: String) -> Result<String, String> {
+    let root = PathBuf::from(project_root).canonicalize().map_err(|e| e.to_string())?;
+    let file = root.join(".contextos/profile.json");
+    if !file.exists() { return Ok("cli-first".into()); }
+    let profile: Value = serde_json::from_str(&fs::read_to_string(file).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    Ok(profile["micro"]["priority"].as_str().unwrap_or("cli-first").to_string())
+}
+
+#[tauri::command]
+fn set_micro_priority(project_root: String, priority: String) -> Result<(), String> {
+    if priority != "cli-first" && priority != "api-first" { return Err("Unsupported Micro priority".into()); }
+    let root = PathBuf::from(project_root).canonicalize().map_err(|e| e.to_string())?;
+    let dir = root.join(".contextos");
+    let file = dir.join("profile.json");
+    let mut profile: Value = if file.exists() { serde_json::from_str(&fs::read_to_string(&file).map_err(|e| e.to_string())?).map_err(|e| e.to_string())? } else { json!({}) };
+    if !profile.is_object() { return Err("Invalid profile JSON; settings were not changed".into()); }
+    if profile.get("micro").is_some() && !profile["micro"].is_object() && !profile["micro"].is_null() { return Err("Invalid Micro settings".into()); }
+    if !profile["micro"].is_object() { profile["micro"] = json!({}); }
+    profile["micro"]["priority"] = json!(priority);
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let tmp = dir.join(format!("profile.contextos-{}.tmp", std::process::id()));
+    fs::write(&tmp, serde_json::to_string_pretty(&profile).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    fs::rename(tmp, file).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn choose_project() -> Result<Option<String>, String> {
     let folder = rfd::FileDialog::new()
         .set_title("Select ContextOS Project Directory")
@@ -567,6 +594,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_project_root,
+            get_micro_priority,
+            set_micro_priority,
             choose_project,
             load_snapshot,
             reveal_source,

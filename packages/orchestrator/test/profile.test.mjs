@@ -36,3 +36,18 @@ test('profile inherits global settings and lets project settings override them',
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('switching priority preserves both transports without copying inherited credentials', () => {
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'ctx-profile-priority-'));
+ const previous=process.env.CONTEXTOS_HOME;process.env.CONTEXTOS_HOME=path.join(root,'global');
+ try {
+  saveProfile(root,{micro:{key:'global-private-key',url:'https://api.example.test',model:'api-model'}},{scope:'global'});
+  saveProfile(root,{micro:{priority:'cli-first',cli:{command:'selected-cli',model:'cli-model'}}});
+  saveProfile(root,{micro:{priority:'api-first'}});
+  const disk=JSON.parse(fs.readFileSync(path.join(root,'.contextos/profile.json')));
+  assert.equal(disk.micro.cli.command,'selected-cli');assert.equal(disk.micro.priority,'api-first');assert.equal(disk.micro.key,undefined);
+  assert.equal(loadProfile(root).micro.key,'global-private-key');
+  fs.writeFileSync(path.join(root,'.contextos/profile.json'),'{broken');
+  assert.throws(()=>saveProfile(root,{micro:{priority:'cli-first'}}));assert.equal(fs.readFileSync(path.join(root,'.contextos/profile.json'),'utf8'),'{broken');
+ }finally{if(previous===undefined)delete process.env.CONTEXTOS_HOME;else process.env.CONTEXTOS_HOME=previous;fs.rmSync(root,{recursive:true,force:true});}
+});

@@ -4,16 +4,12 @@ struct ProjectDescriptor: Codable {
     let id: String
     let name: String
     let schemaVersion: Int
-    var isCloud: Bool? = false
-    var cloudUrl: String? = nil
 }
 
 struct RecentProject: Identifiable, Codable, Equatable {
     var id: String { path }
     let path: String
     let name: String
-    var isCloud: Bool? = false
-    var cloudUrl: String? = nil
 }
 
 struct ProjectInfo: Equatable {

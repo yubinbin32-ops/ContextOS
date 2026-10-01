@@ -33,3 +33,11 @@ plugins/contextos/grammars/
 # Python benchmark runner bytecode
 __pycache__/
 *.pyc
+
+# Private provider settings, worker state and local task logs
+.contextos/profile*.json
+.contextos/micro-cli/
+.contextos/micro-sessions/
+.contextos/micro-deliveries/
+.contextos/logs/
+.contextos/artifacts/

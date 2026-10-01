@@ -133,9 +133,9 @@ Read the owning function and focused tests together with `work`, then edit and v
 
 ## Local state, desktop, and optional services
 
-Local mode stores project state in the workspace. The core server needs no cloud account. Cloud collaboration is experimental; Micro calls an external model only when configured and invoked. Choose these features when your workflow needs them.
+Project state stays local. Cloud Hub has been removed and no Hooks are installed. Optional Micro supports an existing API/Key or an AI-configured CLI adapter; see [setup](AI_SETUP.md). Workers receive bounded task context and the host verifies their results.
 
-Desktop downloads and their supported platforms are listed per release. The 2.7.1 measurements cover the MCP runtime on macOS arm64; they do not establish Windows desktop performance or cloud/Micro savings.
+Desktop downloads and their supported platforms are listed per release. The 2.7.1 measurements cover the MCP runtime on macOS arm64; they do not establish Windows desktop performance or Micro savings.
 
 ## Reproduce and contribute
 

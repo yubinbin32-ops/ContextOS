@@ -7,8 +7,6 @@ import {
   deployCanonicalServer,
   syncAllPlatforms,
   initProjectWorkspace,
-  saveGlobalCloudConfig,
-  getGlobalCloudConfig,
   detectInstalledPlatforms,
 } from '../packages/mcp/src/bootstrap-util.mjs';
 
@@ -21,18 +19,15 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2);
   if (args.includes('--help') || args.includes('-h')) {
-    console.log(`ContextOS bootstrap\n\nUsage:\n  node scripts/bootstrap.mjs --target-root <workspace> (--platforms cursor,codex | --all) [options]\n\nOptions:\n  --mode <local|cloud>       Project storage mode (default: local)\n  --cloud-url <url>          Cloud endpoint for cloud mode\n  --token <token>            Cloud token for cloud mode\n  --project-id <id>          Project id (default: preserve existing or derive from directory)\n  --platforms <list>         Comma-separated platform ids; no implicit all\n  --all                      Explicitly select every detected platform\n  --save-global-cloud        Persist cloud credentials to ~/.contextos/cloud.json\n  --dry-run                  Print the plan without writing any files\n  --help, -h                 Show this help`);
+    console.log(`ContextOS bootstrap\n\nUsage:\n  node scripts/bootstrap.mjs --target-root <workspace> (--platforms cursor,codex | --all) [options]\n\nOptions:\n  --project-id <id>          Project id (default: preserve existing or derive from directory)\n  --platforms <list>         Comma-separated platform ids; no implicit all\n  --all                      Explicitly select every detected platform\n  --dry-run                  Print the plan without writing any files\n  --help, -h                 Show this help`);
     process.exit(0);
   }
 
   let mode = 'local';
-  let cloudUrl = '';
-  let token = '';
   let projectId = null;
   let targetRoot = process.cwd();
   let platformsArg = '';
   let allPlatforms = false;
-  let saveGlobal = false;
   let dryRun = false;
   let argIndex = 0;
 
@@ -48,10 +43,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (argIndex = 0; argIndex < args.length; argIndex++) {
     if (args[argIndex] === '--mode') {
       mode = takeValue('--mode');
-    } else if (args[argIndex] === '--cloud-url') {
-      cloudUrl = takeValue('--cloud-url');
-    } else if (args[argIndex] === '--token') {
-      token = takeValue('--token');
     } else if (args[argIndex] === '--project-id') {
       projectId = takeValue('--project-id');
     } else if (args[argIndex] === '--target-root') {
@@ -60,8 +51,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       platformsArg = takeValue('--platforms');
     } else if (args[argIndex] === '--all') {
       allPlatforms = true;
-    } else if (args[argIndex] === '--save-global-cloud') {
-      saveGlobal = true;
     } else if (args[argIndex] === '--dry-run') {
       dryRun = true;
     } else if (args[argIndex].startsWith('--')) {
@@ -70,8 +59,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   }
 
-  if (!['local', 'cloud'].includes(mode)) {
-    console.error(`Unsupported mode: ${mode}. Use 'local' or 'cloud'.`);
+  if (mode !== 'local') {
+    console.error(`Unsupported mode: ${mode}. Only local storage is available.`);
     process.exit(2);
   }
 
@@ -88,17 +77,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(2);
   }
 
-  // If cloudUrl is not provided via CLI but mode is cloud, check global cloud config
-  if (mode === 'cloud' && !cloudUrl) {
-    const globalCloud = getGlobalCloudConfig();
-    if (globalCloud?.cloudUrl) {
-      cloudUrl = globalCloud.cloudUrl;
-      if (!token && globalCloud.token) {
-        token = globalCloud.token;
-      }
-    }
-  }
-
   const selectedPlatforms = allPlatforms
     ? null
     : platformsArg.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -111,10 +89,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const unknownPlatforms = (selectedPlatforms || []).filter((id) => !supportedPlatformIds.has(id));
   if (unknownPlatforms.length > 0) {
     console.error(`Unknown platform id(s): ${unknownPlatforms.join(', ')}. Supported: ${[...supportedPlatformIds].join(', ')}`);
-    process.exit(2);
-  }
-  if (saveGlobal && (mode !== 'cloud' || !cloudUrl)) {
-    console.error('--save-global-cloud requires --mode cloud and a cloud URL.');
     process.exit(2);
   }
 
@@ -136,16 +110,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       const suffix = platform.configPath ? ` -> ${platform.configPath}` : '';
       console.log(`[ContextOS Bootstrap] Would configure ${platform.name}${suffix}`);
     }
-    if (saveGlobal) {
-      console.log('[ContextOS Bootstrap] Would save global cloud credentials to ~/.contextos/cloud.json (mode 0600)');
-    }
     process.exit(0);
   }
 
-  if (saveGlobal && cloudUrl) {
-    saveGlobalCloudConfig({ cloudUrl, token });
-    console.log(`[ContextOS Bootstrap] Saved global cloud credentials to ~/.contextos/cloud.json`);
-  }
 
   const nodePath = resolveNodeExecutable();
   console.log(`[ContextOS Bootstrap] Node binary: ${nodePath}`);
@@ -157,23 +124,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const projectConfig = initProjectWorkspace({
     projectRoot: targetRoot,
     mode,
-    cloudUrl,
-    token,
     projectId,
   });
   console.log(`[ContextOS Bootstrap] Initialized project metadata at ${targetRoot}/.contextos/project.json`);
-
-  let env = null;
-  if (mode === 'cloud' && cloudUrl) {
-    env = {
-      CONTEXTOS_MODE: 'cloud',
-      CONTEXTOS_CLOUD_URL: cloudUrl.replace(/\/+$/, ''),
-      CONTEXTOS_PROJECT_ID: projectId,
-    };
-    if (token) {
-      env.CONTEXTOS_CLOUD_TOKEN = token;
-    }
-  }
 
   const skillSource = path.join(REPO_ROOT, 'plugins', 'contextos', 'skills', 'contextos');
   const pluginSource = path.join(REPO_ROOT, 'plugins', 'contextos');
@@ -181,7 +134,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const modified = syncAllPlatforms({
     serverScript,
     nodePath,
-    env,
     targetRoot,
     skillSource,
     pluginSource,

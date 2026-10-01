@@ -42,6 +42,7 @@
     "plugins/contextos/skills/contextos/SKILL.md",
     "plugins/contextos/skills/contextos/references/",
     "packages/code-intel/grammars/",
+    "plugins/contextos/skills/contextos-ops/",
     "AI_SETUP.md",
     "README.md",
     "README_zh.md",

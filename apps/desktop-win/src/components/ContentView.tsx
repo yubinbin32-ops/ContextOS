@@ -362,9 +362,6 @@ const ProjectHeader: React.FC<{ store: GraphStore }> = ({ store }) => {
   const totalCps = store.totalCheckpointsCount;
   const passedCps = store.passedCheckpointsCount;
   const pct = store.checkpointPassPercentage;
-  const isCloud =
-    store.snapshot.project.name.includes('(Cloud)') ||
-    store.projectRoot.includes('.contextos/cloud_projects');
 
   return (
     <div className="p-4 flex flex-col gap-2">
@@ -373,7 +370,7 @@ const ProjectHeader: React.FC<{ store: GraphStore }> = ({ store }) => {
           onClick={() => setDropdownOpen(!dropdownOpen)}
           className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200/80 transition-colors w-full text-left"
         >
-          <span className="text-blue-500 text-xs">{isCloud ? '☁' : '📁'}</span>
+          <span className="text-blue-500 text-xs">📁</span>
           <span className="text-[14px] font-semibold text-slate-800 truncate flex-1">
             {store.snapshot.project.name}
           </span>
@@ -729,6 +726,16 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
         <div className="flex-1 overflow-y-auto p-5 grid grid-cols-[330px_1fr] gap-4">
           {/* Left Column: Preferences + Software Update + Live Data */}
           <div className="flex flex-col gap-3.5">
+            <p className="text-xs text-slate-500">
+              {chinese ? 'Micro 可选：在 AI 对话中说“配置 API 或 CLI Micro”，由 AI 检测、引导安装/登录并写入项目 adapter。' : 'Optional Micro: ask your AI assistant to configure API or CLI Micro. It detects the CLI, guides installation/login and writes the project adapter.'}
+            </p>
+            <label className="text-xs text-slate-600 flex items-center justify-between">
+              {chinese ? 'Micro 优先级' : 'Micro priority'}
+              <select value={store.microPriority} onChange={event => void store.setMicroPriority(event.target.value)} className="border rounded px-2 py-1">
+                <option value="cli-first">{chinese ? 'CLI 优先' : 'CLI first'}</option>
+                <option value="api-first">{chinese ? 'Key / API 优先' : 'Key / API first'}</option>
+              </select>
+            </label>
             {/* 1. Preferences */}
             <div>
               {sectionHeader(chinese ? '偏好设置' : 'PREFERENCES')}
