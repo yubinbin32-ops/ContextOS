@@ -1,4 +1,16 @@
-# ContextOS 3.0.1
+# ContextOS 3.0.2
+
+This release brings an adaptive desktop layout, dynamic multi-platform synchronization without hardcoded mappings, dual skill deployment for all editors and CLI agents, and environment-agnostic conversational ops protocols.
+
+### Key Highlights
+- **Adaptive Desktop Modal (Zero ScrollView)**: Dynamically expands the Settings modal sheet height when update notices or release notes appear, preventing UI collapse and clipping without using scroll views.
+- **Dynamic Platform & Adapter Sync**: The bottom-right sync panel dynamically reads configured platforms from `project.json` / `profile.json` (`platforms`) and custom CLI adapters from `agents.adapters` (`harness`, `zcode`, `pi`, `workbuddy`, etc.).
+- **Zero Hardcoded Switch-Case Mappings**: Platform identifiers are normalized dynamically as lowercase slugs with capitalized display names, eliminating hardcoded switch-case branches and static dictionaries.
+- **Dual Skill Deployment**: Desktop App and canonical distribution now deploy both `contextos` (core development scaffold) and `contextos-ops` (low-frequency verification and ops protocols) to Cursor, Antigravity, OpenCode, Codex, and arbitrary CLI runtime environments (`~/.contextos/skills/`).
+- **App-Native & Environment-Agnostic Ops Protocols**: Generalized all 5 conversational ops workflows in `contextos-ops` (`cli`, `micro`, `app update`, `editor plugin sync`, `cli plugin sync`), removing repo-internal commands and dangling indices.
+- **MCP System Actions**: Added `action: "sync"` under `ops({capability: "system"})` for in-conversation editor injection and autonomous plugin setup.
+
+## ContextOS 3.0.1
 
 This patch republishes the MCP Registry metadata with a schema-valid description and includes the detached CLI worker cancellation lifecycle fix.
 

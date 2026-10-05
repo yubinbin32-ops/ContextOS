@@ -1,8 +1,8 @@
 {
   "schemaVersion": 3,
   "projectId": "mdflow",
-  "graphRevision": 1505,
-  "exportedAt": "2026-10-05T06:35:08.749Z",
+  "graphRevision": 1509,
+  "exportedAt": "2026-10-05T18:32:03.804Z",
   "data": {
     "plans": [
       {
@@ -10639,17 +10639,6 @@
             "manifest": null
           },
           {
-            "path": "plugins/contextos/skills/contextos-ops/SKILL.md",
-            "symbol": "SKILL.md",
-            "anchorKind": "file",
-            "startLine": 1,
-            "endLine": 84,
-            "hash": "ae99561b4ca96487",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "plugins/contextos/skills/contextos/SKILL.md",
             "symbol": "SKILL.md",
             "anchorKind": "file",
@@ -10667,6 +10656,17 @@
             "startLine": 1,
             "endLine": 434,
             "hash": "9155ab25aae2f508",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "plugins/contextos/skills/contextos-ops/SKILL.md",
+            "symbol": "SKILL.md",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 156,
+            "hash": "a095a8f8a0cc9045",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -11676,8 +11676,8 @@
             "symbol": "PluginInstaller",
             "anchorKind": "symbol",
             "startLine": 35,
-            "endLine": 804,
-            "hash": "add1cf4b685e8df1",
+            "endLine": 936,
+            "hash": "21495d643e9d08cb",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -11809,8 +11809,8 @@
             "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
             "symbol": "ContentView",
             "anchorKind": "symbol",
-            "startLine": 1832,
-            "endLine": 1840,
+            "startLine": 1852,
+            "endLine": 1860,
             "hash": "e96bd54fb37a62c7",
             "role": "implementation",
             "hashMode": null,
@@ -11821,8 +11821,8 @@
             "symbol": "SettingsView",
             "anchorKind": "symbol",
             "startLine": 659,
-            "endLine": 1208,
-            "hash": "133793f656a43a05",
+            "endLine": 1228,
+            "hash": "77b845857786d460",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -11831,8 +11831,8 @@
             "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
             "symbol": "SoftwareUpdateSection",
             "anchorKind": "symbol",
-            "startLine": 1210,
-            "endLine": 1636,
+            "startLine": 1230,
+            "endLine": 1656,
             "hash": "4d61b24385383ed6",
             "role": "implementation",
             "hashMode": null,
@@ -11842,8 +11842,8 @@
             "path": "apps/desktop/Sources/ContextOSDesktop/ContentView.swift",
             "symbol": "EditorPlatformRow",
             "anchorKind": "symbol",
-            "startLine": 1638,
-            "endLine": 1830,
+            "startLine": 1658,
+            "endLine": 1850,
             "hash": "f53bf1e4f2941388",
             "role": "implementation",
             "hashMode": null,
@@ -12694,6 +12694,28 @@
             "startLine": 993,
             "endLine": 997,
             "hash": "9b96df848102c2fd",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/pluginInstaller.ts",
+            "symbol": "invokeTauri",
+            "anchorKind": "symbol",
+            "startLine": 4,
+            "endLine": 15,
+            "hash": "1429686ad64cd540",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "apps/desktop-win/src/pluginInstaller.ts",
+            "symbol": "PluginInstaller",
+            "anchorKind": "symbol",
+            "startLine": 17,
+            "endLine": 157,
+            "hash": "c7b175f2db0457b5",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -31609,8 +31631,8 @@
             "symbol": "syncAllPlatforms",
             "anchorKind": "symbol",
             "startLine": 572,
-            "endLine": 683,
-            "hash": "109bd0746c7057c7",
+            "endLine": 695,
+            "hash": "2bd9a31505b1a4e5",
             "role": "implementation",
             "hashMode": null,
             "manifest": null
@@ -31619,8 +31641,8 @@
             "path": "packages/mcp/src/bootstrap-util.mjs",
             "symbol": "initProjectWorkspace",
             "anchorKind": "symbol",
-            "startLine": 685,
-            "endLine": 705,
+            "startLine": 697,
+            "endLine": 717,
             "hash": "a4c7f4b1b81b356b",
             "role": "implementation",
             "hashMode": null,
@@ -32132,17 +32154,6 @@
         "details": "",
         "artifactRefs": [
           {
-            "path": "scripts/bootstrap.mjs",
-            "symbol": "bootstrap.mjs",
-            "anchorKind": "file",
-            "startLine": 1,
-            "endLine": 150,
-            "hash": "1c26be6fb10a0f63",
-            "role": "implementation",
-            "hashMode": null,
-            "manifest": null
-          },
-          {
             "path": "scripts/fixture-project.mjs",
             "symbol": "createFixtureProject",
             "anchorKind": "symbol",
@@ -32347,6 +32358,17 @@
             "startLine": 153,
             "endLine": 166,
             "hash": "79c4a2b07d6783a1",
+            "role": "implementation",
+            "hashMode": null,
+            "manifest": null
+          },
+          {
+            "path": "scripts/bootstrap.mjs",
+            "symbol": "bootstrap.mjs",
+            "anchorKind": "file",
+            "startLine": 1,
+            "endLine": 170,
+            "hash": "77f444143e292433",
             "role": "implementation",
             "hashMode": null,
             "manifest": null

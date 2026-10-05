@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ContextOSV2Service } from './v2-service.mjs';
@@ -42,10 +43,15 @@ export function findDefaultProjectRoot() {
 
 export function findBundledPluginRoot() {
   const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
+  const home = os.homedir();
   const candidates = [
     process.env.CONTEXTOS_REPOSITORY_ROOT,
     path.resolve(moduleDirectory, '../../..'),
     path.resolve(moduleDirectory, '..'),
+    '/Applications/ContextOS.app/Contents/Resources/MarketplaceRoot',
+    path.join(home, 'Applications/ContextOS.app/Contents/Resources/MarketplaceRoot'),
+    path.resolve(moduleDirectory, '../MarketplaceRoot'),
+    path.resolve(moduleDirectory, '../../MarketplaceRoot'),
   ].filter(Boolean);
   for (const candidate of candidates) {
     if (fs.existsSync(path.join(candidate, 'plugins', 'contextos'))) return candidate;

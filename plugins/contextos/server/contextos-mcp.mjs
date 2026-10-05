@@ -67959,6 +67959,7 @@ async function runAdminCli(argv = process.argv.slice(2)) {
 // packages/mcp/src/service-factory.mjs
 await init_v2_service();
 import fs38 from "node:fs";
+import os4 from "node:os";
 import path39 from "node:path";
 import { fileURLToPath as fileURLToPath5 } from "node:url";
 
@@ -68457,7 +68458,8 @@ function syncAllPlatforms({
 }) {
   const allPlatforms = detectInstalledPlatforms();
   const knownPlatformIds = new Set(allPlatforms.map((platform) => platform.id));
-  const requestedPlatforms = selectedPlatforms && selectedPlatforms.length > 0 ? [...new Set(selectedPlatforms)] : null;
+  const normalizePlatformId = (id) => String(id).trim().toLowerCase();
+  const requestedPlatforms = selectedPlatforms && selectedPlatforms.length > 0 ? [...new Set(selectedPlatforms.map(normalizePlatformId))] : null;
   if (requestedPlatforms) {
     const unknown3 = requestedPlatforms.filter((id) => !knownPlatformIds.has(id));
     if (unknown3.length > 0) {
@@ -68537,6 +68539,17 @@ function syncAllPlatforms({
       modified.push("Workspace OpenCode configuration");
     }
   }
+  if (targetRoot && requestedPlatforms && requestedPlatforms.length > 0) {
+    try {
+      const projPath = path38.join(targetRoot, ".contextos", "project.json");
+      if (fs37.existsSync(projPath)) {
+        const curProj = JSON.parse(fs37.readFileSync(projPath, "utf8"));
+        curProj.platforms = [.../* @__PURE__ */ new Set([...curProj.platforms || [], ...requestedPlatforms])];
+        fs37.writeFileSync(projPath, JSON.stringify(curProj, null, 2) + "\n");
+      }
+    } catch (_) {
+    }
+  }
   return modified;
 }
 function initProjectWorkspace({ projectRoot = process.cwd(), mode = "local", projectId = null } = {}) {
@@ -68580,10 +68593,15 @@ function requireProjectRoot(inputRoot) {
 }
 function findBundledPluginRoot() {
   const moduleDirectory = path39.dirname(fileURLToPath5(import.meta.url));
+  const home = os4.homedir();
   const candidates = [
     process.env.CONTEXTOS_REPOSITORY_ROOT,
     path39.resolve(moduleDirectory, "../../.."),
-    path39.resolve(moduleDirectory, "..")
+    path39.resolve(moduleDirectory, ".."),
+    "/Applications/ContextOS.app/Contents/Resources/MarketplaceRoot",
+    path39.join(home, "Applications/ContextOS.app/Contents/Resources/MarketplaceRoot"),
+    path39.resolve(moduleDirectory, "../MarketplaceRoot"),
+    path39.resolve(moduleDirectory, "../../MarketplaceRoot")
   ].filter(Boolean);
   for (const candidate of candidates) {
     if (fs38.existsSync(path39.join(candidate, "plugins", "contextos"))) return candidate;
@@ -68621,13 +68639,13 @@ function evictServices(projectRoot) {
 
 // packages/mcp/src/system-tools.mjs
 import fs39 from "node:fs";
-import os4 from "node:os";
+import os5 from "node:os";
 import path40 from "node:path";
 
 // package.json
 var package_default = {
   name: "contextos",
-  version: "3.0.1",
+  version: "3.0.2",
   description: "The context exoskeleton for AI development: optimize the entire development lifecycle to reduce token usage and context occupancy.",
   license: "MIT",
   type: "module",
@@ -68784,7 +68802,7 @@ async function runDoctor(input) {
     }
   }
   const platforms = detectInstalledPlatforms();
-  const contextosHome2 = process.env.CONTEXTOS_HOME || path40.join(os4.homedir(), ".contextos");
+  const contextosHome2 = process.env.CONTEXTOS_HOME || path40.join(os5.homedir(), ".contextos");
   const globalProfilePath2 = path40.join(contextosHome2, "profile.json");
   const editorStatuses = platforms.map((p) => `  - **${p.name}**: ${p.isInstalled ? "Installed" : "Not detected"} (\`${p.configPath}\`)`).join("\n");
   return [
@@ -73059,13 +73077,20 @@ function createV3Server() {
     if (tool === "ops" && input.capability === "system" && input.action === "doctor") {
       return runDoctor({ ...input.args || {}, projectRoot: root });
     }
+    if (tool === "ops" && input.capability === "system" && (input.action === "init" || input.action === "sync")) {
+      return runInit({ ...input.args || {}, projectRoot: root, injectEditors: true });
+    }
     ensureWorkspace(root);
     const service = getService(root);
     const orchestrator = new Orchestrator({
       service,
       projectRoot: root,
       projectId: service.projectId,
-      system: { init: runInit, doctor: runDoctor }
+      system: {
+        init: runInit,
+        doctor: runDoctor,
+        sync: (args2) => runInit({ ...args2, injectEditors: true })
+      }
     });
     return orchestrator.dispatch(tool, input);
   };

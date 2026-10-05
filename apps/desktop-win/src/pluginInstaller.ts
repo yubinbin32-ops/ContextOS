@@ -19,22 +19,29 @@ export class PluginInstaller {
   static readonly targetBuild = `build-${AppUpdater.currentAppVersion}`;
   projectRoot: string | null = null;
 
+  static normalizePlatformId(raw: string): string {
+    return raw.trim().toLowerCase();
+  }
+
+  static platformDisplayName(id: string): string {
+    if (!id) return id;
+    return id.charAt(0).toUpperCase() + id.slice(1);
+  }
+
   constructor(projectRoot?: string | null) {
     this.projectRoot = projectRoot || null;
   }
 
   static async detectAllPlatforms(): Promise<EditorPlatformStatus[]> {
+    let tauriData: EditorPlatformStatus[] | null = null;
     try {
-      const tauriData = await invokeTauri<EditorPlatformStatus[]>('detect_installed_editors');
-      if (Array.isArray(tauriData) && tauriData.length > 0) {
-        return tauriData;
-      }
+      tauriData = await invokeTauri<EditorPlatformStatus[]>('detect_installed_editors');
     } catch {
       // Fallback
     }
 
     // Default editor platforms schema for browser dev preview
-    return [
+    const defaultPlatforms: EditorPlatformStatus[] = [
       {
         id: 'claude',
         name: 'Claude Desktop',
@@ -106,6 +113,18 @@ export class PluginInstaller {
         targetBuild: PluginInstaller.targetBuild,
       },
     ];
+
+    let platformList = (Array.isArray(tauriData) && tauriData.length > 0) ? tauriData : defaultPlatforms;
+    try {
+      const configured = await invokeTauri<string[]>('get_configured_platforms');
+      if (Array.isArray(configured) && configured.length > 0) {
+        const normalized = new Set(configured.map(PluginInstaller.normalizePlatformId));
+        platformList = platformList.filter((p) => normalized.has(PluginInstaller.normalizePlatformId(p.id)));
+      }
+    } catch {
+      // Fallback
+    }
+    return platformList;
   }
 
   static async syncPlatform(id: string, projectRoot?: string | null): Promise<void> {

@@ -115,6 +115,107 @@ enum PluginInstaller {
         return fallbackVersion
     }
 
+    static func normalizePlatformID(_ raw: String) -> String {
+        raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    static func platformDisplayName(_ id: String) -> String {
+        guard let first = id.first else { return id }
+        return first.uppercased() + id.dropFirst()
+    }
+
+    static func configuredPlatformIDs(projectRoot: URL?) -> Set<String> {
+        var configured = Set<String>()
+
+        func scanJsonFile(fileURL: URL) {
+            guard FileManager.default.fileExists(atPath: fileURL.path),
+                  let data = try? Data(contentsOf: fileURL),
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+
+            if let list = json["platforms"] as? [String] {
+                for item in list { configured.insert(normalizePlatformID(item)) }
+            }
+            if let agents = json["agents"] as? [String: Any],
+               let adapters = agents["adapters"] as? [String: Any] {
+                for key in adapters.keys {
+                    configured.insert(normalizePlatformID(key))
+                }
+            }
+        }
+
+        // Global profile (~/.contextos/profile.json)
+        scanJsonFile(fileURL: RoleSettings.globalProfileURL())
+
+        // Project files
+        if let projectRoot {
+            scanJsonFile(fileURL: projectRoot.appending(path: ".contextos/profile.json"))
+            scanJsonFile(fileURL: projectRoot.appending(path: ".contextos/project.json"))
+        }
+
+        return configured
+    }
+
+    static func customAdapterPlatforms(projectRoot: URL?, targetVersion: String, appVersion: String, targetBuild: String) -> [EditorPlatformStatus] {
+        var statuses: [EditorPlatformStatus] = []
+        let builtInIDs: Set<String> = ["claude", "cursor", "antigravity", "opencode", "codex"]
+        let home = FileManager.default.homeDirectoryForCurrentUser
+
+        func checkExecutableExists(_ executable: String) -> Bool {
+            if executable.hasPrefix("/") {
+                return FileManager.default.fileExists(atPath: executable)
+            }
+            let candidates = [
+                "/opt/homebrew/bin/\(executable)",
+                "/usr/local/bin/\(executable)",
+                "/usr/bin/\(executable)",
+                home.appending(path: ".local/bin/\(executable)").path,
+                home.appending(path: ".cargo/bin/\(executable)").path
+            ]
+            return candidates.contains { FileManager.default.fileExists(atPath: $0) }
+        }
+
+        func extractFromProfile(fileURL: URL) {
+            guard FileManager.default.fileExists(atPath: fileURL.path),
+                  let data = try? Data(contentsOf: fileURL),
+                  let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                  let agents = json["agents"] as? [String: Any],
+                  let adapters = agents["adapters"] as? [String: Any] else { return }
+
+            for (key, val) in adapters {
+                let normID = normalizePlatformID(key)
+                if builtInIDs.contains(normID) || statuses.contains(where: { $0.id == normID }) { continue }
+
+                let config = val as? [String: Any] ?? [:]
+                let command = config["command"] as? String ?? key
+                let executable = command.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? command
+                let isInstalled = checkExecutableExists(executable)
+                let displayName = platformDisplayName(key)
+
+                statuses.append(EditorPlatformStatus(
+                    id: normID,
+                    name: displayName,
+                    iconSystemName: "terminal.fill",
+                    isAppInstalled: isInstalled,
+                    isSynced: isInstalled,
+                    installedVersion: isInstalled ? targetVersion : nil,
+                    targetVersion: targetVersion,
+                    isOutdated: false,
+                    configPath: command,
+                    appVersion: appVersion,
+                    installedBuild: isInstalled ? targetBuild : nil,
+                    targetBuild: targetBuild
+                ))
+            }
+        }
+
+        extractFromProfile(fileURL: RoleSettings.globalProfileURL())
+        if let projectRoot {
+            extractFromProfile(fileURL: projectRoot.appending(path: ".contextos/profile.json"))
+        }
+
+        return statuses
+    }
+
     static func detectAllPlatforms(projectRoot: URL?, marketplaceRoot: URL?) -> [EditorPlatformStatus] {
         var platforms: [EditorPlatformStatus] = []
         let targetVersion = bundledTargetVersion(marketplaceRoot: marketplaceRoot)
@@ -240,6 +341,32 @@ enum PluginInstaller {
             targetBuild: targetBuild
         ))
 
+        let customList = customAdapterPlatforms(projectRoot: projectRoot, targetVersion: targetVersion, appVersion: appVersion, targetBuild: targetBuild)
+        platforms.append(contentsOf: customList)
+
+        let configured = configuredPlatformIDs(projectRoot: projectRoot)
+        if !configured.isEmpty {
+            for id in configured {
+                if !platforms.contains(where: { $0.id == id }) {
+                    platforms.append(EditorPlatformStatus(
+                        id: id,
+                        name: platformDisplayName(id),
+                        iconSystemName: "terminal.fill",
+                        isAppInstalled: false,
+                        isSynced: false,
+                        installedVersion: nil,
+                        targetVersion: targetVersion,
+                        isOutdated: false,
+                        configPath: id,
+                        appVersion: appVersion,
+                        installedBuild: nil,
+                        targetBuild: targetBuild
+                    ))
+                }
+            }
+            return platforms.filter { configured.contains($0.id) }
+        }
+
         return platforms
     }
 
@@ -269,7 +396,18 @@ enum PluginInstaller {
         let skillSource = marketplaceRoot
             .appending(path: "plugins/contextos/skills/contextos")
             .standardizedFileURL
+        let opsSkillSource = marketplaceRoot
+            .appending(path: "plugins/contextos/skills/contextos-ops")
+            .standardizedFileURL
         let home = FileManager.default.homeDirectoryForCurrentUser
+
+        // Always ensure canonical runtime skills directory (~/.contextos/skills) has both skills deployed
+        let canonicalRuntimeSkills = home.appending(path: ".contextos/skills")
+        try? FileManager.default.createDirectory(at: canonicalRuntimeSkills, withIntermediateDirectories: true)
+        try? syncSkills(from: skillSource, to: canonicalRuntimeSkills.appending(path: "contextos"))
+        if FileManager.default.fileExists(atPath: opsSkillSource.path) {
+            try? syncSkills(from: opsSkillSource, to: canonicalRuntimeSkills.appending(path: "contextos-ops"))
+        }
 
         switch id {
         case "claude":
@@ -282,12 +420,16 @@ enum PluginInstaller {
             // 1. Clean old skill and MCP config
             let userCursorDir = home.appending(path: ".cursor")
             let userSkillDest = userCursorDir.appending(path: "skills/contextos")
+            let userOpsDest = userCursorDir.appending(path: "skills/contextos-ops")
             let userMcpConfig = userCursorDir.appending(path: "mcp.json")
             try? FileManager.default.createDirectory(at: userCursorDir, withIntermediateDirectories: true)
             try cleanJsonMcp(at: userMcpConfig)
 
-            // 2. Copy fresh skill and write fresh MCP config
+            // 2. Copy fresh skills and write fresh MCP config
             try syncSkills(from: skillSource, to: userSkillDest)
+            if FileManager.default.fileExists(atPath: opsSkillSource.path) {
+                try? syncSkills(from: opsSkillSource, to: userOpsDest)
+            }
             _ = try configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
 
             // 3. Update project root IF .cursor directory already explicitly existed
@@ -303,15 +445,23 @@ enum PluginInstaller {
             // 1. Clean old skill and MCP config
             let geminiConfigDir = home.appending(path: ".gemini/config")
             let userSkillDest = home.appending(path: ".gemini/antigravity-cli/skills/contextos")
+            let userOpsDest = home.appending(path: ".gemini/antigravity-cli/skills/contextos-ops")
             let userMcpConfig = geminiConfigDir.appending(path: "mcp_config.json")
             try? FileManager.default.createDirectory(at: geminiConfigDir, withIntermediateDirectories: true)
             try cleanJsonMcp(at: userMcpConfig)
 
-            // 2. Copy fresh skill and write fresh MCP config
+            // 2. Copy fresh skills and write fresh MCP config
             try syncSkills(from: skillSource, to: userSkillDest)
+            if FileManager.default.fileExists(atPath: opsSkillSource.path) {
+                try? syncSkills(from: opsSkillSource, to: userOpsDest)
+            }
             let legacySkillDest = geminiConfigDir.appending(path: "skills/contextos")
             if FileManager.default.fileExists(atPath: legacySkillDest.path) {
                 try syncSkills(from: skillSource, to: legacySkillDest)
+                let legacyOpsDest = geminiConfigDir.appending(path: "skills/contextos-ops")
+                if FileManager.default.fileExists(atPath: opsSkillSource.path) {
+                    try? syncSkills(from: opsSkillSource, to: legacyOpsDest)
+                }
             }
             _ = try configureJsonMcp(at: userMcpConfig, serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
 
@@ -328,12 +478,16 @@ enum PluginInstaller {
             // 1. Clean old skill and MCP config
             let userOpencodeDir = home.appending(path: ".config/opencode")
             let userSkillDest = userOpencodeDir.appending(path: "skills/contextos")
+            let userOpsDest = userOpencodeDir.appending(path: "skills/contextos-ops")
             let userMcpConfig = userOpencodeDir.appending(path: "mcp.json")
             try? FileManager.default.createDirectory(at: userOpencodeDir, withIntermediateDirectories: true)
             try cleanJsonMcp(at: userMcpConfig)
 
-            // 2. Copy fresh skill and write fresh MCP config
+            // 2. Copy fresh skills and write fresh MCP config
             try syncSkills(from: skillSource, to: userSkillDest)
+            if FileManager.default.fileExists(atPath: opsSkillSource.path) {
+                try? syncSkills(from: opsSkillSource, to: userOpsDest)
+            }
             _ = try configureJsonMcp(at: userOpencodeDir.appending(path: "mcp.json"), serverScript: serverScript, version: targetVersion, build: targetBuild, env: nil)
 
             // 3. Update project root IF .opencode directory already explicitly existed
@@ -409,6 +563,14 @@ enum PluginInstaller {
             }
 
         default:
+            // Generic/custom CLI adapter sync (e.g. harness, zcode, pi, workbuddy)
+            let runtimeSkills = home.appending(path: ".contextos/skills")
+            try? FileManager.default.createDirectory(at: runtimeSkills, withIntermediateDirectories: true)
+            try? syncSkills(from: skillSource, to: runtimeSkills.appending(path: "contextos"))
+            let opsSource = marketplaceRoot.appending(path: "plugins/contextos/skills/contextos-ops").standardizedFileURL
+            if FileManager.default.fileExists(atPath: opsSource.path) {
+                try? syncSkills(from: opsSource, to: runtimeSkills.appending(path: "contextos-ops"))
+            }
             break
         }
     }

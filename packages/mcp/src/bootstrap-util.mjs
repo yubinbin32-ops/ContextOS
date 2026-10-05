@@ -582,8 +582,9 @@ export function syncAllPlatforms({
 }) {
   const allPlatforms = detectInstalledPlatforms();
   const knownPlatformIds = new Set(allPlatforms.map((platform) => platform.id));
+  const normalizePlatformId = (id) => String(id).trim().toLowerCase();
   const requestedPlatforms = selectedPlatforms && selectedPlatforms.length > 0
-    ? [...new Set(selectedPlatforms)]
+    ? [...new Set(selectedPlatforms.map(normalizePlatformId))]
     : null;
   if (requestedPlatforms) {
     const unknown = requestedPlatforms.filter((id) => !knownPlatformIds.has(id));
@@ -677,6 +678,17 @@ export function syncAllPlatforms({
       });
       modified.push('Workspace OpenCode configuration');
     }
+  }
+
+  if (targetRoot && requestedPlatforms && requestedPlatforms.length > 0) {
+    try {
+      const projPath = path.join(targetRoot, '.contextos', 'project.json');
+      if (fs.existsSync(projPath)) {
+        const curProj = JSON.parse(fs.readFileSync(projPath, 'utf8'));
+        curProj.platforms = [...new Set([...(curProj.platforms || []), ...requestedPlatforms])];
+        fs.writeFileSync(projPath, JSON.stringify(curProj, null, 2) + '\n');
+      }
+    } catch (_) {}
   }
 
   return modified;

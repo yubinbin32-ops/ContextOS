@@ -996,9 +996,17 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
     </div>
   );
 
+  const isUpdateExpanded = store.updater.state.type === 'updateAvailable' ||
+    store.updater.state.type === 'downloading' ||
+    store.updater.state.type === 'readyToInstall' ||
+    store.updater.state.type === 'installing';
+  const modalHeight = isUpdateExpanded
+    ? (store.updater.showReleaseNotes ? 'h-[860px]' : 'h-[732px]')
+    : (store.editorStatuses.length > 3 ? `h-[${582 + (store.editorStatuses.length - 3) * 44}px]` : 'h-[582px]');
+
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-      <div className="w-[756px] h-[582px] max-w-full bg-[#fafafa] rounded-2xl shadow-2xl flex flex-col border border-slate-200/80 overflow-hidden">
+      <div className={`w-[756px] ${modalHeight} max-w-full bg-[#fafafa] rounded-2xl shadow-2xl flex flex-col border border-slate-200/80 overflow-hidden transition-all duration-300`}>
         {/* Navigation Bar */}
         <div className="px-5 py-3 bg-white border-b border-slate-200/70 flex items-center justify-between shrink-0">
           <h3 className="text-[15px] font-semibold text-slate-900 tracking-tight">

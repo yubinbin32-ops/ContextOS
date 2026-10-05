@@ -980,6 +980,25 @@ private struct SettingsView: View {
         return value.isEmpty ? (store.activeLocale == "zh-Hans" ? "未指定" : "Unspecified") : value
     }
 
+    private var sheetHeight: CGFloat {
+        var base: CGFloat = 582
+        switch store.updater.state {
+        case .updateAvailable, .downloading, .readyToInstall, .installing:
+            base += 150
+            if store.updater.showReleaseNotes {
+                base += 130
+            }
+        default:
+            break
+        }
+        let platformCount = store.editorStatuses.count
+        if platformCount > 3 {
+            let extra = CGFloat(platformCount - 3) * 44
+            base = max(base, 582 + extra)
+        }
+        return base
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // macOS / iOS Sheet Navigation Bar
@@ -1189,7 +1208,8 @@ private struct SettingsView: View {
             .padding(.top, 14)
             .padding(.bottom, 14)
         }
-        .frame(width: 756, height: 582)
+        .frame(width: 756, height: sheetHeight)
+        .animation(.easeInOut(duration: 0.25), value: sheetHeight)
         .background(ContextOSTheme.surface.ignoresSafeArea())
         .onAppear {
             loadMicroDraft()

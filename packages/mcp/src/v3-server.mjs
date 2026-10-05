@@ -156,9 +156,12 @@ export function createV3Server() {
         agent: (args, options) => executeAgent(args, { ...options, onUsage: recordUsage, workerEntry: fileURLToPath(import.meta.url) }),
       });
     }
-    // Diagnostics must remain available when context import itself is invalid.
+    // Diagnostics and platform sync must remain available when context import itself is invalid.
     if (tool === 'ops' && input.capability === 'system' && input.action === 'doctor') {
       return runDoctor({ ...(input.args || {}), projectRoot: root });
+    }
+    if (tool === 'ops' && input.capability === 'system' && (input.action === 'init' || input.action === 'sync')) {
+      return runInit({ ...(input.args || {}), projectRoot: root, injectEditors: true });
     }
     ensureWorkspace(root);
     const service = getService(root);
@@ -166,7 +169,11 @@ export function createV3Server() {
       service,
       projectRoot: root,
       projectId: service.projectId,
-      system: { init: runInit, doctor: runDoctor },
+      system: {
+        init: runInit,
+        doctor: runDoctor,
+        sync: (args) => runInit({ ...args, injectEditors: true }),
+      },
     });
     return orchestrator.dispatch(tool, input);
   };

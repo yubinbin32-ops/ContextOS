@@ -77,9 +77,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(2);
   }
 
+  const normalizePlatformId = (id) => String(id).trim().toLowerCase();
+
   const selectedPlatforms = allPlatforms
     ? null
-    : platformsArg.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    : platformsArg.split(',').map(normalizePlatformId).filter(Boolean);
   if (!allPlatforms && selectedPlatforms.length === 0) {
     console.error('No platforms selected. Pass at least one platform id.');
     process.exit(2);
@@ -145,5 +147,23 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   for (const m of modified) {
     console.log(`  ✓ ${m}`);
   }
+
+  if (selectedPlatforms && selectedPlatforms.length > 0) {
+    try {
+      const projPath = path.join(targetRoot, '.contextos', 'project.json');
+      if (fs.existsSync(projPath)) {
+        const curProj = JSON.parse(fs.readFileSync(projPath, 'utf8'));
+        curProj.platforms = [...new Set([...(curProj.platforms || []), ...selectedPlatforms])];
+        fs.writeFileSync(projPath, JSON.stringify(curProj, null, 2) + '\n');
+      }
+      const profPath = path.join(os.homedir(), '.contextos', 'profile.json');
+      if (fs.existsSync(profPath)) {
+        const curProf = JSON.parse(fs.readFileSync(profPath, 'utf8'));
+        curProf.platforms = [...new Set([...(curProf.platforms || []), ...selectedPlatforms])];
+        fs.writeFileSync(profPath, JSON.stringify(curProf, null, 2) + '\n');
+      }
+    } catch (_) {}
+  }
+
   console.log(`[ContextOS Bootstrap] Complete! Ready for AI Agent orchestration.`);
 }

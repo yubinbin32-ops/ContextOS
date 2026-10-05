@@ -1043,7 +1043,7 @@ test('runMicroTask enforces budgets before final tool-convergence dispatch', asy
       // ContextOS skill guidance is injected into every Micro request, so keep
       // the initial prompt under the limit while a long tool result pushes the
       // convergence turn over it.
-      maxProviderTokens: 4900,
+      maxProviderTokens: 6000,
       caps: { inspect: async () => 'x'.repeat(20000) },
     });
     assert.equal(result.ok, false);

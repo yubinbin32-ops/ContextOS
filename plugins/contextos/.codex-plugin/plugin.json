@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "The context exoskeleton for AI development: optimize the entire development lifecycle to reduce token usage and context occupancy.",
   "author": {
     "name": "ContextOS"
