@@ -53,8 +53,80 @@ test('pipeline returns a resumable partial result at the continuation window', a
 
     assert.equal(calls.length, 1);
     assert.match(output, /pipeline=PARTIAL/);
-    assert.match(output, /partial=true resume=\{"kind":"pipeline","fromStep":2\}/);
-    assert.match(output, /do not replay completed steps/);
+    assert.match(output, /partial=true resume=\{"kind":"pipeline","fromStep":2,"totalSteps":2\}/);
+    assert.match(output, /completed steps are skipped/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline clamps in-call wait windows to the remaining continuation budget', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-wait-budget-'));
+  const waits = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        waits.push({ tool, waitMs: input.waitMs });
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return '# ContextOS integrate\n- status=noop changed=0';
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      steps: [
+        { tool: 'integrate', args: { jobId: 'agent-wait-budget-1', waitMs: 60000 } },
+        { tool: 'integrate', args: { jobId: 'agent-wait-budget-2', waitMs: 60000 } },
+      ],
+      budget: { maxDurationMs: 30 },
+    });
+
+    assert.equal(waits.length, 1);
+    assert.equal(waits[0].tool, 'integrate');
+    assert.ok(waits[0].waitMs >= 1 && waits[0].waitMs <= 30, `wait must be bounded, got ${waits[0].waitMs}`);
+    assert.match(output, /pipeline=PARTIAL/);
+    assert.match(output, /resume=\{"kind":"pipeline","fromStep":2,"totalSteps":2\}/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline resume handle skips completed steps when the full flow is resent', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-resume-'));
+  fs.writeFileSync(path.join(projectRoot, 'a.txt'), 'a\n');
+  fs.writeFileSync(path.join(projectRoot, 'b.txt'), 'b\n');
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push(input.path || tool);
+        await new Promise((resolve) => setTimeout(resolve, 12));
+        return `# ContextOS inspect\n\n${input.path || tool}`;
+      },
+    },
+  };
+  const steps = [
+    { tool: 'inspect', args: { path: 'a.txt' } },
+    { tool: 'inspect', args: { path: 'b.txt' } },
+  ];
+
+  try {
+    const partial = await pipelinePipeline(ctx, { steps, budget: { maxDurationMs: 1 } });
+    assert.equal(calls.length, 1);
+    assert.match(partial, /resume=\{"kind":"pipeline","fromStep":2,"totalSteps":2\}/);
+
+    const resumed = await pipelinePipeline(ctx, {
+      steps,
+      resume: { kind: 'pipeline', fromStep: 2, totalSteps: 2 },
+      budget: { maxDurationMs: 1000 },
+    });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1], 'b.txt');
+    assert.match(resumed, /pipeline=OK/);
+    assert.match(resumed, /actions=1\/1/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }

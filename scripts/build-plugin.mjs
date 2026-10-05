@@ -24,6 +24,8 @@ const normalized = bundled
   .map((line) => line.replace(/[ \t]+$/, ''))
   .join('\n');
 if (normalized !== bundled) fs.writeFileSync(outfile, normalized, 'utf8');
+// Keep the shipped entrypoint executable for npm bin and direct invocation.
+try { fs.chmodSync(outfile, 0o755); } catch (_) {}
 
 // Ship the parser runtime beside the bundled server. A plugin cache lives
 // outside the repository and cannot rely on the repo's node_modules/grammars.

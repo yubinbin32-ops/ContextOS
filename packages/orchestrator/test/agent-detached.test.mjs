@@ -68,9 +68,11 @@ test('detached dispatch returns running and the worker completes through the dis
 
     const early = await executeAgent({ action: 'wait', id: jobId, waitMs: 25 }, { projectRoot: root });
     assert.equal(early.status, 'partial');
+    assert.equal(early.jobStatus, 'running');
     assert.equal(early.terminal, false);
+    assert.equal(early.doNotRedispatch, true);
     assert.deepEqual(early.resume, { kind: 'agent', action: 'wait', jobId });
-    assert.match(early.guidance, /refresh the window/);
+    assert.match(early.guidance, /do not dispatch the same task again/);
 
     const completed = await executeAgent({ action: 'wait', id: jobId, waitMs: 5000 }, { projectRoot: root });
     assert.equal(completed.status, 'completed');

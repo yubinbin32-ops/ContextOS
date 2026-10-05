@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { executeAgent } from '../src/agent-service.mjs';
-import { createMicroJob, enqueueMicroDelivery, readMicroJob, reportMicroJob, updateMicroJob } from '../src/micro-delivery.mjs';
+import { claimMicroDeliveries, createMicroJob, cancellationMarkerPath, enqueueMicroDelivery, readMicroJob, reportMicroJob, updateMicroJob } from '../src/micro-delivery.mjs';
 import { sendMicroMessage, receiveMicroMessages } from '../src/micro-mailbox.mjs';
 
 process.env.CONTEXTOS_AGENT_INPROCESS = '1';
@@ -608,9 +609,27 @@ test('agent wait returns a resumable partial snapshot when the window closes', a
     const waited = await executeAgent({ action: 'wait', id: start.id, waitMs: 1 }, opts);
     assert.equal(waited.status, 'partial');
     assert.equal(waited.partial, true);
+    assert.equal(waited.jobStatus, 'running');
+    assert.equal(waited.window, 'expired');
+    assert.equal(waited.doNotRedispatch, true);
     assert.deepEqual(waited.resume, { kind: 'agent', action: 'wait', jobId: start.id });
-    assert.match(waited.guidance, /refresh the window/);
+    assert.deepEqual(waited.continueWith, { action: 'wait', jobId: start.id, waitMs: 290000 });
+    assert.match(waited.guidance, /do not dispatch the same task again/);
+    const resumed = await executeAgent({ action: 'wait', resume: waited.resume, waitMs: 1 }, opts);
+    assert.equal(resumed.jobStatus, 'running');
     await executeAgent({ action: 'cancel', id: start.id }, opts);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('agent wait settles a missing job instead of reporting a running window', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-agent-service-'));
+  try {
+    const waited = await executeAgent({ action: 'wait', id: 'agent-never-created' }, { projectRoot: root });
+    assert.equal(waited.status, 'missing');
+    assert.equal(waited.terminal, true);
+    assert.equal(waited.errorCode, 'JOB_NOT_FOUND');
+    assert.equal(waited.resume, undefined);
+    assert.match(waited.guidance, /agent\(\{action:"list"\}\)/);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -631,6 +650,63 @@ test('background concurrent jobs return ids before they finish and cancelled job
     assert.equal(result.status, 'cancelled');
     finish?.();
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('agent cancel signals a detached lease pid and persists a cancellation marker', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-agent-service-'));
+  const lease = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+  const signals = [];
+  try {
+    createMicroJob(root, { jobId: 'agent-detached-cancel', kind: 'agent' });
+    updateMicroJob(root, 'agent-detached-cancel', { leasePid: lease.pid });
+    const cancelled = await executeAgent({ action: 'cancel', id: 'agent-detached-cancel' }, {
+      projectRoot: root,
+      processAlive: () => true,
+      killProcess: (pid, signal) => { signals.push([pid, signal]); },
+    });
+    assert.equal(cancelled.cancellationRequested, true);
+    assert.equal(cancelled.cancellation.marker, true);
+    assert.equal(cancelled.cancellation.signalled, process.platform !== 'win32');
+    if (process.platform !== 'win32') assert.deepEqual(signals, [[lease.pid, 'SIGTERM']]);
+    assert.equal(fs.existsSync(cancellationMarkerPath(root, 'agent-detached-cancel')), true);
+    assert.equal(Boolean(readMicroJob(root, 'agent-detached-cancel').cancelRequestedAt), true);
+  } finally {
+    try { lease.kill('SIGKILL'); } catch {}
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a detached agent worker observes a cancellation marker written by another process', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-agent-service-'));
+  try {
+    createMicroJob(root, {
+      jobId: 'agent-marker-cancel',
+      kind: 'agent',
+      worker: {
+        version: 1,
+        args: { task: 'bounded task' },
+        adapter: { command: 'worker' },
+        name: 'worker',
+        deliveryMode: 'defer',
+      },
+    });
+    const run = executeAgent({ action: 'run', id: 'agent-marker-cancel', workerResume: true, background: false }, {
+      projectRoot: root,
+      runner: async (_config, args) => new Promise((resolve) => {
+        args.signal.addEventListener('abort', () => resolve({ ok: false, error: 'cancelled' }), { once: true });
+      }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    fs.mkdirSync(path.dirname(cancellationMarkerPath(root, 'agent-marker-cancel')), { recursive: true });
+    fs.writeFileSync(cancellationMarkerPath(root, 'agent-marker-cancel'), `${JSON.stringify({ requestedAt: new Date().toISOString(), requestedBy: 'test' })}\n`);
+    const result = await run;
+    assert.equal(result.status, 'cancelled');
+    assert.equal(readMicroJob(root, 'agent-marker-cancel').status, 'cancelled');
+    assert.equal(fs.existsSync(cancellationMarkerPath(root, 'agent-marker-cancel')), false);
+    assert.equal(claimMicroDeliveries(root, { maxItems: 10 }).some((item) => item.deliveryId === 'agent-marker-cancel'), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('agent wait returns the terminal report in one bounded call', async () => {

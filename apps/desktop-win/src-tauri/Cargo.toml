@@ -1,6 +1,6 @@
 [package]
 name = "contextos-desktop-win"
-version = "3.0.0"
+version = "3.0.1"
 description = "ContextOS Architecture Desktop Client for Windows"
 authors = ["ContextOS Team"]
 edition = "2021"

@@ -9244,9 +9244,16 @@ function lockPath(projectRoot) {
 function jobsDir(projectRoot) {
   return path5.join(deliveryDir(projectRoot), "jobs");
 }
+function validatedJobId(jobId) {
+  const id = String(jobId || "");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(id)) throw new Error("Invalid Micro job id.");
+  return id;
+}
 function jobPath(projectRoot, jobId) {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(String(jobId))) throw new Error("Invalid Micro job id.");
-  return path5.join(jobsDir(projectRoot), `${jobId}.json`);
+  return path5.join(jobsDir(projectRoot), `${validatedJobId(jobId)}.json`);
+}
+function cancellationMarkerPath(projectRoot, jobId) {
+  return path5.join(jobsDir(projectRoot), `${validatedJobId(jobId)}.cancel`);
 }
 function sleepSync(ms) {
   const wait = Math.max(1, Math.min(100, Math.floor(ms)));
@@ -9310,7 +9317,7 @@ function writeState(projectRoot, state) {
 `, { encoding: "utf8", mode: 384 });
   fs6.renameSync(temporary, filePath);
 }
-function processIsAlive(pid) {
+function isProcessAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
@@ -9354,7 +9361,7 @@ function recoverExpiredLeases(state, now = Date.now()) {
   const activeLeases = [];
   for (const item of state.leased) {
     const claimedAt = Date.parse(item.claimedAt || "");
-    const leaseProcessAlive = Number.isInteger(item.leasePid) ? processIsAlive(item.leasePid) : true;
+    const leaseProcessAlive = Number.isInteger(item.leasePid) ? isProcessAlive(item.leasePid) : true;
     if (!Number.isFinite(claimedAt) || now - claimedAt > LEASE_STALE_MS || !leaseProcessAlive) {
       const { claimedAt: _claimedAt, leasePid: _leasePid, ...delivery } = item;
       fresh.push(delivery);
@@ -9416,7 +9423,7 @@ function writeJob(projectRoot, job) {
   return job;
 }
 function normalizeJobStatus(status) {
-  return ["running", "completed", "failed", "cancelled"].includes(status) ? status : "running";
+  return ["running", "partial", "completed", "failed", "cancelled"].includes(status) ? status : "running";
 }
 function normalizeJob(projectRoot, job) {
   if (!job || typeof job !== "object") return null;
@@ -9426,13 +9433,14 @@ function normalizeJob(projectRoot, job) {
   const createdAt = job.createdAt || (/* @__PURE__ */ new Date()).toISOString();
   const updatedAt = job.updatedAt || createdAt;
   const stale = Date.now() - Date.parse(updatedAt || createdAt) > JOB_TTL_MS;
-  const leaseAlive = status !== "running" || !Number.isInteger(job.leasePid) || processIsAlive(job.leasePid);
+  const leaseAlive = status !== "running" || !Number.isInteger(job.leasePid) || isProcessAlive(job.leasePid);
+  const cancelRequested = Boolean(job.cancelRequestedAt);
   if (status === "running" && (stale || !leaseAlive)) {
     return {
       ...job,
       jobId,
-      status: "failed",
-      error: stale ? "Micro background job expired before completion." : "Micro background worker exited before completion.",
+      status: cancelRequested ? "cancelled" : "failed",
+      error: cancelRequested ? "Micro background job was cancelled." : stale ? "Micro background job expired before completion." : "Micro background worker exited before completion.",
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     };
   }
@@ -9498,12 +9506,53 @@ function readMicroJob(projectRoot, jobId) {
   const normalized = normalizeJob(projectRoot, job);
   if (normalized && normalized.status !== job.status) {
     writeJob(projectRoot, normalized);
+    if (["completed", "failed", "cancelled", "partial"].includes(normalized.status)) {
+      clearMicroJobCancellation(projectRoot, normalized.jobId);
+    }
     const ledger = path5.join(projectRoot, ".contextos", "logs", "micro-usage.jsonl");
     fs6.mkdirSync(path5.dirname(ledger), { recursive: true });
     fs6.appendFileSync(ledger, JSON.stringify({ at: normalized.updatedAt, receiptId: normalized.jobId, hostSessionId: normalized.hostSessionId || null, ok: false, usageSource: "unavailable", providerUsageComplete: false, providerRequests: null, provider: normalized.provider || "cli", estimatedCostUsd: null, error: normalized.error }) + "\n", { mode: 384 });
-    enqueueMicroDelivery(projectRoot, { deliveryId: normalized.jobId, receiptId: normalized.jobId, content: normalized.error });
+    if (normalized.status !== "cancelled") {
+      enqueueMicroDelivery(projectRoot, { deliveryId: normalized.jobId, receiptId: normalized.jobId, content: normalized.error });
+    }
   }
   return normalized;
+}
+function requestMicroJobCancellation(projectRoot, jobId) {
+  if (!projectRoot || !jobId) return { status: "missing", requested: false, terminal: false, job: null };
+  const existing = readJobFile(jobPath(projectRoot, jobId));
+  if (!existing) return { status: "missing", requested: false, terminal: false, job: null };
+  const status = normalizeJobStatus(existing.status);
+  if (TERMINAL_JOB_STATUSES.has(status)) {
+    return { status, requested: false, terminal: true, job: normalizeJob(projectRoot, existing) };
+  }
+  const requestedAt = (/* @__PURE__ */ new Date()).toISOString();
+  fs6.mkdirSync(jobsDir(projectRoot), { recursive: true });
+  fs6.writeFileSync(cancellationMarkerPath(projectRoot, jobId), `${JSON.stringify({ requestedAt, requestedBy: "host" })}
+`, { mode: 384 });
+  const updated = updateMicroJob(projectRoot, jobId, { cancelRequestedAt: requestedAt }) || normalizeJob(projectRoot, existing);
+  return { status: updated?.status || status, requested: true, terminal: false, job: updated, requestedAt };
+}
+function microJobCancellationRequested(projectRoot, jobId) {
+  if (!projectRoot || !jobId) return null;
+  try {
+    const marker = JSON.parse(fs6.readFileSync(cancellationMarkerPath(projectRoot, jobId), "utf8"));
+    return marker?.requestedAt || (/* @__PURE__ */ new Date()).toISOString();
+  } catch {
+  }
+  try {
+    const job = readJobFile(jobPath(projectRoot, jobId));
+    return job?.cancelRequestedAt || null;
+  } catch {
+    return null;
+  }
+}
+function clearMicroJobCancellation(projectRoot, jobId) {
+  if (!projectRoot || !jobId) return;
+  try {
+    fs6.rmSync(cancellationMarkerPath(projectRoot, jobId), { force: true });
+  } catch {
+  }
 }
 function isAgentJob(job) {
   if (job?.kind) return job.kind === "agent";
@@ -9639,7 +9688,7 @@ function reportMicroJob(projectRoot, jobId, content) {
     content: JSON.stringify(report)
   });
 }
-var DELIVERY_VERSION, DEFAULT_LOCK_TIMEOUT_MS, DEFAULT_LOCK_STALE_MS, MAX_PENDING_DELIVERIES, MAX_STORED_ANSWER_CHARS, DEFAULT_RESTORE_ITEMS, DEFAULT_RESTORE_CHARS, LEASE_STALE_MS, DELIVERY_TTL_MS, MAX_DELIVERED_TOMBSTONES, JOB_TTL_MS, LEGACY_AGENT_JOB_PREFIXES;
+var DELIVERY_VERSION, DEFAULT_LOCK_TIMEOUT_MS, DEFAULT_LOCK_STALE_MS, MAX_PENDING_DELIVERIES, MAX_STORED_ANSWER_CHARS, DEFAULT_RESTORE_ITEMS, DEFAULT_RESTORE_CHARS, LEASE_STALE_MS, DELIVERY_TTL_MS, MAX_DELIVERED_TOMBSTONES, JOB_TTL_MS, TERMINAL_JOB_STATUSES, LEGACY_AGENT_JOB_PREFIXES;
 var init_micro_delivery = __esm({
   "packages/orchestrator/src/micro-delivery.mjs"() {
     init_artifact_store();
@@ -9655,6 +9704,7 @@ var init_micro_delivery = __esm({
     DELIVERY_TTL_MS = 24 * 60 * 60 * 1e3;
     MAX_DELIVERED_TOMBSTONES = 256;
     JOB_TTL_MS = 24 * 60 * 60 * 1e3;
+    TERMINAL_JOB_STATUSES = /* @__PURE__ */ new Set(["completed", "failed", "cancelled", "partial"]);
     LEGACY_AGENT_JOB_PREFIXES = ["agent-", "agy-", "goal-"];
   }
 });
@@ -11413,7 +11463,7 @@ function readOwner(lockDir) {
     return null;
   }
 }
-function processIsAlive2(pid) {
+function processIsAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
@@ -11432,7 +11482,7 @@ function isStale(lockDir, owner, staleMs) {
   }
   const timestamp = Number.isFinite(createdAt) ? createdAt : stat?.mtimeMs || 0;
   if (!timestamp || Date.now() - timestamp <= staleMs) return false;
-  if (owner?.pid && processIsAlive2(owner.pid)) return false;
+  if (owner?.pid && processIsAlive(owner.pid)) return false;
   return true;
 }
 function removeLockDirectory(lockDir) {
@@ -11458,7 +11508,7 @@ function inspectProjectWriteLock(projectRoot) {
     path: lockDir,
     owner,
     ageMs: Date.now() - stat.mtimeMs,
-    alive: owner?.pid ? processIsAlive2(owner.pid) : false
+    alive: owner?.pid ? processIsAlive(owner.pid) : false
   };
 }
 async function withProjectWriteLock(projectRoot, callback, { timeoutMs = 15e3, staleMs = 6e4, label = "write" } = {}) {
@@ -41841,21 +41891,33 @@ ${text2}`;
   const verifyLines = [];
   const failureLines = [];
   let verifyPassed = true;
+  let verifyFailed = false;
   let failedReceiptId = null;
   const failureSourceLines = [];
   const verifyCommands = verifyCommandsFromInput(input.verify, profile);
   if (verifyCommands.length) {
     if (verifyCommands && verifyCommands.length) {
       const fingerprint = workspaceFingerprint(ctx.projectRoot);
+      const verifyWindowMs = Number(input.verifyTimeoutMs);
+      const verifyDeadline = Number.isFinite(verifyWindowMs) && verifyWindowMs > 0 ? Date.now() + Math.floor(verifyWindowMs) : null;
       for (const cmd of verifyCommands) {
+        const windowRemaining = verifyDeadline === null ? null : verifyDeadline - Date.now();
+        if (windowRemaining !== null && windowRemaining <= 0) {
+          verifyPassed = false;
+          verifyLines.push(`- \`${redactSecrets(cmd)}\` \u2192 skipped: host verification window closed; rerun verify separately.`);
+          continue;
+        }
+        const configuredTimeout = input.timeoutMs ?? profile.timeoutMs;
+        const timeoutMs = windowRemaining === null ? configuredTimeout : Math.max(1e3, Math.min(Number(configuredTimeout) || Infinity, Math.floor(windowRemaining)));
         const res = await caps.run({
           command: cmd,
           cwd: input.cwd,
           maxLogBytes: input.maxLogBytes,
-          timeoutMs: input.timeoutMs ?? profile.timeoutMs
+          timeoutMs
         });
         if (!res.ok) {
           verifyPassed = false;
+          verifyFailed = true;
           recordActionVerification(ctx, { command: cmd, cwd: input.cwd, outcome: "failed" });
           verifyLines.push(`- \`${cmd}\` \u2192 \u2717 ${res.error}`);
           continue;
@@ -41874,6 +41936,7 @@ ${text2}`;
         verifyLines.push(`- \`${label}\` \u2192 exit ${receipt.exitCode} (${receipt.durationMs}ms, receipt ${receipt.id})`);
         if (receipt.exitCode !== 0) {
           verifyPassed = false;
+          verifyFailed = true;
           failedReceiptId ||= receipt.id;
           const diag = receipt.diagnostics && receipt.diagnostics.length ? receipt.diagnostics.join("\n\n---\n\n") : receipt.errors && receipt.errors.length ? receipt.errors.slice(0, 5).join("\n") : clip3(receipt.summary || "failed", 240);
           failureLines.push(`### \`${label}\`
@@ -41885,7 +41948,7 @@ ${diag}`);
         }
         tracer.step("change_verify", { command: cmd, exitCode: receipt.exitCode });
       }
-      if (!verifyPassed && input.autoRevert === true) {
+      if (verifyFailed && input.autoRevert === true) {
         for (const fullPath of originallyMissing) {
           try {
             if (fs26.existsSync(fullPath)) fs26.rmSync(fullPath, { force: true });
@@ -43328,6 +43391,17 @@ async function pipelinePipeline(ctx, input = {}) {
       autoBaselineVerify = true;
     }
   }
+  let resumeStepFrom = 0;
+  let resumeChainFrom = 0;
+  const pipelineResume = input.resume && typeof input.resume === "object" && !Array.isArray(input.resume) && input.resume.kind === "pipeline" ? input.resume : null;
+  if (pipelineResume) {
+    const fromStep = Math.max(1, Math.floor(Number(pipelineResume.fromStep) || 1));
+    const totalStepsHint = Number(pipelineResume.totalSteps);
+    if (Number.isFinite(totalStepsHint) && steps.length === totalStepsHint) {
+      resumeStepFrom = Math.min(fromStep - 1, Math.max(0, steps.length - 1));
+      resumeChainFrom = Math.max(0, Math.floor(Number(pipelineResume.fromChain) || 1) - 1);
+    }
+  }
   const mode = input.mode || "full";
   const receiptMode = isReceiptMode(mode);
   const exploreActionCount = countPipelineTool(steps, "explore", ctx.projectRoot);
@@ -43359,12 +43433,30 @@ async function pipelinePipeline(ctx, input = {}) {
     }
     return null;
   }
-  for (let i2 = 0; i2 < steps.length; i2++) {
+  const boundedWait = (tool, actionInput) => {
+    if (!actionInput || typeof actionInput !== "object" || Array.isArray(actionInput)) return actionInput;
+    const waitable = tool === "integrate" || tool === "agent" && (actionInput.action === "wait" || actionInput.action === "messages");
+    if (!waitable) return actionInput;
+    const requested = Number.isFinite(Number(actionInput.waitMs)) ? Math.max(0, Math.floor(Number(actionInput.waitMs))) : tool === "integrate" ? 28e4 : 0;
+    if (!requested) return actionInput;
+    const remaining = Math.max(0, maxDurationMs - (Date.now() - batchStartedAt));
+    const bounded = Math.max(1, Math.min(requested, remaining));
+    return bounded === requested ? actionInput : { ...actionInput, waitMs: bounded };
+  };
+  const dispatchWithoutClamp = ctx.orchestrator.dispatch.bind(ctx.orchestrator);
+  ctx = {
+    ...ctx,
+    orchestrator: {
+      ...ctx.orchestrator,
+      dispatch: (tool, actionInput, evidence) => dispatchWithoutClamp(tool, boundedWait(tool, actionInput), evidence)
+    }
+  };
+  for (let i2 = resumeStepFrom; i2 < steps.length; i2++) {
     const stopReason = budgetStop();
     if (stopReason) {
       halted = true;
       haltReason = stopReason;
-      if (!resume) resume = { kind: "pipeline", fromStep: i2 + 1 };
+      if (!resume) resume = { kind: "pipeline", fromStep: i2 + 1, totalSteps: steps.length };
       break;
     }
     const step = steps[i2];
@@ -43416,12 +43508,12 @@ async function pipelinePipeline(ctx, input = {}) {
       const items = step.chain;
       const subResults = [];
       let chainFailed = false;
-      for (let j = 0; j < items.length; j++) {
+      for (let j = i2 === resumeStepFrom ? resumeChainFrom : 0; j < items.length; j++) {
         const stopReason2 = budgetStop();
         if (stopReason2) {
           halted = true;
           haltReason = stopReason2;
-          if (!resume) resume = { kind: "pipeline", fromStep: stepNum, fromChain: j + 1 };
+          if (!resume) resume = { kind: "pipeline", fromStep: stepNum, fromChain: j + 1, totalSteps: steps.length };
           break;
         }
         const action = items[j];
@@ -43611,16 +43703,16 @@ async function pipelinePipeline(ctx, input = {}) {
     if (result.kind === "parallel" || result.kind === "chain") return sum + result.items.length;
     return sum + 1;
   }, 0) + branchResults.reduce((sum, result) => sum + result.items.length, 0);
-  const totalSteps = steps.length + branchResults.reduce((sum, result) => sum + result.items.length, 0);
+  const totalSteps = steps.length - resumeStepFrom + branchResults.reduce((sum, result) => sum + result.items.length, 0);
   const recovered = branchResults.some((branch) => branch.ok);
   const continuationStop = Boolean(halted && haltReason?.startsWith("budget exceeded: maxDurationMs="));
   const pipelineStatus = continuationStop ? "PARTIAL" : halted ? "HALTED" : failureCount ? recovered ? "RECOVERED" : continueOnFailure ? "PARTIAL" : "FAIL" : "OK";
   const headerLines = [`pipeline=${pipelineStatus} actions=${totalActions}/${totalSteps}${receiptMode ? " mode=receipt" : ""}`];
   if (halted && haltReason) headerLines.push(`stop=${haltReason}`);
   if (continuationStop) {
-    const handle2 = resume || { kind: "pipeline", fromStep: 1 };
+    const handle2 = resume || { kind: "pipeline", fromStep: 1, totalSteps: steps.length };
     headerLines.push(`partial=true resume=${JSON.stringify(handle2)}`);
-    headerLines.push(`guidance=Resend only the remaining pipeline steps after ${handle2.fromStep || 1}${handle2.fromChain ? ` (chain from ${handle2.fromChain})` : ""}; do not replay completed steps.`);
+    headerLines.push("guidance=Pass the resume handle back with the same steps array; completed steps are skipped, never replayed.");
   }
   const mutationStatus = results.flatMap((result) => result.items || [result]).flatMap((item) => String(item.output || "").split(/\r?\n/).filter((line) => line.startsWith("status="))).at(-1);
   if (mutationStatus) headerLines.push(mutationStatus);
@@ -43802,8 +43894,11 @@ async function integratePipeline(ctx, input = {}) {
       '- Next: dispatch it with execution:"implement", workspace, context.allowedPaths and context.acceptance.'
     ].join("\n");
   }
+  const hostWindowMs = Math.min(29e4, Math.max(5e3, Number(input.maxDurationMs) || 29e4));
+  const deadline = Date.now() + hostWindowMs;
   if (job.status !== "completed") {
-    const waitMs = Math.min(28e4, Math.max(0, Number(input.waitMs) || 28e4));
+    const waitBudget = Math.max(0, deadline - Date.now() - 1e4);
+    const waitMs = Math.min(28e4, Math.max(0, Number(input.waitMs) || 28e4), waitBudget);
     const startedWait = Date.now();
     while (job && job.status !== "completed" && !["failed", "cancelled"].includes(job.status) && Date.now() - startedWait < waitMs) {
       await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, waitMs - (Date.now() - startedWait)))));
@@ -43814,7 +43909,8 @@ async function integratePipeline(ctx, input = {}) {
         "# ContextOS integrate",
         `- status=blocked errorCode=INTEGRATE_JOB_${String(job?.status || "unknown").toUpperCase()}`,
         `- Agent job \`${jobId}\` is ${job?.status || "unknown"} after waiting ${Date.now() - startedWait}ms; only a completed implementation can be integrated.`,
-        ...job?.report?.summary ? [`- Report: ${clip3(String(job.report.summary), 240)}`] : []
+        ...job?.report?.summary ? [`- Report: ${clip3(String(job.report.summary), 240)}`] : [],
+        `- resume={"kind":"integrate","jobId":"${jobId}"}`
       ].join("\n");
     }
   }
@@ -43927,7 +44023,10 @@ async function integratePipeline(ctx, input = {}) {
     ].join("\n");
   }
   const liveChangedPaths = [...edits.map((edit) => edit.path), ...creates.map((create) => create.path)];
-  const verifyCommands = (input.verify === true ? Array.isArray(implementation.verify) ? implementation.verify : [] : Array.isArray(input.verify) ? input.verify : []).filter((command) => typeof command === "string" && command.trim());
+  const requestedVerify = (input.verify === true ? Array.isArray(implementation.verify) ? implementation.verify : [] : Array.isArray(input.verify) ? input.verify : []).filter((command) => typeof command === "string" && command.trim());
+  const verifyWindowMs = Math.max(0, deadline - Date.now() - 2e3);
+  const verifyCommands = verifyWindowMs >= 5e3 ? requestedVerify : [];
+  const verifyDeferred = requestedVerify.length > 0 && verifyCommands.length === 0;
   const workerChecks = Array.isArray(job.report?.checks) ? job.report.checks.filter((check) => typeof check === "string" && check.trim()) : [];
   let architecture = input.architecture && typeof input.architecture === "object" && !Array.isArray(input.architecture) ? input.architecture : null;
   if (!architecture && ctx.caps && typeof ctx.caps.blocks === "function" && typeof ctx.caps.chains === "function") {
@@ -43944,12 +44043,17 @@ async function integratePipeline(ctx, input = {}) {
       if (suggestion) architecture = suggestion;
     }
   }
+  const verifyBudgetMs = Math.max(0, deadline - Date.now() - 2e3);
   const merged = await changePipeline(ctx, {
     edits,
     create: creates,
     delete: deletes,
     ...architecture ? { architecture } : {},
-    ...verifyCommands.length ? { verify: { commands: verifyCommands } } : {},
+    ...verifyCommands.length ? {
+      verify: { commands: verifyCommands },
+      timeoutMs: Math.min(Number(ctx.profile?.timeoutMs) || Infinity, verifyBudgetMs),
+      verifyTimeoutMs: verifyBudgetMs
+    } : {},
     ...input.autoRevert === true ? { autoRevert: true } : {}
   });
   const header = [
@@ -43957,7 +44061,7 @@ async function integratePipeline(ctx, input = {}) {
     `- status=applied changed=${changedPaths.length} jobId=${jobId}`,
     `- Files: ${changedPaths.map((file2) => `\`${file2}\``).join(", ")}`,
     workerChecks.length ? `- Worker checks: ${workerChecks.map((check) => `\`${check}\``).join(", ")}` : "- Worker checks: none recorded.",
-    verifyCommands.length ? `- Host verification: ${verifyCommands.map((command) => `\`${command}\``).join(", ")}` : "- Host verification: skipped (worker checks carried; run remaining acceptance once after integrate).",
+    verifyDeferred ? "- Host verification: deferred (host window nearly closed); run verify separately." : verifyCommands.length ? `- Host verification: ${verifyCommands.map((command) => `\`${command}\``).join(", ")}` : "- Host verification: skipped (worker checks carried; run remaining acceptance once after integrate).",
     ...architecture ? ["- Architecture: auto-bound new paths to Blocks/Chains."] : [],
     ...skipped.length ? [`- Skipped: ${skipped.map((file2) => `\`${file2}\``).join(", ")}`] : [],
     ""
@@ -46705,6 +46809,19 @@ import fs30 from "node:fs";
 import path31 from "node:path";
 import { spawn as spawn4 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
+function startJobCancellationWatcher(projectRoot, jobId, controller) {
+  let stopped = false;
+  const check = () => {
+    if (stopped || controller.signal.aborted) return;
+    if (microJobCancellationRequested(projectRoot, jobId)) controller.abort();
+  };
+  const timer = setInterval(check, CANCEL_POLL_MS);
+  check();
+  return { stop() {
+    stopped = true;
+    clearInterval(timer);
+  } };
+}
 function resultFromError(error2) {
   const partialResult = error2?.result && typeof error2.result === "object" && !Array.isArray(error2.result) ? error2.result : {};
   return {
@@ -46823,9 +46940,9 @@ function cliProviderName(adapter, resultProvider = null) {
   if (Array.isArray(configured)) return typeof configured[0] === "string" && configured[0].trim() ? configured[0] : "cli";
   return typeof configured === "string" && configured.trim() ? configured : "cli";
 }
-async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, runner = runMicroTask, onUsage, signal, workerEntry } = {}) {
+async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, runner = runMicroTask, onUsage, signal, workerEntry, killProcess = (pid, signalName) => process.kill(pid, signalName), processAlive = isProcessAlive } = {}) {
   const action = args2.action || "run";
-  const jobId = args2.jobId || args2.id;
+  const jobId = args2.jobId || args2.id || (args2.resume && typeof args2.resume === "object" ? args2.resume.jobId : void 0);
   const workerResume = args2.workerResume === true;
   if (workerResume) {
     if (action !== "run" || !jobId) throw new Error("A detached worker requires a persisted running job.");
@@ -46840,25 +46957,63 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
   if (action === "get") return compactJob(readMicroJob(projectRoot, jobId));
   if (action === "list") return { status: "completed", jobs: listMicroJobs(projectRoot, args2).map(compactJob) };
   if (action === "cancel") {
+    const job = readMicroJob(projectRoot, jobId);
+    if (!job) return { status: "missing", cancellationRequested: false, id: jobId ?? null };
+    if (TERMINAL_JOB_STATUSES2.has(job.status)) {
+      return { ...compactJob(job), cancellationRequested: false, alreadyTerminal: true };
+    }
     const controller2 = active2.get(key(projectRoot, jobId));
     controller2?.abort();
-    return { ...compactJob(readMicroJob(projectRoot, jobId)), cancellationRequested: Boolean(controller2) };
+    const requested = requestMicroJobCancellation(projectRoot, jobId);
+    let signalled = false;
+    const leasePid = job.leasePid;
+    if (process.platform !== "win32" && Number.isInteger(leasePid) && leasePid > 0 && leasePid !== process.pid && processAlive(leasePid)) {
+      try {
+        killProcess(leasePid, "SIGTERM");
+        signalled = true;
+      } catch {
+      }
+    }
+    const updated = requested.job || job;
+    return {
+      ...compactJob(updated),
+      cancellationRequested: Boolean(controller2) || requested.requested || signalled,
+      cancellation: { marker: requested.requested, signalled, leasePid: leasePid ?? null }
+    };
   }
   if (action === "wait") {
     const waitMs = Math.min(29e4, Math.max(0, Number(args2.waitMs) || 0));
     const startedWait = Date.now();
-    const terminalStatuses = /* @__PURE__ */ new Set(["completed", "failed", "cancelled"]);
+    const terminalStatuses = /* @__PURE__ */ new Set(["completed", "failed", "cancelled", "partial"]);
     let job = readMicroJob(projectRoot, jobId);
-    while (job && !terminalStatuses.has(job.status) && Date.now() - startedWait < waitMs && !signal?.aborted) {
+    if (!job) {
+      return {
+        id: jobId ?? null,
+        status: "missing",
+        terminal: true,
+        errorCode: "JOB_NOT_FOUND",
+        missing: [`Unknown or expired agent job '${jobId ?? ""}'. Job records expire after 24h.`],
+        guidance: 'Do not wait or re-dispatch blindly; verify the id with agent({action:"list"}) or start a new job.'
+      };
+    }
+    while (!terminalStatuses.has(job.status) && Date.now() - startedWait < waitMs && !signal?.aborted) {
       await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, waitMs - (Date.now() - startedWait)))));
       job = readMicroJob(projectRoot, jobId);
     }
-    const snapshot2 = { ...compactJob(job), waitedMs: Date.now() - startedWait, terminal: Boolean(job && terminalStatuses.has(job.status)) };
+    const snapshot2 = {
+      ...compactJob(job),
+      jobStatus: job.status,
+      waitedMs: Date.now() - startedWait,
+      terminal: terminalStatuses.has(job.status)
+    };
     if (!snapshot2.terminal) {
       snapshot2.status = "partial";
       snapshot2.partial = true;
+      snapshot2.window = "expired";
+      snapshot2.doNotRedispatch = true;
       snapshot2.resume = { kind: "agent", action: "wait", jobId };
-      snapshot2.guidance = `Job is still running; call agent({action:"wait", jobId:"${jobId}", waitMs:290000}) again to refresh the window.`;
+      snapshot2.continueWith = { action: "wait", jobId, waitMs: 29e4 };
+      snapshot2.guidance = `Wait window closed while job ${jobId} is still ${job.status}; do not dispatch the same task again. Retry agent({action:"wait", jobId:"${jobId}", waitMs:290000}), or let the next integrate({jobId:"${jobId}"}) call collect it.`;
     }
     return snapshot2;
   }
@@ -46956,6 +47111,12 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
   }
   const controller = new AbortController();
   active2.set(key(projectRoot, id), controller);
+  const cancellationWatcher = workerResume ? startJobCancellationWatcher(projectRoot, id, controller) : null;
+  const onTerminationSignal = () => controller.abort();
+  if (workerResume) {
+    process.once("SIGTERM", onTerminationSignal);
+    process.once("SIGINT", onTerminationSignal);
+  }
   const startedAt = (/* @__PURE__ */ new Date()).toISOString();
   const started = Date.now();
   const run2 = async () => {
@@ -46985,7 +47146,7 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
       }
       const completed = !runnerError && result?.ok === true;
       const status = controller.signal.aborted ? "cancelled" : completed ? "completed" : "failed";
-      const errorMessage = runnerError?.message || result?.error || (completed ? null : "CLI task failed.");
+      const errorMessage = runnerError?.message || result?.error || (completed ? null : status === "cancelled" ? "CLI task was cancelled." : "CLI task failed.");
       const providerLaunches = result?.providerLaunches ?? result?.invocation?.providerLaunches ?? null;
       const actualModel = result?.actualModel || result?.invocation?.actualModel || null;
       const requestedModel2 = result?.requestedModel || adapter.model || null;
@@ -47043,7 +47204,7 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
         usageReceipt,
         cliUsage
       });
-      const shouldQueue = !completed || deliveryMode === "defer" || deliveryMode === "auto" && report.needsHost === true;
+      const shouldQueue = status !== "cancelled" && (!completed || deliveryMode === "defer" || deliveryMode === "auto" && report.needsHost === true);
       let deliveryAccounting = { status: "not-requested" };
       if (shouldQueue) {
         try {
@@ -47116,19 +47277,21 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
           }
         }
         const stillRunning = existing.status === "running";
-        const errorMessage = error2?.message || String(error2);
+        const cancelled = Boolean(existing.cancelRequestedAt) || controller.signal.aborted;
+        const terminalStatus = cancelled ? "cancelled" : "failed";
+        const errorMessage = cancelled ? "CLI task was cancelled." : error2?.message || String(error2);
         const report = existing.report || normalizeAgentReport({
-          answer: `Background CLI task failed before its result could be saved: ${errorMessage}`,
-          needsHost: true
-        }, { jobId: id, status: "failed" });
+          answer: cancelled ? "CLI task was cancelled." : `Background CLI task failed before its result could be saved: ${errorMessage}`,
+          needsHost: !cancelled
+        }, { jobId: id, status: terminalStatus });
         let job = updateMicroJob(projectRoot, id, {
-          ...stillRunning ? { status: "failed", report, error: errorMessage } : {},
+          ...stillRunning ? { status: terminalStatus, report, error: errorMessage } : {},
           ...!existing.usageReceipt ? { usageReceipt: failedUsageReceipt } : {},
           usageAccounting: failedUsageAccounting,
           executionAccounting: { status: "gap", reason: "Background task processing terminated unexpectedly after launch." }
         }) || existing;
         let deliveryAccounting = job.deliveryAccounting || { status: "not-requested" };
-        if (stillRunning || job.status === "failed") {
+        if (!cancelled && (stillRunning || job.status === "failed")) {
           try {
             const queued = enqueueMicroDelivery(projectRoot, { deliveryId: id, receiptId: id, content: JSON.stringify(report), hostSessionId: null });
             deliveryAccounting = { status: queued.duplicate ? "already-queued" : "queued", deliveryId: id };
@@ -47140,7 +47303,13 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
       } catch {
       }
     } finally {
+      cancellationWatcher?.stop();
+      if (workerResume) {
+        process.removeListener("SIGTERM", onTerminationSignal);
+        process.removeListener("SIGINT", onTerminationSignal);
+      }
       active2.delete(key(projectRoot, id));
+      clearMicroJobCancellation(projectRoot, id);
     }
   };
   if (args2.background === true) {
@@ -47150,16 +47319,18 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
         const existing = readMicroJob(projectRoot, id);
         if (!existing) return;
         const isStillRunning = existing.status === "running";
+        const cancelled = Boolean(existing.cancelRequestedAt) || controller.signal.aborted;
+        const terminalStatus = cancelled ? "cancelled" : "failed";
         const report = existing.report || normalizeAgentReport({
-          answer: `Background CLI task failed before its result could be saved: ${message}`,
-          needsHost: true
-        }, { jobId: id, status: "failed" });
+          answer: cancelled ? "CLI task was cancelled." : `Background CLI task failed before its result could be saved: ${message}`,
+          needsHost: !cancelled
+        }, { jobId: id, status: terminalStatus });
         let job = updateMicroJob(projectRoot, id, {
-          ...isStillRunning ? { status: "failed", report, error: message } : {},
+          ...isStillRunning ? { status: terminalStatus, report, error: cancelled ? "CLI task was cancelled." : message } : {},
           executionAccounting: { status: "gap", reason: "Background task processing terminated unexpectedly after launch." }
         }) || existing;
         let deliveryAccounting = job.deliveryAccounting || { status: "not-requested" };
-        if (isStillRunning || job.status === "failed") {
+        if (!cancelled && (isStillRunning || job.status === "failed")) {
           try {
             const queued = enqueueMicroDelivery(projectRoot, { deliveryId: id, receiptId: id, content: JSON.stringify(report), hostSessionId: null });
             deliveryAccounting = { status: queued.duplicate ? "already-queued" : "queued", deliveryId: id };
@@ -47175,7 +47346,7 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
   }
   return run2();
 }
-var active2, key, compactJob;
+var active2, key, TERMINAL_JOB_STATUSES2, CANCEL_POLL_MS, compactJob;
 var init_agent_service = __esm({
   async "packages/orchestrator/src/agent-service.mjs"() {
     await init_micro_client();
@@ -47184,6 +47355,8 @@ var init_agent_service = __esm({
     init_micro_mailbox();
     active2 = /* @__PURE__ */ new Map();
     key = (root, id) => `${root}\0${id}`;
+    TERMINAL_JOB_STATUSES2 = /* @__PURE__ */ new Set(["completed", "failed", "cancelled", "partial"]);
+    CANCEL_POLL_MS = 250;
     compactJob = (job) => {
       if (!job) return {
         status: "missing",
@@ -49653,9 +49826,11 @@ __export(src_exports, {
   applyOutputBudget: () => applyOutputBudget,
   auditRouting: () => auditRouting,
   buildMicroHistory: () => buildMicroHistory,
+  cancellationMarkerPath: () => cancellationMarkerPath,
   claimMicroDeliveries: () => claimMicroDeliveries,
   claimMicroJob: () => claimMicroJob,
   classifyIntent: () => classifyIntent,
+  clearMicroJobCancellation: () => clearMicroJobCancellation,
   cliDoctor: () => cliDoctor,
   closeMicroSession: () => closeMicroSession,
   completeMicroDeliveryClaims: () => completeMicroDeliveryClaims,
@@ -49673,6 +49848,7 @@ __export(src_exports, {
   fitSections: () => fitSections,
   globalProfilePath: () => globalProfilePath,
   isIndexable: () => isIndexable,
+  isProcessAlive: () => isProcessAlive,
   isSource: () => isSource,
   listMicroJobs: () => listMicroJobs,
   listMicroSessions: () => listMicroSessions,
@@ -49680,6 +49856,7 @@ __export(src_exports, {
   loadProfile: () => loadProfile,
   mainEquivalentCostTokens: () => mainEquivalentCostTokens,
   microCostEstimate: () => microCostEstimate,
+  microJobCancellationRequested: () => microJobCancellationRequested,
   microPreloadPrompt: () => microPreloadPrompt,
   microPreloadReceipt: () => microPreloadReceipt,
   microSessionSnapshot: () => microSessionSnapshot,
@@ -49698,6 +49875,7 @@ __export(src_exports, {
   releaseMicroDeliveryClaims: () => releaseMicroDeliveryClaims,
   renderMicroDeliveries: () => renderMicroDeliveries,
   reportMicroJob: () => reportMicroJob,
+  requestMicroJobCancellation: () => requestMicroJobCancellation,
   resolveBudget: () => resolveBudget,
   resolveChatCompletionsUrl: () => resolveChatCompletionsUrl,
   resolveMicroBudget: () => resolveMicroBudget,
@@ -68449,7 +68627,7 @@ import path40 from "node:path";
 // package.json
 var package_default = {
   name: "contextos",
-  version: "3.0.0",
+  version: "3.0.1",
   description: "The context exoskeleton for AI development: optimize the entire development lifecycle to reduce token usage and context occupancy.",
   license: "MIT",
   type: "module",
@@ -72675,18 +72853,19 @@ import { fileURLToPath as fileURLToPath6 } from "node:url";
 async function persistWorkerFailure(projectRoot, jobId, error2) {
   const existing = readMicroJob(projectRoot, jobId);
   if (!existing) return null;
-  const message = error2?.message || String(error2);
+  const cancelled = Boolean(existing.cancelRequestedAt) || Boolean(microJobCancellationRequested(projectRoot, jobId));
+  const message = cancelled ? "Detached CLI task was cancelled." : error2?.message || String(error2);
   const report = existing.report || normalizeAgentReport({
-    answer: `Detached CLI task failed before its result could be saved: ${message}`,
-    needsHost: true
-  }, { jobId, status: "failed" });
+    answer: cancelled ? "Detached CLI task was cancelled." : `Detached CLI task failed before its result could be saved: ${message}`,
+    needsHost: !cancelled
+  }, { jobId, status: cancelled ? "cancelled" : "failed" });
   const stillRunning = existing.status === "running";
   let job = updateMicroJob(projectRoot, jobId, {
-    ...stillRunning ? { status: "failed", report, error: message } : {},
-    executionAccounting: { status: "gap", reason: "Detached worker terminated unexpectedly after launch." }
+    ...stillRunning ? { status: cancelled ? "cancelled" : "failed", report, error: message } : {},
+    executionAccounting: cancelled ? { status: "cancelled" } : { status: "gap", reason: "Detached worker terminated unexpectedly after launch." }
   }) || existing;
   let deliveryAccounting = job.deliveryAccounting || { status: "not-requested" };
-  if (stillRunning || job.status === "failed") {
+  if (!cancelled && (stillRunning || job.status === "failed")) {
     try {
       const queued = enqueueMicroDelivery(projectRoot, {
         deliveryId: jobId,
@@ -72699,10 +72878,17 @@ async function persistWorkerFailure(projectRoot, jobId, error2) {
       deliveryAccounting = { status: "gap", reason: "The failure was saved, but its error report could not be queued." };
     }
   }
+  clearMicroJobCancellation(projectRoot, jobId);
   return updateMicroJob(projectRoot, jobId, { deliveryAccounting }) || job;
 }
 async function runAgentWorker(projectRoot, jobId) {
   const root = path45.resolve(projectRoot);
+  if (microJobCancellationRequested(root, jobId)) {
+    const existing = readMicroJob(root, jobId);
+    const cancelled = existing && existing.status === "running" ? updateMicroJob(root, jobId, { status: "cancelled", error: "Detached CLI task was cancelled before it started.", executionAccounting: { status: "cancelled" } }) : existing;
+    clearMicroJobCancellation(root, jobId);
+    return { id: jobId, status: cancelled?.status || "cancelled" };
+  }
   const claimed = claimMicroJob(root, jobId);
   if (!claimed) throw new Error(`Unknown detached agent job '${jobId}'.`);
   const definition = claimed.worker;

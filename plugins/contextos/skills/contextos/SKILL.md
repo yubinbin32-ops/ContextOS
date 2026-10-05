@@ -53,9 +53,9 @@ Micro sessions are retained for follow-up; at most 5 dormant, oldest evicted fir
 
 Use `delivery:"defer"` (or `"errors-only"`) when you do not need the result this turn: the call returns once queued and the pending report surfaces on your next ContextOS call. Use `delivery:"immediate"` only when the next step depends on the answer.
 
-- At 290s Micro returns `status:"partial"` and a session handle; continue that session instead of restarting.
+- At 290s Micro returns `status:"partial"` plus a retained session; the job persists `partial`, not `running`. Continue that session.
 
-**CLI** - dispatch in the background, then collect with one bounded wait:
+**CLI** - dispatch, then collect with `integrate`, which already waits:
 
 ```js
 contextos({action:"agent", args:{
@@ -65,29 +65,25 @@ contextos({action:"agent", args:{
   context:{allowedPaths:["<files>"], acceptance:["<command>"], verify:["<command>"]},
   background:true
 }}, projectRoot)
+contextos({action:"integrate", args:{jobId:"<id>", waitMs:280000}}, projectRoot)
 ```
 
-```js
-contextos({action:"agent", args:{action:"wait", jobId:"<id>", waitMs:290000}}, projectRoot)
-contextos({action:"integrate", args:{jobId:"<id>"}}, projectRoot)
-```
+- `integrate` waits up to 280s and merges in the same call; a separate `agent wait` is a pure status round - use it only for report-only jobs.
+- A closed window returns `status:"partial"` with `jobStatus`, `window:"expired"`, `doNotRedispatch:true`, `resume` and `continueWith`; resend only that handle, never redispatch or replay. Missing jobs return `status:"missing"`/`JOB_NOT_FOUND`.
+- After integrate succeeds, never re-implement the same files; run only remaining project checks.
+- Reuse a retained CLI session when continuous and occupancy is below 233k; otherwise start a new conversation. Keep at most 5 completed sessions.
 
-- A 290s wait or pipeline returns `status:"partial"` plus a resume handle. Resend only that handle or remaining steps to refresh the window; never redispatch a running job or replay completed steps.
-- After integrate succeeds, never re-implement the same files; review the report and run only the remaining project-level checks.
-- Reuse a retained CLI session when work is continuous and occupancy is below 233k; otherwise start a new conversation. Keep at most 5 completed sessions.
-
-**One-call delegation.** `pipeline` chains the whole lifecycle in one round:
+**One-call delegation.** `pipeline` chains the lifecycle in one round:
 
 ```js
 contextos({action:"pipeline", args:{continueOnFailure:false, steps:[
   {tool:"agent", args:{task:"<contract>", workspace:"/tmp/<copy>", execution:"implement",
     context:{allowedPaths:["<files>"], acceptance:["<command>"], verify:["<command>"]}, background:true}},
-  {tool:"agent", args:{action:"wait", jobId:"<id from step 1>", waitMs:240000}},
-  {tool:"integrate", args:{jobId:"<id from step 1>"}}
+  {tool:"integrate", args:{jobId:"<id from step 1>", waitMs:280000}}
 ]}}, projectRoot)
 ```
 
-Step results carry the job id forward; read it from step 1 rather than inventing one. If wait returns a running snapshot, rerun only the wait and integrate steps - never re-dispatch a running job.
+Step results carry the job id forward; if the pipeline returns a partial handle, resend the same steps with `resume:<handle>` and completed steps are skipped.
 
 ## Tool guide
 

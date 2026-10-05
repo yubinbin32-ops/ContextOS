@@ -1,4 +1,8 @@
-# ContextOS 3.0.0 — The context exoskeleton for AI development
+# ContextOS 3.0.1
+
+This patch republishes the MCP Registry metadata with a schema-valid description and includes the detached CLI worker cancellation lifecycle fix.
+
+## 3.0.0 — The context exoskeleton for AI development
 
 ContextOS supports the full AI development lifecycle: understand a project, plan work, inspect evidence, execute, implement, verify, review, and resume. It keeps project state inspectable while reducing repeated token use and main-agent context occupancy.
 

@@ -43,9 +43,18 @@ function jobsDir(projectRoot) {
   return path.join(deliveryDir(projectRoot), 'jobs');
 }
 
+function validatedJobId(jobId) {
+  const id = String(jobId || '');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(id)) throw new Error('Invalid Micro job id.');
+  return id;
+}
+
 function jobPath(projectRoot, jobId) {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(String(jobId))) throw new Error('Invalid Micro job id.');
-  return path.join(jobsDir(projectRoot), `${jobId}.json`);
+  return path.join(jobsDir(projectRoot), `${validatedJobId(jobId)}.json`);
+}
+
+export function cancellationMarkerPath(projectRoot, jobId) {
+  return path.join(jobsDir(projectRoot), `${validatedJobId(jobId)}.cancel`);
 }
 
 function sleepSync(ms) {
@@ -121,7 +130,7 @@ function writeState(projectRoot, state) {
   fs.renameSync(temporary, filePath);
 }
 
-function processIsAlive(pid) {
+export function isProcessAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
@@ -167,7 +176,7 @@ function recoverExpiredLeases(state, now = Date.now()) {
   const activeLeases = [];
   for (const item of state.leased) {
     const claimedAt = Date.parse(item.claimedAt || '');
-    const leaseProcessAlive = Number.isInteger(item.leasePid) ? processIsAlive(item.leasePid) : true;
+    const leaseProcessAlive = Number.isInteger(item.leasePid) ? isProcessAlive(item.leasePid) : true;
     if (!Number.isFinite(claimedAt) || now - claimedAt > LEASE_STALE_MS || !leaseProcessAlive) {
       const { claimedAt: _claimedAt, leasePid: _leasePid, ...delivery } = item;
       fresh.push(delivery);
@@ -236,7 +245,10 @@ function writeJob(projectRoot, job) {
 }
 
 function normalizeJobStatus(status) {
-  return ['running', 'completed', 'failed', 'cancelled'].includes(status) ? status : 'running';
+  // `partial` is a durable outcome (work retained for host continuation), not
+  // a transient state: normalizing it to `running` left 290s-window jobs
+  // looking live for 24h and later produced a false timeout delivery.
+  return ['running', 'partial', 'completed', 'failed', 'cancelled'].includes(status) ? status : 'running';
 }
 
 function normalizeJob(projectRoot, job) {
@@ -247,15 +259,18 @@ function normalizeJob(projectRoot, job) {
   const createdAt = job.createdAt || new Date().toISOString();
   const updatedAt = job.updatedAt || createdAt;
   const stale = Date.now() - Date.parse(updatedAt || createdAt) > JOB_TTL_MS;
-  const leaseAlive = status !== 'running' || !Number.isInteger(job.leasePid) || processIsAlive(job.leasePid);
+  const leaseAlive = status !== 'running' || !Number.isInteger(job.leasePid) || isProcessAlive(job.leasePid);
+  const cancelRequested = Boolean(job.cancelRequestedAt);
   if (status === 'running' && (stale || !leaseAlive)) {
     return {
       ...job,
       jobId,
-      status: 'failed',
-      error: stale
-        ? 'Micro background job expired before completion.'
-        : 'Micro background worker exited before completion.',
+      status: cancelRequested ? 'cancelled' : 'failed',
+      error: cancelRequested
+        ? 'Micro background job was cancelled.'
+        : stale
+          ? 'Micro background job expired before completion.'
+          : 'Micro background worker exited before completion.',
       updatedAt: new Date().toISOString(),
     };
   }
@@ -325,14 +340,55 @@ export function readMicroJob(projectRoot, jobId) {
   const normalized = normalizeJob(projectRoot, job);
   if (normalized && normalized.status !== job.status) {
     writeJob(projectRoot, normalized);
+    if (['completed', 'failed', 'cancelled', 'partial'].includes(normalized.status)) {
+      clearMicroJobCancellation(projectRoot, normalized.jobId);
+    }
     // No terminal receipt means cost is unknown, not zero. Keep the failed
     // assignment in the same usage ledger as completed provider calls.
     const ledger = path.join(projectRoot, '.contextos', 'logs', 'micro-usage.jsonl');
     fs.mkdirSync(path.dirname(ledger), { recursive: true });
     fs.appendFileSync(ledger, JSON.stringify({ at: normalized.updatedAt, receiptId: normalized.jobId, hostSessionId: normalized.hostSessionId || null, ok: false, usageSource: 'unavailable', providerUsageComplete: false, providerRequests: null, provider: normalized.provider || 'cli', estimatedCostUsd: null, error: normalized.error }) + '\n', { mode: 0o600 });
-    enqueueMicroDelivery(projectRoot, { deliveryId: normalized.jobId, receiptId: normalized.jobId, content: normalized.error });
+    if (normalized.status !== 'cancelled') {
+      enqueueMicroDelivery(projectRoot, { deliveryId: normalized.jobId, receiptId: normalized.jobId, content: normalized.error });
+    }
   }
   return normalized;
+}
+
+const TERMINAL_JOB_STATUSES = new Set(['completed', 'failed', 'cancelled', 'partial']);
+
+export function requestMicroJobCancellation(projectRoot, jobId) {
+  if (!projectRoot || !jobId) return { status: 'missing', requested: false, terminal: false, job: null };
+  const existing = readJobFile(jobPath(projectRoot, jobId));
+  if (!existing) return { status: 'missing', requested: false, terminal: false, job: null };
+  const status = normalizeJobStatus(existing.status);
+  if (TERMINAL_JOB_STATUSES.has(status)) {
+    return { status, requested: false, terminal: true, job: normalizeJob(projectRoot, existing) };
+  }
+  const requestedAt = new Date().toISOString();
+  fs.mkdirSync(jobsDir(projectRoot), { recursive: true });
+  fs.writeFileSync(cancellationMarkerPath(projectRoot, jobId), `${JSON.stringify({ requestedAt, requestedBy: 'host' })}\n`, { mode: 0o600 });
+  const updated = updateMicroJob(projectRoot, jobId, { cancelRequestedAt: requestedAt }) || normalizeJob(projectRoot, existing);
+  return { status: updated?.status || status, requested: true, terminal: false, job: updated, requestedAt };
+}
+
+export function microJobCancellationRequested(projectRoot, jobId) {
+  if (!projectRoot || !jobId) return null;
+  try {
+    const marker = JSON.parse(fs.readFileSync(cancellationMarkerPath(projectRoot, jobId), 'utf8'));
+    return marker?.requestedAt || new Date().toISOString();
+  } catch {}
+  try {
+    const job = readJobFile(jobPath(projectRoot, jobId));
+    return job?.cancelRequestedAt || null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearMicroJobCancellation(projectRoot, jobId) {
+  if (!projectRoot || !jobId) return;
+  try { fs.rmSync(cancellationMarkerPath(projectRoot, jobId), { force: true }); } catch {}
 }
 
 const LEGACY_AGENT_JOB_PREFIXES = ['agent-', 'agy-', 'goal-'];

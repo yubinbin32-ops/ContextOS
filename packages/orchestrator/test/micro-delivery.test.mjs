@@ -82,6 +82,23 @@ test('Micro background jobs persist running and terminal state', () => {
   }
 });
 
+test('Micro continuation windows persist as partial instead of a zombie running job', () => {
+  const root = tempProject('contextos-micro-partial-');
+  try {
+    createMicroJob(root, { jobId: 'job-partial', preset: 'triage' });
+    const partial = updateMicroJob(root, 'job-partial', {
+      status: 'partial',
+      result: { status: 'partial', resume: { kind: 'micro', action: 'send', sessionId: 'sess-1' } },
+    });
+    assert.equal(partial.status, 'partial');
+    assert.equal(readMicroJob(root, 'job-partial').status, 'partial');
+    assert.deepEqual(listMicroJobs(root, { status: 'running' }), []);
+    assert.deepEqual(listMicroJobs(root, { status: 'partial' }).map((job) => job.jobId), ['job-partial']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('worker reports update job state without forcing host attention for informational changes', () => {
   const root = tempProject('contextos-micro-report-');
   try {

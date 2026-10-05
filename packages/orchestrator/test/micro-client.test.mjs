@@ -1040,8 +1040,11 @@ test('runMicroTask enforces budgets before final tool-convergence dispatch', asy
       withOS: true,
       maxSteps: 1,
       maxTokens: 5,
-      maxProviderTokens: 4130,
-      caps: { inspect: async () => 'export const x = 1;' },
+      // ContextOS skill guidance is injected into every Micro request, so keep
+      // the initial prompt under the limit while a long tool result pushes the
+      // convergence turn over it.
+      maxProviderTokens: 4900,
+      caps: { inspect: async () => 'x'.repeat(20000) },
     });
     assert.equal(result.ok, false);
     assert.equal(result.budgetExceeded, 'providerTokens');

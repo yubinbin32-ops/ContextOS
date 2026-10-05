@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { executeAgent } from './agent-service.mjs';
 import { normalizeAgentReport } from './micro-agent-report.mjs';
-import { claimMicroJob, enqueueMicroDelivery, readMicroJob, updateMicroJob } from './micro-delivery.mjs';
+import { claimMicroJob, enqueueMicroDelivery, readMicroJob, updateMicroJob, microJobCancellationRequested, clearMicroJobCancellation } from './micro-delivery.mjs';
 import { loadProfile } from './profile.mjs';
 import { resolveMicroRoles } from './micro-role-config.mjs';
 import { appendRoleUsage } from './role-usage-ledger.mjs';
@@ -10,18 +10,21 @@ import { appendRoleUsage } from './role-usage-ledger.mjs';
 async function persistWorkerFailure(projectRoot, jobId, error) {
   const existing = readMicroJob(projectRoot, jobId);
   if (!existing) return null;
-  const message = error?.message || String(error);
+  const cancelled = Boolean(existing.cancelRequestedAt) || Boolean(microJobCancellationRequested(projectRoot, jobId));
+  const message = cancelled ? 'Detached CLI task was cancelled.' : error?.message || String(error);
   const report = existing.report || normalizeAgentReport({
-    answer: `Detached CLI task failed before its result could be saved: ${message}`,
-    needsHost: true,
-  }, { jobId, status: 'failed' });
+    answer: cancelled ? 'Detached CLI task was cancelled.' : `Detached CLI task failed before its result could be saved: ${message}`,
+    needsHost: !cancelled,
+  }, { jobId, status: cancelled ? 'cancelled' : 'failed' });
   const stillRunning = existing.status === 'running';
   let job = updateMicroJob(projectRoot, jobId, {
-    ...(stillRunning ? { status: 'failed', report, error: message } : {}),
-    executionAccounting: { status: 'gap', reason: 'Detached worker terminated unexpectedly after launch.' },
+    ...(stillRunning ? { status: cancelled ? 'cancelled' : 'failed', report, error: message } : {}),
+    executionAccounting: cancelled
+      ? { status: 'cancelled' }
+      : { status: 'gap', reason: 'Detached worker terminated unexpectedly after launch.' },
   }) || existing;
   let deliveryAccounting = job.deliveryAccounting || { status: 'not-requested' };
-  if (stillRunning || job.status === 'failed') {
+  if (!cancelled && (stillRunning || job.status === 'failed')) {
     try {
       const queued = enqueueMicroDelivery(projectRoot, {
         deliveryId: jobId,
@@ -34,11 +37,20 @@ async function persistWorkerFailure(projectRoot, jobId, error) {
       deliveryAccounting = { status: 'gap', reason: 'The failure was saved, but its error report could not be queued.' };
     }
   }
+  clearMicroJobCancellation(projectRoot, jobId);
   return updateMicroJob(projectRoot, jobId, { deliveryAccounting }) || job;
 }
 
 export async function runAgentWorker(projectRoot, jobId) {
   const root = path.resolve(projectRoot);
+  if (microJobCancellationRequested(root, jobId)) {
+    const existing = readMicroJob(root, jobId);
+    const cancelled = existing && existing.status === 'running'
+      ? updateMicroJob(root, jobId, { status: 'cancelled', error: 'Detached CLI task was cancelled before it started.', executionAccounting: { status: 'cancelled' } })
+      : existing;
+    clearMicroJobCancellation(root, jobId);
+    return { id: jobId, status: cancelled?.status || 'cancelled' };
+  }
   const claimed = claimMicroJob(root, jobId);
   if (!claimed) throw new Error(`Unknown detached agent job '${jobId}'.`);
   const definition = claimed.worker;

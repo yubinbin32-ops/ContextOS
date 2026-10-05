@@ -2,16 +2,16 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.yubinbin32-ops/contextos",
   "title": "ContextOS — Powered Exoskeleton for AI Coding",
-  "description": "Context exoskeleton for AI development: optimize the entire development lifecycle to reduce token usage and context occupancy.",
+  "description": "Context exoskeleton for AI development: reduce token usage and context occupancy.",
   "repository": {
     "url": "https://github.com/yubinbin32-ops/ContextOS",
     "source": "github"
   },
-  "version": "3.0.0",
+  "version": "3.0.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/yubinbin32-ops/contextos:3.0.0",
+      "identifier": "ghcr.io/yubinbin32-ops/contextos:3.0.1",
       "transport": {
         "type": "stdio"
       },

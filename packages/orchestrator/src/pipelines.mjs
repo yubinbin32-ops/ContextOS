@@ -2274,6 +2274,7 @@ export async function changePipeline(ctx, input = {}) {
   const verifyLines = [];
   const failureLines = [];
   let verifyPassed = true;
+  let verifyFailed = false;
   let failedReceiptId = null;
   const failureSourceLines = [];
 
@@ -2282,15 +2283,30 @@ export async function changePipeline(ctx, input = {}) {
   if (verifyCommands.length) {
     if (verifyCommands && verifyCommands.length) {
       const fingerprint = workspaceFingerprint(ctx.projectRoot);
+      const verifyWindowMs = Number(input.verifyTimeoutMs);
+      const verifyDeadline = Number.isFinite(verifyWindowMs) && verifyWindowMs > 0
+        ? Date.now() + Math.floor(verifyWindowMs)
+        : null;
       for (const cmd of verifyCommands) {
+        const windowRemaining = verifyDeadline === null ? null : verifyDeadline - Date.now();
+        if (windowRemaining !== null && windowRemaining <= 0) {
+          verifyPassed = false;
+          verifyLines.push(`- \`${redactSecrets(cmd)}\` → skipped: host verification window closed; rerun verify separately.`);
+          continue;
+        }
+        const configuredTimeout = input.timeoutMs ?? profile.timeoutMs;
+        const timeoutMs = windowRemaining === null
+          ? configuredTimeout
+          : Math.max(1_000, Math.min(Number(configuredTimeout) || Infinity, Math.floor(windowRemaining)));
         const res = await caps.run({
           command: cmd,
           cwd: input.cwd,
           maxLogBytes: input.maxLogBytes,
-          timeoutMs: input.timeoutMs ?? profile.timeoutMs,
+          timeoutMs,
         });
         if (!res.ok) {
           verifyPassed = false;
+          verifyFailed = true;
           recordActionVerification(ctx, { command: cmd, cwd: input.cwd, outcome: 'failed' });
           verifyLines.push(`- \`${cmd}\` → ✗ ${res.error}`);
           continue;
@@ -2309,6 +2325,7 @@ export async function changePipeline(ctx, input = {}) {
         verifyLines.push(`- \`${label}\` → exit ${receipt.exitCode} (${receipt.durationMs}ms, receipt ${receipt.id})`);
         if (receipt.exitCode !== 0) {
           verifyPassed = false;
+          verifyFailed = true;
           failedReceiptId ||= receipt.id;
           const diag = receipt.diagnostics && receipt.diagnostics.length
             ? receipt.diagnostics.join('\n\n---\n\n')
@@ -2322,7 +2339,7 @@ export async function changePipeline(ctx, input = {}) {
         tracer.step('change_verify', { command: cmd, exitCode: receipt.exitCode });
       }
 
-      if (!verifyPassed && input.autoRevert === true) {
+      if (verifyFailed && input.autoRevert === true) {
         for (const fullPath of originallyMissing) {
           try {
             if (fs.existsSync(fullPath)) fs.rmSync(fullPath, { force: true });
@@ -4058,6 +4075,22 @@ export async function pipelinePipeline(ctx, input = {}) {
     }
   }
 
+  // A resumed pipeline call can resend the same steps array plus the handle:
+  // steps already executed are skipped instead of replayed. A shorter array is
+  // treated as the remaining tail and is not offset again.
+  let resumeStepFrom = 0;
+  let resumeChainFrom = 0;
+  const pipelineResume = input.resume && typeof input.resume === 'object' && !Array.isArray(input.resume)
+    && input.resume.kind === 'pipeline' ? input.resume : null;
+  if (pipelineResume) {
+    const fromStep = Math.max(1, Math.floor(Number(pipelineResume.fromStep) || 1));
+    const totalStepsHint = Number(pipelineResume.totalSteps);
+    if (Number.isFinite(totalStepsHint) && steps.length === totalStepsHint) {
+      resumeStepFrom = Math.min(fromStep - 1, Math.max(0, steps.length - 1));
+      resumeChainFrom = Math.max(0, Math.floor(Number(pipelineResume.fromChain) || 1) - 1);
+    }
+  }
+
   const mode = input.mode || 'full';
   const receiptMode = isReceiptMode(mode);
   const exploreActionCount = countPipelineTool(steps, 'explore', ctx.projectRoot);
@@ -4103,12 +4136,37 @@ export async function pipelinePipeline(ctx, input = {}) {
     return null;
   }
 
-  for (let i = 0; i < steps.length; i++) {
+  // A single step must not outlive the host MCP call window: an unbounded
+  // agent wait or integrate wait inside the pipeline would lose the partial
+  // receipt and force the host to re-request (and possibly replay) the flow.
+  const boundedWait = (tool, actionInput) => {
+    if (!actionInput || typeof actionInput !== 'object' || Array.isArray(actionInput)) return actionInput;
+    const waitable = tool === 'integrate'
+      || (tool === 'agent' && (actionInput.action === 'wait' || actionInput.action === 'messages'));
+    if (!waitable) return actionInput;
+    const requested = Number.isFinite(Number(actionInput.waitMs))
+      ? Math.max(0, Math.floor(Number(actionInput.waitMs)))
+      : (tool === 'integrate' ? 280_000 : 0);
+    if (!requested) return actionInput;
+    const remaining = Math.max(0, maxDurationMs - (Date.now() - batchStartedAt));
+    const bounded = Math.max(1, Math.min(requested, remaining));
+    return bounded === requested ? actionInput : { ...actionInput, waitMs: bounded };
+  };
+  const dispatchWithoutClamp = ctx.orchestrator.dispatch.bind(ctx.orchestrator);
+  ctx = {
+    ...ctx,
+    orchestrator: {
+      ...ctx.orchestrator,
+      dispatch: (tool, actionInput, evidence) => dispatchWithoutClamp(tool, boundedWait(tool, actionInput), evidence),
+    },
+  };
+
+  for (let i = resumeStepFrom; i < steps.length; i++) {
     const stopReason = budgetStop();
     if (stopReason) {
       halted = true;
       haltReason = stopReason;
-      if (!resume) resume = { kind: 'pipeline', fromStep: i + 1 };
+      if (!resume) resume = { kind: 'pipeline', fromStep: i + 1, totalSteps: steps.length };
       break;
     }
     const step = steps[i];
@@ -4165,12 +4223,12 @@ export async function pipelinePipeline(ctx, input = {}) {
       const subResults = [];
       let chainFailed = false;
 
-      for (let j = 0; j < items.length; j++) {
+      for (let j = (i === resumeStepFrom ? resumeChainFrom : 0); j < items.length; j++) {
         const stopReason = budgetStop();
         if (stopReason) {
           halted = true;
           haltReason = stopReason;
-          if (!resume) resume = { kind: 'pipeline', fromStep: stepNum, fromChain: j + 1 };
+          if (!resume) resume = { kind: 'pipeline', fromStep: stepNum, fromChain: j + 1, totalSteps: steps.length };
           break;
         }
         const action = items[j];
@@ -4364,7 +4422,7 @@ export async function pipelinePipeline(ctx, input = {}) {
     if (result.kind === 'parallel' || result.kind === 'chain') return sum + result.items.length;
     return sum + 1;
   }, 0) + branchResults.reduce((sum, result) => sum + result.items.length, 0);
-  const totalSteps = steps.length + branchResults.reduce((sum, result) => sum + result.items.length, 0);
+  const totalSteps = (steps.length - resumeStepFrom) + branchResults.reduce((sum, result) => sum + result.items.length, 0);
   const recovered = branchResults.some((branch) => branch.ok);
   const continuationStop = Boolean(halted && haltReason?.startsWith('budget exceeded: maxDurationMs='));
   const pipelineStatus = continuationStop
@@ -4377,9 +4435,9 @@ export async function pipelinePipeline(ctx, input = {}) {
   const headerLines = [`pipeline=${pipelineStatus} actions=${totalActions}/${totalSteps}${receiptMode ? ' mode=receipt' : ''}`];
   if (halted && haltReason) headerLines.push(`stop=${haltReason}`);
   if (continuationStop) {
-    const handle = resume || { kind: 'pipeline', fromStep: 1 };
+    const handle = resume || { kind: 'pipeline', fromStep: 1, totalSteps: steps.length };
     headerLines.push(`partial=true resume=${JSON.stringify(handle)}`);
-    headerLines.push(`guidance=Resend only the remaining pipeline steps after ${handle.fromStep || 1}${handle.fromChain ? ` (chain from ${handle.fromChain})` : ''}; do not replay completed steps.`);
+    headerLines.push('guidance=Pass the resume handle back with the same steps array; completed steps are skipped, never replayed.');
   }
   const mutationStatus = results.flatMap((result) => result.items || [result])
     .flatMap((item) => String(item.output || '').split(/\r?\n/).filter((line) => line.startsWith('status='))).at(-1);
@@ -4585,8 +4643,13 @@ export async function integratePipeline(ctx, input = {}) {
       '- Next: dispatch it with execution:"implement", workspace, context.allowedPaths and context.acceptance.',
     ].join('\n');
   }
+  // Keep the whole merge inside the host MCP call window: waiting for the job
+  // must leave headroom for the diff, verification and the response itself.
+  const hostWindowMs = Math.min(290_000, Math.max(5_000, Number(input.maxDurationMs) || 290_000));
+  const deadline = Date.now() + hostWindowMs;
   if (job.status !== 'completed') {
-    const waitMs = Math.min(280_000, Math.max(0, Number(input.waitMs) || 280_000));
+    const waitBudget = Math.max(0, deadline - Date.now() - 10_000);
+    const waitMs = Math.min(280_000, Math.max(0, Number(input.waitMs) || 280_000), waitBudget);
     const startedWait = Date.now();
     while (job && job.status !== 'completed' && !['failed', 'cancelled'].includes(job.status)
       && Date.now() - startedWait < waitMs) {
@@ -4599,6 +4662,7 @@ export async function integratePipeline(ctx, input = {}) {
         `- status=blocked errorCode=INTEGRATE_JOB_${String(job?.status || 'unknown').toUpperCase()}`,
         `- Agent job \`${jobId}\` is ${job?.status || 'unknown'} after waiting ${Date.now() - startedWait}ms; only a completed implementation can be integrated.`,
         ...(job?.report?.summary ? [`- Report: ${clip(String(job.report.summary), 240)}`] : []),
+        `- resume={"kind":"integrate","jobId":"${jobId}"}`,
       ].join('\n');
     }
   }
@@ -4678,10 +4742,13 @@ export async function integratePipeline(ctx, input = {}) {
     ].join('\n');
   }
   const liveChangedPaths = [...edits.map((edit) => edit.path), ...creates.map((create) => create.path)];
-  const verifyCommands = (input.verify === true
+  const requestedVerify = (input.verify === true
     ? (Array.isArray(implementation.verify) ? implementation.verify : [])
     : (Array.isArray(input.verify) ? input.verify : []))
     .filter((command) => typeof command === 'string' && command.trim());
+  const verifyWindowMs = Math.max(0, deadline - Date.now() - 2_000);
+  const verifyCommands = verifyWindowMs >= 5_000 ? requestedVerify : [];
+  const verifyDeferred = requestedVerify.length > 0 && verifyCommands.length === 0;
   const workerChecks = Array.isArray(job.report?.checks)
     ? job.report.checks.filter((check) => typeof check === 'string' && check.trim())
     : [];
@@ -4702,12 +4769,19 @@ export async function integratePipeline(ctx, input = {}) {
       if (suggestion) architecture = suggestion;
     }
   }
+  const verifyBudgetMs = Math.max(0, deadline - Date.now() - 2_000);
   const merged = await changePipeline(ctx, {
     edits,
     create: creates,
     delete: deletes,
     ...(architecture ? { architecture } : {}),
-    ...(verifyCommands.length ? { verify: { commands: verifyCommands } } : {}),
+    ...(verifyCommands.length
+      ? {
+          verify: { commands: verifyCommands },
+          timeoutMs: Math.min(Number(ctx.profile?.timeoutMs) || Infinity, verifyBudgetMs),
+          verifyTimeoutMs: verifyBudgetMs,
+        }
+      : {}),
     ...(input.autoRevert === true ? { autoRevert: true } : {}),
   });
   const header = [
@@ -4717,9 +4791,11 @@ export async function integratePipeline(ctx, input = {}) {
     workerChecks.length
       ? `- Worker checks: ${workerChecks.map((check) => `\`${check}\``).join(', ')}`
       : '- Worker checks: none recorded.',
-    verifyCommands.length
-      ? `- Host verification: ${verifyCommands.map((command) => `\`${command}\``).join(', ')}`
-      : '- Host verification: skipped (worker checks carried; run remaining acceptance once after integrate).',
+    verifyDeferred
+      ? '- Host verification: deferred (host window nearly closed); run verify separately.'
+      : verifyCommands.length
+        ? `- Host verification: ${verifyCommands.map((command) => `\`${command}\``).join(', ')}`
+        : '- Host verification: skipped (worker checks carried; run remaining acceptance once after integrate).',
     ...(architecture ? ['- Architecture: auto-bound new paths to Blocks/Chains.'] : []),
     ...(skipped.length ? [`- Skipped: ${skipped.map((file) => `\`${file}\``).join(', ')}`] : []),
     '',
