@@ -12,8 +12,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: contextos-release
-  cancel-in-progress: false
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
   package:
@@ -45,8 +45,24 @@ jobs:
       - name: Sync version data
         run: npm run version:sync
 
+      - name: Validate tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node -e 'const pkg = require("./package.json").version; const tag = process.env.GITHUB_REF_NAME.replace(/^v/, ""); if (tag !== pkg) { console.error(`Tag ${tag} does not match package.json ${pkg}`); process.exit(1); }'
+
       - name: Run automated checks
         run: npm test
+
+      - name: Verify plugin bundle
+        run: npm run plugin:verify
+
+      - name: Run distribution smoke test
+        run: npm run dist:smoke
+
+      - name: Run real MCP acceptance test
+        run: npm run acceptance:real
+
+      - name: Run Swift desktop tests
+        run: swift test --package-path apps/desktop
 
       - name: Build unsigned release package
         env:
@@ -127,6 +143,16 @@ jobs:
       - name: Sync version data
         run: npm run version:sync
 
+      - name: Validate tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node -e 'const pkg = require("./package.json").version; const tag = process.env.GITHUB_REF_NAME.replace(/^v/, ""); if (tag !== pkg) { console.error(`Tag ${tag} does not match package.json ${pkg}`); process.exit(1); }'
+
+      - name: Run Windows catalog tests
+        run: node --test apps/desktop-win/src-tauri/src/model_catalog.test.mjs
+
+      - name: Build Windows frontend
+        run: npm run desktop:win:build
+
       - name: Build Windows release package
         run: node scripts/package-windows.mjs
 
@@ -155,6 +181,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: [package, package-windows]
     runs-on: ubuntu-latest
     steps:
@@ -208,7 +235,7 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
-      - name: Package complete standalone plugin and evaluation data
+      - name: Package complete standalone plugin
         shell: bash
         run: |
           set -euo pipefail
