@@ -1,15 +1,42 @@
-# ContextOS — Focused code, compact results, Micro assistants
+# ContextOS 3.0.0 — The context exoskeleton for AI development
 
-Draft for the next release. Source-build functionality is tested. The 60% user-equivalent token-cost reduction is a working target, not a measured guarantee.
+Release preparation from `4706c38`. ContextOS optimizes the full AI development lifecycle: project understanding, planning, evidence, execution, implementation, verification, review, and continuity. Its evidence, commands, pipelines, changes, Blocks, Chains, plans, Micro, and CLI work toward the same goal: reduce unnecessary token use and context occupancy.
 
-ContextOS helps your AI coding agent read functions instead of whole files, batch edits and tests, and recover specific failure logs. Keep the main model responsible for the plan and final review, and assign bounded review or implementation work to a Micro assistant.
+## One OS for the full development lifecycle
 
-Micro can use an OpenAI-compatible API or an existing CLI login. Dispatch a background task and keep working: the assistant can return every result, report only what needs attention, or keep successful work quiet. Important reports arrive with a later OS call, without progress polling.
+- **Evidence and commands:** exact source inspection, recoverable results, and durable execution receipts.
+- **Pipelines and changes:** serial/parallel batches, scoped edits, verification, and integration.
+- **Architecture and continuity:** Blocks, Chains, plans, tasks, and sessions connected to actual implementation.
+- **Task-appropriate assistance:** API Micro handles bounded work; CLI adapters execute complex implementations in isolated workspaces.
+- **Desktop visibility:** the App presents project structure, progress, evidence, and configuration.
 
-Attach a focused read pipeline when delegating, so task source goes directly to the assistant while the main model reviews the resulting diff and checks. Reuse existing evidence instead of repeating reads.
+The main agent retains the task contract, decisions, and final review while OS carries execution and project memory.
 
-The comparison formula is `main raw + api-micro raw / 7 + cli-agent raw / 7`. The `/7` factor is a user-specific relative-price estimate, not an invoice. Validate the target on real tasks with visible host conversations and complete role usage.
+## Measured effect
 
-Requires Node.js 22+. [Install and configure](https://github.com/yubinbin32-ops/ContextOS/blob/main/setup.md) · [中文介绍](https://github.com/yubinbin32-ops/ContextOS/blob/main/README_zh.md)
+The recorded plan-dependency feature experiment, based on commit `0dd6431`, compared fresh conversations and isolated worktrees. Peak main-thread input fell from **234,174 tokens with native tools** to **145,694 with OS + Micro (−37.8%)** and **84,681 with OS + Micro + CLI (−63.8%)**. All three implementations passed their test suites.
 
-If ContextOS helps your workflow, [give it a star](https://github.com/yubinbin32-ops/ContextOS). Share a reproducible task or report repeated reads, oversized responses, and task drift so we can improve it.
+These are historical single-run measurements, not a new benchmark of this release. The full workflow used more combined raw tokens across workers; peak main context, cumulative raw tokens, and price-weighted cost are different metrics. See [the complete comparison and assumptions](../README.md#three-development-workflows-measured).
+
+## Install and configure with AI
+
+Send your coding assistant:
+
+> 读取 (https://github.com/yubinbin32-ops/ContextOS/blob/main/setup.md) ，为我安装OS
+
+[setup.md](../setup.md) guides the agent through version selection, installation, host plugins/skills, project registration, mandatory API Micro setup, CLI adapter creation, authentication, and actual acceptance checks. Node.js 22+ is required. The one-line prompt requires 3.0.0 or newer. Before publication, the agent verifies candidate availability and reports an unpublished version if no suitable build can be obtained; it must not silently install 2.x.
+
+Micro requires its own API connection. Recommended options are [Command Code GOAT](https://commandcode.ai/docs/plans/goat), [OpenCode Go](https://opencode.ai/v2/docs/console/go), or your own compatible provider. For bounded tasks, use DeepSeek V4.1 Flash with `medium` reasoning where supported; the installer verifies the provider's actual model ID and parameters.
+
+
+## Global settings and model synchronization
+
+The App now supports shared model and reasoning settings with `Use Global` inheritance for each role. Model synchronization reads each Micro provider and CLI adapter's available models and effort options. Empty API key fields preserve an existing key for the same origin; changing origin requires a new key.
+
+The final settings layout uses compact cards and a single dropdown arrow, fixes the scrollbar layout, and retains the normal 756 × 710 macOS window size. Windows settings also adapt to smaller screens. The README settings image remains an earlier accepted capture.
+
+Validation passed: Swift 45 tests, Windows TypeScript build, seven model-catalog Node tests, and live catalogs for Micro (36 entries), Codex (5 with effort information), and AGY (14, including 12 variants). The user also confirmed manual login and invocation tests passed. The final macOS package, version checks, benchmark recalculation and hashes, diff checks, and a 321-file global/project credential scan passed.
+
+The final settings UI has no new tool-verified native screenshot because native App binding failed. Windows Rust/Tauri was not compiled because Cargo was unavailable. This session made no commit, push, or Release.
+
+[English overview](../README.md) · [中文介绍](../README_zh.md) · [Report an issue](https://github.com/yubinbin32-ops/ContextOS/issues)

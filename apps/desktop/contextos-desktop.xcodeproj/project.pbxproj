@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C0DE00000000000000000005 /* RoleSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000006 /* RoleSettings.swift */; };
+		C0DE00000000000000000007 /* RoleModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000008 /* RoleModelCatalog.swift */; };
 		2BD57D08C4AFD1C6469570C4 /* ProjectDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61C675EDBCE6EEC793620F1E /* ProjectDatabase.swift */; };
 		31E844BB6CC7F5AF8A1AE048 /* KnowledgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D6A8828032C460DD8666458 /* KnowledgeView.swift */; };
 		64EAF909E1FD56410C36B85F /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50C3E667653563A3C331EC3 /* Models.swift */; };
@@ -29,6 +31,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		C0DE00000000000000000006 /* RoleSettings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoleSettings.swift; sourceTree = "<group>"; };
+		C0DE00000000000000000008 /* RoleModelCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoleModelCatalog.swift; sourceTree = "<group>"; };
 		10D7424A64C7B936FF398782 /* ContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		18F1723269D6CA447B5C3501 /* Theme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		1D6A8828032C460DD8666458 /* KnowledgeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = KnowledgeView.swift; sourceTree = "<group>"; };
@@ -122,6 +126,8 @@
 				F8A5799A076A8333FD4582C2 /* DetailView.swift */,
 				31BB6ADC4F82384B6B57766D /* GraphCanvasView.swift */,
 				EEFC7A2EB420601BC4929B59 /* GraphStore.swift */,
+				C0DE00000000000000000006 /* RoleSettings.swift */,
+				C0DE00000000000000000008 /* RoleModelCatalog.swift */,
 				1D6A8828032C460DD8666458 /* KnowledgeView.swift */,
 				75E5350B2D13657C8B35AE41 /* MarkdownPage.swift */,
 				C50C3E667653563A3C331EC3 /* Models.swift */,
@@ -249,6 +255,8 @@
 				F29C364245A8714F205A037C /* DetailView.swift in Sources */,
 				9B97C0DCF1E2E8443CD34311 /* GraphCanvasView.swift in Sources */,
 				B49179793BC9564A7B05A929 /* GraphStore.swift in Sources */,
+				C0DE00000000000000000005 /* RoleSettings.swift in Sources */,
+				C0DE00000000000000000007 /* RoleModelCatalog.swift in Sources */,
 				31E844BB6CC7F5AF8A1AE048 /* KnowledgeView.swift in Sources */,
 				9363A4DA350132E939374FE5 /* MarkdownPage.swift in Sources */,
 				64EAF909E1FD56410C36B85F /* Models.swift in Sources */,
@@ -354,8 +362,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.contextos.desktop;
 				PRODUCT_NAME = ContextOS;
-				MARKETING_VERSION = 2.7.2;
-				CURRENT_PROJECT_VERSION = 20702;
+				MARKETING_VERSION = 3.0.0;
+				CURRENT_PROJECT_VERSION = 30000;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -453,8 +461,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.contextos.desktop;
 				PRODUCT_NAME = ContextOS;
-				MARKETING_VERSION = 2.7.2;
-				CURRENT_PROJECT_VERSION = 20702;
+				MARKETING_VERSION = 3.0.0;
+				CURRENT_PROJECT_VERSION = 30000;
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Sources/CSQLite";

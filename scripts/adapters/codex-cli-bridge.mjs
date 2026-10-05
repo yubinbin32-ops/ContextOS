@@ -127,7 +127,7 @@ async function main() {
   const lastMessageFile = path.join(os.tmpdir(), `contextos-codex-cli-${process.pid}-${Date.now()}.txt`);
 
   const args = sessionId
-    ? ['exec', 'resume', sessionId, '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', '--json', '-m', model, '-c', `model_reasoning_effort=${thinking}`, '-C', workspace, '-o', lastMessageFile]
+    ? ['exec', 'resume', sessionId, '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', '--json', '-m', model, '-c', `model_reasoning_effort=${thinking}`, '-o', lastMessageFile]
     : ['exec', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', '--json', '-m', model, '-c', `model_reasoning_effort=${thinking}`, '-C', workspace, '-o', lastMessageFile];
 
   const child = spawn('codex', args, { cwd: workspace, stdio: ['pipe', 'pipe', 'pipe'] });

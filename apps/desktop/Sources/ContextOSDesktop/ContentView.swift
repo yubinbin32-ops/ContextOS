@@ -44,7 +44,8 @@ struct ContentView: View {
         .frame(minWidth: 1_080, minHeight: 680)
         .background(ContextOSTheme.canvas)
         .preferredColorScheme(preferredColorScheme)
-        .sheet(isPresented: $store.settingsPresented) { SettingsView(store: store) }
+        .onAppear { restoreWorkspaceFocus() }
+        .sheet(isPresented: $store.settingsPresented, onDismiss: restoreWorkspaceFocus) { SettingsView(store: store) }
         .task(id: store.projectRoot) {
             let root = store.projectRoot
             var initialized = false
@@ -132,6 +133,17 @@ struct ContentView: View {
             selection.type == .plan ? 500 : 380,
             max(selection.type == .plan ? 410 : 320, preferredWidth)
         )
+    }
+
+    private func restoreWorkspaceFocus() {
+        // AppKit restores the first menu control after a sheet closes. Wait for
+        // that restoration, then leave the canvas as the neutral responder.
+        // The project menu remains available to Tab and accessibility actions.
+        DispatchQueue.main.async {
+            let window = NSApp.keyWindow ?? NSApp.mainWindow
+                ?? NSApp.windows.first { $0.canBecomeMain && $0.sheetParent == nil }
+            window?.makeFirstResponder(nil)
+        }
     }
 
     private var sidebar: some View {
@@ -393,6 +405,7 @@ struct ContentView: View {
                     )
                 }
                 .menuStyle(.borderlessButton)
+                .focusEffectDisabled()
                 .menuIndicator(.hidden)
                 .help(store.activeLocale == "zh-Hans" ? "点击切换项目或查看最近项目 (⌘O 打开)" : "Click to switch project or view recents (⌘O to open)")
 
@@ -648,6 +661,311 @@ private struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("contextos.appearance") private var appearance = AppearancePreference.system.rawValue
 
+    @State private var microDraft = MicroSettingsDraft()
+    @State private var savedMicroDraft = MicroSettingsDraft()
+    @State private var settingsSaved = false
+    @State private var cliDraft = CLISettingsDraft()
+    @State private var savedCLIDraft = CLISettingsDraft()
+    @State private var cliAdapterID = ""
+    @State private var savedCLIAdapterID = ""
+
+    private var chinese: Bool { store.activeLocale == "zh-Hans" }
+    private var selectedAdapter: MicroAdapterSummary? {
+        store.globalRolesSummary.adapters.first { $0.id == cliAdapterID }
+    }
+
+    private func loadMicroDraft() {
+        microDraft = MicroSettingsDraft(baseURL: store.globalRolesSummary.baseURL ?? "",
+            model: store.globalRolesSummary.model ?? "", thinking: store.globalRolesSummary.requestedThinking ?? "")
+        savedMicroDraft = microDraft
+    }
+
+    private func loadCLIDraft() {
+        if cliAdapterID.isEmpty { cliAdapterID = store.globalRolesSummary.defaultAdapter ?? "" }
+        cliDraft = CLISettingsDraft(model: selectedAdapter?.model ?? "", thinking: selectedAdapter?.thinking ?? "")
+        savedCLIDraft = cliDraft
+        savedCLIAdapterID = store.globalRolesSummary.defaultAdapter ?? ""
+    }
+
+    private func reasoning(_ catalog: RoleModelCatalog?, model: String) -> RoleCatalogModel? {
+        catalog?.models.first { $0.id == model }
+    }
+
+    private func cardHeader(title: String, micro: Bool) -> some View {
+        let syncing = micro ? store.syncingMicroModels : store.syncingCLIModels
+        let error = micro ? store.microCatalogError : store.cliCatalogError
+        return HStack(alignment: .center, spacing: 6) {
+            Text(title)
+                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                .tracking(0.5)
+                .foregroundStyle(ContextOSTheme.muted)
+            Spacer(minLength: 0)
+            if let error {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(ContextOSTheme.failure)
+                    .help(error)
+                    .accessibilityLabel((micro ? "Micro model catalog error: " : "CLI model catalog error: ") + error)
+            }
+            Text(chinese ? "全局" : "GLOBAL")
+                .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                .tracking(0.5)
+                .foregroundStyle(ContextOSTheme.muted)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(Color.black.opacity(0.04), in: RoundedRectangle(cornerRadius: 4))
+            if syncing {
+                ProgressView().controlSize(.mini)
+            }
+            Button {
+                Task {
+                    if micro { await store.syncMicroModels(microDraft) }
+                    else { await store.syncCLIModels(adapter: cliAdapterID) }
+                }
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(ContextOSTheme.muted)
+            }
+            .buttonStyle(.plain)
+            .disabled(syncing || (!micro && selectedAdapter == nil))
+            .help(chinese ? "同步模型目录" : "Sync model catalog")
+            .accessibilityLabel(micro ? "Sync Micro models" : "Sync CLI models")
+        }
+        .frame(height: 18)
+    }
+
+    private func modelField(_ title: String, value: Binding<String>, catalog: RoleModelCatalog?, accessibility: String) -> some View {
+        field(title) {
+            HStack(spacing: 0) {
+                TextField(chinese ? "模型" : "Model", text: value)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .padding(.leading, 8)
+                    .accessibilityLabel(accessibility)
+                Menu {
+                    if !value.wrappedValue.isEmpty, catalog?.models.contains(where: { $0.id == value.wrappedValue }) != true {
+                        Button((chinese ? "当前 / 自定义： " : "Current / custom: ") + value.wrappedValue) {}
+                    }
+                    ForEach(catalog?.models ?? []) { model in
+                        Button(model.label.map { $0 == model.id ? $0 : "\($0) · \(model.id)" } ?? model.id) { value.wrappedValue = model.id }
+                    }
+                    if catalog == nil { Text(chinese ? "先同步模型目录" : "Sync models first") }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(ContextOSTheme.muted)
+                        .frame(width: 26, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel(accessibility + " options")
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .background(ContextOSTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+        }
+    }
+
+    private func thinkingField(value: Binding<String>, catalog: RoleModelCatalog?, model: String, accessibility: String) -> some View {
+        let entry = reasoning(catalog, model: model)
+        return field(chinese ? "思考等级" : "Thinking") {
+            HStack(spacing: 0) {
+                TextField(chinese ? "默认" : "Default", text: value)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .padding(.leading, 8)
+                    .accessibilityLabel(accessibility)
+                Menu {
+                    Button(chinese ? "继承 / 默认" : "Inherit / default") { value.wrappedValue = "" }
+                    ForEach(entry?.reasoningLevels ?? []) { level in
+                        Button(level.label) { value.wrappedValue = level.id }
+                    }
+                    if !value.wrappedValue.isEmpty, entry?.reasoningLevels.contains(where: { $0.id == value.wrappedValue }) != true {
+                        Button((chinese ? "当前 / 自定义： " : "Current / custom: ") + value.wrappedValue) {}
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(ContextOSTheme.muted)
+                        .frame(width: 26, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel(accessibility + " options")
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .background(ContextOSTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+        }
+    }
+
+    private func projectOverride(micro: Bool) -> some View {
+        Button(chinese ? "使用全局" : "Use global") {
+            if store.useGlobalRoleSettings(micro: micro) { settingsSaved = true }
+        }
+        .buttonStyle(.bordered).controlSize(.small)
+        .accessibilityLabel(micro ? "Use global Micro settings" : "Use global CLI settings")
+    }
+
+    private var roleConfiguration: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 7) {
+                    cardHeader(title: "01 / API MICRO", micro: true)
+                    HStack(spacing: 8) {
+                        field("Base URL") {
+                            TextField("https://api.example.com/v1", text: $microDraft.baseURL)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 11, design: .monospaced))
+                                .padding(.horizontal, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(height: 32)
+                                .background(ContextOSTheme.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+                                .accessibilityLabel("Micro Base URL")
+                        }
+                        .frame(maxWidth: .infinity)
+
+                        field("API Key") {
+                            SecureField(store.globalRolesSummary.credentialConfigured ? "••••••••" : "API Key", text: $microDraft.replacementKey)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 11, design: .monospaced))
+                                .padding(.horizontal, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .frame(height: 32)
+                                .background(ContextOSTheme.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+                                .accessibilityLabel("Micro API Key")
+                        }
+                        .frame(width: 110)
+                    }
+                    modelField(chinese ? "模型" : "Model", value: $microDraft.model, catalog: store.microCatalog, accessibility: "Micro model")
+                    thinkingField(value: $microDraft.thinking, catalog: store.microCatalog, model: microDraft.model, accessibility: "Micro thinking")
+                    HStack {
+                        if store.microHasProjectOverride { projectOverride(micro: true) }
+                        Spacer()
+                        Button(chinese ? "保存全局" : "Save global") {
+                            if store.saveMicroSettings(microDraft) {
+                                loadMicroDraft()
+                                settingsSaved = true
+                            }
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .accessibilityLabel("Save global Micro settings")
+                        .disabled(microDraft == savedMicroDraft || store.globalRolesSummary.configurationSource == "unknown")
+                    }
+                    .frame(height: 26)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, minHeight: 238, maxHeight: 238, alignment: .topLeading)
+                .background(ContextOSTheme.card, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+
+                VStack(alignment: .leading, spacing: 7) {
+                    cardHeader(title: "02 / CLI AGENT", micro: false)
+                    field("Adapter") {
+                        if store.globalRolesSummary.adapters.isEmpty {
+                            HStack {
+                                Text("—").font(.system(size: 11, design: .monospaced)).foregroundStyle(ContextOSTheme.muted)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 8)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                            .background(ContextOSTheme.surface)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+                        } else {
+                            HStack(spacing: 0) {
+                                Text(cliAdapterID.isEmpty ? (chinese ? "选择 adapter" : "Choose adapter") : cliAdapterID)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(cliAdapterID.isEmpty ? ContextOSTheme.muted : ContextOSTheme.ink)
+                                    .padding(.leading, 8)
+                                    .accessibilityLabel("CLI adapter")
+                                Spacer(minLength: 0)
+                                Menu {
+                                    if selectedAdapter == nil {
+                                        Button(chinese ? "选择 adapter" : "Choose adapter") { cliAdapterID = "" }
+                                    }
+                                    ForEach(store.globalRolesSummary.adapters) { adapter in
+                                        Button(adapter.id) { cliAdapterID = adapter.id }
+                                    }
+                                } label: {
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(ContextOSTheme.muted)
+                                        .frame(width: 26, height: 32)
+                                        .contentShape(Rectangle())
+                                }
+                                .menuStyle(.borderlessButton)
+                                .menuIndicator(.hidden)
+                                .fixedSize()
+                                .accessibilityLabel("CLI adapter options")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 32)
+                            .background(ContextOSTheme.surface)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+                        }
+                    }
+                    modelField(chinese ? "模型" : "Model", value: $cliDraft.model, catalog: store.cliCatalog, accessibility: "CLI model")
+                    thinkingField(value: $cliDraft.thinking, catalog: store.cliCatalog, model: cliDraft.model, accessibility: "CLI thinking")
+                    HStack {
+                        if store.cliHasProjectOverride { projectOverride(micro: false) }
+                        Spacer()
+                        Button(chinese ? "保存全局" : "Save global") {
+                            if let adapter = selectedAdapter, store.saveCLISettings(cliDraft, adapter: adapter.id) {
+                                loadCLIDraft()
+                                settingsSaved = true
+                            }
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .accessibilityLabel("Save global CLI settings")
+                        .disabled((cliDraft == savedCLIDraft && cliAdapterID == savedCLIAdapterID) || store.globalRolesSummary.configurationSource == "unknown" || selectedAdapter == nil)
+                    }
+                    .frame(height: 26)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, minHeight: 238, maxHeight: 238, alignment: .topLeading)
+                .background(ContextOSTheme.card, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
+            }
+            if let error = store.roleSettingsError {
+                Text(error).font(.system(size: 10)).foregroundStyle(ContextOSTheme.failure)
+                    .lineLimit(2)
+            } else if store.globalRolesSummary.configurationSource == "unknown" {
+                Text(chinese ? "无法读取配置，请检查 profile.json。" : "Cannot read configuration; check profile.json.")
+                    .font(.system(size: 10)).foregroundStyle(ContextOSTheme.failure)
+            }
+        }
+        .onChange(of: microDraft) { _, _ in settingsSaved = false }
+        .onChange(of: cliDraft) { _, _ in settingsSaved = false }
+        .onChange(of: cliAdapterID) { _, _ in
+            store.resetCLIModelCatalog()
+            loadCLIDraft()
+            settingsSaved = false
+        }
+    }
+
+    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.system(size: 10, weight: .medium)).foregroundStyle(ContextOSTheme.muted)
+            content()
+        }
+    }
+
     private func microSettingRow(_ title: String, value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title).foregroundStyle(ContextOSTheme.muted)
@@ -683,55 +1001,11 @@ private struct SettingsView: View {
 
             Divider()
 
+            VStack(alignment: .leading, spacing: 14) {
+            roleConfiguration
             HStack(alignment: .top, spacing: 16) {
                 // Left Column: 偏好设置 + 软件更新 + 数据内核
                 VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(store.activeLocale == "zh-Hans" ? "API Micro（必需）" : "API Micro (required)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        microSettingRow(store.activeLocale == "zh-Hans" ? "配置" : "Configuration", value: store.microRolesSummary.apiStatus)
-                        microSettingRow(store.activeLocale == "zh-Hans" ? "有效配置来源" : "Effective config source", value: store.microRolesSummary.configurationSource)
-                        microSettingRow(store.activeLocale == "zh-Hans" ? "Provider / 协议" : "Provider / protocol", value: microProviderProtocol)
-                        microSettingRow(store.activeLocale == "zh-Hans" ? "模型" : "Model", value: store.microRolesSummary.model ?? (store.activeLocale == "zh-Hans" ? "未配置" : "Not configured"))
-                        let thinking = store.microRolesSummary.requestedThinking.map { requested in
-                            let mapped = store.microRolesSummary.effectiveThinking.map { " → \($0)" } ?? ""
-                            return requested + mapped
-                        } ?? (store.activeLocale == "zh-Hans" ? "未指定" : "Unspecified")
-                        microSettingRow(store.activeLocale == "zh-Hans" ? "思考等级（请求→映射）" : "Thinking (requested → mapped)", value: thinking)
-                        microSettingRow(store.activeLocale == "zh-Hans" ? "支持等级" : "Mapped levels", value: store.microRolesSummary.supportedThinking.isEmpty
-                            ? (store.activeLocale == "zh-Hans" ? "未知（未配置映射）" : "Unknown (no mapping configured)")
-                            : store.microRolesSummary.supportedThinking.joined(separator: ", "))
-                        microSettingRow(store.activeLocale == "zh-Hans" ? "凭据来源" : "Credential source", value: store.microRolesSummary.credentialConfigured
-                            ? (store.activeLocale == "zh-Hans" ? "已配置（密钥不显示）" : "Configured (secret hidden)")
-                            : (store.activeLocale == "zh-Hans" ? "未配置" : "Not configured"))
-
-                        Divider()
-                        Text(store.activeLocale == "zh-Hans" ? "CLI Agent（可选 adapter）" : "CLI Agent (optional adapter)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        microSettingRow(store.activeLocale == "zh-Hans" ? "默认 adapter" : "Default adapter", value: store.microRolesSummary.defaultAdapter ?? (store.activeLocale == "zh-Hans" ? "未配置" : "Not configured"))
-                        if store.microRolesSummary.adapters.isEmpty {
-                            Text(store.activeLocale == "zh-Hans" ? "未配置 CLI adapter。" : "No CLI adapter configured.")
-                                .font(.system(size: 10)).foregroundStyle(ContextOSTheme.muted)
-                        } else {
-                            ForEach(store.microRolesSummary.adapters) { adapter in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    microSettingRow(adapter.id, value: adapter.command ?? (store.activeLocale == "zh-Hans" ? "命令未知" : "Command unknown"))
-                                    Text(store.activeLocale == "zh-Hans"
-                                        ? "已安装：未知 · 已认证：未知 · 模型：未知 · analyze：未知 · implement：未知"
-                                        : "Installed: unknown · Auth: unknown · Model: unknown · Analyze: unknown · Implement: unknown")
-                                        .font(.system(size: 9)).foregroundStyle(ContextOSTheme.muted)
-                                }
-                            }
-                        }
-                        Text(store.activeLocale == "zh-Hans"
-                            ? "只读取并脱敏展示全局/项目的有效配置，不把全局密钥写入项目。API 认证和任务就绪度未知。CLI 安装、登录、模型及 analyze/implement 就绪度未探测，需由 AI 显式执行一次有界验证。"
-                            : "Reads and redacts effective global/project config without copying global secrets into the project. API authentication and task readiness are unknown. CLI installation, login, model, and analyze/implement readiness are unprobed until the AI runs one explicit bounded check.")
-                            .font(.system(size: 10)).foregroundStyle(ContextOSTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(10)
-                    .background(ContextOSTheme.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     // Group 1: 偏好设置 (PREFERENCES)
                     VStack(alignment: .leading, spacing: 5) {
                         sectionHeader(store.activeLocale == "zh-Hans" ? "偏好设置" : "PREFERENCES")
@@ -748,13 +1022,33 @@ private struct SettingsView: View {
                                         .frame(width: 18)
                                 }
                                 Spacer()
-                                Picker("", selection: $store.language) {
-                                    Text(store.text("system")).tag(AppLanguage.system)
-                                    Text(store.text("chinese")).tag(AppLanguage.zhHans)
-                                    Text(store.text("english")).tag(AppLanguage.english)
+                                HStack(spacing: 0) {
+                                    Text(store.language == .system ? store.text("system") : store.language == .zhHans ? store.text("chinese") : store.text("english"))
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(ContextOSTheme.ink)
+                                        .padding(.leading, 8)
+                                        .accessibilityLabel(store.text("language"))
+                                    Spacer(minLength: 0)
+                                    Menu {
+                                        Button(store.text("system")) { store.language = .system }
+                                        Button(store.text("chinese")) { store.language = .zhHans }
+                                        Button(store.text("english")) { store.language = .english }
+                                    } label: {
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 8.5, weight: .semibold))
+                                            .foregroundStyle(ContextOSTheme.muted)
+                                            .frame(width: 26, height: 26)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .menuStyle(.borderlessButton)
+                                    .menuIndicator(.hidden)
+                                    .fixedSize()
+                                    .accessibilityLabel(store.text("language") + " options")
                                 }
-                                .pickerStyle(.menu)
-                                .frame(width: 105)
+                                .frame(width: 105, height: 26)
+                                .background(ContextOSTheme.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
@@ -773,14 +1067,33 @@ private struct SettingsView: View {
                                         .frame(width: 18)
                                 }
                                 Spacer()
-                                Picker("", selection: $appearance) {
-                                    Text(store.text("system")).tag(AppearancePreference.system.rawValue)
-                                    Text(store.text("light")).tag(AppearancePreference.light.rawValue)
-                                    Text(store.text("dark")).tag(AppearancePreference.dark.rawValue)
+                                HStack(spacing: 0) {
+                                    Text(appearance == AppearancePreference.light.rawValue ? store.text("light") : appearance == AppearancePreference.dark.rawValue ? store.text("dark") : store.text("system"))
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(ContextOSTheme.ink)
+                                        .padding(.leading, 8)
+                                        .accessibilityLabel(store.text("appearance"))
+                                    Spacer(minLength: 0)
+                                    Menu {
+                                        Button(store.text("system")) { appearance = AppearancePreference.system.rawValue }
+                                        Button(store.text("light")) { appearance = AppearancePreference.light.rawValue }
+                                        Button(store.text("dark")) { appearance = AppearancePreference.dark.rawValue }
+                                    } label: {
+                                        Image(systemName: "chevron.down")
+                                            .font(.system(size: 8.5, weight: .semibold))
+                                            .foregroundStyle(ContextOSTheme.muted)
+                                            .frame(width: 26, height: 26)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .menuStyle(.borderlessButton)
+                                    .menuIndicator(.hidden)
+                                    .fixedSize()
+                                    .accessibilityLabel(store.text("appearance") + " options")
                                 }
-                                .pickerStyle(.menu)
-                                .frame(width: 105)
-                                .accessibilityLabel(store.text("appearance"))
+                                .frame(width: 105, height: 26)
+                                .background(ContextOSTheme.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
@@ -820,29 +1133,13 @@ private struct SettingsView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
 
-                            Divider().padding(.leading, 12)
 
-                            HStack {
-                                HStack(spacing: 4) {
-                                    Circle().fill(ContextOSTheme.success).frame(width: 5, height: 5)
-                                    Text(store.text("liveHelp"))
-                                        .font(.system(size: 10, design: .rounded))
-                                        .foregroundStyle(ContextOSTheme.muted)
-                                }
-                                Spacer()
-                                Text("SQLITE · GRAPH.JSON")
-                                    .font(.system(size: 7.5, weight: .bold, design: .monospaced))
-                                    .tracking(0.8)
-                                    .foregroundStyle(ContextOSTheme.muted)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
                         }
                         .background(RoundedRectangle(cornerRadius: 10).fill(ContextOSTheme.card))
                         .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
                     }
                 }
-                .frame(width: 320)
+                .frame(maxWidth: .infinity)
 
                 // Right Column: AI 编辑器集成 (AI CLIENT MCP BRIDGES)
                 VStack(alignment: .leading, spacing: 5) {
@@ -884,26 +1181,19 @@ private struct SettingsView: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(ContextOSTheme.card))
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(ContextOSTheme.hairline, lineWidth: 0.8))
 
-                    Text(store.runtimeHandshake)
-                        .font(.system(size: 9.5, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .padding(.top, 2)
-                    Text(store.text("pluginHelp"))
-                        .font(.system(size: 10, design: .rounded))
-                        .foregroundStyle(ContextOSTheme.muted)
-                        .padding(.horizontal, 4)
-                        .padding(.top, 1)
                 }
-                .frame(width: 340)
+                .frame(maxWidth: .infinity)
+            }
             }
             .padding(.horizontal, 20)
             .padding(.top, 14)
-            .padding(.bottom, 18)
+            .padding(.bottom, 14)
         }
-        .frame(width: 716)
+        .frame(width: 756, height: 582)
         .background(ContextOSTheme.surface.ignoresSafeArea())
         .onAppear {
+            loadMicroDraft()
+            loadCLIDraft()
             store.updater.checkOnSettingsOpen()
         }
     }
@@ -911,7 +1201,7 @@ private struct SettingsView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-            .tracking(1.1)
+            .tracking(0.5)
             .foregroundStyle(ContextOSTheme.muted)
             .padding(.leading, 6)
     }
@@ -953,6 +1243,7 @@ private struct SoftwareUpdateSection: View {
                                 .padding(.horizontal, 4.5)
                                 .padding(.vertical, 1)
                                 .background(Capsule().fill(Color.black.opacity(0.04)))
+                            .fixedSize(horizontal: true, vertical: false)
                         }
 
                         // Status subtitle line
@@ -1338,7 +1629,7 @@ private struct SoftwareUpdateSection: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-            .tracking(1.1)
+            .tracking(0.5)
             .foregroundStyle(ContextOSTheme.muted)
             .padding(.leading, 6)
     }
@@ -1369,6 +1660,8 @@ private struct EditorPlatformRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(status.name)
+                        .lineLimit(1)
+                        .layoutPriority(1)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(status.isAppInstalled ? ContextOSTheme.ink : ContextOSTheme.muted)
 
@@ -1393,6 +1686,7 @@ private struct EditorPlatformRow: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(Capsule().fill(Color.orange.opacity(0.12)))
+                        .fixedSize(horizontal: true, vertical: false)
                     } else if status.isSynced {
                         HStack(spacing: 3) {
                             Text("v\(status.installedVersion ?? status.targetVersion)")
@@ -1405,6 +1699,7 @@ private struct EditorPlatformRow: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(Capsule().fill(ContextOSTheme.success.opacity(0.12)))
+                        .fixedSize(horizontal: true, vertical: false)
                     } else if status.isBuildMismatch {
                         Text(store.text("bundleChanged"))
                             .font(.system(size: 7.5, weight: .bold, design: .rounded))
@@ -1412,6 +1707,7 @@ private struct EditorPlatformRow: View {
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.orange.opacity(0.12)))
+                        .fixedSize(horizontal: true, vertical: false)
                     } else if status.isOutdated {
                         HStack(spacing: 3) {
                             Text("v\(status.installedVersion ?? "?")")
@@ -1427,6 +1723,7 @@ private struct EditorPlatformRow: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(Capsule().fill(Color.orange.opacity(0.12)))
+                        .fixedSize(horizontal: true, vertical: false)
                     } else {
                         Text(store.text("notConfigured"))
                             .font(.system(size: 7.5, weight: .bold, design: .monospaced))

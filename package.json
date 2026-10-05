@@ -1,10 +1,10 @@
 {
   "name": "contextos",
-  "version": "2.7.2",
-  "description": "Local MCP tools for exact code evidence, reusable command results, API retrieval, and optional CLI coding assistants.",
+  "version": "3.0.0",
+  "description": "The context exoskeleton for AI development: optimize the entire development lifecycle to reduce token usage and context occupancy.",
   "license": "MIT",
   "type": "module",
-  "homepage": "https://dashend.cn",
+  "homepage": "https://github.com/yubinbin32-ops/ContextOS#readme",
   "bugs": {
     "url": "https://github.com/yubinbin32-ops/ContextOS/issues"
   },
@@ -13,7 +13,9 @@
   },
   "keywords": [
     "context-window",
+    "context-engineering",
     "context-optimization",
+    "codex",
     "ai-coding",
     "model-context-protocol",
     "mcp",

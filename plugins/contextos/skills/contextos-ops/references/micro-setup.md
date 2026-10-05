@@ -229,7 +229,7 @@ Use the absolute bridge path (`~` is not expanded by the process spawn):
             "reasoning": "reasoning_output_tokens",
             "inputIncludesCache": true,
             "reasoningIncludedInOutput": true,
-            "aggregation": "session"
+            "aggregation": "invocation"
           },
           "contextUsage": {
             "path": "context_usage",
@@ -244,6 +244,8 @@ Use the absolute bridge path (`~` is not expanded by the process spawn):
   }
 }
 ```
+
+The bridge reports usage for the current invocation, so `output.usage.aggregation` must be `invocation`, including on resume; `session` would incorrectly subtract per-invocation values as cumulative counters. The sample context window is adapter/model specific and must be verified for the selected model.
 
 The bridge passes `--dangerously-bypass-approvals-and-sandbox` to `codex exec` so background jobs never block on a confirmation prompt. Do not add `--sandbox` or approval flags in `args`; the bridge owns them.
 

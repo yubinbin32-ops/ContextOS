@@ -30,12 +30,22 @@ import {
 } from './models';
 import { ContextOSTheme } from './theme';
 
+export type ModelCatalog = {
+  models: { id: string; label?: string; reasoningLevels: { id: string; label: string }[]; reasoningSource: string }[];
+  source: string;
+  warnings: string[];
+  status?: string;
+  error?: string;
+};
+
 type MicroRoleConfigSummary = {
   micro: {
     status: string;
     configurationSource: string;
+    hasProjectOverride?: boolean;
     provider: string | null;
     transport: string | null;
+    baseURL: string | null;
     model: string | null;
     credentialConfigured: boolean;
     requestedThinking: string | null;
@@ -45,6 +55,7 @@ type MicroRoleConfigSummary = {
     taskReady: { analyze: null | boolean; implement: null | boolean };
   };
   agents: {
+    hasProjectOverride?: boolean;
     default: string | null;
     adapters: Record<string, {
       configured: boolean;
@@ -1439,6 +1450,40 @@ export class GraphStore {
       } catch {}
     }
     console.info(`[Reveal Source] ${source.path}`);
+  }
+
+  async syncMicroModels(draft: { baseURL: string; replacementKey: string }): Promise<ModelCatalog> {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<ModelCatalog>('sync_micro_models', { draft });
+  }
+
+  async syncCLIModels(adapter: string): Promise<ModelCatalog> {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<ModelCatalog>('sync_cli_models', { adapter });
+  }
+
+  async useGlobalRoleSettings(role: 'micro' | 'cli') {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('use_global_role_settings', { projectRoot: this.projectRoot, role });
+    await this.refreshMicroRoles();
+  }
+
+  async saveMicroSettings(draft: { baseURL: string; model: string; thinking: string; replacementKey: string }) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('save_micro_settings', { projectRoot: this.projectRoot, draft });
+    await this.refreshMicroRoles();
+  }
+
+  async saveCLISettings(adapter: string, draft: { model: string; thinking: string }) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('save_cli_settings', { projectRoot: this.projectRoot, adapter, draft });
+    await this.refreshMicroRoles();
+  }
+
+  async selectCLIAdapter(adapter: string) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('select_cli_adapter', { projectRoot: this.projectRoot, adapter });
+    await this.refreshMicroRoles();
   }
 
   async refreshMicroRoles() {

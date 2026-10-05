@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 
 const HOME = os.homedir();
+const contextosHome = path.resolve(process.env.CONTEXTOS_HOME || path.join(HOME, '.contextos'));
+const codexHome = path.resolve(process.env.CODEX_HOME || path.join(HOME, '.codex'));
 
 export function deriveProjectId(projectRoot) {
   const baseName = path.basename(path.resolve(projectRoot || process.cwd())).trim();
@@ -64,7 +66,7 @@ export function resolveNodeExecutable() {
 function resolveCodexExecutable() {
   const isWin = process.platform === 'win32';
   const isMac = process.platform === 'darwin';
-  const candidates = [];
+  const candidates = [process.env.CONTEXTOS_CODEX_BIN];
 
   if (isWin) {
     const localAppData = process.env.LOCALAPPDATA || path.join(HOME, 'AppData\\Local');
@@ -103,7 +105,7 @@ function resolveCodexExecutable() {
 }
 
 export function deployCanonicalServer(sourceScriptPath = null) {
-  const canonicalDir = path.join(HOME, '.contextos', 'server');
+  const canonicalDir = path.join(contextosHome, 'server');
   const canonicalScript = path.join(canonicalDir, 'contextos-mcp.mjs');
   fs.mkdirSync(canonicalDir, { recursive: true });
 
@@ -121,6 +123,18 @@ export function deployCanonicalServer(sourceScriptPath = null) {
     const tempPath = `${canonicalScript}.contextos-${process.pid}-${randomUUID()}.tmp`;
     fs.copyFileSync(found, tempPath);
     fs.renameSync(tempPath, canonicalScript);
+  }
+  // Portable parser assets are part of the runtime, not optional repo dependencies.
+  const runtimeWasm = path.join(path.dirname(found), 'web-tree-sitter.wasm');
+  if (fs.existsSync(runtimeWasm) && path.resolve(runtimeWasm) !== path.join(canonicalDir, 'web-tree-sitter.wasm')) {
+    const tempWasm = path.join(canonicalDir, `web-tree-sitter.wasm.${randomUUID()}.tmp`);
+    fs.copyFileSync(runtimeWasm, tempWasm);
+    fs.renameSync(tempWasm, path.join(canonicalDir, 'web-tree-sitter.wasm'));
+  }
+  const grammarSource = path.resolve(path.dirname(found), '..', 'grammars');
+  const grammarTarget = path.join(contextosHome, 'grammars');
+  if (fs.existsSync(grammarSource) && grammarSource !== grammarTarget) {
+    replaceDirectoryAtomically(grammarSource, grammarTarget);
   }
   return canonicalScript;
 }
@@ -183,7 +197,8 @@ export function mergePersonalMarketplaceDocument(parsed) {
     marketplaces = parsed;
     marketplaceWasArray = true;
   } else if (parsed && typeof parsed === 'object') {
-    marketplaces = [parsed];
+    // A clean install passes {}: do not emit an invalid [{}, personal] catalog.
+    marketplaces = Object.keys(parsed).length ? [parsed] : [];
   } else {
     throw new Error('Marketplace root must be an object or array');
   }
@@ -313,11 +328,11 @@ export function cleanTomlCodex({ configPath }) {
   writeFileAtomic(configPath, content.trim() + '\n');
 }
 
-function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
+function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null, skillSource = null }) {
   const userPluginsContextOS = path.join(HOME, 'plugins', 'contextos');
   const personalMarketplaceDir = path.join(HOME, '.agents', 'plugins');
   const personalMarketplaceURL = path.join(personalMarketplaceDir, 'marketplace.json');
-  const codexConfigURL = path.join(HOME, '.codex', 'config.toml');
+  const codexConfigURL = path.join(codexHome, 'config.toml');
 
   // 1. Sync official plugin bundle to ~/plugins/contextos
   if (pluginSource && fs.existsSync(pluginSource)) {
@@ -341,11 +356,16 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   const output = mergePersonalMarketplaceDocument(parsedMarketplace ?? {});
   writeFileAtomic(personalMarketplaceURL, JSON.stringify(output, null, 2) + '\n');
 
+  // Codex marketplace commands require their configuration home to exist.
+  fs.mkdirSync(codexHome, { recursive: true });
   // 3. Attempt official codex CLI plugin add
   const codexBin = resolveCodexExecutable();
   let installedViaCli = false;
   if (codexBin) {
     try {
+      // Current CLI versions require registering a marketplace source first.
+      // Older versions may auto-discover the personal catalog and lack this subcommand.
+      try { execFileSync(codexBin, ['plugin', 'marketplace', 'add', HOME, '--json'], { stdio: 'pipe' }); } catch (_) {}
       try { execFileSync(codexBin, ['plugin', 'remove', 'contextos@personal', '--json'], { stdio: 'ignore' }); } catch (_) {}
       execFileSync(codexBin, ['plugin', 'add', 'contextos@personal', '--json'], { stdio: 'pipe' });
       installedViaCli = true;
@@ -355,7 +375,15 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   // 4. Fallback or clean up TOML (guarantee zero redundant skill/server definitions)
   if (!installedViaCli) {
     configureTomlCodex({ configPath: codexConfigURL, serverScript, nodePath, env });
-    return 'Codex (config.toml MCP)';
+    // CLI versions without plugins still need both operational skills.
+    if (skillSource && fs.existsSync(skillSource)) {
+      const skillRoot = path.join(HOME, '.agents', 'skills');
+      for (const name of ['contextos', 'contextos-ops']) {
+        const source = path.join(path.dirname(skillSource), name);
+        if (fs.existsSync(source)) replaceDirectoryAtomically(source, path.join(skillRoot, name));
+      }
+    }
+    return 'Codex (config.toml MCP + local skills)';
   } else {
     cleanTomlCodex({ configPath: codexConfigURL });
     return 'Codex (Official Plugin & Skill)';
@@ -500,7 +528,7 @@ export function detectInstalledPlatforms() {
   });
 
   // 5. Codex
-  const codexDir = path.join(HOME, '.codex');
+  const codexDir = codexHome;
   let codexAppExists = false;
   if (isMac) {
     codexAppExists =
@@ -533,8 +561,8 @@ export function detectInstalledPlatforms() {
     id: 'generic',
     name: 'Generic MCP Host',
     isInstalled: true,
-    configPath: path.join(HOME, '.contextos', 'mcp.json'),
-    skillPath: path.join(HOME, '.contextos', 'skills', 'contextos'),
+    configPath: path.join(contextosHome, 'mcp.json'),
+    skillPath: path.join(contextosHome, 'skills', 'contextos'),
     type: 'json',
   });
 
@@ -569,10 +597,11 @@ export function syncAllPlatforms({
     : allPlatforms;
 
   for (const platform of platforms) {
-    if (!platform.isInstalled && !forceAll) continue;
+    // An explicit platform selection is installation intent, including a clean home.
+    if (!platform.isInstalled && !forceAll && !requestedPlatforms) continue;
 
     if (platform.id === 'codex') {
-      modified.push(installCodexPlugin({ serverScript, nodePath, env, pluginSource }));
+      modified.push(installCodexPlugin({ serverScript, nodePath, env, pluginSource, skillSource }));
       continue;
     }
 

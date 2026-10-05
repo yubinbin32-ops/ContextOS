@@ -166,6 +166,13 @@ test('syncAllPlatforms rejects unknown platform ids', () => {
   );
 });
 
+test('a fresh personal marketplace is one valid object, not an array with an empty entry', () => {
+ const catalog=mergePersonalMarketplaceDocument({});
+ assert.equal(Array.isArray(catalog),false);
+ assert.equal(catalog.name,'personal');
+ assert.equal(catalog.plugins.length,1);
+});
+
 test('personal marketplace merge preserves other plugins and unknown fields', () => {
   const merged = mergePersonalMarketplaceDocument({
     name: 'personal',
@@ -193,6 +200,44 @@ test('OpenCode MCP uses the official local command array and preserves config', 
   assert.equal(config.mcp.contextos.type, 'local');
   assert.deepEqual(config.mcp.contextos.command, ['/usr/bin/node', '--no-warnings=ExperimentalWarning', '/tmp/contextos-mcp.mjs']);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('clean installs honor explicit platforms, isolated homes and parser assets', () => {
+ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-clean-install-'));
+ const home = path.join(dir, 'home'), runtime = path.join(dir, 'runtime'), codex = path.join(dir, 'codex');
+ const plugin = path.join(dir, 'plugin'), stub = path.join(dir, 'codex-unavailable');
+ fs.mkdirSync(path.join(plugin, 'server'), { recursive: true });
+ fs.mkdirSync(path.join(plugin, 'grammars'), { recursive: true });
+ fs.writeFileSync(path.join(plugin, 'server/contextos-mcp.mjs'), '// runtime');
+ fs.writeFileSync(path.join(plugin, 'server/web-tree-sitter.wasm'), 'parser');
+ fs.writeFileSync(path.join(plugin, 'grammars/tree-sitter-python.wasm'), 'python');
+ for (const name of ['contextos', 'contextos-ops']) {
+  fs.mkdirSync(path.join(plugin, 'skills', name), { recursive: true });
+  fs.writeFileSync(path.join(plugin, 'skills', name, 'SKILL.md'), name);
+ }
+ fs.writeFileSync(stub, '#!/usr/bin/env node\nprocess.exit(1);\n', { mode: 0o755 });
+ const moduleUrl = new URL('../src/bootstrap-util.mjs', import.meta.url).href;
+ const script = `import os from 'node:os'; os.homedir=()=>${JSON.stringify(home)};
+ process.env.CONTEXTOS_HOME=${JSON.stringify(runtime)}; process.env.CODEX_HOME=${JSON.stringify(codex)};
+ process.env.CONTEXTOS_CODEX_BIN=${JSON.stringify(stub)};
+ const api=await import(${JSON.stringify(moduleUrl)});
+ const serverScript=api.deployCanonicalServer(${JSON.stringify(path.join(plugin, 'server/contextos-mcp.mjs'))});
+ console.log(JSON.stringify(api.syncAllPlatforms({selectedPlatforms:['codex','cursor','generic'],
+ serverScript,nodePath:process.execPath,pluginSource:${JSON.stringify(plugin)},
+ skillSource:${JSON.stringify(path.join(plugin,'skills/contextos'))}})));`;
+ try {
+  const output=execFileSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8'});
+  assert.match(output,/Codex \(config.toml MCP \+ local skills\)/);
+  assert.match(output,/Cursor/);
+  for(const file of ['server/contextos-mcp.mjs','server/web-tree-sitter.wasm','grammars/tree-sitter-python.wasm','mcp.json']) assert.ok(fs.existsSync(path.join(runtime,file)),file);
+  assert.ok(fs.existsSync(path.join(codex,'config.toml')));
+  assert.equal(fs.existsSync(path.join(home,'.codex/config.toml')),false);
+  assert.ok(fs.existsSync(path.join(home,'.cursor/mcp.json')));
+  for(const name of ['contextos','contextos-ops']) {
+   assert.equal(fs.readFileSync(path.join(home,'.agents/skills',name,'SKILL.md'),'utf8'),name);
+   assert.equal(fs.readFileSync(path.join(runtime,'skills',name,'SKILL.md'),'utf8'),name);
+  }
+ } finally { fs.rmSync(dir,{recursive:true,force:true}); }
 });
 
 test('Antigravity refresh includes an existing legacy skill without creating an obsolete install', () => {

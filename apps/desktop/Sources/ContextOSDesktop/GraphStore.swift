@@ -7,9 +7,12 @@ import SwiftUI
 struct MicroAdapterSummary: Identifiable {
     let id: String
     let command: String?
+    let model: String?
+    let thinking: String?
 }
 
 struct MicroRolesSummary {
+    var baseURL: String?
     let apiStatus: String
     let configurationSource: String
     let provider: String?
@@ -56,6 +59,18 @@ final class GraphStore: ObservableObject {
             }
         }
     }
+    private var effectiveCLIAdapters: [String: Any] = [:]
+    private var globalMicroConfiguration: [String: Any] = [:]
+    @Published private(set) var globalRolesSummary = MicroRolesSummary.empty
+    @Published private(set) var microHasProjectOverride = false
+    @Published private(set) var cliHasProjectOverride = false
+    @Published private(set) var microCatalog: RoleModelCatalog?
+    @Published private(set) var cliCatalog: RoleModelCatalog?
+    private var cliCatalogAdapterID: String?
+    @Published private(set) var syncingMicroModels = false
+    @Published private(set) var syncingCLIModels = false
+    @Published private(set) var microCatalogError: String?
+    @Published private(set) var cliCatalogError: String?
     @Published private(set) var microRolesSummary = MicroRolesSummary.empty
     @Published var updater = AppUpdater.shared
     @Published private(set) var pluginInstallStatus: PluginInstallStatus = .checking
@@ -138,18 +153,23 @@ final class GraphStore: ObservableObject {
     func refreshMicroRoles() {
         guard !projectRoot.isEmpty else { microRolesSummary = .unknown; return }
         let projectFile = URL(fileURLWithPath: projectRoot).appending(path: ".contextos/profile.json")
-        let home = ProcessInfo.processInfo.environment["CONTEXTOS_HOME"] ?? URL(fileURLWithPath: NSHomeDirectory()).appending(path: ".contextos").path
-        let globalFile = URL(fileURLWithPath: home).appending(path: "profile.json")
+        let globalFile = RoleSettings.globalProfileURL()
         let fileManager = FileManager.default
         let projectExists = fileManager.fileExists(atPath: projectFile.path)
         let globalExists = fileManager.fileExists(atPath: globalFile.path)
-        if !projectExists && !globalExists { microRolesSummary = .empty; return }
+        if !projectExists && !globalExists {
+            microRolesSummary = .empty; globalRolesSummary = .empty
+            effectiveCLIAdapters = [:]; globalMicroConfiguration = [:]
+            microHasProjectOverride = false; cliHasProjectOverride = false
+            return
+        }
         func readProfile(_ file: URL) -> [String: Any]? {
             guard let data = try? Data(contentsOf: file) else { return nil }
             return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         }
         guard (!projectExists || readProfile(projectFile) != nil), (!globalExists || readProfile(globalFile) != nil) else {
             microRolesSummary = .unknown
+            globalRolesSummary = .unknown
             return
         }
         let global = globalExists ? (readProfile(globalFile) ?? [:]) : [:]
@@ -159,7 +179,87 @@ final class GraphStore: ObservableObject {
         let projectHasRoleConfig = Self.hasMicroRoleConfig(project)
         let source = globalHasRoleConfig && projectHasRoleConfig ? "global + project"
             : (projectHasRoleConfig ? "project" : (globalHasRoleConfig ? "global" : "none"))
+        effectiveCLIAdapters = (global["agents"] as? [String: Any])?["adapters"] as? [String: Any] ?? [:]
+        globalMicroConfiguration = global["micro"] as? [String: Any] ?? [:]
+        globalRolesSummary = Self.summarizeMicroRoles(global, configurationSource: globalExists ? "global" : "none")
+        let projectMicro = project["micro"] as? [String: Any] ?? [:]
+        microHasProjectOverride = project["micro"] is NSNull || !projectMicro.isEmpty
+        let projectAgents = project["agents"] as? [String: Any] ?? [:]
+        cliHasProjectOverride = project["agents"] is NSNull || !projectAgents.isEmpty
         microRolesSummary = Self.summarizeMicroRoles(profile, configurationSource: source)
+    }
+
+    @Published private(set) var roleSettingsError: String?
+
+    func saveMicroSettings(_ draft: MicroSettingsDraft) -> Bool {
+        saveRoleSettings(draft: draft)
+    }
+
+    func selectCLIAdapter(_ id: String) -> Bool {
+        saveRoleSettings(adapter: id)
+    }
+
+    func saveCLISettings(_ draft: CLISettingsDraft, adapter: String) -> Bool {
+        saveRoleSettings(adapter: adapter, cliDraft: draft)
+    }
+
+    private func saveRoleSettings(draft: MicroSettingsDraft? = nil, adapter: String? = nil, cliDraft: CLISettingsDraft? = nil) -> Bool {
+        guard !projectRoot.isEmpty, globalRolesSummary.configurationSource != "unknown" else {
+            roleSettingsError = activeLocale == "zh-Hans" ? "无法读取配置，请先修复 profile。" : "Cannot read configuration; repair the profile first."
+            return false
+        }
+        do {
+            try RoleSettings.update(projectFile: RoleSettings.globalProfileURL(),
+                draft: draft, adapter: adapter, allowedAdapters: globalRolesSummary.adapters.map(\.id),
+                cliDraft: cliDraft, effectiveAdapter: effectiveCLIAdapters[adapter ?? ""] as? [String: Any] ?? [:],
+                cliCatalog: cliCatalogAdapterID == adapter ? cliCatalog : nil)
+            roleSettingsError = nil
+            refreshMicroRoles()
+            return true
+        } catch {
+            roleSettingsError = error.localizedDescription
+            return false
+        }
+    }
+
+    func useGlobalRoleSettings(micro: Bool) -> Bool {
+        do {
+            try RoleSettings.useGlobalSettings(projectFile: URL(fileURLWithPath: projectRoot).appending(path: ".contextos/profile.json"), micro: micro)
+            roleSettingsError = nil
+            refreshMicroRoles()
+            return true
+        } catch { roleSettingsError = error.localizedDescription; return false }
+    }
+
+    func syncMicroModels(_ draft: MicroSettingsDraft) async {
+        guard !syncingMicroModels else { return }
+        syncingMicroModels = true
+        microCatalogError = nil
+        defer { syncingMicroModels = false }
+        let config = globalMicroConfiguration
+        do {
+            let key = try RoleSettings.catalogKey(draft, saved: config)
+            microCatalog = try await RoleCatalogService.micro(baseURL: draft.baseURL, key: key, configuration: config)
+        } catch { microCatalogError = error.localizedDescription }
+    }
+
+    func syncCLIModels(adapter: String) async {
+        guard !syncingCLIModels else { return }
+        syncingCLIModels = true
+        cliCatalogError = nil
+        defer { syncingCLIModels = false }
+        let config = effectiveCLIAdapters[adapter] as? [String: Any] ?? [:]
+        cliCatalogAdapterID = adapter
+        do {
+            let catalog = try await RoleCatalogService.cli(adapterID: adapter, configuration: config)
+            if cliCatalogAdapterID == adapter { cliCatalog = catalog }
+        } catch { if cliCatalogAdapterID == adapter { cliCatalogError = error.localizedDescription } }
+    }
+
+    func resetCLIModelCatalog() {
+        cliCatalogAdapterID = nil
+        cliCatalog = nil
+        cliCatalogError = nil
     }
 
     private static func mergeConfigRecord(_ base: Any?, _ override: Any?) -> Any? {
@@ -167,7 +267,9 @@ final class GraphStore: ObservableObject {
         if override is NSNull { return NSNull() }
         guard let project = override as? [String: Any] else { return override }
         var merged = base as? [String: Any] ?? [:]
-        merged.merge(project) { _, projectValue in projectValue }
+        for (key, value) in project {
+            merged[key] = mergeConfigRecord(merged[key], value)
+        }
         return merged
     }
 
@@ -179,12 +281,12 @@ final class GraphStore: ObservableObject {
         merged.merge(project) { _, projectValue in projectValue }
         if let projectAdapters = project["adapters"] {
             if projectAdapters is NSNull { merged["adapters"] = NSNull() }
-            else { merged["adapters"] = mergeConfigRecord(merged["adapters"], projectAdapters) }
+            else { merged["adapters"] = mergeConfigRecord((base as? [String: Any])?["adapters"], projectAdapters) }
         }
         return merged
     }
 
-    private static func effectiveProfile(global: [String: Any], project: [String: Any]) -> [String: Any] {
+    static func effectiveProfile(global: [String: Any], project: [String: Any]) -> [String: Any] {
         var merged = global
         for (key, value) in project where !["micro", "agents"].contains(key) {
             merged[key] = value
@@ -200,7 +302,7 @@ final class GraphStore: ObservableObject {
         return !micro.isEmpty || !agents.isEmpty
     }
 
-    private static func summarizeMicroRoles(_ profile: [String: Any], configurationSource: String) -> MicroRolesSummary {
+    static func summarizeMicroRoles(_ profile: [String: Any], configurationSource: String) -> MicroRolesSummary {
         let api = profile["micro"] as? [String: Any] ?? [:]
         let agents = profile["agents"] as? [String: Any] ?? [:]
 
@@ -224,17 +326,25 @@ final class GraphStore: ObservableObject {
             : configuredMap.filter { !($0.value is NSNull) && ($0.value as? Bool != false) }.map(\.key).sorted()
         let effectiveThinking = requestedThinking.flatMap { isDeepSeek ? deepSeekMap[$0.lowercased()] : configuredMap[$0] as? String }
 
-        let adapters = agents["adapters"] as? [String: [String: Any]] ?? [:]
+        let adapters = agents["adapters"] as? [String: Any] ?? [:]
         let defaultAdapter = agents["default"] as? String
-        let adapterSummaries = adapters.map { name, config -> MicroAdapterSummary in
+        let adapterSummaries = adapters.compactMap { name, value -> MicroAdapterSummary? in
+            let config: [String: Any]
+            if let record = value as? [String: Any] { config = record }
+            else if let command = value as? String { config = ["command": command] }
+            else { return nil }
             let command: String?
             if let raw = config["command"] as? String { command = raw.split(whereSeparator: \.isWhitespace).first.map(String.init) }
             else if let args = config["command"] as? [String] { command = args.first }
             else { command = nil }
-            return MicroAdapterSummary(id: name, command: command?.components(separatedBy: CharacterSet(charactersIn: "/\\")).last)
+            let model = config["model"] as? String
+            let executable = command?.components(separatedBy: CharacterSet(charactersIn: "/\\\\")).last
+            let aliasThinking = executable == "agy" ? ["low", "medium", "high"].first(where: { model?.hasSuffix("-" + $0) == true }) : nil
+            return MicroAdapterSummary(id: name, command: command?.components(separatedBy: CharacterSet(charactersIn: "/\\")).last,
+                model: model, thinking: config["thinking"] as? String ?? aliasThinking)
         }.sorted { $0.id < $1.id }
 
-        return MicroRolesSummary(apiStatus: apiStatus, configurationSource: configurationSource, provider: provider, transport: transport, model: model,
+        return MicroRolesSummary(baseURL: endpoint, apiStatus: apiStatus, configurationSource: configurationSource, provider: provider, transport: transport, model: model,
             credentialConfigured: keyConfigured, requestedThinking: requestedThinking, effectiveThinking: effectiveThinking,
             supportedThinking: supported, defaultAdapter: defaultAdapter, adapters: adapterSummaries)
     }

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
-  <title id="title">ContextOS — a context exoskeleton for AI coding</title>
-  <desc id="desc">The main AI makes decisions. Micro and CLI workers carry execution. Real architecture canvas screenshot. The published single-task benchmark on commit 0dd6431 reported 63.8 percent lower peak main context; this is not a universal savings claim.</desc>
+  <title id="title">ContextOS — the context exoskeleton for AI development</title>
+  <desc id="desc">ContextOS optimizes the full AI development lifecycle with evidence, commands, pipelines, architecture, continuity, and task-appropriate workers. Real architecture canvas screenshot. Precise reads, reusable command results, and persistent project state keep development evidence recoverable.</desc>
   <defs>
     <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
       <path d="M24 0H0V24" fill="none" stroke="#e9edf1" stroke-width="0.7"/>
@@ -13,16 +13,16 @@
   <path d="M516 48H536M526 38V58M516 561H536M526 551V571" stroke="#b2bdc7" stroke-width="1"/>
   <g font-family="Arial, Helvetica, sans-serif" fill="#19212a">
     <text x="60" y="81" font-size="34" letter-spacing="-0.8" font-weight="600">ContextOS</text>
-    <text x="60" y="112" font-size="13" fill="#6b7580" letter-spacing="1.25">CONTEXT EXOSKELETON FOR AI CODING</text>
-    <text x="60" y="208" font-size="62" letter-spacing="-2.4" font-weight="500">AI decides.</text>
-    <text x="60" y="279" font-size="62" letter-spacing="-2.4" font-weight="500">OS carries</text>
-    <text x="60" y="345" font-size="62" letter-spacing="-2.4" font-weight="500">the work.</text>
-    <text x="60" y="454" font-size="70" letter-spacing="-2" font-weight="600">63.8%</text>
-    <text x="60" y="488" font-size="17" fill="#414d5a">lower peak main context</text>
-    <text x="60" y="517" font-size="12" fill="#727d88">Reported on one plan-dependency feature.</text>
-    <text x="60" y="540" font-size="12" fill="#727d88">n = 1 per arm · measured commit 0dd6431</text>
-    <text x="562" y="89" font-size="17" font-weight="600">Main AI + Micro + CLI</text>
-    <text x="562" y="118" font-size="14" fill="#64717e">Decisions · bounded evidence · isolated implementation</text>
+    <text x="60" y="112" font-size="13" fill="#6b7580" letter-spacing="1.25">CONTEXT EXOSKELETON FOR AI DEVELOPMENT</text>
+    <text x="60" y="208" font-size="62" letter-spacing="-2.4" font-weight="500">Full lifecycle.</text>
+    <text x="60" y="279" font-size="62" letter-spacing="-2.4" font-weight="500">Focused</text>
+    <text x="60" y="345" font-size="62" letter-spacing="-2.4" font-weight="500">context.</text>
+    <text x="60" y="454" font-size="56" letter-spacing="-1.5" font-weight="600">Evidence.</text>
+    <text x="60" y="488" font-size="17" fill="#414d5a">Ready for your next decision.</text>
+    <text x="60" y="517" font-size="12" fill="#727d88">Precise reads · reusable command results</text>
+    <text x="60" y="540" font-size="12" fill="#727d88">Persistent plans · architecture · verification</text>
+    <text x="562" y="89" font-size="17" font-weight="600">Understand · plan · build · verify · continue</text>
+    <text x="562" y="118" font-size="14" fill="#64717e">Evidence · commands · pipelines · architecture · continuity</text>
     <text x="562" y="560" font-size="11" fill="#737e89">REAL DESKTOP CAPTURE · ARCHITECTURE / PLANS / RECEIPTS</text>
     <text x="60" y="610" font-size="12" fill="#626e7b">Install with one message to your AI.</text>
     <text x="1220" y="610" text-anchor="end" font-size="12" fill="#626e7b">github.com/yubinbin32-ops/ContextOS</text>

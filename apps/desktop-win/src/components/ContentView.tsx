@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppUpdater } from '../appUpdater';
-import { GraphStore } from '../graphStore';
+import { GraphStore, ModelCatalog } from '../graphStore';
 import { EditorPlatformStatus, SidebarSection } from '../models';
 import { ContextOSTheme } from '../theme';
 import { DetailView } from './DetailView';
@@ -694,6 +694,296 @@ const CanvasToolbar: React.FC<{ store: GraphStore }> = ({ store }) => {
   );
 };
 
+
+const RoleConfiguration: React.FC<{ store: GraphStore }> = ({ store }) => {
+  const chinese = store.activeLocale === 'zh-Hans';
+  const micro = store.microRoles?.micro;
+  const [draft, setDraft] = useState({ baseURL: '', model: '', thinking: '', replacementKey: '' });
+  const [microCatalog, setMicroCatalog] = useState<ModelCatalog | null>(null);
+  const [cliCatalogs, setCLICatalogs] = useState<Record<string, ModelCatalog>>({});
+  const [syncing, setSyncing] = useState<'micro' | 'cli' | null>(null);
+  const [initialDraft, setInitialDraft] = useState(draft);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [failed, setFailed] = useState(false);
+  const [cliDraft, setCLIDraft] = useState({ model: '', thinking: '' });
+  const [initialCLIDraft, setInitialCLIDraft] = useState(cliDraft);
+  useEffect(() => {
+    if (micro) {
+      const next = { baseURL: micro.baseURL ?? '', model: micro.model ?? '', thinking: micro.requestedThinking ?? '', replacementKey: '' };
+      setDraft(next);
+      setInitialDraft(next);
+    }
+  }, [micro?.baseURL, micro?.model, micro?.requestedThinking]);
+  const adapters = store.microRoles?.agents.adapters ?? {};
+  const active = store.microRoles?.agents.default ?? '';
+  const adapter = adapters[active];
+  useEffect(() => {
+    const next = { model: adapter?.model ?? '', thinking: adapter?.thinking ?? '' };
+    setCLIDraft(next);
+    setInitialCLIDraft(next);
+  }, [active, adapter?.model, adapter?.thinking]);
+  const cliDirty = JSON.stringify(cliDraft) !== JSON.stringify(initialCLIDraft);
+  const cliCatalog = cliCatalogs[active] ?? null;
+  const cliModel = cliCatalog?.models.find(model => model.id === cliDraft.model);
+  const microModel = microCatalog?.models.find(model => model.id === draft.model);
+  const sync = async (role: 'micro' | 'cli') => {
+    setSyncing(role); setFeedback('');
+    try {
+      const catalog = role === 'micro' ? await store.syncMicroModels(draft) : await store.syncCLIModels(active);
+      if (catalog.status === 'failed' || !catalog.models.length) throw new Error(catalog.error || 'No models returned.');
+      if (role === 'micro') setMicroCatalog(catalog);
+      else setCLICatalogs(current => ({ ...current, [active]: catalog }));
+      setFailed(false);
+      setFeedback(chinese ? `已同步 ${catalog.models.length} 个模型` : `Synced ${catalog.models.length} models`);
+    } catch (error) {
+      setFailed(true);
+      setFeedback(String(error instanceof Error ? error.message : error));
+    } finally { setSyncing(null); }
+  };
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initialDraft);
+  const update = (key: keyof typeof draft, value: string) => {
+    setDraft(current => ({ ...current, [key]: value }));
+    if (key === 'baseURL') setMicroCatalog(null);
+    setFeedback('');
+  };
+  const persist = async (operation: () => Promise<void>) => {
+    setBusy(true);
+    setFeedback('');
+    try {
+      await operation();
+      setFailed(false);
+      setFeedback(chinese ? '已保存' : 'Saved');
+    } catch (error) {
+      setFailed(true);
+      setFeedback(String(error));
+    } finally { setBusy(false); }
+  };
+  const inputContainerClass = 'relative flex items-center h-8 rounded-md border border-slate-200/80 bg-white focus-within:border-slate-400 focus-within:ring-1 focus-within:ring-slate-200';
+  const textInputClass = 'w-full h-full bg-transparent px-2.5 text-[11px] font-mono text-slate-800 placeholder-slate-400 focus:outline-none';
+  const labelClass = 'flex flex-col gap-0.5 text-[10px] font-medium text-slate-500';
+
+  const cardHeader = (number: string, title: string, role: 'micro' | 'cli') => {
+    const isSyncing = syncing === role;
+    const canSync = role === 'micro' ? (busy || syncing !== null) : (busy || syncing !== null || !adapter);
+    return (
+      <div className="flex items-center justify-between text-[9.5px] font-mono tracking-[0.5px] text-slate-400">
+        <span className="font-bold text-slate-500">{number} / {title}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="px-1.5 py-0.5 rounded text-[8.5px] font-mono font-medium tracking-wide bg-slate-100 text-slate-500">
+            {chinese ? '全局' : 'GLOBAL'}
+          </span>
+          <button
+            type="button"
+            title={chinese ? '同步模型目录' : 'Sync model catalog'}
+            aria-label={role === 'micro' ? 'Sync Micro models' : 'Sync CLI models'}
+            disabled={canSync}
+            onClick={() => void sync(role)}
+            className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors disabled:opacity-40"
+          >
+            {isSyncing ? (
+              <span className="animate-spin text-[10px] text-blue-600">⌛</span>
+            ) : (
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const modelField = (
+    catalog: ModelCatalog | null,
+    value: string,
+    onChange: (value: string) => void,
+    label: string,
+    accessibility: string
+  ) => (
+    <div className={labelClass}>
+      <span>{label}</span>
+      <div className={inputContainerClass}>
+        <input
+          aria-label={accessibility}
+          className={textInputClass}
+          value={value}
+          placeholder={chinese ? '模型 ID' : 'Model ID'}
+          onChange={event => onChange(event.target.value)}
+        />
+        <div className="relative shrink-0 flex items-center justify-center w-7 h-full text-slate-400 hover:text-slate-600">
+          <svg className="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+          </svg>
+          <select
+            aria-label={accessibility + ' options'}
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+            value=""
+            onChange={event => { if (event.target.value) onChange(event.target.value); }}
+          >
+            <option value="" disabled>{chinese ? '选择模型' : 'Select model'}</option>
+            {value && !catalog?.models.some(m => m.id === value) && (
+              <option value={value}>{(chinese ? '当前 / 自定义: ' : 'Current / custom: ') + value}</option>
+            )}
+            {catalog?.models.map(m => (
+              <option key={m.id} value={m.id}>{m.label && m.label !== m.id ? `${m.label} · ${m.id}` : m.id}</option>
+            ))}
+            {!catalog && <option value="" disabled>{chinese ? '先同步模型目录' : 'Sync models first'}</option>}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+
+  const effortField = (
+    levels: { id: string; label: string }[],
+    value: string,
+    onChange: (value: string) => void,
+    label: string,
+    accessibility: string
+  ) => (
+    <div className={labelClass}>
+      <span>{label}</span>
+      <div className={inputContainerClass}>
+        <input
+          aria-label={accessibility}
+          className={textInputClass}
+          value={value}
+          placeholder={chinese ? '默认' : 'Default'}
+          onChange={event => onChange(event.target.value)}
+        />
+        <div className="relative shrink-0 flex items-center justify-center w-7 h-full text-slate-400 hover:text-slate-600">
+          <svg className="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+          </svg>
+          <select
+            aria-label={accessibility + ' options'}
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+            value=""
+            onChange={event => onChange(event.target.value)}
+          >
+            <option value="">{chinese ? '继承 / 默认' : 'Inherit / default'}</option>
+            {levels.map(level => (
+              <option key={level.id} value={level.id}>{level.label || level.id}</option>
+            ))}
+            {value && !levels.some(l => l.id === value) && (
+              <option value={value}>{(chinese ? '当前 / 自定义: ' : 'Current / custom: ') + value}</option>
+            )}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="col-span-2 grid grid-cols-2 gap-3">
+      <div className="h-[238px] rounded-xl border border-slate-200/80 bg-white p-3 flex flex-col justify-between">
+        {cardHeader('01', 'API MICRO', 'micro')}
+        <div className="grid grid-cols-3 gap-2">
+          <label className={`${labelClass} col-span-2`}>
+            <span>Base URL</span>
+            <div className={inputContainerClass}>
+              <input
+                className={textInputClass}
+                disabled={syncing !== null}
+                value={draft.baseURL}
+                placeholder="https://api.example.com/v1"
+                onChange={event => update('baseURL', event.target.value)}
+              />
+            </div>
+          </label>
+          <label className={`${labelClass} col-span-1`}>
+            <span>API Key</span>
+            <div className={inputContainerClass}>
+              <input
+                className={textInputClass}
+                type="password"
+                autoComplete="new-password"
+                value={draft.replacementKey}
+                placeholder={micro?.credentialConfigured ? '••••••••' : 'API Key'}
+                onChange={event => update('replacementKey', event.target.value)}
+              />
+            </div>
+          </label>
+        </div>
+        {modelField(microCatalog, draft.model, value => update('model', value), chinese ? '模型' : 'Model', 'Micro model')}
+        {effortField(microModel?.reasoningLevels ?? [], draft.thinking, value => update('thinking', value), chinese ? '思考等级' : 'Reasoning', 'Micro thinking')}
+        <div className="flex justify-end items-center gap-2 h-[26px]">
+          {micro?.hasProjectOverride && (
+            <button
+              disabled={busy || syncing !== null}
+              title={chinese ? '清除项目 Micro 配置，使用全局设置' : 'Clear project Micro settings and use global settings'}
+              className="text-[10px] text-amber-700 underline"
+              onClick={() => void persist(() => store.useGlobalRoleSettings('micro'))}
+            >
+              {chinese ? '使用全局' : 'Use global'}
+            </button>
+          )}
+          <button
+            disabled={!dirty || busy || syncing !== null || !micro}
+            onClick={() => void persist(async () => { await store.saveMicroSettings(draft); const saved = { ...draft, replacementKey: '' }; setDraft(saved); setInitialDraft(saved); })}
+            className="border border-slate-200 rounded-md px-3 py-1 text-[11px] text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+          >
+            {chinese ? '保存全局' : 'Save global'}
+          </button>
+        </div>
+      </div>
+      <div className="h-[238px] rounded-xl border border-slate-200/80 bg-white p-3 flex flex-col justify-between">
+        {cardHeader('02', 'CLI AGENT', 'cli')}
+        <div className={labelClass}>
+          <span>Adapter</span>
+          <div className={inputContainerClass}>
+            <div className="w-full h-full flex items-center px-2.5 text-[11px] font-mono text-slate-800">
+              {active || (chinese ? '选择 adapter' : 'Choose adapter')}
+            </div>
+            <div className="relative shrink-0 flex items-center justify-center w-7 h-full text-slate-400 pointer-events-none">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <select
+              aria-label="CLI adapter"
+              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+              value={active}
+              disabled={busy || syncing !== null || !Object.keys(adapters).length}
+              onChange={event => void persist(() => store.selectCLIAdapter(event.target.value))}
+            >
+              {!adapters[active] && <option value="">{chinese ? '选择 adapter' : 'Choose adapter'}</option>}
+              {Object.keys(adapters).sort().map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </div>
+        </div>
+        {modelField(cliCatalog, cliDraft.model, model => { setCLIDraft(current => ({ ...current, model })); setFeedback(''); }, chinese ? '模型' : 'Model', 'CLI model')}
+        {effortField(cliModel?.reasoningLevels ?? [], cliDraft.thinking, thinking => { setCLIDraft(current => ({ ...current, thinking })); setFeedback(''); }, chinese ? '思考等级' : 'Reasoning', 'CLI thinking')}
+        <div className="flex justify-end items-center gap-2 h-[26px]">
+          {store.microRoles?.agents.hasProjectOverride && (
+            <button
+              disabled={busy || syncing !== null}
+              title={chinese ? '清除项目 CLI 配置，使用全局设置' : 'Clear project CLI settings and use global settings'}
+              className="text-[10px] text-amber-700 underline"
+              onClick={() => void persist(() => store.useGlobalRoleSettings('cli'))}
+            >
+              {chinese ? '使用全局' : 'Use global'}
+            </button>
+          )}
+          <button
+            disabled={!cliDirty || busy || syncing !== null || !adapter}
+            onClick={() => void persist(() => store.saveCLISettings(active, cliDraft))}
+            className="border border-slate-200 rounded-md px-3 py-1 text-[11px] text-slate-700 disabled:opacity-40 hover:bg-slate-50"
+          >
+            {chinese ? '保存全局' : 'Save global'}
+          </button>
+        </div>
+      </div>
+      {((failed && feedback) || store.microRolesError) && (
+        <div role="status" title={feedback || store.microRolesError || ''} className="col-span-2 text-[10px] text-red-600 line-clamp-2">
+          {store.microRolesError ? (chinese ? '无法读取配置，请检查 profile.json。' : 'Cannot read configuration; check profile.json.') : feedback}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // --- Settings Modal (1:1 Port of SettingsView, SoftwareUpdateSection, EditorPlatformRow) ---
 export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
   const chinese = store.activeLocale === 'zh-Hans';
@@ -701,16 +991,16 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
   const [customRepoInput, setCustomRepoInput] = useState(store.updater.repository);
 
   const sectionHeader = (title: string) => (
-    <div className="text-[9.5px] font-mono font-bold text-slate-400 uppercase tracking-[1.1px] pl-1.5 mb-1.5">
+    <div className="text-[9.5px] font-mono font-bold text-slate-400 uppercase tracking-[0.5px] pl-1.5 mb-1.5">
       {title}
     </div>
   );
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-      <div className="w-[740px] max-h-[88vh] bg-[#fafafa] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200/80">
+      <div className="w-[756px] h-[582px] max-w-full bg-[#fafafa] rounded-2xl shadow-2xl flex flex-col border border-slate-200/80 overflow-hidden">
         {/* Navigation Bar */}
-        <div className="px-6 py-3.5 bg-white border-b border-slate-200/70 flex items-center justify-between shrink-0">
+        <div className="px-5 py-3 bg-white border-b border-slate-200/70 flex items-center justify-between shrink-0">
           <h3 className="text-[15px] font-semibold text-slate-900 tracking-tight">
             {store.text('settings')}
           </h3>
@@ -723,40 +1013,10 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
         </div>
 
         {/* Content Body: Two Columns */}
-        <div className="flex-1 overflow-y-auto p-5 grid grid-cols-[330px_1fr] gap-4">
+        <div className="p-4 grid grid-cols-2 gap-3">
+          <div className="col-span-2"><RoleConfiguration store={store} /></div>
           {/* Left Column: Preferences + Software Update + Live Data */}
-          <div className="flex flex-col gap-3.5">
-            <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs space-y-2">
-              <div className="font-semibold text-slate-800">{chinese ? 'API Micro（必需）' : 'API Micro (required)'}</div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '配置' : 'Configuration'}</span><span>{store.microRoles?.micro.status ?? (store.microRolesError ? 'Unknown' : 'Loading')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '有效配置来源' : 'Effective config source'}</span><span>{store.microRoles?.micro.configurationSource ?? 'Unknown'}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? 'Provider / 协议' : 'Provider / protocol'}</span><span>{[store.microRoles?.micro.provider, store.microRoles?.micro.transport].filter(Boolean).join(' / ') || (chinese ? '未指定' : 'Unspecified')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '模型' : 'Model'}</span><span>{store.microRoles?.micro.model ?? (chinese ? '未配置/未知' : 'Not configured / unknown')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '思考等级（请求→映射）' : 'Thinking (requested → mapped)'}</span><span>{store.microRoles?.micro.requestedThinking
-                ? `${store.microRoles.micro.requestedThinking}${store.microRoles.micro.effectiveThinking ? ` → ${store.microRoles.micro.effectiveThinking}` : ''}`
-                : (chinese ? '未指定' : 'Unspecified')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '映射等级' : 'Mapped levels'}</span><span>{store.microRoles?.micro.supportedThinking.length
-                ? store.microRoles.micro.supportedThinking.join(', ')
-                : (chinese ? '未知（未配置映射）' : 'Unknown (no mapping configured)')}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '凭据来源' : 'Credential source'}</span><span>{store.microRoles?.micro.credentialConfigured
-                ? (chinese ? '已配置（密钥不显示）' : 'Configured (secret hidden)')
-                : (chinese ? '未配置' : 'Not configured')}</span></div>
-              <div className="text-[11px] text-slate-500">{chinese ? '此页只读并脱敏展示全局/项目有效配置，不复制全局密钥；认证及任务就绪度未知，也不执行请求。' : 'This page reads and redacts effective global/project config without copying global secrets; authentication and task readiness remain unknown, and no request is made.'}</div>
-
-              <div className="border-t border-slate-100 pt-2 font-semibold text-slate-800">{chinese ? 'CLI Agent（可选 adapter）' : 'CLI Agent (optional adapter)'}</div>
-              <div className="flex justify-between gap-3"><span className="text-slate-500">{chinese ? '默认 adapter' : 'Default adapter'}</span><span>{store.microRoles?.agents.default ?? (chinese ? '未配置' : 'Not configured')}</span></div>
-              {Object.entries(store.microRoles?.agents.adapters ?? {}).map(([name, adapter]) => (
-                <div key={name}>
-                  <div className="flex justify-between gap-3"><span>{name}</span><span className="text-slate-500">{adapter.command ?? (chinese ? '命令未知' : 'Command unknown')}</span></div>
-                  <div className="text-[10px] text-slate-500">{chinese
-                    ? '已安装：未知 · 已认证：未知 · 模型：未知 · analyze：未知 · implement：未知'
-                    : 'Installed: unknown · Auth: unknown · Model: unknown · Analyze: unknown · Implement: unknown'}</div>
-                </div>
-              ))}
-              <div className="text-[11px] text-slate-500">{chinese
-                ? '安装、登录、模型和 analyze/implement 状态均未探测；需要 AI 显式执行一次有界验证。'
-                : 'Install, login, model, and analyze/implement states are unprobed until the AI runs one explicit bounded check.'}</div>
-            </div>
+          <div className="flex flex-col gap-3">
             {/* 1. Preferences */}
             <div>
               {sectionHeader(chinese ? '偏好设置' : 'PREFERENCES')}
@@ -767,15 +1027,26 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
                     <span className="text-slate-400 text-sm">🌐</span>
                     <span>{store.text('language')}</span>
                   </div>
-                  <select
-                    value={store.language}
-                    onChange={(e) => store.setLanguage(e.target.value as any)}
-                    className="px-2 py-0.5 border border-slate-200 rounded text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="system">{store.text('system')}</option>
-                    <option value="zhHans">{store.text('chinese')}</option>
-                    <option value="english">{store.text('english')}</option>
-                  </select>
+                  <div className="relative flex items-center h-[26px] w-[105px] rounded-md border border-slate-200/80 bg-white">
+                    <span className="px-2 text-[11px] text-slate-700 truncate">
+                      {store.language === 'system' ? store.text('system') : store.language === 'zhHans' ? store.text('chinese') : store.text('english')}
+                    </span>
+                    <div className="ml-auto pr-1.5 text-slate-400 pointer-events-none">
+                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <select
+                      value={store.language}
+                      onChange={(e) => store.setLanguage(e.target.value as any)}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      aria-label={store.text('language')}
+                    >
+                      <option value="system">{store.text('system')}</option>
+                      <option value="zhHans">{store.text('chinese')}</option>
+                      <option value="english">{store.text('english')}</option>
+                    </select>
+                  </div>
                 </div>
 
                 {/* Appearance Row */}
@@ -784,15 +1055,26 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
                     <span className="text-slate-400 text-sm">◐</span>
                     <span>{store.text('appearance')}</span>
                   </div>
-                  <select
-                    value={store.appearance}
-                    onChange={(e) => store.setAppearance(e.target.value as any)}
-                    className="px-2 py-0.5 border border-slate-200 rounded text-xs text-slate-700 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="system">{store.text('system')}</option>
-                    <option value="light">{store.text('light')}</option>
-                    <option value="dark">{store.text('dark')}</option>
-                  </select>
+                  <div className="relative flex items-center h-[26px] w-[105px] rounded-md border border-slate-200/80 bg-white">
+                    <span className="px-2 text-[11px] text-slate-700 truncate">
+                      {store.appearance === 'light' ? store.text('light') : store.appearance === 'dark' ? store.text('dark') : store.text('system')}
+                    </span>
+                    <div className="ml-auto pr-1.5 text-slate-400 pointer-events-none">
+                      <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <select
+                      value={store.appearance}
+                      onChange={(e) => store.setAppearance(e.target.value as any)}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      aria-label={store.text('appearance')}
+                    >
+                      <option value="system">{store.text('system')}</option>
+                      <option value="light">{store.text('light')}</option>
+                      <option value="dark">{store.text('dark')}</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -891,18 +1173,30 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
                           <span className="text-slate-400">🏷️</span>
                           <span>{store.text('selectVersion')}</span>
                         </div>
-                        <select
-                          value={store.updater.selectedReleaseId || updateState.latest.id}
-                          onChange={(e) => store.updater.setSelectedReleaseId(Number(e.target.value))}
-                          className="px-2 py-0.5 border border-slate-200 rounded text-xs bg-white text-slate-700"
-                        >
-                          {updateState.releases.map((rel) => (
-                            <option key={rel.id} value={rel.id}>
-                              {rel.name || rel.tagName}
-                              {rel.id === updateState.latest.id ? (chinese ? ' (最新)' : ' (Latest)') : ''}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="relative flex items-center h-[26px] w-[150px] rounded-md border border-slate-200/80 bg-white">
+                          <span className="px-2 text-[11px] text-slate-700 truncate">
+                            {(updateState.releases.find(r => r.id === (store.updater.selectedReleaseId || updateState.latest.id))?.name || updateState.latest.tagName) +
+                             ((store.updater.selectedReleaseId || updateState.latest.id) === updateState.latest.id ? (chinese ? ' (最新)' : ' (Latest)') : '')}
+                          </span>
+                          <div className="ml-auto pr-1.5 text-slate-400 pointer-events-none">
+                            <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                            </svg>
+                          </div>
+                          <select
+                            value={store.updater.selectedReleaseId || updateState.latest.id}
+                            onChange={(e) => store.updater.setSelectedReleaseId(Number(e.target.value))}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            aria-label={store.text('selectVersion')}
+                          >
+                            {updateState.releases.map((rel) => (
+                              <option key={rel.id} value={rel.id}>
+                                {rel.name || rel.tagName}
+                                {rel.id === updateState.latest.id ? (chinese ? ' (最新)' : ' (Latest)') : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       {/* Edition Selector */}
@@ -1109,15 +1403,6 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
                     {store.text('changeProject')}
                   </button>
                 </div>
-                <div className="px-3 py-1.5 flex items-center justify-between text-[10px] text-slate-500 bg-slate-50/40">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span>{store.text('liveHelp')}</span>
-                  </div>
-                  <span className="text-[7.5px] font-mono font-bold text-slate-400 tracking-wider">
-                    SQLITE · GRAPH.JSON
-                  </span>
-                </div>
               </div>
             </div>
           </div>
@@ -1149,15 +1434,6 @@ export const SettingsModal: React.FC<{ store: GraphStore }> = ({ store }) => {
               ))}
             </div>
 
-            {/* Runtime Handshake & Help Text */}
-            <div className="px-1 flex flex-col gap-1 mt-1">
-              <span className="font-mono text-[9.5px] text-slate-500 select-text">
-                {store.runtimeHandshake}
-              </span>
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                {store.text('pluginHelp')}
-              </p>
-            </div>
           </div>
         </div>
       </div>

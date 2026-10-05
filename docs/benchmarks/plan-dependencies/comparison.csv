@@ -1,0 +1,5 @@
+arm,workflow,peak_main_input_tokens,main_raw_tokens,micro_raw_tokens,cli_raw_tokens,total_observed_raw_tokens,main_equivalent_tokens,equivalent_token_reduction_percent,main_equivalent_usd,equivalent_usd_reduction_percent,peak_main_context_reduction_percent,coverage
+A,Native tools,234174,8016375,0,0,8016375,8016375.000000000000,0.000000000000,1.623055600000,0.000000000000,0.000000000000,complete observed request coverage
+B,OS only (no assistant),184507,6119582,0,0,6119582,6119582.000000000000,23.661480407291,1.315797600000,18.930836380467,21.209442551265,complete observed request coverage
+C,OS + API Micro,145694,4993135,734551,0,5727686,5098070.857142857143,36.404286761250,1.413765028571,12.894849161580,37.783870113676,complete observed request coverage
+D,OS + API Micro + CLI,84681,1809566,3258709,4393118,9461393,2902684.142857142857,63.790564402774,0.790090114286,51.320822633204,63.838427835712,observed subtotal; D Micro 1 missing request unknown

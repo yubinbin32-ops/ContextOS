@@ -67791,6 +67791,8 @@ import os3 from "node:os";
 import { execFileSync as execFileSync3 } from "node:child_process";
 import { randomUUID as randomUUID4 } from "node:crypto";
 var HOME = os3.homedir();
+var contextosHome = path38.resolve(process.env.CONTEXTOS_HOME || path38.join(HOME, ".contextos"));
+var codexHome = path38.resolve(process.env.CODEX_HOME || path38.join(HOME, ".codex"));
 function deriveProjectId(projectRoot) {
   const baseName = path38.basename(path38.resolve(projectRoot || process.cwd())).trim();
   const slug = baseName.toLowerCase().replace(/ +/g, "-");
@@ -67845,7 +67847,7 @@ function resolveNodeExecutable() {
 function resolveCodexExecutable() {
   const isWin = process.platform === "win32";
   const isMac = process.platform === "darwin";
-  const candidates = [];
+  const candidates = [process.env.CONTEXTOS_CODEX_BIN];
   if (isWin) {
     const localAppData = process.env.LOCALAPPDATA || path38.join(HOME, "AppData\\Local");
     candidates.push(
@@ -67882,7 +67884,7 @@ function resolveCodexExecutable() {
   return null;
 }
 function deployCanonicalServer(sourceScriptPath = null) {
-  const canonicalDir = path38.join(HOME, ".contextos", "server");
+  const canonicalDir = path38.join(contextosHome, "server");
   const canonicalScript = path38.join(canonicalDir, "contextos-mcp.mjs");
   fs37.mkdirSync(canonicalDir, { recursive: true });
   const candidates = [
@@ -67898,6 +67900,17 @@ function deployCanonicalServer(sourceScriptPath = null) {
     const tempPath = `${canonicalScript}.contextos-${process.pid}-${randomUUID4()}.tmp`;
     fs37.copyFileSync(found, tempPath);
     fs37.renameSync(tempPath, canonicalScript);
+  }
+  const runtimeWasm = path38.join(path38.dirname(found), "web-tree-sitter.wasm");
+  if (fs37.existsSync(runtimeWasm) && path38.resolve(runtimeWasm) !== path38.join(canonicalDir, "web-tree-sitter.wasm")) {
+    const tempWasm = path38.join(canonicalDir, `web-tree-sitter.wasm.${randomUUID4()}.tmp`);
+    fs37.copyFileSync(runtimeWasm, tempWasm);
+    fs37.renameSync(tempWasm, path38.join(canonicalDir, "web-tree-sitter.wasm"));
+  }
+  const grammarSource = path38.resolve(path38.dirname(found), "..", "grammars");
+  const grammarTarget = path38.join(contextosHome, "grammars");
+  if (fs37.existsSync(grammarSource) && grammarSource !== grammarTarget) {
+    replaceDirectoryAtomically(grammarSource, grammarTarget);
   }
   return canonicalScript;
 }
@@ -67954,7 +67967,7 @@ function mergePersonalMarketplaceDocument(parsed) {
     marketplaces = parsed;
     marketplaceWasArray = true;
   } else if (parsed && typeof parsed === "object") {
-    marketplaces = [parsed];
+    marketplaces = Object.keys(parsed).length ? [parsed] : [];
   } else {
     throw new Error("Marketplace root must be an object or array");
   }
@@ -68080,11 +68093,11 @@ function cleanTomlCodex({ configPath }) {
   content = content.replace(mcpRegex, "").replace(hookRegex, "").replace(/\n{3,}/g, "\n\n");
   writeFileAtomic(configPath, content.trim() + "\n");
 }
-function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null }) {
+function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource = null, skillSource = null }) {
   const userPluginsContextOS = path38.join(HOME, "plugins", "contextos");
   const personalMarketplaceDir = path38.join(HOME, ".agents", "plugins");
   const personalMarketplaceURL = path38.join(personalMarketplaceDir, "marketplace.json");
-  const codexConfigURL = path38.join(HOME, ".codex", "config.toml");
+  const codexConfigURL = path38.join(codexHome, "config.toml");
   if (pluginSource && fs37.existsSync(pluginSource)) {
     replaceDirectoryAtomically(pluginSource, userPluginsContextOS);
   } else if (!fs37.existsSync(userPluginsContextOS)) {
@@ -68103,10 +68116,15 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   }
   const output = mergePersonalMarketplaceDocument(parsedMarketplace ?? {});
   writeFileAtomic(personalMarketplaceURL, JSON.stringify(output, null, 2) + "\n");
+  fs37.mkdirSync(codexHome, { recursive: true });
   const codexBin = resolveCodexExecutable();
   let installedViaCli = false;
   if (codexBin) {
     try {
+      try {
+        execFileSync3(codexBin, ["plugin", "marketplace", "add", HOME, "--json"], { stdio: "pipe" });
+      } catch (_) {
+      }
       try {
         execFileSync3(codexBin, ["plugin", "remove", "contextos@personal", "--json"], { stdio: "ignore" });
       } catch (_) {
@@ -68118,7 +68136,14 @@ function installCodexPlugin({ serverScript, nodePath, env = null, pluginSource =
   }
   if (!installedViaCli) {
     configureTomlCodex({ configPath: codexConfigURL, serverScript, nodePath, env });
-    return "Codex (config.toml MCP)";
+    if (skillSource && fs37.existsSync(skillSource)) {
+      const skillRoot = path38.join(HOME, ".agents", "skills");
+      for (const name2 of ["contextos", "contextos-ops"]) {
+        const source = path38.join(path38.dirname(skillSource), name2);
+        if (fs37.existsSync(source)) replaceDirectoryAtomically(source, path38.join(skillRoot, name2));
+      }
+    }
+    return "Codex (config.toml MCP + local skills)";
   } else {
     cleanTomlCodex({ configPath: codexConfigURL });
     return "Codex (Official Plugin & Skill)";
@@ -68215,7 +68240,7 @@ function detectInstalledPlatforms() {
     skillPath: path38.join(opencodeDir, "skills", "contextos"),
     type: "opencode"
   });
-  const codexDir = path38.join(HOME, ".codex");
+  const codexDir = codexHome;
   let codexAppExists = false;
   if (isMac) {
     codexAppExists = fs37.existsSync("/Applications/ChatGPT.app") || fs37.existsSync("/Applications/Codex.app") || fs37.existsSync(codexDir) || fs37.existsSync(path38.join(HOME, ".agents/plugins"));
@@ -68235,8 +68260,8 @@ function detectInstalledPlatforms() {
     id: "generic",
     name: "Generic MCP Host",
     isInstalled: true,
-    configPath: path38.join(HOME, ".contextos", "mcp.json"),
-    skillPath: path38.join(HOME, ".contextos", "skills", "contextos"),
+    configPath: path38.join(contextosHome, "mcp.json"),
+    skillPath: path38.join(contextosHome, "skills", "contextos"),
     type: "json"
   });
   return platforms;
@@ -68264,9 +68289,9 @@ function syncAllPlatforms({
   const modified = [];
   const platforms = requestedPlatforms ? allPlatforms.filter((platform) => requestedPlatforms.includes(platform.id)) : allPlatforms;
   for (const platform of platforms) {
-    if (!platform.isInstalled && !forceAll) continue;
+    if (!platform.isInstalled && !forceAll && !requestedPlatforms) continue;
     if (platform.id === "codex") {
-      modified.push(installCodexPlugin({ serverScript, nodePath, env, pluginSource }));
+      modified.push(installCodexPlugin({ serverScript, nodePath, env, pluginSource, skillSource }));
       continue;
     }
     for (const skillPath of platform.skillPaths || (platform.skillPath ? [platform.skillPath] : [])) {
@@ -68424,11 +68449,11 @@ import path40 from "node:path";
 // package.json
 var package_default = {
   name: "contextos",
-  version: "2.7.2",
-  description: "Local MCP tools for exact code evidence, reusable command results, API retrieval, and optional CLI coding assistants.",
+  version: "3.0.0",
+  description: "The context exoskeleton for AI development: optimize the entire development lifecycle to reduce token usage and context occupancy.",
   license: "MIT",
   type: "module",
-  homepage: "https://dashend.cn",
+  homepage: "https://github.com/yubinbin32-ops/ContextOS#readme",
   bugs: {
     url: "https://github.com/yubinbin32-ops/ContextOS/issues"
   },
@@ -68437,7 +68462,9 @@ var package_default = {
   },
   keywords: [
     "context-window",
+    "context-engineering",
     "context-optimization",
+    "codex",
     "ai-coding",
     "model-context-protocol",
     "mcp",
@@ -68579,8 +68606,8 @@ async function runDoctor(input) {
     }
   }
   const platforms = detectInstalledPlatforms();
-  const contextosHome = process.env.CONTEXTOS_HOME || path40.join(os4.homedir(), ".contextos");
-  const globalProfilePath2 = path40.join(contextosHome, "profile.json");
+  const contextosHome2 = process.env.CONTEXTOS_HOME || path40.join(os4.homedir(), ".contextos");
+  const globalProfilePath2 = path40.join(contextosHome2, "profile.json");
   const editorStatuses = platforms.map((p) => `  - **${p.name}**: ${p.isInstalled ? "Installed" : "Not detected"} (\`${p.configPath}\`)`).join("\n");
   return [
     `# ContextOS Doctor Report`,
@@ -68588,7 +68615,7 @@ async function runDoctor(input) {
     `- **Project Root**: \`${root}\``,
     `- **Project ID**: \`${projectId}\``,
     `- **Active Storage Mode**: \`${mode}\``,
-    `- **ContextOS Home**: \`${contextosHome}\``,
+    `- **ContextOS Home**: \`${contextosHome2}\``,
     `- **Global Profile**: \`${globalProfilePath2}\` (${fs39.existsSync(globalProfilePath2) ? "present" : "missing"})`,
     ...legacyCloud ? ["- **Legacy storage**: Local data is preserved. Remote-only data was not downloaded; import an existing export separately."] : [],
     `- **Saved Graph Integrity**: ${graphIntegrity}`,

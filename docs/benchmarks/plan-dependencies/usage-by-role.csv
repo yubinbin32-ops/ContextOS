@@ -1,0 +1,8 @@
+arm,role,input_tokens,cached_input_tokens,uncached_input_tokens,output_tokens,reasoning_output_tokens,raw_tokens,usd_base,assistant_divisor,main_equivalent_usd,coverage
+A,Main,7971486,7773056,198430,44889,18284,8016375,1.623055600000,1,1.623055600000,complete observed response coverage
+B,Main,6073014,5945216,127798,46568,24421,6119582,1.315797600000,1,1.315797600000,complete observed response coverage
+C,Main,4952753,4710016,242737,40382,21109,4993135,1.360295600000,1,1.360295600000,complete observed response coverage
+D,Main,1788852,1746560,42292,20714,11019,1809566,0.466380000000,1,0.466380000000,complete observed response coverage
+C,Micro,720163,636800,83363,14388,unknown,734551,0.374286000000,7,0.053469428571,provider usage 26/26
+D,Micro,3211208,3007232,203976,47501,unknown,3258709,1.183685200000,7,0.169097885714,provider usage 128/129; missing usage unknown
+D,CLI,4355283,4214016,141267,37835,15589,4393118,1.082285600000,7,0.154612228571,51 unique states; terminal usage matched

@@ -1,264 +1,232 @@
 <div align="center">
   <img src="assets/logo.png" width="80" alt="ContextOS logo" />
   <h1>ContextOS</h1>
-  <p><strong>Context Exoskeleton for AI Coding Agents: Offloading Evidence, Commands, Edits, and Architecture State</strong></p>
+  <p><strong>The context exoskeleton for AI development.</strong></p>
+  <p>Optimize the full development lifecycle. Reduce repeated token use and keep context focused.</p>
 
 [![GitHub release](https://img.shields.io/github/v/release/yubinbin32-ops/ContextOS)](https://github.com/yubinbin32-ops/ContextOS/releases/latest)
 [![GitHub stars](https://img.shields.io/github/stars/yubinbin32-ops/ContextOS?style=flat)](https://github.com/yubinbin32-ops/ContextOS/stargazers)
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)](https://nodejs.org)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<p>Current Version: <span id="contextos-version">2.7.2</span> · Local MCP runtime · AST slices · Verification receipts · Persistent project state</p>
+<p>Local MCP runtime · Precise evidence · Persistent receipts · Live architecture</p>
 
-[**Download & Installation**](#5-download--installation) · [**Empirical Evaluation**](#4-empirical-evaluation) · [**Solution & System Capabilities**](#3-solution--system-capabilities) · [**Releases**](https://github.com/yubinbin32-ops/ContextOS/releases) · [**中文**](README_zh.md)
+[中文](README_zh.md) · [Install with AI](#install-with-one-prompt) · [Measured results](#three-development-workflows-measured) · [Desktop App](#see-your-project-in-the-app)
 </div>
 
-![ContextOS Social Banner](assets/github-social-banner.png)
-*Figure 1: Project overview and core architectural metrics of ContextOS context exoskeleton.*
+## Give your agent an exoskeleton
 
----
+![ContextOS desktop walkthrough](assets/contextos-demo.gif)
 
-## 1. System Definition
+ContextOS is a local development runtime between an AI coding agent and your repository. It keeps source evidence, command logs, plans, architecture, and verification receipts outside the main conversation, then returns the pieces needed for the next decision.
 
-**ContextOS** is a **context exoskeleton management system** designed as an underlying development scaffold for AI coding agents. In conventional agent workflows, all operations—including source file exploration, terminal command executions, test runner log outputs, and exploratory trial-and-error edits—are streamed directly into the primary conversational context window. This quickly exhausts context budgets, causes attention dilution, and inflates reasoning costs.
+OS supports the **entire AI development lifecycle**: understand the project, plan, inspect evidence, execute, implement, verify, review, and resume. Precise reads, reusable commands, pipelines, Blocks, Chains, persistent plans, Micro, and CLI all serve the same purpose: reduce unnecessary token consumption and context occupancy while keeping development grounded in inspectable project state.
 
-ContextOS decouples mechanical execution from semantic reasoning. By establishing an externalized execution layer between the AI agent and the codebase, ContextOS offloads evidence retrieval, command execution, atomic source modifications, and architectural state outside the main chat session. The primary agent receives only deterministic AST slices, durable execution receipts, and targeted failure diagnostics, ensuring a lean, focused, and persistent development loop.
+Your existing coding assistant stays in charge. OS supplies the execution and memory layer beneath it, including bounded API Micro assistance and isolated CLI implementation when a task benefits from delegation.
 
-![ContextOS Workflow Demo](assets/contextos-demo.gif)
-*Figure 2: End-to-end workflow demonstration of ContextOS managing agent execution and architecture canvas.*
+In a recorded real development task, the full OS + Micro + CLI workflow reduced **peak main-thread context by 63.8%** and main-thread cumulative raw tokens by 77.4% compared with native tools. [See the task, comparison, and limits below.](#three-development-workflows-measured)
 
----
+## Why long coding sessions get expensive
 
-## 2. Problem Analysis
+A small question often triggers a large file read. A failed test fills the conversation with logs. The agent revisits the same code, repeats a command, and spends its attention reconstructing decisions made earlier. Multi-file implementation then shares the same context window as planning and review.
 
-Contemporary autonomous coding agents struggle with systemic bottlenecks when operating directly within conventional terminal and conversational environments:
+The result is familiar: a crowded conversation, repeated explanations, uncertain project state, and less room for the next useful decision. A larger context window postpones the problem; development needs a way to carry this work across tools and sessions.
 
-1. **Full-File Ingestion and Log Flooding**:
-   Standard file inspection tools dump entire source files into the conversation history to inspect small symbol definitions. Furthermore, build systems and test suites produce thousands of lines of verbose stdout/stderr logs. Injecting these raw streams directly into the conversation consumes tens of thousands of tokens in a single turn, degrades attention on system instructions, and forces early context window truncation.
-2. **Multi-Turn Command Execution and Conversational Pollution**:
-   Complex development cycles require multiple intermediate commands (`lint`, `typecheck`, `test`, `build`). Standard agent loops execute these across sequential conversational turns. Each round appends request/response payloads to the conversation history, permanently inflating the input context for all future turns and causing conversational drift.
-3. **Mutation Drift and Architectural Erosion**:
-   Unconstrained LLMs performing direct code edits frequently modify out-of-scope files or internal helper functions without immediate regression testing. Lacking explicit structural boundaries or ownership models, agents cause architectural drift, violate interface contracts, and introduce regressions across module boundaries.
-4. **Cross-Session Progress Amnesia**:
-   When conversational context limits are reached or an agent session resets, all accumulated understanding—including discovered dependencies, executed commands, and task milestones—is lost. The incoming agent session must redundantly re-scan directories and re-read code, wasting significant token budgets and risking inconsistent architectural decisions.
-5. **Frontier Model Economic Inefficiency**:
-   Directing routine mechanical tasks—such as file searching, command log inspection, and repetitive syntax checks—to expensive flagship frontier models dramatically increases financial cost without improving solution quality.
+## How OS carries the work
 
----
-
-## 3. Solution & System Capabilities
-
-ContextOS provides a comprehensive execution layer to resolve these limitations. The system exposes a unified MCP interface `contextos({ action, args, projectRoot })` backed by a local runtime and a visual architecture desktop environment.
-
-![Desktop Architecture Canvas Overview](assets/canvas-overview.png)
-*Figure 3: Desktop Block/Chain subway-style architecture canvas and real-time context feedback inspector.*
-
-### 3.1 Deterministic Evidence Retrieval & Result Reuse (`ask` / `inspect`)
-ContextOS replaces entire-file reads with deterministic AST symbol slicing and exact line boundaries (`ask` with `inspect: [{ path, ranges: [[first, last]] }]`).
-- Queries return only the exact syntax nodes and cryptographically verifiable content hashes.
-- Evidence references are indexed via `resultId`. When an agent re-inspects code, ContextOS validates whether the underlying file has changed; if identical, it emits an `unchanged` receipt with zero redundant source body tokens, eliminating repeated context ingestion.
-
-![In-App README Reader & Capability Table](assets/readme-reader.png)
-*Figure 4: In-app README reader and capability inspection table.*
-
-### 3.2 Local Durable Receipts & Log Offloading (`command`)
-Rather than streaming raw terminal logs into the conversation window, `command` executes processes in isolated local subprocesses.
-- Verbose stdout and stderr streams are persisted directly to local disk storage as durable receipts.
-- The agent receives a compact receipt containing execution status, exit code, duration, and focused summaries.
-- Historical execution outputs can be queried by `id` (`command({ action: "get", id })`) at any time, avoiding re-executing commands simply to recover diagnostic output.
-
-![Checkpoint Detail & Verification Receipts](assets/checkpoint-detail.png)
-*Figure 5: Checkpoint verification receipt displaying passed status and compact diff details.*
-
-### 3.3 Batch Serial & Parallel Pipelines (`pipeline`)
-To eliminate multi-turn conversational back-and-forth, `pipeline` allows the agent to chain or parallelize multiple actions (`inspect`, `change`, `verify`, `command`, `run`) in a single invocation.
-- Steps execute sequentially or concurrently within the local runtime.
-- The host agent receives a unified outcome payload in a single conversational turn, collapsing latency and eliminating round-trip message accumulation.
-
-### 3.4 Atomic Verified Modifications & Block Ownership (`change` + `verify`)
-ContextOS enforces disciplined mutations through atomic transactions:
-- **Coupled Verification**: Every source modification (`edits: [{ path, target, replacement }]`) can attach verification suites (`verify: ["npm test"]`). If verification fails, the runtime can immediately roll back changes (`autoRevert: true`).
-- **Architectural Block Ownership**: Curated project files are mapped into architectural Blocks and Chains. Files within architectural boundaries cannot be modified without explicit Block ownership, preventing unexpected cross-module drift.
-
-![Architectural Impact Path Highlighting](assets/path-impact.png)
-*Figure 6: Impact path highlighting across architectural boundaries and dependency chains.*
-
-### 3.5 Cross-Session Continuity & Persistent State Graph (`plan` / `task` / `session`)
-Development state is persisted in `.contextos/` rather than lost between conversational turns:
-- **State Blackboard**: The runtime records user intent, task breakdowns (`plan`, `task`), touched files, and verification receipts, automatically generating and maintaining `.contextos/blackboard.md`.
-- **Zero Cold-Start Exploration**: New agent sessions immediately ingest the persistent architecture graph and progress status through `ops({ capability: "session", action: "status" })`, resuming implementation without re-exploring the codebase.
-
-![Knowledge Reader & Project Rules](assets/knowledge-reader.png)
-*Figure 7: Knowledge list view organizing project READMEs, architecture specs, and operational rules.*
-
-### 3.6 Two-Tier Delegation Architecture (`api-micro` & `cli-agent`)
-ContextOS provides flexible delegation paths to keep the main conversation lean:
-- **API Micro**: A lightweight, synchronous executor designed for semantic code discovery, evidence retrieval, bounded commands, and verification batches. It returns concise, host-ready summaries directly to the caller.
-- **CLI Agent**: An isolated subagent adapter designed for multi-step refactoring and complex repairs requiring independent tool loops. Dispatched with `background: true` to prevent host tool call timeouts (e.g. AGY ~3 minutes).
-- **Session Retention & 233k Rule**: Up to 5 completed sessions are retained for continuation (`sessionId` / `cliSessionId`). When tasks are coherent, sessions are reused; once CLI context consumption reaches the 233k token window threshold, or when an independent task begins, a fresh session is spawned to maintain peak model attentiveness.
-
-![Plugins Management: MCP & Skills](assets/mcp-integration.png)
-*Figure 8: Plugins view showing local MCP server registration and Skill installation.*
-
-![Multi-Platform Settings Synchronization](assets/settings-sync.png)
-*Figure 9: Multi-platform MCP and Skill synchronization across Codex, Claude, Cursor, Antigravity, and OpenCode.*
-
----
-
-## 4. Empirical Evaluation
-
-To evaluate ContextOS rigorously under realistic software engineering conditions, an empirical benchmark was conducted on a non-trivial development task.
-
-### 4.1 Methodology & Experimental Controls
-
-This evaluation was rerun on final commit `0dd6431` with durable raw evidence. Four isolated Git worktrees were created from the same commit, and four fresh host conversations received the same real development task: implement plan dependency management, including add, remove, and list actions; persistence; unknown-target, self-reference, duplicate, and cycle rejection; MCP routing and read/mutation classification; and focused domain, application, storage, and MCP tests.
-
-The four arms were:
-
-- **A (native baseline)**: native file and shell tools only.
-- **B (OS only)**: ContextOS primitives only, without API Micro or the CLI agent.
-- **C (OS + Micro)**: ContextOS primitives with API Micro for bounded exploration and verification.
-- **D (OS + Micro + CLI)**: ContextOS primitives, API Micro, and CLI delegation for the multi-file implementation.
-
-All four arms were independently rerun after completion. Arms A, B, and C passed 778 of 778 tests. Arm D passed 781 of 781 tests. Every arm produced a real implementation diff, and no arm modified the main repository or README during the experiment.
-
-Metrics use the following definitions:
-
-- `raw`: `input + output`, including cached input reads; diagnostic only.
-- `peak`: peak single-request input tokens.
-- `weighted cost`: `cached input * 0.1 + uncached input * 2 + output * 10`.
-- `main-equivalent cost`: main weighted cost plus API Micro and CLI weighted cost divided by 7.
-
-### 4.2 Benchmark Results
-
-| Arm | main raw | micro raw | CLI raw | total raw | main-equivalent cost | vs A | peak context | peak vs A | main requests | tests |
-| :--- | ---: | ---: | ---: | ---: | ---: | :---: | ---: | :---: | ---: | :---: |
-| **A native** | 8,016,375 | 0 | 0 | 8,016,375 | 1,623,055.6 | - | 234,174 | - | 47 | 778/778 |
-| **B OS only** | 6,119,582 | 0 | 0 | 6,119,582 | 1,315,797.6 | **-18.9%** | 184,507 | **-21.2%** | 50 | 778/778 |
-| **C OS + Micro** | 4,993,135 | 734,551 | 0 | 5,727,686 | 1,413,765.0 | **-12.9%** | 145,694 | **-37.8%** | 50 | 778/778 |
-| **D OS + Micro + CLI** | 1,809,566 | 3,258,709 | 4,393,118 | 9,461,393 | 790,090.1 | **-51.3%** | 84,681 | **-63.8%** | 29 | 781/781 |
-
-Arm D reduced main-thread raw tokens by 77.4% and peak context by 63.8% relative to Arm A. Its total raw token count is higher because the CLI worker consumed 4.39M raw tokens, but the worker's weighted cost is divided by 7 and the main thread avoided the multi-file implementation work. Arm B and Arm C both reduced cost and context, but API Micro did not improve this task enough to beat the simpler OS-only arm: Arm C used 734,551 additional Micro raw tokens and finished at 1,413,765.0 main-equivalent cost versus 1,315,797.6 for Arm B.
-
-### 4.3 Codex vs AGY CLI Adapters
-
-The same bounded plan-dependency task was dispatched through ContextOS to two explicit CLI adapters on commit `0dd6431`: `adapter: "codex"` and `adapter: "agy"`. Both completed the feature and passed 777 of 777 tests. AGY also made four API Micro calls during its run.
-
-| Adapter | tests | CLI raw | micro raw | total raw | main-equivalent cost | peak context | peak usage | report quality |
-| :--- | :---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
-| **Codex CLI** | 777/777 | 2,370,500 | 0 | 2,370,500 | 94,824.2 | 95,231 | 40.9% of 233,000 | complete report |
-| **AGY CLI** | 777/777 | 12,523,379 | 23,445 | 12,546,824 | 555,374.6 | 185,563 | 79.6% of 233,000 | `changes` and `checks` empty; two EOF whitespace errors |
-
-AGY now works end to end: its live doctor probe returned `PONG`, it loaded the synced ContextOS skill, it used ContextOS and API Micro, and its implementation passed the full suite. However, it cost 5.86 times as much as Codex on weighted main-equivalent terms, used 5.29 times as much raw tokens, and reached 1.95 times the peak context. Its report also omitted the structured change and check lists and left two files with blank lines at EOF. Codex therefore remains the default CLI adapter; AGY is functional but should be selected only when its specific model behavior is required.
-
-### 4.4 Objective Findings & Current Limitations
-
-1. **D is the only arm with a large verified saving.** The full OS + Micro + CLI path reduced main-equivalent cost by 51.3% and peak context by 63.8% against the native baseline.
-2. **OS-only is cheaper than OS + Micro on this task.** Arm B reduced cost by 18.9%; adding Micro in Arm C reduced the saving to 12.9% because the Micro provider requests added 734,551 raw tokens without replacing enough main-thread work.
-3. **Raw token growth does not imply cost growth.** Arm D used more total raw tokens than Arm A, but its worker usage is divided by 7 and its main thread is much smaller, so its weighted cost is substantially lower.
-4. **AGY is repaired but not competitive.** The adapter, MCP registration, permission preconfiguration, and skill synchronization are working, but AGY remains far more expensive and context-heavy than Codex on the same task.
-5. **Limitations.** These are single-run comparisons on one multi-file feature. Provider usage is aggregated across provider requests, and AGY's structured reporting still needs a separate parser or reporting fix. The results should be treated as controlled engineering measurements rather than universal provider benchmarks.
-
----
-
-## 5. Download & Installation
-
-### 5.1 One-Sentence Agent Installation
-Users can install and configure ContextOS automatically by issuing a single prompt to their AI coding assistant:
-
-> **"Please read the setup.md guide to install ContextOS for me."**
-
-The assistant will inspect the host operating system, CPU architecture, and Node.js environment, configure credentials, and guide MCP server registration step-by-step.
-
-### 5.2 Official Release Binaries
-Pre-compiled distribution archives are published on [GitHub Releases](https://github.com/yubinbin32-ops/ContextOS/releases):
-
-- **macOS** (`arm64` Apple Silicon / `x64` Intel):
-  - **Standard Package** (`ContextOS-macos-<arch>.zip`): Lightweight distribution utilizing system Node.js (requires Node.js 22+).
-  - **Full Package** (`ContextOS-macos-full-<arch>.zip`): Self-contained distribution with a bundled Node.js runtime, requiring no host runtime setup.
-- **Windows x64** (requires Node.js 22+):
-  - **Installer** (`ContextOS-Setup-x64.exe`): Standard Windows installer with automated PATH registration.
-  - **Portable** (`ContextOS-win-x64.zip`): Standalone archive for portable or restricted environments.
-
-### 5.3 Source Installation
-Developers building from source require **Node.js 22+**:
-
-```bash
-git clone https://github.com/yubinbin32-ops/ContextOS.git
-cd ContextOS
-npm ci
-npm run plugin:build
+```text
+You → Main agent: plan, scope, architecture, review
+          │
+          └─ ContextOS: evidence, commands, changes, persistent state
+                ├─ API Micro: bounded discovery, summaries, small checks
+                ├─ CLI worker: isolated implementation → report → integration
+                └─ Desktop App: architecture, plans, checkpoints, settings
 ```
 
-### 5.4 Host Integrations
-- **Codex Plugin**:
-  ```bash
-  codex plugin marketplace add .
-  codex plugin add contextos@contextos-development
-  npm run plugin:install
-  npm run plugin:install:check
-  ```
-- **Standard MCP Hosts (Claude Desktop, Cursor, Antigravity, OpenCode)**:
-  Register the stdio server in the host configuration file:
-  ```json
-  {
-    "mcpServers": {
-      "contextos": {
-        "command": "node",
-        "args": ["/absolute/path/to/ContextOS/plugins/contextos/server/contextos-mcp.mjs"]
-      }
-    }
-  }
-  ```
+Evidence and logs are saved locally. Workers read task evidence in their own contexts and return compact reports. Changes pass through OS so file ownership, verification, and the project graph stay connected. A fresh session can recover the plan and receipts instead of reconstructing the entire transcript.
 
----
+### Capabilities and their practical effect
 
-## 6. Daily Workflow & Usage
+| Capability | How it works | What it achieves |
+| --- | --- | --- |
+| **Evidence · `ask`** | Inspect exact paths, line ranges, and AST symbols; recover earlier evidence by result ID and check source versions. | Read the relevant implementation and reuse valid evidence instead of repeatedly loading whole files. |
+| **Commands · `command`** | Execute once, persist stdout/stderr and exit status, then retrieve a focused section by command ID. | Keep build noise outside the main context and recover the useful failure without rerunning the process. |
+| **Batches · `pipeline`** | Combine known steps in serial or parallel execution, with per-step results and continuation. | Reduce tool round trips; group independent reads and checks in one call. |
+| **Architecture · Block** | Bind curated source files to architecture units with boundaries, state, and verification evidence. | Make ownership visible and keep implementation changes connected to the architecture. |
+| **Architecture · Chain** | Connect Blocks into project paths and record their relationships and progress. | See which capabilities depend on each other and follow a feature across module boundaries. |
+| **Changes · `change` / `integrate`** | Apply scoped changes through OS or merge a worker's isolated diff, with verification receipts. | Review actual changes and keep architecture state current during implementation. |
+| **Small assistant · `micro`** | A configured API model performs bounded retrieval, summarization, diagnosis, or a small edit and returns a compact report. | Move routine tool loops into a lower-cost assistant context; keep the main agent available for judgement. |
+| **Implementation · `agent`** | A configured CLI adapter runs a task in an isolated workspace, supports background collection, and returns changes, checks, and blockers. | Move complex implementation out of the main conversation and integrate a reviewable result. |
+| **Continuity · plans, tasks, sessions** | Persist intent, progress, rules, decisions, and receipts in the project's OS state. | Resume real project work across conversations and inspect progress in the App. |
 
-Once installed, ContextOS automatically attaches as the primary development scaffold.
+Micro and CLI help when the task contract is clear. A small deterministic read can use OS directly; a broad implementation belongs to a CLI worker. Delegation has overhead, so OS makes its execution and results inspectable.
 
-### 6.1 Everyday Interaction Prompts
-Agents natively recognize ContextOS scaffolding commands:
-- `"Write the development requirements into plan and begin execution."`
-- `"Configure CLI for me."`
-- `"Switch to deepseek API."`
+### Three development workflows, measured
 
-### 6.2 Programmatic Tool Invocation Syntax
-Agents interact with ContextOS through the unified `contextos` MCP tool:
+The recorded comparison started from commit [`0dd6431`](https://github.com/yubinbin32-ops/ContextOS/tree/0dd6431). Fresh host conversations and isolated worktrees received the same real feature: plan dependency add/remove/list, persistence, validation of unknown targets, duplicates, self-reference and cycles, MCP routing, and tests across domain, application, storage, and MCP layers. [Historical measurement record](https://github.com/yubinbin32-ops/ContextOS/blob/4706c38/README.md#4-empirical-evaluation).
 
-```javascript
-// Example: Atomic pipeline batching exact inspection, code modification, and regression verification
-contextos({
-  action: "pipeline",
-  args: {
-    steps: [
-      { action: "ask", inspect: [{ path: "src/cart.ts", ranges: [[45, 60]] }] },
-      {
-        action: "change",
-        edits: [{
-          path: "src/cart.ts",
-          target: "const total = price * quantity;",
-          replacement: "const total = price * quantity - discount;"
-        }],
-        verify: ["npm test"],
-        autoRevert: true
-      }
-    ]
-  },
-  projectRoot: "/absolute/path/to/project"
-});
+| Workflow | Peak main-thread context | Reduction vs native | Main-thread raw tokens | Tests passed |
+| --- | ---: | ---: | ---: | ---: |
+| **Native tools** | 234,174 | baseline | 8,016,375 | 778 / 778 |
+| **OS + API Micro** | 145,694 | **37.8%** | 4,993,135 | 778 / 778 |
+| **OS + API Micro + CLI** | 84,681 | **63.8%** | 1,809,566 | 781 / 781 |
+
+**What “60% less context” means here:** peak input to a main-agent request fell from 234,174 to 84,681 tokens. It describes this measured task, rather than a promise for every repository or the combined tokens of every worker.
+
+<details>
+<summary>Full token usage, specified equivalent USD costs, and the OS-only control</summary>
+
+Raw tokens are cumulative input plus output; peak context is the largest single main-agent input. **Cached input is included in input**, so `uncached = input − cached`. Reasoning tokens are included in output and are not counted or charged twice.
+
+The specified comparison uses `equivalent tokens = main raw + (Micro raw + CLI raw) / 7`:
+
+| Arm / workflow | Main raw | Micro raw | CLI raw | Observed total raw | Equivalent tokens | Reduction vs native |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A · Native | 8,016,375 | 0 | 0 | 8,016,375 | 8,016,375 | baseline |
+| B · OS only, no assistant | 6,119,582 | 0 | 0 | 6,119,582 | 6,119,582 | 23.7% |
+| C · OS + Micro | 4,993,135 | 734,551 | 0 | 5,727,686 | 5,098,070.9 | 36.4% |
+| D · OS + Micro + CLI | 1,809,566 | 3,258,709† | 4,393,118 | 9,461,393† | 2,902,684.1† | 63.8%† |
+
+For USD, the **user-specified comparison rates per million tokens** are $2 for uncached input, $0.10 for cached input, and $10 for output:
+
+`base USD = (uncached input × 2 + cached input × 0.1 + output × 10) / 1,000,000`
+
+`equivalent USD = main base USD + (Micro base USD + CLI base USD) / 7`
+
+| Arm | Role | Input | Cached input | Uncached input | Output | Base USD | Divisor | Equivalent USD |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | Main | 7,971,486 | 7,773,056 | 198,430 | 44,889 | $1.6230556 | 1 | $1.6230556 |
+| B | Main | 6,073,014 | 5,945,216 | 127,798 | 46,568 | $1.3157976 | 1 | $1.3157976 |
+| C | Main | 4,952,753 | 4,710,016 | 242,737 | 40,382 | $1.3602956 | 1 | $1.3602956 |
+| C | Micro | 720,163 | 636,800 | 83,363 | 14,388 | $0.3742860 | 7 | $0.053469428571 |
+| D | Main | 1,788,852 | 1,746,560 | 42,292 | 20,714 | $0.4663800 | 1 | $0.4663800 |
+| D | Micro | 3,211,208† | 3,007,232† | 203,976† | 47,501† | $1.1836852† | 7 | $0.169097885714† |
+| D | CLI | 4,355,283 | 4,214,016 | 141,267 | 37,835 | $1.0822856 | 7 | $0.154612228571 |
+
+| Workflow | Total equivalent USD | Reduction vs native |
+| --- | ---: | ---: |
+| Native | $1.623055600000 | baseline |
+| OS only | $1.315797600000 | 18.9% |
+| OS + Micro | $1.413765028571 | 12.9% |
+| OS + Micro + CLI | $0.790090114286† | 51.3%† |
+
+These are **equivalent consumption and costs under the specified model**, not actual provider invoices or verified provider rates. The assistant divisor of 7 is a chosen comparison assumption. All main sessions reported the `deepseek-v4.1-flash` alias with `max` reasoning effort and a custom provider; Micro C/D retained the same session `lastModel`, and D CLI reported the same alias/custom provider. This does not independently verify the underlying backend model.
+
+Main usage is deduplicated by provider response ID and matches terminal cumulative totals. C Micro has 2 receipts and provider usage for all 26/26 started requests. D CLI has 51 unique cumulative states whose last-usage sum matches its terminal total. **† D Micro has 5 receipts, 129 started requests and 128 usage-bearing responses. One continuation timeout request has unknown usage.** D totals and the 51.3% cost reduction are observed subtotals; the missing request is not assigned zero. Original Micro reasoning fields are unavailable and remain unknown.
+
+The full workflow used **more observed total raw tokens** than native tools while reducing peak main context. OS-only reached 184,507 peak tokens (−21.2%) and lower equivalent USD than OS + Micro in this run. This is one feature's historical single-run comparison; results vary with task, model, caching and delegation.
+
+[Inspect the frozen evidence and methodology](docs/benchmarks/plan-dependencies/README.md), [original usage fields and coverage](docs/benchmarks/plan-dependencies/historical-usage.json), [role costs CSV](docs/benchmarks/plan-dependencies/usage-by-role.csv), and [four-arm totals CSV](docs/benchmarks/plan-dependencies/comparison.csv). Recompute and check the published file hashes with:
+
+```sh
+python3 docs/benchmarks/plan-dependencies/recalculate.py --check
 ```
 
-### 6.3 Local Verification & Quality Gates
-```bash
-npm test
-npm run plugin:verify
-```
+</details>
 
----
+## See your project in the App
 
-<div align="center">
+The desktop App projects the same OS state that agents use: Blocks, Chains, plans, checkpoints, rules, and knowledge. Its white canvas, restrained color, and precise connections make a large project readable.
 
-[Contributing](CONTRIBUTING.md) · [Security Policy](SECURITY.md) · [Release Notes](.github/RELEASE_NOTES.md) · [MIT License](LICENSE)
+![Live Block and Chain architecture canvas](assets/canvas-overview.png)
 
-</div>
+**Read the whole system at a glance.** Follow a Chain through its Blocks, inspect the selected capability, and see implementation and verification progress alongside the graph.
+
+<details open>
+<summary>Trace a feature and inspect its evidence</summary>
+
+![A feature path across integration, UI, and testing Blocks](assets/path-impact.png)
+
+**Follow impact across modules.** A highlighted Chain connects integration, packaging, and verification work.
+
+![A passed checkpoint with its receipt reference](assets/checkpoint-detail.png)
+
+**See the evidence behind completion.** Checkpoints expose their status and receipt references.
+
+</details>
+
+<details>
+<summary>Read project knowledge and synchronize your tools</summary>
+
+![Project knowledge and rules navigation](assets/knowledge-reader.png)
+
+**Keep project knowledge close.** Open repository documentation and rules from the project sidebar.
+
+![Repository README in the desktop reader](assets/readme-reader.png)
+
+**Read documentation inside the App.** The reader opens repository content alongside the project; performance figures follow the reproducible evidence below.
+
+![Desktop settings and AI editor synchronization](assets/settings-sync.png)
+
+**Manage your development environment.** Settings bring preferences and host integration into the App. Configure shared models and reasoning levels, let each role inherit them with `Use Global`, and synchronize available models and effort options for Micro and CLI adapters.
+
+*The settings image above shows an earlier accepted layout.*
+
+![MCP and skill integration in an AI host](assets/mcp-integration.png)
+
+**Use OS from your coding assistant.** The host loads the MCP runtime and matching skill so the agent can operate on project state.
+
+Some gallery images were captured from earlier builds and retain the former `mdflow` name or earlier version labels. They demonstrate the workflow; follow the installer for the current runtime and configuration.
+
+</details>
+
+## Install with one prompt
+
+Paste this into your AI coding assistant:
+
+> 读取 (https://github.com/yubinbin32-ops/ContextOS/blob/main/setup.md) ，为我安装OS
+
+The agent reads [setup.md](setup.md), installs OS and matching host plugins/skills, registers your repository, configures API Micro and your CLI, and verifies the result with real tool calls. It handles dependency checks, adapter creation, plugin setup, and diagnosis for you.
+
+**You do not need to download and configure a Release package by hand.** The setup guide is written for the installing agent, including diagnosis, adapter configuration, plugin installation, and acceptance checks.
+
+### Micro is required
+
+Micro is the small assistant for routine work, and its **API connection is required for the OS workflow**. Prepare an API key, provider base URL, and model. A main-agent subscription or CLI login alone does not configure API Micro.
+
+Recommended options:
+
+- **[Command Code GOAT](https://commandcode.ai/docs/plans/goat):** includes Provider API access. Create a key in its console; let the agent use the provider's current endpoint and exact model ID.
+- **[OpenCode Go](https://opencode.ai/v2/docs/console/go):** provides a subscription API key and available coding models. Have the agent check the current model list and API configuration.
+- **Your own compatible API:** use a provider you already trust, including the [DeepSeek API](https://api-docs.deepseek.com/).
+
+For bounded Micro tasks, we recommend **DeepSeek V4.1 Flash with `medium` reasoning** where the provider supports it. The [official DeepSeek model ID is `deepseek-flash`](https://api-docs.deepseek.com/updates/); gateways can use different IDs. The installer must verify model availability and map the provider's reasoning setting instead of assuming every API accepts the same parameters.
+
+Keep the key in the local credential/configuration path established by the installer. Do not paste it into repository documentation or tracked source.
+
+### CLI setup is completed by the agent
+
+CLI workers require a working CLI installation, an adapter, the matching ContextOS plugin/skills, and a verified authenticated execution path. Tell the agent which CLI you use; it should consult that CLI's official documentation, write the adapter, configure OS, and run a real probe and isolated implementation check.
+
+A login, browser authorization, or operating-system permission may require your action. The agent should identify that exact step, continue the remaining setup, and verify readiness after you complete it. A discovered binary or saved adapter alone is not a successful installation.
+
+Node.js **22 or later** is required. After a plugin/runtime update, reload the host's MCP process as directed by setup. Keep the App, plugin, skills, and runtime on matching versions.
+
+## Daily use, in ordinary language
+
+| What you want | Prompt to your agent |
+| --- | --- |
+| Start a planned task | “Write this plan into OS and start executing it.” |
+| Resume tomorrow | “Read the current OS plan and session state, then continue the next unfinished task.” |
+| Configure the small assistant | “Configure Micro for me, verify its API connection, and use it for bounded tasks.” |
+| Configure implementation workers | “Configure my CLI for me. Write its adapter, install the ContextOS plugin, and test an isolated implementation.” |
+| Explore a bug | “Use Micro to locate the cause; return the relevant evidence and one compact diagnosis.” |
+| Implement a feature | “Delegate this implementation to CLI in an isolated workspace, verify it, and integrate the result through OS.” |
+| Review progress | “Update the Blocks, Chains, and checkpoints so I can inspect progress in the App.” |
+| Change tools | “Switch to my other configured CLI adapter and verify it before the next task.” |
+
+The main agent keeps the acceptance criteria and final review. Micro and CLI take bounded assignments; OS retains the evidence and progress between them.
+
+## What's new in 3.0.0
+
+The 3.0 line, prepared from `4706c38`, restructures ContextOS into an exoskeleton for the full AI development lifecycle:
+
+- **Precise evidence and reusable commands** keep source inspection and execution results focused and recoverable.
+- **Pipelines and verified changes** connect batched execution, scoped edits, and reviewable results.
+- **Architecture and continuity** keep plans, tasks, sessions, Blocks, Chains, and receipts available across conversations and in the desktop App.
+- **Task-appropriate delegation** adds bounded API Micro assistance and isolated CLI implementation to the same OS lifecycle.
+- **AI-led installation** makes provider configuration, host plugins, CLI adapters, diagnosis, and real acceptance checks part of setup.
+
+See [the 3.0 release notes](.github/RELEASE_NOTES.md), [installation guide](setup.md), and [release history](https://github.com/yubinbin32-ops/ContextOS/releases).
+
+If ContextOS helps your agent stay focused, [give the project a star](https://github.com/yubinbin32-ops/ContextOS/stargazers). Reproducible tasks and [issue reports](https://github.com/yubinbin32-ops/ContextOS/issues) help us improve the next release.

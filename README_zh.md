@@ -1,249 +1,232 @@
 <div align="center">
   <img src="assets/logo.png" width="80" alt="ContextOS 标志" />
   <h1>ContextOS</h1>
-  <p><strong>AI 编码智能体的上下文外骨骼管理系统：将证据检索、命令执行、代码修改与架构状态移出主会话</strong></p>
+  <p><strong>AI 开发的上下文外骨骼。</strong></p>
+  <p>优化 AI 开发全流程，减少重复 token 消耗与上下文占用。</p>
 
 [![GitHub release](https://img.shields.io/github/v/release/yubinbin32-ops/ContextOS)](https://github.com/yubinbin32-ops/ContextOS/releases/latest)
 [![GitHub stars](https://img.shields.io/github/stars/yubinbin32-ops/ContextOS?style=flat)](https://github.com/yubinbin32-ops/ContextOS/stargazers)
 [![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-339933)](https://nodejs.org)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<p>当前版本：<span id="contextos-version">2.7.2</span> · 本地 MCP 服务 · AST 切片 · 验证回执 · 持久化项目状态</p>
+<p>本地 MCP 运行时 · 精确证据 · 持久回执 · 实时架构</p>
 
-[**下载与安装**](#5-下载与安装) · [**实测数据**](#4-实测数据与基准评估) · [**解决方案与核心功能**](#3-解决方案与核心功能) · [**发布页**](https://github.com/yubinbin32-ops/ContextOS/releases) · [**English**](README.md)
+[English](README.md) · [一句话安装](#一句话安装) · [实测效果](#三种开发方式的实测对比) · [桌面-app](#在-app-中看见项目)
 </div>
 
-![ContextOS 项目横幅](assets/github-social-banner.png)
-*图 1：ContextOS 上下文外骨骼系统的项目横幅与核心指标概览。*
+## 给 AI 一副上下文外骨骼
 
----
+![ContextOS 桌面演示](assets/contextos-demo.gif)
 
-## 1. 系统定义
+ContextOS 是 AI 编程代理与代码仓库之间的本地开发运行时。它把源码证据、命令日志、计划、架构和验证回执保存在主对话之外，按任务提供下一步决策所需的内容。
 
-**ContextOS** 是一个为 AI 编码智能体打造的底层开发脚手架与**上下文外骨骼（Context Exoskeleton）管理系统**。在传统的智能体工作流中，源码检索、终端命令行调用、测试构建日志以及试探性的代码修改全部直接输入主对话窗口。这会导致对话上下文迅速膨胀、关键系统指令被冲淡稀释，并显著增加主模型的推理开销。
+OS 是覆盖 **理解项目、计划、读取证据、执行、实现、验证、审查与接续开发整个流程** 的 AI 开发外骨骼。精确读取、可复用命令、pipeline、Block、Chain、持久计划、Micro 与 CLI，共同服务于一个目的：减少不必要的 token 消耗与上下文占用，让开发持续建立在可检查的项目状态上。
 
-ContextOS 将机械执行与语义推理严格解耦。通过在智能体与代码仓库之间构建独立的执行层，ContextOS 将证据检索、命令执行、原子修改与架构状态全面移出主会话，仅向主模型回传高确定性的 AST 代码切片、持久化执行回执以及精准的失败诊断，从而维持轻量、聚焦且具备持久连续性的开发闭环。
+你仍然使用熟悉的编程助手。OS 为它提供执行层与项目记忆，也在适合的任务中提供 API Micro 有界协助与 CLI 隔离实现。
 
-![ContextOS 工作流演示](assets/contextos-demo.gif)
-*图 2：ContextOS 驱动智能体执行、代码修改与架构画布联动的端到端工作流演示。*
+在已有真实开发任务记录中，完整 OS + Micro + CLI 流程相较原生工具，**主线程峰值上下文降低 63.8%**，主线程累计原始 token 降低 77.4%。[任务、统计口径与适用范围见下文。](#三种开发方式的实测对比)
 
----
+## 为什么 AI 写得越久，负担越重
 
-## 2. 痛点分析
+为了定位一个函数，代理读入整个文件；为了找到一次失败，它把全部测试日志带进对话。随后又重复读代码、重复执行命令、重新解释之前的决策。跨文件实现继续占据主对话，与计划、架构判断和最终审查共享同一个上下文窗口。
 
-在未经受控脚手架管理的开发环境中，自主编码智能体面临以下五大核心瓶颈：
+对话越来越长，用户需要反复提醒，项目状态越来越难确认，真正有价值的下一步决策却没有足够空间。开发需要一套能够承载证据、执行和进度，并在不同工具与会话之间持续工作的系统。
 
-1. **整文件读取与日志污染上下文**：
-   传统文件检查工具往往直接读入完整源文件（成百上千行代码）以查看局部函数；构建与测试命令输出的数千行日志亦全量涌入对话。单轮交互即消耗数万 token，不仅挤占有限的上下文预算，而且削弱模型对全局设计意图的注意力，迫使对话提早截断。
-2. **多轮命令调用造成脏对话与重复请求**：
-   完整的工程检查通常涉及 `lint`、`typecheck`、`test`、`build` 等串行步骤。传统模式下智能体必须多轮往返触发，每一轮的输入输出都永久沉淀在对话历史中，导致后续每一步的上下文输入基数呈几何倍数累积，大幅推高计费。
-3. **修改与架构漂移**：
-   缺乏架构边界约束的智能体在多文件修改时，极易产生非原子性或越界修改，且未能即时结合回归验证。无边界的所有权缺失会导致私有模块被非预期篡改，引发隐蔽的接口破坏与架构漂移。
-4. **跨对话丢失进度**：
-   当上下文触顶或开启新会话时，智能体面临“记忆归零”。新会话必须从头扫描目录、重读依赖、重新理解工程上下文，耗费巨额冷启动 token，且容易产生与先前决策冲突的不一致修改。
-5. **主模型 Token 成本高**：
-   将机械的文件检索、日志解析和低级命令调用交由昂贵的旗舰级前沿模型处理，不仅未提升语义决策质量，反而造成不必要的经济成本负担。
+## OS 如何承载这些工作
 
----
-
-## 3. 解决方案与核心功能
-
-针对上述痛点，ContextOS 提供了统一的执行外骨骼。系统对外暴露紧凑的 MCP 接口 `contextos({ action, args, projectRoot })`，并配套桌面端架构画布环境。
-
-![桌面端架构画布概览](assets/canvas-overview.png)
-*图 3：桌面端 Block/Chain 地铁图架构画布与上下文反馈检查器。*
-
-### 3.1 确定性证据检索与结果复用（`ask` / `inspect`）
-ContextOS 采用 AST 驱动的符号切片与确定性行区间替代整文件读取（`ask` 配合 `inspect: [{ path, ranges: [[first, last]] }]`）。
-- 仅检索目标语法节点，并生成密码学内容校验哈希。
-- 检索结果以 `resultId` 建立索引；当后续需要再次引用该部分代码时，系统通过版本校验确认内容无变化，返回零正文负载的 `unchanged` 回执，彻底消除重复读取。
-
-![应用内 README 阅读器与能力表](assets/readme-reader.png)
-*图 4：应用内内嵌的 README 结构化阅读器与能力对照表。*
-
-### 3.2 本地持久化回执与日志外置（`command`）
-`command` 机制在隔离的本地子进程中执行终端命令，杜绝终端日志向会话漫延。
-- 冗长的 stdout 与 stderr 数据完整保存在本地磁盘，生成持久化日志回执。
-- 对话上下文仅接收包含退出码、执行耗时与关键过滤信息的轻量回执。
-- 历史命令输出可通过执行 `id`（`command({ action: "get", id })`）随时提取，无需重新运行命令即可调取诊断依据。
-
-![Checkpoint PASSED 与验证回执](assets/checkpoint-detail.png)
-*图 5：Checkpoint 验证回执，展示 PASSED 状态与紧凑差异回执。*
-
-### 3.3 批量串联与并联流水线（`pipeline`）
-为消除多轮命令往返带来的上下文膨胀，`pipeline` 支持将多个操作（`inspect`、`change`、`verify`、`command`、`run`）串行或并行编排在单次调用中。
-- 所有步骤在本地运行时内依次或并发执行。
-- 主智能体在单个交互轮次中即可获取全部步骤的综合回执，极大降低往返延迟与会话堆积。
-
-### 3.4 原子修改验证与 Block 所有权（`change` + `verify`）
-ContextOS 通过事务性修改确保代码库健壮性：
-- **修改与验证强绑定**：源码编辑（`edits: [{ path, target, replacement }]`）与测试命令（`verify: ["npm test"]`）同轮执行；若测试未通过，支持即时回滚（`autoRevert: true`）。
-- **架构 Block 所有权**：工程文件按边界纳入 Block 与 Chain 管理。处于受控边界内的文件修改必须具备明确的 Block 所有权，未经授权的跨界修改将被直接拦截，杜绝架构漂移。
-
-![影响路径高亮](assets/path-impact.png)
-*图 6：架构边界与依赖链上的影响路径高亮展示。*
-
-### 3.5 跨会话连续性与持久化状态图（`plan` / `task` / `session`）
-开发进度沉淀于本地 `.contextos/` 目录，不受对话截断影响：
-- **状态黑板**：运行时持续记录任务意图、分解步骤（`plan`、`task`）、修改记录与验证回执，自动渲染并同步 `.contextos/blackboard.md`。
-- **零冷启动复原**：新会话通过 `ops({ capability: "session", action: "status" })` 秒级重建项目全景认知，无缝续接任务，免除冗余扫描。
-
-![知识列表视图](assets/knowledge-reader.png)
-*图 7：整理项目 README、架构规范与操作规则的知识列表视图。*
-
-### 3.6 双层子代理委派机制（`api-micro` 与 `cli-agent`）
-ContextOS 提供分级委派能力，分担主模型负荷：
-- **API Micro**：轻量级同步执行器，专门负责语义检索、日志提炼、有界命令执行与小批量验证，以极小开销直接返回处理就绪的精简总结。
-- **CLI Agent**：隔离的 CLI 子代理适配器，处理多步骤重构与需要独立工具循环的复杂实现任务。采用 `background: true` 异步调度，规避宿主工具超时（如 AGY 约 3 分钟限制）。
-- **会话复用与 233k 窗口规则**：系统最多保留 5 个已完成的会话以供复用（`sessionId` / `cliSessionId`）。在任务连续且背景一致时复用会话；一旦 CLI 上下文占用达到 233k token 临界值，或进入全新独立任务，立即轮转开启全新会话，防止模型注意衰减。
-
-![插件页：MCP 与技能管理](assets/mcp-integration.png)
-*图 8：插件管理界面展示本地 MCP 服务注册与技能安装状态。*
-
-![多平台设置同步](assets/settings-sync.png)
-*图 9：面向 Codex、Claude、Cursor、Antigravity 与 OpenCode 的多平台 MCP 及技能配置同步。*
-
----
-
-## 4. 实测数据与基准评估
-
-为真实评估 ContextOS 在实际工程开发中的效能，团队进行了严格的端到端对比评测。
-
-### 4.1 测试方法与实验设计
-- **实验设置**：将 ContextOS 仓库复制为四个完全隔离的工作副本。使用四个全新的 AGY 主会话（模型：`gemini-3.8-flash-high`，思考强度：`high`）独立实现同一个真实业务功能：`ops session handoff` 开发交接报告生成机制。
-- **准出条件**：所有对照组均必须通过独立的业务验收测试与全量仓库测试套件（`npm test`）。
-- **实验分组（Arms）**：
-  - **A 组（原生 Native）**：使用传统原生文件读取与终端命令工具开发。
-  - **B 组（仅使用 OS 原语）**：仅使用 ContextOS 核心原语（`pipeline`、`command`、`change`、`inspect`）。
-  - **C 组（OS + API Micro）**：使用 OS 原语并结合 API Micro 进行语义检索与验证批处理。
-  - **D 组（OS + API Micro + CLI Agent）**：使用 OS 原语并同时引入 API Micro 与 CLI 子代理委派。
-- **指标定义**：
-  - `raw`：未缓存输入 + 缓存读取 + 输出 token 总量。
-  - `peak`：单步交互的最大上下文占用（`input + cache`）。
-  - `cost`：按标准 API 费率核算的实际财务支出（未缓存输入 $2.00/M，缓存读取 $0.10/M，输出 $10.00/M）。
-  - `adjusted raw`：加权折算总 token（`main raw + micro raw / 7 + cli raw / 7`）。
-  - `adjusted cost`：加权折算总费用（`main cost + micro cost / 7 + cli cost / 7`）。
-
-### 4.2 实测数据对比
-
-| 实验组 (Arm) | main raw | micro raw | cli raw | adjusted raw | 对比 A 组 | peak | main cost | adjusted cost | 对比 A 组 | turns |
-| :--- | ---: | ---: | ---: | ---: | :---: | ---: | ---: | ---: | :---: | :---: |
-| **A native** | 12,626,564 | 0 | 0 | 12,626,564 | — | 221,221 | $3.0415 | $3.0415 | — | 102 |
-| **B OS only** | 9,965,559 | 0 | 0 | 9,965,559 | **-21.1%** | 171,915 | $2.7931 | $2.7931 | **-8.2%** | 101 |
-| **C OS+micro** | 10,671,004 | 40,605 | 0 | 10,676,805 | -15.4% | 183,521 | $4.0187 | $4.0281 | +32.4% | 102 |
-| **D OS+micro+CLI** | 18,594,536 | 0 | 4,522,517 | 19,240,610 | +52.4% | 235,531 | $3.9567 | $4.1465 | +36.3% | 141 |
-
-### 4.3 客观结论与局限性分析
-
-实测数据呈现出严谨、客观的工程事实：
-
-1. **OS 核心原语成效显著（B 组）**：
-   在仅使用 ContextOS 核心原语（`pipeline`、`command`、`change`）的 B 组中，主会话 raw token 稳定下降 **21.1%**（从 1,262 万降至 996 万），单步峰值上下文压缩 **22.3%**（从 221,221 降至 171,915），实际费用减少 **8.2%**（$2.7931 对比 $3.0415），交互轮次保持稳定（101 轮对 102 轮）。这证明代码切片与外置日志回执能够有效保护主对话窗口。
-2. **子代理委派开销与缓存失效（C/D 组）**：
-   在 C 组与 D 组中，子代理委派并未真正替代主对话的工作量，而是呈现叠加效应。主会话仍承担了繁重的任务协调、结果确认与后台轮询工作（D 组交互轮次增至 141 轮）。同时，跨智能体上下文切换导致主会话 Prompt 缓存频繁失效，反而显著增加了整体 token 消耗（D 组折算 raw 增加 52.4%）与财务成本（C 组增加 32.4%，D 组增加 36.3%）。
-3. **当前局限与未来演进**：
-   实测表明，底层执行外骨骼能够确切压缩上下文与开销，但自主子代理委派在当前仍伴随显著的协作损耗与轮询开销。这并非已经彻底解决的问题，而是 ContextOS 当前的局限与下一阶段的重点攻坚方向：我们将聚焦于零轮询事件响应机制、严格的工作量替代语义以及面向上下文缓存对齐的会话序列化设计。
-
----
-
-## 5. 下载与安装
-
-### 5.1 一句话智能体安装
-用户可通过向 AI 编码智能体发送一句话指令完成自动化安装引导：
-
-> **「请你读取 setup.md 指引为我安装」**
-
-智能体将自动检测宿主操作系统、CPU 架构与 Node.js 运行时环境，推荐最适安装包，引导配置 API Key 并完成 MCP 注册。
-
-### 5.2 官方发布产物
-预编译版本可从 [GitHub Releases](https://github.com/yubinbin32-ops/ContextOS/releases) 下载：
-
-- **macOS**（支持 `arm64` Apple Silicon 与 `x64` Intel）：
-  - **Standard 包**（`ContextOS-macos-<arch>.zip`）：轻量级版本，直接利用系统现有 Node.js（需 Node.js 22+）。
-  - **Full 包**（`ContextOS-macos-full-<arch>.zip`）：内置独立 Node.js 运行时，免去系统环境配置。
-- **Windows x64**（需 Node.js 22+）：
-  - **安装器版**（`ContextOS-Setup-x64.exe`）：标准安装程序，自动配置全局 PATH。
-  - **便携版**（`ContextOS-win-x64.zip`）：解压即用，适合受限或免安装环境。
-
-### 5.3 源码安装
-开发者若需基于源码构建或进行二次开发（需 **Node.js 22+**）：
-
-```bash
-git clone https://github.com/yubinbin32-ops/ContextOS.git
-cd ContextOS
-npm ci
-npm run plugin:build
+```text
+你 → 主代理：计划、任务边界、架构决策、最终审查
+          │
+          └─ ContextOS：证据、命令、修改、持久项目状态
+                ├─ API Micro：有界检索、总结、简单检查
+                ├─ CLI 执行器：隔离实现 → 报告 → 集成
+                └─ 桌面 App：架构、计划、检查点、配置
 ```
 
-### 5.4 宿主集成方式
-- **Codex 插件**：
-  ```bash
-  codex plugin marketplace add .
-  codex plugin add contextos@contextos-development
-  npm run plugin:install
-  npm run plugin:install:check
-  ```
-- **通用 MCP 宿主（Claude Desktop、Cursor、Antigravity、OpenCode）**：
-  在宿主的 MCP 配置文件中添加 stdio 服务：
-  ```json
-  {
-    "mcpServers": {
-      "contextos": {
-        "command": "node",
-        "args": ["/absolute/path/to/ContextOS/plugins/contextos/server/contextos-mcp.mjs"]
-      }
-    }
-  }
-  ```
+证据与日志保存在本地。Micro 与 CLI 在自己的上下文中读取任务材料，返回精简报告。源码修改通过 OS 进入项目，让文件所有权、验证结果与架构图保持关联。新会话可以恢复计划与回执，继续实际进度。
 
----
+### 功能、实现方式与目的
 
-## 6. 日常使用方式
+| 功能 | 如何实现 | 带来的效果 |
+| --- | --- | --- |
+| **证据 · `ask`** | 精确读取文件、行范围与 AST 符号；用 result ID 恢复证据并检查源码版本。 | 按需读取相关实现，复用有效证据，减少重复读入整文件。 |
+| **命令 · `command`** | 执行一次，保存 stdout、stderr 与退出码；按命令 ID 提取所需日志。 | 把构建噪声留在主上下文之外，直接找回失败证据。 |
+| **批处理 · `pipeline`** | 把已知步骤组合成串行或并行执行，返回各步骤结果并支持继续。 | 减少工具往返，把独立读取与验证放进一次调用。 |
+| **架构单元 · Block** | 将受管源码绑定到架构单元，记录边界、状态与验证证据。 | 明确实现归属，让代码变化与架构保持联系。 |
+| **架构路径 · Chain** | 把 Blocks 连接成项目路径，记录关系与进度。 | 看清功能依赖，沿一项能力追踪跨模块实现。 |
+| **修改 · `change` / `integrate`** | 通过 OS 应用有界修改，或集成 CLI 隔离工作区的差异，并保存验证回执。 | 让实现具备可审查的结果，同时更新项目架构状态。 |
+| **小助手 · `micro`** | 使用配置好的 API 模型，完成有界检索、摘要、诊断或小修改，返回精简报告。 | 将日常工具循环交给低成本助手，为主代理保留判断空间。 |
+| **执行器 · `agent`** | 通过已配置 CLI adapter 在隔离工作区执行任务，支持后台收集与结构化报告。 | 把复杂实现移出主对话，提交可验证、可集成的结果。 |
+| **连续性 · plan / task / session** | 在项目 OS 状态中保存目标、进度、规则、决策与回执。 | 跨会话继续开发，也能在 App 中检查真实进展。 |
 
-安装完成后，智能体日常开发将自动接入 ContextOS 作为底层执行脚手架。
+任务边界清晰时，Micro 与 CLI 才能发挥作用。一个确定的源码读取可以直接用 OS；复杂实现交给 CLI。委派也有开销，因此 OS 保留执行记录，让结果可以检查。
 
-### 6.1 常用提示词示例
-智能体原生支持以下调度指令：
-- `「把开发文档写入 plan 后开始执行」`
-- `「为我配置 CLI」`
-- `「切换到 deepseek API」`
+### 三种开发方式的实测对比
 
-### 6.2 智能体 MCP 调用示例
-智能体通过统一的 `contextos` 接口执行原子操作：
+已有对比以 [`0dd6431`](https://github.com/yubinbin32-ops/ContextOS/tree/0dd6431) 为基线，使用独立 worktree 与全新主代理会话完成同一真实功能：计划依赖的添加、移除、查询与持久化，拒绝未知目标、重复、自引用和循环依赖，补齐 MCP 路由与 domain、application、storage、MCP 测试。[历史测量记录](https://github.com/yubinbin32-ops/ContextOS/blob/4706c38/README.md#4-empirical-evaluation)。
 
-```javascript
-// 示例：单轮流水线批量完成精确检查、原子修改与自动化回归测试
-contextos({
-  action: "pipeline",
-  args: {
-    steps: [
-      { action: "ask", inspect: [{ path: "src/cart.ts", ranges: [[45, 60]] }] },
-      {
-        action: "change",
-        edits: [{
-          path: "src/cart.ts",
-          target: "const total = price * quantity;",
-          replacement: "const total = price * quantity - discount;"
-        }],
-        verify: ["npm test"],
-        autoRevert: true
-      }
-    ]
-  },
-  projectRoot: "/absolute/path/to/project"
-});
+| 开发方式 | 主线程峰值上下文 | 相较原生降低 | 主线程原始 token | 测试通过 |
+| --- | ---: | ---: | ---: | ---: |
+| **原生工具开发** | 234,174 | 基线 | 8,016,375 | 778 / 778 |
+| **OS + API Micro** | 145,694 | **37.8%** | 4,993,135 | 778 / 778 |
+| **OS + API Micro + CLI** | 84,681 | **63.8%** | 1,809,566 | 781 / 781 |
+
+**“减少约 60% 上下文”的口径：** 这项任务中，主代理单次请求的峰值输入从 234,174 降至 84,681 token。这不是所有仓库的固定保证，也不代表主代理与所有助手的总 token 同比例下降。
+
+<details>
+<summary>展开完整 token 用量、指定口径的等价美元成本与 OS 控制组</summary>
+
+原始 token 是累计输入加输出；峰值上下文是主代理单次请求的最大输入。**缓存输入已包含在输入中**，所以 `非缓存输入 = 输入 − 缓存输入`。推理 token 已包含在输出中，不重复计数或计费。
+
+按指定公式折算：`等价 token = 主线程 raw + (Micro raw + CLI raw) / 7`。
+
+| 实验组 / 开发方式 | 主线程 raw | Micro raw | CLI raw | 已观测合计 raw | 等价 token | 相较原生降低 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A · 原生 | 8,016,375 | 0 | 0 | 8,016,375 | 8,016,375 | 基线 |
+| B · 仅 OS，不使用助手 | 6,119,582 | 0 | 0 | 6,119,582 | 6,119,582 | 23.7% |
+| C · OS + Micro | 4,993,135 | 734,551 | 0 | 5,727,686 | 5,098,070.9 | 36.4% |
+| D · OS + Micro + CLI | 1,809,566 | 3,258,709† | 4,393,118 | 9,461,393† | 2,902,684.1† | 63.8%† |
+
+美元计算采用**用户指定的对比费率，单位为美元 / 百万 token**：非缓存输入 $2，缓存输入 $0.10，输出 $10。
+
+`基价美元 = (非缓存输入 × 2 + 缓存输入 × 0.1 + 输出 × 10) / 1,000,000`
+
+`等价美元 = 主线程基价美元 + (Micro 基价美元 + CLI 基价美元) / 7`
+
+| 实验组 | 角色 | 输入 | 缓存输入 | 非缓存输入 | 输出 | 基价美元 | 除数 | 等价美元 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A | 主线程 | 7,971,486 | 7,773,056 | 198,430 | 44,889 | $1.6230556 | 1 | $1.6230556 |
+| B | 主线程 | 6,073,014 | 5,945,216 | 127,798 | 46,568 | $1.3157976 | 1 | $1.3157976 |
+| C | 主线程 | 4,952,753 | 4,710,016 | 242,737 | 40,382 | $1.3602956 | 1 | $1.3602956 |
+| C | Micro | 720,163 | 636,800 | 83,363 | 14,388 | $0.3742860 | 7 | $0.053469428571 |
+| D | 主线程 | 1,788,852 | 1,746,560 | 42,292 | 20,714 | $0.4663800 | 1 | $0.4663800 |
+| D | Micro | 3,211,208† | 3,007,232† | 203,976† | 47,501† | $1.1836852† | 7 | $0.169097885714† |
+| D | CLI | 4,355,283 | 4,214,016 | 141,267 | 37,835 | $1.0822856 | 7 | $0.154612228571 |
+
+| 开发方式 | 等价美元合计 | 相较原生降低 |
+| --- | ---: | ---: |
+| 原生 | $1.623055600000 | 基线 |
+| 仅 OS | $1.315797600000 | 18.9% |
+| OS + Micro | $1.413765028571 | 12.9% |
+| OS + Micro + CLI | $0.790090114286† | 51.3%† |
+
+这些数字是**指定口径的等价消耗与成本**，不是实际供应商账单，也不是已核实的供应商费率。助手除以 7 是对比假设。四组主会话记录的模型别名均为 `deepseek-v4.1-flash`、推理强度 `max`、custom provider；Micro C/D 的会话 `lastModel` 也为该别名，D CLI 记录了相同别名与 custom provider。这些记录不能独立证明底层实际模型身份。
+
+主线程用量按供应商 response ID 去重，与终态累计量一致。C Micro 有 2 份 receipt，26/26 个已发起请求均有供应商 usage；D CLI 有 51 个唯一累计状态，单次 usage 之和与终态累计量一致。**† D Micro 有 5 份 receipt，发起 129 个请求，其中 128 个返回 usage；1 个续跑超时请求的用量未知。** D 的合计及 51.3% 等价成本降低仅对应已观测小计，缺失请求没有当作零。原始 Micro 推理字段不可得，保留为未知。
+
+完整流程的**已观测总 raw token 高于原生**，但主线程峰值上下文明显降低。仅 OS 的峰值为 184,507（降低 21.2%），这次等价美元成本也低于 OS + Micro。以上是一项功能的历史单次对比，结果随任务、模型、缓存与委派方式变化。
+
+查看[冻结证据与口径](docs/benchmarks/plan-dependencies/README.md)、[原始 usage 字段与覆盖情况](docs/benchmarks/plan-dependencies/historical-usage.json)、[角色成本 CSV](docs/benchmarks/plan-dependencies/usage-by-role.csv) 和[四组汇总 CSV](docs/benchmarks/plan-dependencies/comparison.csv)。运行以下命令复算并检查公开文件哈希：
+
+```sh
+python3 docs/benchmarks/plan-dependencies/recalculate.py --check
 ```
 
-### 6.3 本地验证与质量准出
-```bash
-npm test
-npm run plugin:verify
-```
+</details>
 
----
+## 在 App 中看见项目
 
-<div align="center">
+桌面 App 展示代理使用的同一份 OS 状态：Blocks、Chains、计划、检查点、规则与知识。白色画布、克制的色彩和精确连线，让大型项目的结构与进度可以直接阅读。
 
-[贡献指南](CONTRIBUTING.md) · [安全策略](SECURITY.md) · [发布说明](.github/RELEASE_NOTES.md) · [MIT 协议](LICENSE)
+![Block 与 Chain 实时架构画布](assets/canvas-overview.png)
 
-</div>
+**把系统看清楚。** 沿 Chain 追踪 Blocks，在侧栏查看当前能力，让实现进度与验证状态和架构图并排呈现。
+
+<details open>
+<summary>追踪功能路径，检查交付证据</summary>
+
+![从集成到界面和测试的功能路径](assets/path-impact.png)
+
+**沿功能看影响。** 高亮 Chain 串联插件集成、打包与验证工作。
+
+![包含回执引用的已通过检查点](assets/checkpoint-detail.png)
+
+**让完成状态有据可查。** 检查点展示验证状态与回执引用。
+
+</details>
+
+<details>
+<summary>阅读项目知识，同步开发工具</summary>
+
+![项目知识与规则导航](assets/knowledge-reader.png)
+
+**随时找回项目约定。** 从侧栏打开仓库文档与项目规则。
+
+![App 内的仓库 README 阅读器](assets/readme-reader.png)
+
+**在 App 中阅读文档。** 阅读器把仓库内容放在项目旁；效果统计以下列可复算证据为准。
+
+![桌面设置与 AI 编辑器同步](assets/settings-sync.png)
+
+**管理开发环境。** 设置集中管理偏好与宿主集成；可配置全局模型和推理强度，让各角色通过 `Use Global` 继承，并同步 Micro 与 CLI adapter 的可用模型和推理等级。
+
+*上方设置截图展示此前已接受的布局。*
+
+![AI 宿主中的 MCP 与 Skill 集成](assets/mcp-integration.png)
+
+**直接从编程助手操作 OS。** 宿主加载 MCP 运行时与匹配的 Skill，让代理访问项目状态。
+
+部分截图来自早期版本，保留了旧名称 `mdflow` 或旧版本标记，用于展示操作流程；安装与配置请以当前 setup 为准。
+
+</details>
+
+## 一句话安装
+
+把下面这句话发给你的 AI 编程助手：
+
+> 读取 (https://github.com/yubinbin32-ops/ContextOS/blob/main/setup.md) ，为我安装OS
+
+AI 会读取 [setup.md](setup.md)，安装 OS 与匹配的宿主插件、Skills，注册仓库，配置 API Micro 与你的 CLI，并用真实工具调用验证结果。依赖检查、adapter 编写、插件配置与诊断，都由 AI 引导完成。
+
+**无需自己去 Release 下载与手动配置。** setup 面向安装代理，包含诊断、adapter 编写、插件配置与验收步骤。
+
+### Micro 是必须配置项
+
+Micro 是处理日常简单任务的小助手，**OS 工作流必须配置它的 API 连接**。准备 API key、供应商 base URL 与 model。主代理订阅或 CLI 登录不能代替 Micro API 配置。
+
+推荐以下方式：
+
+- **[Command Code GOAT](https://commandcode.ai/docs/plans/goat)**：提供 Provider API 权限。在控制台创建 key，让 AI 按官方当前文档配置端点与模型 ID。
+- **[OpenCode Go](https://opencode.ai/v2/docs/console/go)**：提供订阅 API key 与可用编程模型，让 AI 核对当前模型列表与 API 配置。
+- **自己的兼容 API**：继续使用你信任的供应商，包括 [DeepSeek API](https://api-docs.deepseek.com/)。
+
+有界 Micro 任务推荐 **DeepSeek V4.1 Flash**；供应商支持时，将思考等级设为 **`medium`** 即可。[DeepSeek 官方当前模型 ID 为 `deepseek-flash`](https://api-docs.deepseek.com/updates/)，第三方网关可能使用不同名称。AI 安装时应验证模型可用性，并映射供应商支持的思考参数。
+
+Key 保存在安装器指定的本地凭据或配置路径中，避免写进仓库文档或受版本控制的源码。
+
+### CLI 的配置交给 AI 完成
+
+CLI 执行器需要 CLI 程序、adapter、匹配的 ContextOS 插件与 Skills，以及可验证的登录执行通路。告诉 AI 你想使用哪个 CLI，它应查阅官网，写好 adapter，注册到 OS，配置插件，并执行真实探针和隔离实现验收。
+
+登录、浏览器授权或系统权限可能需要你完成某一步。AI 应明确指出具体操作，继续其他安装工作，并在操作完成后重新验证。只检测到 CLI 程序或保存 adapter，还不能视为安装成功。
+
+需要 **Node.js 22 或更新版本**。插件或运行时更新后，按照 setup 重载宿主 MCP 进程；App、插件、Skills 与运行时应保持版本一致。
+
+## 日常使用，直接说需求
+
+| 想做什么 | 对 AI 说 |
+| --- | --- |
+| 开始计划 | “请把 plan 写入 OS，开始执行。” |
+| 接续开发 | “请读取 OS 当前计划与会话状态，继续下一个未完成任务。” |
+| 配置小助手 | “请为我配置 Micro，验证 API 连接，用它处理有界简单任务。” |
+| 配置执行器 | “请为我配置 CLI，写好 adapter，安装 ContextOS 插件，并测试隔离实现。” |
+| 定位问题 | “请让 Micro 定位问题，返回相关证据和一份精简诊断。” |
+| 完成功能 | “请把这个实现委派给隔离工作区中的 CLI，验证后通过 OS 集成。” |
+| 检查进展 | “请更新 Blocks、Chains 与检查点，让我在 App 中查看进度。” |
+| 切换工具 | “请切换到我配置的另一个 CLI adapter，验证后继续下一项任务。” |
+
+主代理保留验收标准与最终审查。Micro 与 CLI 接受有界任务，OS 保存它们之间的证据与进度。
+
+## 3.0.0 更新介绍
+
+基于 `4706c38` 准备的 3.0 版本，将 ContextOS 重构为覆盖 AI 开发全流程的上下文外骨骼：
+
+- **精确证据与可复用命令** 让源码读取、执行结果保持有界，并能按需恢复。
+- **Pipeline 与验证修改** 连接批量执行、作用域内修改与可审查结果。
+- **架构与项目连续性** 保存 plan、task、session、Block、Chain 与回执，跨会话恢复并投影到桌面 App。
+- **按任务分工执行** 将 API Micro 有界协助与 CLI 隔离实现纳入同一套 OS 开发生命周期。
+- **AI 智能安装** 将 API、宿主插件、CLI adapter、诊断与真实验收纳入 setup。
+
+查看 [3.0 发布说明](.github/RELEASE_NOTES.md)、[安装指南](setup.md) 与 [历史版本](https://github.com/yubinbin32-ops/ContextOS/releases)。
+
+如果 ContextOS 帮助你把注意力留给真正的开发，[欢迎点一颗 Star](https://github.com/yubinbin32-ops/ContextOS/stargazers)。也欢迎提交可复现任务和 [问题反馈](https://github.com/yubinbin32-ops/ContextOS/issues)，帮助下一版持续改进。

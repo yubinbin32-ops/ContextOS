@@ -51,13 +51,17 @@ fn summarize_adapter(value: &Value) -> Value {
         Value::Array(args) => args.first().and_then(Value::as_str).map(str::to_string),
         _ => None,
     }).map(|value| value.rsplit(|character| character == '/' || character == '\\').next().unwrap_or(&value).to_string());
+    let model = config.get("model").and_then(Value::as_str);
+    let alias_thinking = if command.as_deref() == Some("agy") {
+        ["low", "medium", "high"].into_iter().find(|level| model.map(|model| model.ends_with(&format!("-{level}"))).unwrap_or(false))
+    } else { None };
     json!({
         "configured": !config.is_empty(),
         "command": command,
         "installed": Value::Null,
         "authenticated": Value::Null,
-        "model": Value::Null,
-        "thinking": Value::Null,
+        "model": config.get("model"),
+        "thinking": config.get("thinking").cloned().or_else(|| alias_thinking.map(|level| json!(level))),
         "taskReady": { "analyze": Value::Null, "implement": Value::Null }
     })
 }
@@ -75,7 +79,10 @@ fn merged_object(base: Option<&Value>, override_value: Option<&Value>) -> Value 
     if override_value.is_null() { return Value::Null; }
     let Some(override_map) = override_value.as_object() else { return override_value.clone(); };
     let mut merged = base.and_then(Value::as_object).cloned().unwrap_or_default();
-    merged.extend(override_map.iter().map(|(key, value)| (key.clone(), value.clone())));
+    for (key, value) in override_map {
+        let next = merged_object(merged.get(key), Some(value));
+        merged.insert(key.clone(), next);
+    }
     Value::Object(merged)
 }
 
@@ -115,24 +122,26 @@ fn has_micro_role_config(profile: Option<&Value>) -> bool {
         || profile.get("agents").and_then(Value::as_object).map(|value| !value.is_empty()).unwrap_or(false)
 }
 
+fn global_profile_path() -> Result<PathBuf, String> {
+    let home = std::env::var("CONTEXTOS_HOME").ok().filter(|value| !value.trim().is_empty()).map(PathBuf::from)
+        .or_else(|| std::env::var("USERPROFILE").ok().or_else(|| std::env::var("HOME").ok()).map(|home| PathBuf::from(home).join(".contextos")))
+        .ok_or("Cannot locate global ContextOS configuration.")?;
+    Ok(home.join("profile.json"))
+}
+
 #[tauri::command]
 fn get_micro_roles(project_root: String) -> Result<Value, String> {
     let root = PathBuf::from(project_root).canonicalize().map_err(|e| e.to_string())?;
     let project_file = root.join(".contextos/profile.json");
-    let global_home = std::env::var("CONTEXTOS_HOME").ok().filter(|value| !value.trim().is_empty()).map(PathBuf::from)
-        .or_else(|| std::env::var("USERPROFILE").ok().or_else(|| std::env::var("HOME").ok()).map(|home| PathBuf::from(home).join(".contextos")));
-    let global_file = global_home.map(|home| home.join("profile.json"));
-    let global_profile = match global_file.as_deref() { Some(file) => read_optional_profile(file)?, None => None };
+    let global_profile = read_optional_profile(&global_profile_path()?)?;
     let project_profile = read_optional_profile(&project_file)?;
-    let global_has_roles = has_micro_role_config(global_profile.as_ref());
-    let project_has_roles = has_micro_role_config(project_profile.as_ref());
-    let configuration_source = match (global_has_roles, project_has_roles) {
-        (true, true) => "global + project",
-        (true, false) => "global",
-        (false, true) => "project",
-        (false, false) => "none",
-    };
-    let profile = effective_profile(global_profile.as_ref(), project_profile.as_ref());
+    // The editor always shows and writes global settings. Overrides are disclosed separately.
+    let configuration_source = if has_micro_role_config(global_profile.as_ref()) { "global" } else { "none" };
+    let profile = global_profile.clone().unwrap_or(json!({}));
+    let micro_override = project_profile.as_ref().and_then(|p| p.get("micro"))
+        .map(|value| value.as_object().map(|map| !map.is_empty()).unwrap_or(true)).unwrap_or(false);
+    let cli_override = project_profile.as_ref().and_then(|p| p.get("agents"))
+        .map(|value| value.as_object().map(|map| !map.is_empty()).unwrap_or(true)).unwrap_or(false);
 
     let api = profile.get("micro").and_then(Value::as_object).cloned().unwrap_or_default();
 
@@ -179,11 +188,14 @@ fn get_micro_roles(project_root: String) -> Result<Value, String> {
     let agents = profile.get("agents").and_then(Value::as_object);
     let adapters = agents.and_then(|value| value.get("adapters")).and_then(Value::as_object).cloned().unwrap_or_default();
     let default = agents.and_then(|value| value.get("default")).filter(|value| value.as_str().is_some()).cloned().unwrap_or(Value::Null);
-    let adapter_summaries: Map<String, Value> = adapters.iter().map(|(name, value)| (name.clone(), summarize_adapter(value))).collect();
+    let adapter_summaries: Map<String, Value> = adapters.iter().filter(|(_, value)| !value.is_null())
+        .map(|(name, value)| (name.clone(), summarize_adapter(value))).collect();
     Ok(json!({
         "micro": {
             "status": status,
             "configurationSource": configuration_source,
+            "hasProjectOverride": micro_override,
+            "baseURL": endpoint,
             "endpointConfigured": endpoint_configured,
             "credentialConfigured": key_configured,
             "provider": provider,
@@ -196,10 +208,296 @@ fn get_micro_roles(project_root: String) -> Result<Value, String> {
             "taskReady": { "analyze": Value::Null, "implement": Value::Null }
         },
         "agents": {
+            "hasProjectOverride": cli_override,
             "default": default,
             "adapters": adapter_summaries
         }
     }))
+}
+
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MicroSettingsDraft {
+    base_url: String,
+    model: String,
+    thinking: String,
+    replacement_key: String,
+}
+
+fn apply_micro_draft(profile: &mut Value, draft: &MicroSettingsDraft) -> Result<(), String> {
+    let endpoint = draft.base_url.trim();
+    let model = draft.model.trim();
+    let url = tauri::Url::parse(endpoint).map_err(|_| "Enter a valid HTTP(S) Base URL and model.".to_string())?;
+    if !["http", "https"].contains(&url.scheme()) || url.host_str().is_none()
+        || !url.username().is_empty() || url.password().is_some() || url.query().is_some() || url.fragment().is_some() || model.is_empty() {
+        return Err("Enter a valid HTTP(S) Base URL and model.".to_string());
+    }
+    let mut micro = profile.get("micro").and_then(Value::as_object).cloned().unwrap_or_default();
+    let existing_key = ["key", "apiKey", "keyEnv"].iter().any(|key| nonempty_config_string(micro.get(*key)).is_some());
+    let same_origin = nonempty_config_string(micro.get("baseUrl")).or_else(|| nonempty_config_string(micro.get("url")))
+        .and_then(|base| tauri::Url::parse(&base).ok()).map(|base| base.origin() == url.origin()).unwrap_or(false);
+    if draft.replacement_key.trim().is_empty() && existing_key && !same_origin {
+        return Err("After changing service address, enter that service API key before saving.".into());
+    }
+    micro.insert("baseUrl".into(), json!(endpoint));
+    micro.insert("url".into(), json!(endpoint));
+    if !model.is_empty() { micro.insert("model".into(), json!(model)); }
+    if draft.thinking.trim().is_empty() { micro.remove("thinking"); micro.remove("effort"); }
+    else { micro.insert("thinking".into(), json!(draft.thinking.trim())); }
+    if !draft.replacement_key.trim().is_empty() {
+        micro.insert("key".into(), json!(draft.replacement_key.trim()));
+        micro.insert("apiKey".into(), json!(draft.replacement_key.trim()));
+    }
+    profile.as_object_mut().ok_or("Invalid profile; settings were not changed.")?.insert("micro".into(), Value::Object(micro));
+    Ok(())
+}
+
+fn write_project_profile(path: &Path, profile: &Value) -> Result<(), String> {
+    use std::io::Write;
+    fs::create_dir_all(path.parent().ok_or("Invalid profile location")?).map_err(|e| e.to_string())?;
+    let mut temporary = tempfile::NamedTempFile::new_in(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        temporary.as_file().set_permissions(fs::Permissions::from_mode(0o600)).map_err(|e| e.to_string())?;
+    }
+    temporary.write_all(serde_json::to_string_pretty(profile).map_err(|e| e.to_string())?.as_bytes()).map_err(|e| e.to_string())?;
+    temporary.as_file().sync_all().map_err(|e| e.to_string())?;
+    temporary.persist(path).map_err(|e| e.error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn save_micro_settings(project_root: String, draft: MicroSettingsDraft) -> Result<(), String> {
+    get_micro_roles(project_root)?;
+    let path = global_profile_path()?;
+    let mut profile = read_optional_profile(&path)?.unwrap_or(json!({}));
+    apply_micro_draft(&mut profile, &draft)?;
+    write_project_profile(&path, &profile)
+}
+
+
+#[derive(Deserialize)]
+struct CLISettingsDraft {
+    model: String,
+    thinking: String,
+}
+
+fn cli_settings_patch(draft: &CLISettingsDraft, effective_adapter: &Value) -> Result<Value, String> {
+    let mut model = draft.model.trim().to_string();
+    let thinking = draft.thinking.trim();
+    if model.is_empty() { return Err("Enter a CLI model.".into()); }
+    let args: Vec<&str> = effective_adapter.get("args").and_then(Value::as_array)
+        .map(|args| args.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    let command = summarize_adapter(effective_adapter)["command"].as_str().unwrap_or("").to_string();
+    let maps_thinking = args.iter().any(|arg| arg.contains("{thinking}"));
+    let suffix = ["low", "medium", "high", "xhigh", "max"].into_iter().find(|suffix| model.ends_with(&format!("-{suffix}")));
+    if command.trim_end_matches(".exe") == "agy" && suffix.is_some() && args.iter().any(|arg| *arg == "--effort" || arg.starts_with("--effort=")) {
+        return Err("AGY effort aliases must not be combined with --effort.".into());
+    }
+    if thinking.is_empty() { return Ok(json!({"model": model, "thinking": ""})); }
+    if command.trim_end_matches(".exe") == "agy" && !maps_thinking && suffix.is_some() {
+        if !["low", "medium", "high"].contains(&thinking) || args.contains(&"--effort") {
+            return Err("AGY effort aliases support low, medium or high without --effort.".into());
+        }
+        let suffix = suffix.unwrap();
+        model.truncate(model.len() - suffix.len());
+        model.push_str(thinking);
+    } else if !maps_thinking {
+        return Err("Ask AI to add a supported {thinking} mapping to this adapter.".into());
+    }
+    Ok(json!({"model": model, "thinking": thinking}))
+}
+
+fn validate_agy_alias(patch: &Value, catalog: &Value) -> Result<(), String> {
+    let model = patch["model"].as_str().unwrap_or("");
+    if !catalog["models"].as_array().map(|models| models.iter().any(|item| item["id"].as_str() == Some(model))).unwrap_or(false) {
+        return Err("AGY did not list that effort variant. Choose a listed effort or enter a custom model directly.".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn save_cli_settings(project_root: String, adapter: String, draft: CLISettingsDraft) -> Result<(), String> {
+    let summary = get_micro_roles(project_root.clone())?;
+    if !summary["agents"]["adapters"].as_object().map(|adapters| adapters.contains_key(&adapter)).unwrap_or(false) {
+        return Err("Choose a configured CLI adapter.".into());
+    }
+    let path = global_profile_path()?;
+    let mut profile = read_optional_profile(&path)?.unwrap_or(json!({}));
+    let config = &profile["agents"]["adapters"][&adapter];
+    let patch = cli_settings_patch(&draft, config)?;
+    let command = summarize_adapter(config)["command"].as_str().unwrap_or("").to_string();
+    if command.trim_end_matches(".exe") == "agy" && patch["model"].as_str() != Some(draft.model.trim()) {
+        let catalog = run_model_catalog(json!({"kind":"cli","adapter":adapter}))?;
+        validate_agy_alias(&patch, &catalog)?;
+    }
+    let mut agents = profile.get("agents").and_then(Value::as_object).cloned().unwrap_or_default();
+    let mut adapters = agents.get("adapters").and_then(Value::as_object).cloned().unwrap_or_default();
+    let mut stored_adapter = adapters.get(&adapter).and_then(Value::as_object).cloned().unwrap_or_default();
+    stored_adapter.extend(patch.as_object().ok_or("Invalid CLI patch")?.clone());
+    adapters.insert(adapter.clone(), Value::Object(stored_adapter));
+    agents.insert("adapters".into(), Value::Object(adapters));
+    agents.insert("default".into(), json!(adapter));
+    profile.as_object_mut().ok_or("Invalid profile")?.insert("agents".into(), Value::Object(agents));
+    write_project_profile(&path, &profile)
+}
+
+#[tauri::command]
+fn select_cli_adapter(project_root: String, adapter: String) -> Result<(), String> {
+    let summary = get_micro_roles(project_root.clone())?;
+    if !summary["agents"]["adapters"].as_object().map(|adapters| adapters.contains_key(&adapter)).unwrap_or(false) {
+        return Err("Choose a configured CLI adapter.".into());
+    }
+    let path = global_profile_path()?;
+    let mut profile = read_optional_profile(&path)?.unwrap_or(json!({}));
+    let mut agents = profile.get("agents").and_then(Value::as_object).cloned().unwrap_or_default();
+    agents.insert("default".into(), json!(adapter));
+    profile.as_object_mut().ok_or("Invalid profile")?.insert("agents".into(), Value::Object(agents));
+    write_project_profile(&path, &profile)
+}
+
+fn clear_project_role(profile: &mut Value, role: &str) -> Result<(), String> {
+    let key = match role { "micro" => "micro", "cli" => "agents", _ => return Err("Choose Micro or CLI settings.".into()) };
+    profile.as_object_mut().ok_or("Invalid profile; settings were not changed.")?.remove(key);
+    Ok(())
+}
+
+#[tauri::command]
+fn use_global_role_settings(project_root: String, role: String) -> Result<(), String> {
+    let root = PathBuf::from(project_root).canonicalize().map_err(|_| "Cannot locate project.")?;
+    let file = root.join(".contextos/profile.json");
+    let Some(mut profile) = read_optional_profile(&file)? else { return Ok(()); };
+    clear_project_role(&mut profile, &role)?;
+    write_project_profile(&file, &profile)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MicroCatalogDraft { base_url: String, replacement_key: String }
+
+fn run_model_catalog(input: Value) -> Result<Value, String> {
+    use std::io::Write;
+    use std::process::Stdio;
+    let node = std::env::var("CONTEXTOS_NODE_BIN").unwrap_or_else(|_| "node".to_string());
+    let mut child = Command::new(node).args(["--input-type=module", "-e", include_str!("model_catalog.mjs")])
+        .env("CONTEXTOS_CATALOG_RUN", "1")
+        .current_dir(std::env::temp_dir())
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
+        .spawn().map_err(|_| "Cannot start Node 22+ for model discovery.")?;
+    let result = child.stdin.take().ok_or("Cannot open discovery input.")?
+        .write_all(serde_json::to_string(&input).map_err(|_| "Invalid model discovery request.")?.as_bytes());
+    if result.is_err() { let _ = child.kill(); return Err("Cannot send model discovery request.".into()); }
+    let output = child.wait_with_output().map_err(|_| "Model discovery process failed.")?;
+    if !output.status.success() { return Err("Model discovery timed out or failed.".into()); }
+    serde_json::from_slice(&output.stdout).map_err(|_| "Invalid model catalog response.".into())
+}
+
+#[tauri::command]
+async fn sync_micro_models(draft: MicroCatalogDraft) -> Result<Value, String> {
+    let input = json!({"kind":"micro","draft":{"baseURL":draft.base_url,"replacementKey":draft.replacement_key}});
+    tauri::async_runtime::spawn_blocking(move || run_model_catalog(input)).await.map_err(|_| "Model discovery failed.")?
+}
+
+#[tauri::command]
+async fn sync_cli_models(adapter: String) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || run_model_catalog(json!({"kind":"cli","adapter":adapter})))
+        .await.map_err(|_| "Model discovery failed.")?
+}
+
+#[cfg(test)]
+mod role_settings_tests {
+    use super::*;
+    #[test]
+    fn cli_effort_changes_an_actual_argument_or_agy_model_alias() {
+        let draft = CLISettingsDraft { model: "gemini-3.8-flash-high".into(), thinking: "medium".into() };
+        let patch = cli_settings_patch(&draft, &json!({"command": "agy", "args": ["--model", "{model}"]})).unwrap();
+        assert_eq!(patch["model"], "gemini-3.8-flash-medium");
+        assert_eq!(patch["thinking"], "medium");
+        let codex = cli_settings_patch(&CLISettingsDraft { model: "gpt-6.1-sol".into(), thinking: "high".into() }, &json!({"command": "node", "args": ["--thinking", "{thinking}"]})).unwrap();
+        assert_eq!(codex["thinking"], "high");
+        assert!(cli_settings_patch(&draft, &json!({"command": "unknown", "args": []})).is_err());
+        assert!(cli_settings_patch(&draft, &json!({"command": "agy", "args": ["--effort", "high"]})).is_err());
+        assert!(cli_settings_patch(&draft, &json!({"command": "agy", "args": ["--effort={thinking}"]})).is_err());
+        let blank = CLISettingsDraft { model:"gemini-high".into(),thinking:"".into() };
+        assert!(cli_settings_patch(&blank, &json!({"command":"agy.exe","args":["--effort=high"]})).is_err());
+    }
+    #[test]
+    fn partial_adapter_overrides_preserve_global_command_and_siblings() {
+        let global = json!({"agents": {"default": "agy", "adapters": {
+            "agy": {"command": "agy"},
+            "codex": {"command": "node", "model": "old", "output": {"usage": {"input": "input_tokens", "cache": "cached_tokens"}}}
+        }}});
+        let project = json!({"agents": {"default": "codex", "adapters": {
+            "codex": {"model": "gpt-6.1-sol", "thinking": "medium", "output": {"usage": {"input": "fresh_input"}}}
+        }}});
+        let profile = effective_profile(Some(&global), Some(&project));
+        assert_eq!(profile["agents"]["adapters"]["codex"]["command"], "node");
+        assert_eq!(profile["agents"]["adapters"]["agy"]["command"], "agy");
+        assert_eq!(profile["agents"]["adapters"]["codex"]["output"]["usage"]["cache"], "cached_tokens");
+        assert_eq!(profile["agents"]["adapters"]["codex"]["output"]["usage"]["input"], "fresh_input");
+        assert_eq!(summarize_adapter(&profile["agents"]["adapters"]["codex"])["model"], "gpt-6.1-sol");
+        let cleared = effective_profile(Some(&global), Some(&json!({"agents": {"adapters": {"agy": null}}})));
+        assert!(cleared["agents"]["adapters"]["agy"].is_null());
+        assert_eq!(cleared["agents"]["adapters"]["codex"]["command"], "node");
+    }
+    #[test]
+    fn unchanged_key_preserves_inheritance_and_other_configuration() {
+        let mut profile = json!({"micro": {"budget": 42}, "agents": {"default": "codex"}});
+        let draft = MicroSettingsDraft { base_url: "https://example.com/v1".into(), model: "model".into(), thinking: "medium".into(), replacement_key: "".into() };
+        apply_micro_draft(&mut profile, &draft).unwrap();
+        assert!(profile["micro"].get("key").is_none());
+        assert!(profile["micro"].get("apiKey").is_none());
+        assert_eq!(profile["micro"]["budget"], 42);
+        assert_eq!(profile["agents"]["default"], "codex");
+    }
+    #[test]
+    fn replacement_wins_over_both_credential_and_endpoint_aliases() {
+        let mut profile = json!({"micro": {"key": "old", "apiKey": "older", "baseUrl": "https://old.example"}});
+        let draft = MicroSettingsDraft { base_url: "https://new.example/v1".into(), model: "model".into(), thinking: "low".into(), replacement_key: "replacement".into() };
+        apply_micro_draft(&mut profile, &draft).unwrap();
+        assert_eq!(profile["micro"]["key"], "replacement");
+        assert_eq!(profile["micro"]["apiKey"], "replacement");
+        assert_eq!(profile["micro"]["url"], profile["micro"]["baseUrl"]);
+    }
+    #[test]
+    fn agy_alias_validation_rejects_variants_absent_from_real_catalog() {
+        let catalog = json!({"models":[{"id":"gemini-3.1-pro-low"},{"id":"gemini-3.1-pro-high"}]});
+        assert!(validate_agy_alias(&json!({"model":"gemini-3.1-pro-medium"}), &catalog).is_err());
+        assert!(validate_agy_alias(&json!({"model":"gemini-3.1-pro-low"}), &catalog).is_ok());
+        assert!(validate_agy_alias(&json!({"model":"gemini-low"}), &json!({"models":[],"status":"failed"})).is_err());
+    }
+    #[test]
+    fn global_role_action_preserves_other_roles_and_project_settings() {
+        let mut profile = json!({"micro":{"transport":"responses","key":"secret"},"agents":{"adapters":{"custom":{"command":"tool"}}},"project":{"name":"keep"}});
+        clear_project_role(&mut profile, "micro").unwrap();
+        assert!(profile.get("micro").is_none());
+        assert!(profile["agents"]["adapters"]["custom"].is_object());
+        clear_project_role(&mut profile, "cli").unwrap();
+        assert!(profile.get("agents").is_none());
+        assert_eq!(profile["project"]["name"], "keep");
+    }
+    #[test]
+    fn changed_origin_requires_replacement_key_but_same_origin_keeps_key() {
+        let mut profile = json!({"micro":{"url":"https://old.example/v1","key":"saved","budget":42}});
+        let original = profile.clone();
+        let mut draft = MicroSettingsDraft { base_url:"https://new.example/v1".into(),model:"custom".into(),thinking:"".into(),replacement_key:"".into() };
+        assert!(apply_micro_draft(&mut profile, &draft).is_err());
+        assert_eq!(profile, original);
+        draft.base_url = "https://old.example/another".into();
+        apply_micro_draft(&mut profile, &draft).unwrap();
+        assert_eq!(profile["micro"]["key"], "saved");
+        assert_eq!(profile["micro"]["budget"], 42);
+    }
+    #[test]
+    fn invalid_input_does_not_mutate_profile() {
+        let mut profile = json!({"micro": {"model": "original"}});
+        let original = profile.clone();
+        let draft = MicroSettingsDraft { base_url: "file:///secret".into(), model: "model".into(), thinking: "medium".into(), replacement_key: "".into() };
+        assert!(apply_micro_draft(&mut profile, &draft).is_err());
+        assert_eq!(profile, original);
+    }
 }
 
 #[tauri::command]
@@ -740,6 +1038,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_project_root,
             get_micro_roles,
+            save_micro_settings,
+            sync_micro_models,
+            sync_cli_models,
+            use_global_role_settings,
+            select_cli_adapter,
+            save_cli_settings,
             choose_project,
             load_snapshot,
             reveal_source,
