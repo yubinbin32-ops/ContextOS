@@ -9,7 +9,7 @@ import { runAdminCli } from './admin-cli.mjs';
 import { getService, requireProjectRoot } from './service-factory.mjs';
 import { runDoctor, runInit } from './system-tools.mjs';
 import packageMetadata from '../../../package.json' with { type: 'json' };
-import { requestContextOS, renderRequestResult, recordEvidenceDelivery } from '../../orchestrator/src/request-service.mjs';
+import { requestContextOS, renderRequestResult, recordEvidenceDelivery, publicAgentProgress } from '../../orchestrator/src/request-service.mjs';
 import { appendRoleUsage } from '../../orchestrator/src/role-usage-ledger.mjs';
 import { executeAgent } from '../../orchestrator/src/agent-service.mjs';
 import { runAgentWorkerCli } from '../../orchestrator/src/agent-worker.mjs';
@@ -140,7 +140,7 @@ export function createV3Server() {
     { name: 'contextos', version: VERSION },
     {
       instructions:
-        'Use micro to delegate a bounded task and receive one compact report; batch micro tasks in pipeline. Use ask for code evidence: describe the goal; API Micro explores privately and OS returns exact selected source. Known inspect ranges read directly. Use command to execute once, then command action get with its id to retrieve results. CLI agent tasks handle complex multi-file implementation and can use ask. Keep provider traces private, use actual execution receipts, and fetch named missing evidence. Native tools remain available.',
+        'First contact with an exact goal: ask({onboard:{goal:"ModuleIndex"}}) resolves existing graph ID/title/symbol/path locally and returns overview, actual owners and verified source in one request; ambiguity returns candidates/partial, no model fallback. Without a goal, ask({overview:true}) returns bounded project entries, commands, graph navigation and current session/plan/task in one local zero-model request. Use micro to delegate a bounded task and receive one compact report; batch micro tasks in pipeline. Use ask for code evidence: describe the goal; API Micro explores privately and OS returns exact selected source. Known inspect ranges read directly. ask({blockId}) or ask({chainId}) verifies named graph anchors and returns bounded source without API; stale anchors are gaps. With request, named graph entities seed semantic retrieval. Batch ownership via ops({capability:"block",action:"owners",args:{paths:[...]}}). Use command to execute once, then command action get with its id to retrieve results. CLI agent tasks handle complex multi-file implementation and can use ask. Keep provider traces private, use actual execution receipts, and fetch named missing evidence. Native tools remain available.',
     }
   );
 
@@ -181,7 +181,7 @@ export function createV3Server() {
   server.registerTool(
     'contextos',
     {
-      description: 'Code evidence, execution, and delegation. micro({prompt,execution,invocation}) runs a bounded API Micro task and returns one compact report; micro({action:"batch",tasks:[...]}) batches. ask(...) returns exact source evidence. command executes once; command({action:"get",id}) retrieves it. agent delegates complex implementation to a configured CLI adapter. change({edits,verify}) edits. Plan, task, block, chain, run_command, knowledge and session stay available via ops({capability,action,args}). Args stay inside args; projectRoot absolute.',
+      description: 'With a known goal, ask({onboard:{goal:"ModuleIndex"}}) returns local overview, trusted graph/owners and verified source; ambiguity is partial, no model fallback. Without a goal use ask({overview:true}). ask({request|inspect}) gets exact source evidence. micro delegates bounded API work; agent delegates implementation to a configured CLI. command runs once; command({action:"get",id}) retrieves. change applies edits/verify. ops({capability,action,args}) exposes state and advanced operations. Put parameters in args; projectRoot absolute.',
       inputSchema: z.object({
         action: z.string().describe('micro | ask | command | agent | change'),
         args: z.record(z.any()).optional().describe('Action parameters; advanced operations use capability/action/args.'),
@@ -205,7 +205,7 @@ export function createV3Server() {
         return { content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] };
       }
       if (['ask', 'command', 'agent'].includes(input.action)) {
-        for (const field of ['request', 'known', 'purpose', 'inspect', 'command', 'cwd', 'focus', 'background', 'id', 'resultId', 'maxChars', 'timeoutMs', 'task', 'workspace', 'context', 'adapter']) {
+        for (const field of ['overview', 'onboard', 'request', 'known', 'purpose', 'blockId', 'chainId', 'inspect', 'command', 'cwd', 'focus', 'background', 'id', 'resultId', 'maxChars', 'timeoutMs', 'task', 'workspace', 'context', 'adapter']) {
           if (input[field] !== undefined) args[field] = input[field];
         }
         const root = requireProjectRoot(input.projectRoot);
@@ -264,6 +264,12 @@ export function createV3Server() {
         if (!textOnlyResults()) {
           response.structuredContent = {
             status,
+            ...(data.overview ? { overview: data.overview, lifecycle: data.lifecycle } : {}),
+            ...(data.navigation ? { navigation: data.navigation } : {}),
+            ...(data.navigation?.mode === 'onboard' && data.owners ? { owners: data.owners } : {}),
+            ...(publicAgentProgress(data.progress) ? { progress: publicAgentProgress(data.progress) } : {}),
+            ...(typeof data.cliSessionId === 'string' ? { cliSessionId: data.cliSessionId.slice(0, 160) } : {}),
+            ...(data.jobStatus ? { jobStatus: data.jobStatus } : {}),
             ...(data.errorCode ? { errorCode: data.errorCode } : {}),
             ...(data.resultId ? { resultId: data.resultId } : {}),
             ...(sourceDelivery ? { sourceDelivery: sourceDelivery.recorded ? 'recorded' : 'unrecorded' } : {}),

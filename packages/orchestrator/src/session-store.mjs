@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 
 const MAX_TOUCHED = 200;
 const MAX_RECEIPTS = 50;
@@ -247,6 +248,41 @@ export function workspaceFingerprint(projectRoot) {
  * agent actually touched (git + edits + receipts), so the agent never has to
  * declare it. Only two states exist: open and closed.
  */
+// The blackboard is the resumption surface: an agent that reopens the project
+// must see the active plan, the rules that plan is bound to, and the task in
+// flight without spending a request. Read the runtime state read-only and fall
+// back to a bare blackboard when no active plan exists.
+const trackingCache = new Map();
+function readTrackingContext(dotDir, projectId) {
+  const dbPath = path.join(dotDir, 'state.sqlite');
+  if (!fs.existsSync(dbPath)) return null;
+  let db;
+  try {
+    db = new DatabaseSync(dbPath, { readOnly: true });
+    const byProject = db.prepare("SELECT id,title,status,rule_refs_json AS ruleRefs FROM plans WHERE project_id=? AND status='active' ORDER BY updated_at DESC,id LIMIT 1").get(projectId);
+    const plan = byProject || db.prepare("SELECT id,title,status,rule_refs_json AS ruleRefs FROM plans WHERE status='active' ORDER BY updated_at DESC,id LIMIT 1").get();
+    if (!plan) return null;
+    const task = db.prepare("SELECT id,title,status FROM tasks WHERE plan_id=? AND status IN ('active','checking','syncing','pending','draft','blocked') ORDER BY CASE WHEN status IN ('active','checking','syncing') THEN 0 ELSE 1 END,updated_at DESC LIMIT 1").get(plan.id);
+    let ruleRefs = [];
+    try { ruleRefs = JSON.parse(plan.ruleRefs || '[]'); } catch { ruleRefs = []; }
+    return {
+      plan: { id: plan.id, title: plan.title, status: plan.status },
+      rules: (Array.isArray(ruleRefs) ? ruleRefs : []).map((rule) => String(rule)).filter(Boolean).slice(0, 6),
+      task: task ? { id: task.id, title: task.title, status: task.status } : null,
+    };
+  } catch { return null; } finally { try { db?.close(); } catch {} }
+}
+function activeTrackingContext(dotDir, projectId) {
+  const key = dotDir + '::' + projectId;
+  const cached = trackingCache.get(key);
+  if (cached && Date.now() - cached.at < 5000) return cached.value;
+  let value = null;
+  try { value = readTrackingContext(dotDir, projectId); } catch { value = null; }
+  trackingCache.set(key, { at: Date.now(), value });
+  while (trackingCache.size > 16) trackingCache.delete(trackingCache.keys().next().value);
+  return value;
+}
+
 export class SessionStore {
   constructor({ projectRoot, projectId = 'contextos' }) {
     this.projectRoot = projectRoot;
@@ -278,6 +314,16 @@ export class SessionStore {
     if (session.notes.length) {
       const lastNote = session.notes[session.notes.length - 1];
       lines.push(`- Note: ${lastNote.text.slice(0, 100)}`);
+    }
+    const tracking = activeTrackingContext(this.dotDir, this.projectId);
+    if (tracking?.plan) {
+      lines.push(`- Active Plan: \`${tracking.plan.id}\` ${String(tracking.plan.title || '').slice(0, 120)} (${tracking.plan.status})`);
+      lines.push(tracking.rules.length
+        ? `- Plan Rules: ${tracking.rules.map((rule) => `\`${rule}\``).join(', ')}`
+        : '- Plan Rules: (none bound) - bind project rules before implementing or the work will drift from them.');
+    }
+    if (tracking?.task) {
+      lines.push(`- Active Task: \`${tracking.task.id}\` ${String(tracking.task.title || '').slice(0, 120)} (${tracking.task.status})`);
     }
     return lines.join('\n') + '\n';
   }

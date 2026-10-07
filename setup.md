@@ -134,7 +134,7 @@ contextos({
 
 ### 编写完整 adapter
 
-阅读已安装的 `contextos-ops/references/micro-setup.md`，AI 根据本机实际版本填写并测试以下完整契约：
+阅读已安装的 `contextos-ops/SKILL.md`（"Full setup and switching guide" 一节），AI 根据本机实际版本填写并测试以下完整契约：
 
 - `command`：可执行文件绝对路径；Windows 正确处理 exe/cmd，避免只在交互 shell 有效的 alias。
 - `args`：真实支持的模型、workspace、模式和输出参数；ContextOS 只展开 `{task}`、`{model}`、`{workspace}`、`{mode}`、`{thinking}` 等 adapter 占位符，`~` 不会由 spawn 自动展开。
@@ -177,7 +177,7 @@ contextos({
 }
 ```
 
-Codex bridge 的 `usage` 是本次调用统计，因此 `aggregation` 必须是 `invocation`；只有 CLI 真正返回会话累计量时才用 `session`，否则续用会话时会发生错误的累计量差分。`contextUsage.window` 必须按该 adapter/模型的官方上下文容量和实际输出核对；示例的 `233000` 是已观测配置的示例值，不是所有 CLI 或模型的通用常量。AGY 的完整 stream-json/终止事件/会话映射见 `micro-setup.md`；其他 CLI 不能照搬 AGY 的字段，必须验证实际输出。
+Codex bridge 的 `usage` 是本次调用统计，因此 `aggregation` 必须是 `invocation`；只有 CLI 真正返回会话累计量时才用 `session`，否则续用会话时会发生错误的累计量差分。`contextUsage.window` 必须按该 adapter/模型的官方上下文容量和实际输出核对；示例的 `233000` 是已观测配置的示例值，不是所有 CLI 或模型的通用常量。AGY 的完整 stream-json/终止事件/会话映射见已安装的 `contextos-ops/SKILL.md`；其他 CLI 不能照搬 AGY 的字段，必须验证实际输出。
 
 ### CLI 的独立验收
 

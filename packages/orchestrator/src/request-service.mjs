@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { loadProfile } from './profile.mjs';
+import { projectOverview, graphEvidence, goalOnboarding } from './project-overview.mjs';
 import { executeCommand } from './command-service.mjs';
 import { resolveMicroRoles } from './micro-role-config.mjs';
 import { createEvidenceTransport } from './api-transports.mjs';
@@ -975,6 +976,24 @@ export async function requestContextOS(action, args = {}, {
   if (args.maxChars !== undefined && (!Number.isSafeInteger(args.maxChars) || args.maxChars < 256)) {
     throw new RangeError('maxChars must be an integer of at least 256 Unicode characters.');
   }
+  if (action === 'ask' && own(args, 'onboard')) {
+    if (!args.onboard || typeof args.onboard !== 'object' || Array.isArray(args.onboard)
+      || Object.keys(args.onboard).some((key) => key !== 'goal')
+      || typeof args.onboard.goal !== 'string' || !args.onboard.goal.trim() || Array.from(args.onboard.goal).length > 160
+      || ['overview', 'resultId', 'inspect', 'known', 'request', 'recovery', 'blockId', 'chainId'].some((key) => own(args, key))) {
+      return artifactFailure(undefined, 'INVALID_GOAL_ONBOARDING', 'onboard requires only a nonempty goal of at most 160 characters and must be a separate ask mode.');
+    }
+    const result = await goalOnboarding(root, args.onboard.goal.trim(), signal);
+    const identity = workspaceIdentity(root);
+    return storeResult(root, publicResult({ ...result, workspace: identity.workspace, workspaceId: identity.workspaceId,
+      records: result.records.map(publicArtifactRecord) }));
+  }
+  if (action === 'ask' && args.overview === true) {
+    if (['resultId', 'inspect', 'known', 'request', 'recovery', 'blockId', 'chainId'].some((key) => own(args, key))) {
+      return { status: 'failed', errorCode: 'INVALID_PROJECT_OVERVIEW', missing: ['overview must be a separate ask request.'] };
+    }
+    return projectOverview(root);
+  }
   const roles = resolveMicroRoles(profile);
   const taskId = args.taskId || crypto.randomUUID();
   const auditEnabled = roles.micro?.audit === true;
@@ -1097,6 +1116,8 @@ export async function requestContextOS(action, args = {}, {
     return response;
   } : null;
   if (action === 'ask') {
+    const namedGraph = own(args, 'blockId') || own(args, 'chainId');
+    if (namedGraph && ['resultId', 'inspect', 'recovery', 'known'].some((key) => own(args, key))) return withAuditParent('ask', artifactFailure(undefined, 'INVALID_GRAPH_NAVIGATION', 'blockId/chainId must be a separate graph navigation or semantic request.'));
     if (args.resultId) {
       if (own(args, 'known')) return withAuditParent('ask', artifactFailure(args.resultId, 'INVALID_EVIDENCE_RECOVERY', 'resultId recovery cannot be combined with known; use known references on a new semantic request.'));
       if (own(args, 'inspect') && own(args, 'recovery')) return withAuditParent('ask', artifactFailure(args.resultId, 'INVALID_EVIDENCE_RECOVERY', 'Specify either inspect or recovery, not both.'));
@@ -1110,8 +1131,21 @@ export async function requestContextOS(action, args = {}, {
       try { knownContext = await resolveKnownContext(root, args.known, signal); }
       catch (error) { return withAuditParent('ask', artifactFailure(undefined, error.code || 'INVALID_KNOWN_CONTEXT', error.message)); }
     }
-    const result = await broker(args, { projectRoot: root, config: roles.micro || {}, transport: tracked, signal, knownContext,
+    const graphContext = !own(args, 'inspect') ? await graphEvidence(root, args, signal) : null;
+    const deterministicGraph = namedGraph && !own(args, 'request');
+    const brokerArgs = deterministicGraph ? { ...args, inspect: graphContext.records.map((record) => ({
+      path: record.path, ranges: record.ranges, expectedContentHash: record.contentHash,
+    })) } : args;
+    const result = await broker(brokerArgs, { projectRoot: root, config: roles.micro || {}, transport: tracked, signal, knownContext,
+      graphContext: deterministicGraph ? undefined : graphContext,
       ...(auditEnabled ? { onTrace: writeAudit } : {}) });
+    if (graphContext?.matched) {
+      result.navigation = { blockIds: graphContext.blockIds || [], paths: graphContext.paths, mode: deterministicGraph ? 'exact' : 'candidate' };
+      if (graphContext.missing.length) {
+        result.missing = [...(result.missing || []), ...graphContext.missing];
+        if (result.status !== 'failed') result.status = 'partial';
+      }
+    }
     const unresolvedKnown = missingKnownSelection(result, knownContext);
     const persistedResult = publicResult(withMeteringGaps({
       ...result,
@@ -1140,7 +1174,41 @@ export async function requestContextOS(action, args = {}, {
   throw new Error(`Unknown request action '${action}'.`);
 }
 
-export function renderRequestResult(result, { maxChars = 12000, onReportDelivered, onMessagesDelivered, onSourceDelivered, onSourceMetrics } = {}) {
+// Pipeline rendering is acknowledged only at the final host boundary, after clipping.
+export async function recordVisibleEvidenceDelivery(projectRoot, deliveries, deliveredText) {
+  const groups = new Map();
+  for (const { resultId, record } of deliveries) {
+    if (!resultId || !record || !String(deliveredText).includes(sourceEvidenceBlock(record))) continue;
+    const records = groups.get(resultId) || [];
+    records.push(record); groups.set(resultId, records);
+  }
+  for (const [resultId, records] of groups) await recordEvidenceDelivery(projectRoot, resultId, records);
+}
+
+function sourceEvidenceBlock(record) {
+  return '\n\n' + record.path + ' ' + JSON.stringify(record.ranges || []) + ' hash=' + (record.contentHash || 'unknown') + '\n' + (record.text || '');
+}
+
+export function publicAgentProgress(progress) {
+  if (!progress || typeof progress !== 'object') return null;
+  const stage = typeof progress.stage === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(progress.stage) ? progress.stage : 'unknown';
+  const number = (value) => Number.isFinite(value) && value >= 0 ? value : 0;
+  return { stage, lastActivityAt: typeof progress.lastActivityAt === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(progress.lastActivityAt)
+    && Number.isFinite(Date.parse(progress.lastActivityAt)) ? progress.lastActivityAt : null,
+    idleMs: number(progress.idleMs), noProgress: progress.noProgress === true, processAlive: progress.processAlive === true,
+    stdoutBytes: number(progress.stdoutBytes), stderrBytes: number(progress.stderrBytes), events: number(progress.events) };
+}
+
+function chainArchitectureText(card) {
+  return [
+    `\nchainArchitecture=${card.id}${card.title ? ` "${card.title}"` : ''} members=${card.memberCount}${card.membersTruncated ? ' (members truncated to 24)' : ''}`,
+    ...(card.responsibility ? [`\nchainResponsibility=${card.responsibility}`] : []),
+    ...card.members.map((member) => `\nmember=${member.id} "${member.title}" kind=${member.kind}${member.responsibility ? ` responsibility=${member.responsibility}` : ''}`),
+    ...card.internalFlow.map((link) => `\nflow=${link.from} -> ${link.to}${link.kind ? ` (${link.kind})` : ''}`),
+  ].join('');
+}
+
+export function renderRequestResult(result, { maxChars = result.navigation?.mode === 'onboard' ? 32000 : 12000, onReportDelivered, onMessagesDelivered, onSourceDelivered, onSourceMetrics } = {}) {
   if (!Number.isSafeInteger(maxChars) || maxChars < 256) throw new RangeError('maxChars must be an integer of at least 256 Unicode characters.');
   const limit = maxChars;
   const chars = (value) => Array.from(value).length;
@@ -1148,8 +1216,8 @@ export function renderRequestResult(result, { maxChars = 12000, onReportDelivere
   const records = result.records || result.evidence || [];
   const reused = Array.isArray(result.reused) ? result.reused : [];
   const recovery = result.resultId
-    ? `result=${result.resultId} with larger maxChars`
-    : result.id ? `command=${result.id} with larger maxChars` : 'the stored result with larger maxChars';
+    ? `result=${result.resultId} with larger maxChars in args`
+    : result.id ? `command=${result.id} with larger maxChars in args` : 'the stored result with larger maxChars in args';
   const formatGap = (gap) => {
     if (typeof gap === 'string') return gap;
     if (!gap || typeof gap !== 'object') return 'unclassified gap';
@@ -1162,7 +1230,7 @@ export function renderRequestResult(result, { maxChars = 12000, onReportDelivere
   const missingFromResult = (Array.isArray(result.missing) ? result.missing : []).map(formatGap);
   const sourceBlocks = records.map((record) => ({
     record,
-    block: `\n\n${record.path} ${JSON.stringify(record.ranges || [])} hash=${record.contentHash || 'unknown'}\n${record.text || ''}`,
+    block: sourceEvidenceBlock(record),
   }));
   const reusedBlocks = reused.map((reference) => ({
     reference,
@@ -1170,19 +1238,40 @@ export function renderRequestResult(result, { maxChars = 12000, onReportDelivere
   }));
   const potentialOmissions = [
     result.summary ? 'summary' : null,
+    result.navigation?.mode === 'onboard' ? 'onboarding navigation' : null,
+    result.navigation?.mode === 'onboard' && result.navigation.chainArchitecture ? 'chain architecture' : null,
+    result.navigation?.mode === 'onboard' && result.owners ? 'owners' : null,
     result.analysis ? 'analysis' : null,
     result.report ? 'report' : null,
     result.jobs ? 'jobs' : null,
+    result.progress ? 'progress' : null,
+    result.cliSessionId ? 'cliSessionId' : null,
+    result.jobStatus ? 'jobStatus' : null,
     result.messages?.length ? `messages[${result.messages.length}]` : null,
     result.log?.length ? `log-lines[${result.log.length}]` : null,
     result.reports?.length ? `reports[${result.reports.length}]` : null,
   ].filter(Boolean);
-  const statusGrowthReserve = status === 'failed' || status === 'partial'
-    ? 0 : chars(`status=partial resultStatus=${status}`) - chars(`status=${status}`);
+  // A partial reply can still grow: the gap reason is appended after the body is
+  // measured, and an already-partial request can receive one too.
+  const statusGrowthReserve = status === 'failed'
+    ? 0
+    : chars(`status=partial resultStatus=${status}`) - chars(`status=${status}`)
+      + chars(' partialReason=evidence-gap+display-budget+source-budget');
   const omissionNoticeReserve = potentialOmissions.length
     ? chars(`\nomitted details[${potentialOmissions.length}]; larger maxChars`)
     : 0;
-  const coreLimit = limit - statusGrowthReserve - omissionNoticeReserve;
+  // Onboard replies must answer "what is this feature" in one call: reserve the
+  // navigation block before admitting source bodies so a large chain's evidence
+  // cannot crowd the architecture card out of the reply.
+  const onboardNavigation = result.navigation?.mode === 'onboard'
+    ? [
+        '\nselection=' + JSON.stringify(result.navigation.selection) + '\nrelatedChains=' + JSON.stringify(result.navigation.relatedChains),
+        ...(result.navigation.chainArchitecture ? [chainArchitectureText(result.navigation.chainArchitecture)] : []),
+        ...(result.owners ? ['\nowners=' + JSON.stringify(result.owners)] : []),
+      ]
+    : [];
+  const navigationReserve = onboardNavigation.length ? chars(onboardNavigation.join('')) + 64 : 0;
+  const coreLimit = limit - statusGrowthReserve - omissionNoticeReserve - navigationReserve;
   const selectedSources = new Set();
   const selectedReused = new Set();
   const deliveredSources = [];
@@ -1266,8 +1355,25 @@ export function renderRequestResult(result, { maxChars = 12000, onReportDelivere
     output += block;
   }
   if (omittedLogLines) omittedDetails.push(`log-lines[${omittedLogLines}]`);
-  if (result.summary) appendOptional('summary', `\nsummary=${result.summary}`);
+  if (result.summary && result.overview) {
+    // Keep first-contact prose even under a small display budget, and preserve
+    // the ordinary report/message delivery callbacks below.
+    const deliveryReserve = Math.min(2000, chars(JSON.stringify(result.messages || [])) + (result.reports || []).reduce((sum, r) => sum + chars(r.content || ''), 0));
+    const available = Math.max(0, limit - chars(output) - statusGrowthReserve - omissionNoticeReserve - deliveryReserve - 80 - navigationReserve);
+    const summary = Array.from(String(result.summary)).slice(0, available).join('');
+    appendOptional('summary', '\nsummary=' + summary);
+    if (summary.length < result.summary.length) omittedDetails.push('overview display limited');
+  } else if (result.summary) appendOptional('summary', `\nsummary=${result.summary}`);
+  if (result.navigation?.mode === 'onboard') {
+    appendOptional('onboarding navigation', onboardNavigation[0]);
+    if (onboardNavigation[1]) appendOptional('chain architecture', onboardNavigation[1]);
+    if (onboardNavigation[2]) appendOptional('owners', onboardNavigation[2]);
+  }
   if (result.analysis) appendOptional('analysis', `\nMicro interpretation: ${result.analysis}`);
+  const progress = publicAgentProgress(result.progress);
+  if (progress) appendOptional('progress', '\nprogress=' + JSON.stringify(progress));
+  if (typeof result.cliSessionId === 'string') appendOptional('cliSessionId', '\ncliSessionId=' + JSON.stringify(result.cliSessionId.slice(0, 160)));
+  if (['running', 'completed', 'failed', 'cancelled', 'partial', 'missing'].includes(result.jobStatus)) appendOptional('jobStatus', '\njobStatus=' + result.jobStatus);
   if (result.report) appendOptional('report', `\nreport=${JSON.stringify(result.report)}`);
   if (result.jobs) appendOptional('jobs', `\njobs=${JSON.stringify(result.jobs)}`);
   if (result.messages?.length) {
@@ -1298,7 +1404,23 @@ export function renderRequestResult(result, { maxChars = 12000, onReportDelivere
     || reusedBlocks.some((item) => !selectedReused.has(item.reference))
     || missingFromResult.length > 0 || omittedDetails.length > 0;
   const renderedStatus = status === 'failed' ? 'failed' : hasDeliveryGaps ? 'partial' : status;
-  const renderedStatusLine = `status=${renderedStatus}${renderedStatus !== status ? ` resultStatus=${status}` : ''}${result.resultId ? ` result=${result.resultId}` : ''}${result.id ? ` id=${result.id}` : ''}`;
+  // `partial` alone cannot tell an ambiguous goal from a bounded delivery, and a host
+  // that reads it as "resolution failed" re-queries and burns the round this reply was
+  // meant to save. Name the cause so the host can choose between recovering the saved
+  // result and asking a narrower question.
+  const gapReasons = [];
+  // An unresolved goal and a bounded delivery are different outcomes: the first needs a
+  // narrower question, the second only needs a smaller read or the saved result.
+  const missingText = missingFromResult.join('\n');
+  if (/No exact trusted graph ID/.test(missingText)) gapReasons.push('ambiguous');
+  if (/capped at/.test(missingText)) gapReasons.push('evidence-capped');
+  if (missingFromResult.length > 0 && !gapReasons.length) gapReasons.push('evidence-gap');
+  if (omittedDetails.length > 0) gapReasons.push('display-budget');
+  if (sourceBlocks.some((item) => !selectedSources.has(item.record)) || reusedBlocks.some((item) => !selectedReused.has(item.reference))) gapReasons.push('source-budget');
+  // Keep the leading `status=... result=...` shape stable and append the cause, so host
+  // parsing and prefix assertions keep working; a request-level partial gets a reason too.
+  const gapReason = renderedStatus === 'partial' && gapReasons.length ? ` partialReason=${gapReasons.join('+')}` : '';
+  const renderedStatusLine = `status=${renderedStatus}${renderedStatus !== status ? ` resultStatus=${status}` : ''}${result.resultId ? ` result=${result.resultId}` : ''}${result.id ? ` id=${result.id}` : ''}${gapReason}`;
   output = output.replace(/^status=[^\n]*/, renderedStatusLine);
   if (chars(output) > limit) throw new Error('Evidence renderer exceeded its character budget.');
 

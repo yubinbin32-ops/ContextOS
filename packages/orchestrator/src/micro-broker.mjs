@@ -671,6 +671,7 @@ function baseResult(identity, fields) {
     notices: fields.notices || [],
     accounting: fields.accounting || null,
     ...(fields.selection ? { selection: fields.selection } : {}),
+    ...(fields.checkpoint ? { checkpoint: fields.checkpoint } : {}),
   };
 }
 
@@ -684,6 +685,7 @@ export async function requestEvidence(args = {}, {
   transport,
   signal,
   knownContext,
+  graphContext,
   onTrace,
 } = {}) {
   let identity;
@@ -881,6 +883,25 @@ export async function requestEvidence(args = {}, {
     workflowNotices.push(...knownContext.missing);
     knownUnavailable.push(...knownContext.missing);
   }
+  // Graph candidates are new verified source, not previously delivered known evidence.
+  const graphRecords = [];
+  if (graphContext?.records?.length) {
+    const verified = await deliverEvidence({ projectRoot: identity.workspace, availableRecords: graphContext.records,
+      references: graphContext.records.map(({ id, path, contentHash, ranges }) => ({ id, path, contentHash, ranges })), signal });
+    knownUnavailable.push(...verified.missing);
+    for (const record of verified.records) {
+      if (availableRecords.has(record.id)) continue;
+      if (evidenceRecords >= maxEvidenceRecords || evidenceBytes + record.bytes > maxEvidenceBytes) {
+        workflowNotices.push(gap('Graph evidence exceeds the current evidence budget; navigate a narrower Block.', record.path));
+        continue;
+      }
+      let relative;
+      try { relative = safeModelPath(record.path); } catch (error) { knownUnavailable.push(gap(error.message, record.path)); continue; }
+      availableRecords.set(record.id, record); evidenceHandleFor(record); graphRecords.push(record); knownPaths.add(relative);
+      const hashes = searchedHashes.get(relative) || new Set(); hashes.add(record.contentHash); searchedHashes.set(relative, hashes);
+      evidenceRecords += 1; evidenceBytes += record.bytes; evidenceChars += record.chars;
+    }
+  }
   let invocations = 0;
   let toolCalls = 0;
   let state;
@@ -961,10 +982,14 @@ export async function requestEvidence(args = {}, {
   const pathSearchBudgetAvailable = () => searchBytes < maxSearchBytes;
   let searchBudgetNoticeReported = false;
   let disabledSearchOnlyRounds = 0;
+  const investigations = new Set();
+  let repeatedInvestigationRounds = 0;
+  let noProgress = false;
   const inputBase = {
     request,
     purpose: typeof args.purpose === 'string' ? args.purpose : undefined,
     knownPaths: [...knownPaths],
+    ...(graphRecords.length ? { graph: { blockIds: graphContext.blockIds, records: graphRecords.map((record) => toolRecord(record, evidenceHandleFor)), guidance: 'Exact graph anchors verified against current source; use first and expand for named gaps. Membership alone is not proof of complete behavior.' } } : {}),
     known: (knownContext?.notes?.length || availableRecords.size || knownContext?.missing?.length) ? {
       notes: (knownContext?.notes || []).slice(0, 32),
       references: [...availableRecords.values()].map((record) => ({
@@ -1355,6 +1380,21 @@ export async function requestEvidence(args = {}, {
       break;
     }
 
+    const investigation = JSON.stringify({
+      calls: calls.map((call) => [call.name, parseToolArgs(call.args)]),
+      evidence: [...availableRecords.values()].map(({ path, contentHash, ranges }) => [path, contentHash, ranges]),
+      discovery: roundToolResults.map(({ result }) => result),
+    });
+    const stable = investigation.replace(/"ref":"[^"]+"/g, '"ref":"current"');
+    repeatedInvestigationRounds = investigations.has(stable) ? repeatedInvestigationRounds + 1 : 0;
+    investigations.add(stable);
+    if (repeatedInvestigationRounds >= 2) {
+      noProgress = true;
+      selectedReferences = [...availableRecords.values()].map(({ id, path, contentHash, ranges }) => ({ id, path, contentHash, ranges }));
+      selectionCompleted = true;
+      workflowMissing.push(gap('Repeated read-only investigation found no new source evidence; reuse the retained result refs and name the remaining evidence gap.'));
+      break;
+    }
     nextToolResults = roundToolResults;
     if (toolCalls >= maxToolCalls && step + 1 < maxTransportInvocations) {
       workflowMissing.push(gap(`Evidence tool-call budget reached (${maxToolCalls}).`));
@@ -1547,7 +1587,7 @@ export async function requestEvidence(args = {}, {
 
   return baseResult(identity, {
     status: finalStatus,
-    ...(requestWasFailed ? { errorCode: transportErrorCode || 'API_MICRO_TRANSPORT_FAILED' } : {}),
+    ...(requestWasFailed ? { errorCode: transportErrorCode || 'API_MICRO_TRANSPORT_FAILED' } : noProgress ? { errorCode: 'EVIDENCE_NO_PROGRESS', checkpoint: { kind: 'ask', references: selectedReferences || [], reason: 'unchanged_investigation' } } : {}),
     summary: finalSummary,
     records,
     ...(reused.length ? { reused } : {}),

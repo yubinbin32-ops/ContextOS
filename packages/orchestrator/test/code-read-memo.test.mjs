@@ -329,3 +329,30 @@ test('non-git workspaces get bounded fingerprints for read reuse', () => {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('state-changing ops actions are never served from the read memo', async () => {
+  const root = createProject();
+  const calls = [];
+  const service = {
+    projectId: 'code-read-memo',
+    async plan(args) {
+      calls.push(args);
+      return `checkpoint ${args.checkpointId || 'unknown'} -> ${args.passed === false ? 'failed' : 'passed'}`;
+    },
+  };
+  try {
+    const run = () => new Orchestrator({ projectRoot: root, service, projectId: 'code-read-memo' }).dispatch('ops', {
+      capability: 'plan',
+      action: 'check',
+      args: { planId: 'plan-1', checkpointId: 'cp-1', passed: true },
+    });
+    const first = await run();
+    const second = await run();
+    assert.doesNotMatch(second, /\(reused\)/, 'a checkpoint write must never be answered from the read memo');
+    assert.equal(calls.length, 2, 'both identical check calls must actually run');
+    assert.match(first, /passed/);
+    assert.match(second, /passed/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

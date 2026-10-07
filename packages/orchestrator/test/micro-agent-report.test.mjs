@@ -10,6 +10,25 @@ it('failed reports cannot be hidden and arbitrary status/objects do not leak int
   assert.equal(report.status, 'completed');
   assert.doesNotMatch(JSON.stringify(report), /PRIVATE_FLOW|arbitrary_private_flow/);
 });
+it('runtime cancellation preserves evidence while overriding claimed payload outcomes', () => {
+  const cliUsage = { percent: 5, usedTokens: 11650, windowTokens: 233000, source: 'provider' };
+  for (const status of ['failed', 'completed', 'success', 'blocked']) {
+    const report = normalizeAgentReport({ status, summary: 'Completed one module', changes: ['src/amount.mjs'], checks: ['unit test passed'], blockers: ['Unfinished work'], needsHost: true }, { status: 'cancelled', cliUsage });
+    assert.equal(report.status, 'cancelled');
+    assert.equal(report.needsHostReason, 'cancelled');
+    assert.equal(report.summary, 'Completed one module');
+    assert.deepEqual(report.changes, ['src/amount.mjs']);
+    assert.deepEqual(report.checks, ['unit test passed']);
+    assert.deepEqual(report.blockers, ['Unfinished work']);
+    assert.deepEqual(report.cliUsage, cliUsage);
+    const replay = normalizeAgentReport(report, { status: 'cancelled', cliUsage });
+    assert.equal(replay.status, 'cancelled');
+    assert.equal(replay.needsHostReason, 'cancelled');
+  }
+  const withoutUsage = normalizeAgentReport({ status: 'failed', summary: 'cancelled' }, { status: 'cancelled' });
+  assert.equal(withoutUsage.status, 'cancelled');
+  assert.equal(withoutUsage.cliUsage, undefined);
+});
 it('carries a bounded CLI usage summary only when real context telemetry is present', () => {
   const report = normalizeAgentReport({ summary: 'done', needsHost: false }, {
     cliUsage: { percent: 50.04, usedTokens: 116600, windowTokens: 233000, source: 'derived', privateTrace: 'DO_NOT_RETURN' },

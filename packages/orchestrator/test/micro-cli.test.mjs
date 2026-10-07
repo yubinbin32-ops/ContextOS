@@ -7,7 +7,7 @@ import path from 'node:path';
 import { loadMicroSkillGuidance, runMicroTask, runMicroTasksParallel } from '../src/micro-client.mjs';
 import { selectMicroProvider } from '../src/micro-provider.mjs';
 import { projectMicroResult, summarizeMicroUsage } from '../src/response-budget.mjs';
-import { cliDoctor, normalizeCliUsage } from '../src/micro-cli.mjs';
+import { cliDoctor, normalizeCliUsage, runCliMicro } from '../src/micro-cli.mjs';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctx-cli-test-'));
@@ -136,6 +136,7 @@ test('CLI adapters with an explicit OS call mapping receive core skill guidance'
   try {
     const config = f.config('normal');
     config.cli.osInvocation = 'call_mcp_tool({"server":"contextos","tool":"contextos","arguments":{"action":"<action>","args":{},"projectRoot":"<workspace>"}})';
+    config.cli.injectSkillGuidance = true;
     const result = await runMicroTask(config, { projectRoot: f.root, task: 'bounded task' });
     assert.equal(result.ok, true);
     const received = JSON.parse(fs.readFileSync(path.join(f.root, 'received.json')));
@@ -143,6 +144,17 @@ test('CLI adapters with an explicit OS call mapping receive core skill guidance'
     assert.ok(received.task.includes(canonicalGuidance), 'CLI receives the same canonical skill bundle as micro');
     assert.match(received.task, /ContextOS is this project's required underlying development scaffold/);
     assert.match(received.task, /ContextOS operations skill guidance/);
+  } finally { f.cleanup(); }
+});
+
+test('CLI adapters do not receive an injected skill bundle by default', async () => {
+  const f = fixture();
+  try {
+    const result = await runMicroTask(f.config('normal'), { projectRoot: f.root, task: 'bounded task' });
+    assert.equal(result.ok, true);
+    const received = JSON.parse(fs.readFileSync(path.join(f.root, 'received.json')));
+    assert.doesNotMatch(received.task, /ContextOS is this project's required underlying development scaffold/);
+    assert.match(received.task, /Role: ContextOS child worker/);
   } finally { f.cleanup(); }
 });
 
@@ -418,4 +430,40 @@ test('CLI evidence broker treats resultId-only task evidence as metadata and giv
     const jobDir = path.dirname(path.join(f.root, result.logPath));
     assert.equal(fs.existsSync(path.join(jobDir, 'api-role.json')), false);
   } finally { f.cleanup(); }
+});
+
+
+test('single JSON adapters publish bridge progress and preserve cancellation before parsing empty output', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctx-cli-progress-'));
+  const script = path.join(root, 'progress.mjs');
+  fs.writeFileSync(script, `process.stderr.write('[contextos-progress] '+JSON.stringify({stage:'model-running'})+String.fromCharCode(10));setInterval(()=>{},1000);`);
+  const controller = new AbortController();
+  const seen = [];
+  try {
+    const result = await runCliMicro({ model: 'fixture', cli: { command: process.execPath, args: [script, '{model}'], input: { format: 'text', template: '{task}' }, output: { format: 'json', contentPath: 'content' } } },
+      { projectRoot: root, task: 'ping', signal: controller.signal, onProgress: event => { seen.push(event); if (event.stage === 'model-running') controller.abort(); }, timeoutMs: 2000 });
+    assert.equal(result.errorCode, 'CLI_CANCELLED');
+    assert.equal(result.error, 'cancelled');
+    assert.ok(seen.some(event => event.stage === 'provider-launched'));
+    assert.ok(seen.some(event => event.stage === 'model-running' && event.stderrBytes > 0));
+    assert.equal(result.providerUsageComplete, false);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('cancellation retains an already emitted JSON terminal usage and session', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctx-cli-cancel-usage-'));
+  const script = path.join(root, 'terminal.mjs');
+  fs.writeFileSync(script, `console.log(JSON.stringify({content:'partial answer',thread_id:'retained-thread',usage:{input_tokens:9,cached_input_tokens:3,output_tokens:2}}));setInterval(()=>{},1000);`);
+  const controller = new AbortController();
+  try {
+    const result = await runCliMicro({ model: 'fixture', cli: { command: process.execPath, args: [script, '{model}'], input: { format: 'text', template: '{task}' },
+      output: { format: 'json', contentPath: 'content', sessionPath: 'thread_id', usage: {path:'usage',input:'input_tokens',cache:'cached_input_tokens',output:'output_tokens',inputIncludesCache:true} } } },
+      { projectRoot: root, task: 'ping', signal: controller.signal, onProgress: event => { if (event.stage === 'provider-output') controller.abort(); }, timeoutMs: 2000 });
+    assert.equal(result.errorCode, 'CLI_CANCELLED');
+    assert.equal(result.cliSessionId, 'retained-thread');
+    assert.deepEqual(result.usageRaw, {input_tokens:9,cached_input_tokens:3,output_tokens:2});
+    assert.equal(result.providerUsage.prompt_tokens, 9);
+    assert.equal(result.providerUsage.cached_input_tokens, 3);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

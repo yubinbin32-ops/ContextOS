@@ -1,10 +1,10 @@
 /**
  * Chain domain entity.
- * Represents an aggregated abstract feature (leaf or composite).
+ * Represents a group of Blocks. Historical linear/feature groups are preserved alongside leaf/composite.
  * Invariant: Chain semantic order is defined by typed Links, not by arbitrary list indexing.
  */
 
-export const CHAIN_KINDS = ['leaf', 'composite'];
+export const CHAIN_KINDS = ['leaf', 'composite', 'linear', 'feature'];
 
 export class Chain {
   constructor({

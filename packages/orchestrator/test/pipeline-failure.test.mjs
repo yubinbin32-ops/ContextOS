@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 
 import { pipelinePipeline, verifyPipeline } from '../src/pipelines.mjs';
+import { resolveAgentWorkerEntry } from '../src/agent-service.mjs';
 import { runCommand } from '../../process-host/src/runner.mjs';
 
 test('pipeline preserves a Micro report instead of applying the generic ops clip', async () => {
@@ -126,7 +128,7 @@ test('pipeline resume handle skips completed steps when the full flow is resent'
     assert.equal(calls.length, 2);
     assert.equal(calls[1], 'b.txt');
     assert.match(resumed, /pipeline=OK/);
-    assert.match(resumed, /actions=1\/1/);
+    assert.match(resumed, /actions=1 steps=1/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -165,7 +167,7 @@ test('pipeline accepts command shorthand and tool aliases as run_command steps',
   }
 });
 
-test('pipeline accepts ask as an inspect alias', async () => {
+test('pipeline preserves public ask fields and keeps explicit inspect compatible', async () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-ask-alias-'));
   const calls = [];
   const ctx = {
@@ -179,16 +181,21 @@ test('pipeline accepts ask as an inspect alias', async () => {
   };
 
   try {
+    const asks = [
+      { inspect: [{ path: 'src/a.mjs', ranges: [[1, 2]] }], resultId: 'result-prior', known: { refs: [{ resultId: 'result-prior' }] } },
+      { overview: false, blockId: 'block-math', chainId: 'chain-feature', request: 'Explain verified behavior', known: { notes: 'Prior evidence' } },
+    ];
     const output = await pipelinePipeline(ctx, {
-      steps: [
-        { tool: 'ask', args: { inspect: [{ path: 'src/a.mjs', ranges: [[1, 2]] }] } },
-        { tool: 'ask', args: { inspect: [{ path: 'src/b.mjs', ranges: [[1, 2]] }] } },
-      ],
+      steps: [...asks.map((args) => ({ tool: 'ask', args })), { tool: 'inspect', args: { path: 'src/b.mjs', ranges: [[1, 2]] } }],
     });
 
-    assert.equal(calls.length, 2);
-    assert.ok(calls.every((call) => call.tool === 'inspect'));
-    assert.deepEqual(calls.map((call) => call.input.inspect[0].path), ['src/a.mjs', 'src/b.mjs']);
+    assert.equal(calls.length, 3);
+    assert.deepEqual(calls.map((call) => call.tool), ['ask', 'ask', 'inspect']);
+    for (let index = 0; index < asks.length; index += 1) {
+      for (const [key, value] of Object.entries(asks[index])) assert.deepEqual(calls[index].input[key], value);
+    }
+    assert.equal(calls[2].input.path, 'src/b.mjs');
+    assert.deepEqual(calls[2].input.ranges, [[1, 2]]);
     assert.match(output, /pipeline=OK/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
@@ -238,7 +245,7 @@ test('verify includes full stdout when full evidence is requested', async () => 
   }
 });
 
-test('pipeline command actions return stdout beyond the run_command preview limit', async () => {
+test('pipeline command actions keep stdout bounded instead of dumping raw logs', async () => {
   const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-command-output-'));
   const script = path.join(projectRoot, 'emit-long-output.mjs');
   const tail = 'PIPELINE-COMMAND-STDOUT-TAIL';
@@ -266,11 +273,9 @@ test('pipeline command actions return stdout beyond the run_command preview limi
     assert.equal(calls.length, 1);
     assert.equal(calls[0].tool, 'ops');
     assert.equal(calls[0].input.capability, 'run_command');
-    assert.equal(calls[0].input.args.raw, true);
-    assert.equal(calls[0].input.args.maxChars, Infinity);
-    assert.ok(output.length > 5000, `expected full command output, got ${output.length}`);
-    assert.match(output, new RegExp(tail));
-    assert.doesNotMatch(output, /\[output truncated\]/);
+    assert.equal(calls[0].input.args.raw, undefined);
+    assert.equal(calls[0].input.args.maxChars, undefined);
+    assert.ok(output.length < 5000, `pipeline must not dump unbounded stdout, got ${output.length}`);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }
@@ -765,5 +770,106 @@ test('pipeline renderer uses clean step boundaries without transport metadata', 
     assert.doesNotMatch(output, /inspect=OK|parallel#|step#|os-response|os-budget|receipt=/);
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('serial pipeline resolves an earlier step job id reference into integrate', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-step-ref-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        if (tool === 'agent') return '# ContextOS agent\n- status=running jobId=agent-step-ref-1 background=true';
+        return '# ContextOS integrate\n- status=applied changed=1 jobId=' + input.jobId;
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      continueOnFailure: false,
+      steps: [
+        { tool: 'agent', args: { task: 'implement the bounded contract', background: true } },
+        { tool: 'integrate', args: { jobId: '<id from step 1>', waitMs: 1000 } },
+      ],
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].tool, 'integrate');
+    assert.equal(calls[1].input.jobId, 'agent-step-ref-1', 'step 2 must receive the job id produced by step 1');
+    assert.doesNotMatch(output, /<id from step 1>/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('pipeline fails the step instead of dispatching an unresolvable job id reference', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-step-ref-miss-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        return '# ContextOS integrate\n- status=noop changed=0';
+      },
+    },
+  };
+
+  try {
+    const output = await pipelinePipeline(ctx, {
+      continueOnFailure: false,
+      steps: [{ tool: 'integrate', args: { jobId: '$step1.jobId', waitMs: 1000 } }],
+    });
+
+    assert.equal(calls.length, 0, 'a placeholder must never reach dispatch');
+    assert.match(output, /\[FAIL\]/);
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('serial pipeline resolves the detached dispatch id shape into integrate', async () => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-pipeline-step-ref-detached-'));
+  const calls = [];
+  const ctx = {
+    projectRoot,
+    orchestrator: {
+      dispatch: async (tool, input) => {
+        calls.push({ tool, input });
+        if (tool === 'agent') return JSON.stringify({ id: 'agent-detached-1', status: 'running' });
+        return '# ContextOS integrate\n- status=applied changed=1';
+      },
+    },
+  };
+
+  try {
+    await pipelinePipeline(ctx, {
+      continueOnFailure: false,
+      steps: [
+        { tool: 'agent', args: { task: 'implement the bounded contract', background: true } },
+        { tool: 'integrate', args: { jobId: '<id from step 1>', waitMs: 1000 } },
+      ],
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].input.jobId, 'agent-detached-1', 'detached dispatch id must be carried into integrate');
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('detached worker re-execs the bundled entry when the sibling worker is absent', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-worker-entry-'));
+  try {
+    const moduleUrl = pathToFileURL(path.join(dir, 'contextos-mcp.mjs')).href;
+    assert.deepEqual(resolveAgentWorkerEntry(moduleUrl), { entry: path.join(dir, 'contextos-mcp.mjs'), bundled: true }, 'installed layout re-execs the bundle with the worker flag');
+    fs.writeFileSync(path.join(dir, 'agent-worker.mjs'), '// worker\n');
+    assert.deepEqual(resolveAgentWorkerEntry(moduleUrl), { entry: path.join(dir, 'agent-worker.mjs'), bundled: false }, 'source layout keeps the sibling worker argv contract');
+    assert.deepEqual(resolveAgentWorkerEntry(moduleUrl, '/tmp/explicit-worker.mjs'), { entry: '/tmp/explicit-worker.mjs', bundled: true }, 'an explicit worker entry stays bundled');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

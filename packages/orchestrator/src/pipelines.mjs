@@ -11,6 +11,7 @@ import { extractIdentifiers, extractPaths, tokenize } from './intent-router.mjs'
 import { redactSecrets } from '../../process-host/src/sanitizer.mjs';
 import { readMicroJob } from './micro-delivery.mjs';
 import { CodeTools } from '../../code-intel/src/code-tools.mjs';
+import { renderRequestResult } from './request-service.mjs';
 
 const OUTLINE_CLIP = 1200;
 // Files at or below this size are cheap to inline whole; above it, a
@@ -126,7 +127,9 @@ function recordActionVerification(ctx, { command, cwd, receipt = null, outcome, 
 }
 
 function actionFailed(action, result, receipts = [], ctx = {}, actionEvidence = null) {
-  if (!action || typeof result !== 'string') return false;
+  if (!action) return false;
+  if (result && typeof result === 'object') return result.ok === false || ['failed', 'local_failed', 'blocked', 'missing'].includes(result.status);
+  if (typeof result !== 'string') return false;
 
   const { tool, input = {} } = action;
   // A rendered body is user-controlled data for inspect/search/run_command.
@@ -137,6 +140,8 @@ function actionFailed(action, result, receipts = [], ctx = {}, actionEvidence = 
     .map((line) => line.match(/^\s*#{1,6}\s+(.+?)\s*#*\s*$/)?.[1]?.trim())
     .filter(Boolean);
 
+  if (tool === 'ask') return /^status=failed\b/.test(result.split(/\r?\n/)[0] || '');
+  if (tool === 'inspect' && /^# ContextOS inspect\n\nstatus=failed\b/.test(result)) return true;
   if (tool === 'verify' && PROCESS_VERIFY_MODES.has(input.mode)) return false;
   if (tool === 'verify' || tool === 'change') {
     const failuresIndex = headings.indexOf('Failures');
@@ -208,6 +213,15 @@ function actionFailed(action, result, receipts = [], ctx = {}, actionEvidence = 
       return false;
     }
   }
+  return false;
+}
+
+function actionPartial(action, result) {
+  if (result && typeof result === 'object') return result.status === 'partial';
+  if (typeof result !== 'string') return false;
+  if (action.tool === 'ask') return /^status=partial\b/.test(result);
+  if (action.tool === 'pipeline' || action.tool === 'work') return /^(?:pipeline|work)=PARTIAL\b/m.test(result);
+  if (action.tool === 'inspect') return /^# ContextOS inspect\n\nstatus=partial\b/.test(result);
   return false;
 }
 
@@ -1440,7 +1454,7 @@ function analyzeArchitectureCoverage(paths, blocks, chains) {
       path: filePath,
       owners: [ownerId],
       chains: chainIds,
-      issue: chainIds.length ? null : 'missing-chain',
+      issue: null,
     };
   });
 }
@@ -1455,7 +1469,7 @@ function formatArchitectureGap(gap) {
     return '- ' + file + ': multiple curated Block owners (' + gap.owners.join(', ') + '); keep exactly one.';
   }
   if (gap.issue === 'missing-chain') {
-    return '- ' + file + ': Block ' + gap.owners[0] + ' is not a member of a Chain; compose the membership.';
+    return '- ' + file + ': Block ' + gap.owners[0] + ' has no Chain navigation; optionally compose a feature Chain.';
   }
   return '- ' + file + ': architecture could not be verified.';
 }
@@ -1727,9 +1741,8 @@ async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRu
     }
   }
 
-  // A changed Block without Chain membership is an incomplete architecture
-  // decision: the host would need another call solely to repair the graph.
-  // Compose uncovered prepared Blocks into one deterministic additive Chain.
+  // Preserve the memberships explicitly declared by the host. Chain navigation
+  // is optional for standalone Blocks; never invent a fallback membership.
   const chainMembersAfterPreparation = new Map();
   for (const chain of initialChainsResult.data || []) {
     chainMembersAfterPreparation.set(
@@ -1753,28 +1766,8 @@ async function bindChangedArchitecture(caps, changedPaths, architecture, { dryRu
   const uncoveredPreparedBlocks = preparedBlocks
     .map((block) => block.id)
     .filter((id) => !coveredBlockIds.has(id));
-  if (uncoveredPreparedBlocks.length) {
-    const existingChangedSurface = preparedChains.find(
-      (entry) => entry.chainData.id === 'chain-changed-surface'
-    );
-    if (existingChangedSurface) {
-      existingChangedSurface.chainData.memberIds = [
-        ...new Set([
-          ...(existingChangedSurface.chainData.memberIds || []),
-          ...uncoveredPreparedBlocks,
-        ]),
-      ];
-    } else {
-      preparedChains.push({
-        chainData: {
-          id: 'chain-changed-surface',
-          title: 'Changed surface',
-          memberIds: uncoveredPreparedBlocks,
-        },
-        replaceMembers: false,
-      });
-    }
-  }
+  // Chain membership is an explicit semantic decision. Standalone Blocks are valid;
+  // first-contact navigation reports missing memberships without inventing a Chain.
 
   const canvasExisted = initialBlocks.some(isCuratedArchitectureBlock);
   if (errors.length) {
@@ -2802,11 +2795,12 @@ export async function inspectPipeline(ctx, input = {}) {
       : (symbol
           ? `No declaration or text match found for symbol \`${symbol}\`. Pass a path or a broader symbol query.`
           : 'No target path provided. Pass `path`, `paths`, `globs`, or `slot` (e.g. `slot: "S1"`).');
-    return `# ContextOS inspect\n\n${globHint}`;
+    return `# ContextOS inspect\n\nstatus=failed error=INSPECT_TARGET_REQUIRED\n\n${globHint}`;
   }
 
   const isOutline = input.mode === 'outline' || Boolean(input.outline);
   const outLines = [];
+  let inspectionGaps = 0;
   let fullExpansionPath = null;
   let directedExpansionPath = null;
   for (let p of inspectPaths) {
@@ -2856,6 +2850,7 @@ export async function inspectPipeline(ctx, input = {}) {
         outLines.push(`### \`${p}\` (AST Outline)\n${clip(outline.data, outlineCap, { withHint: true })}${locator}`);
         outlineHandled = true;
       } else if (isOutline) {
+        inspectionGaps += 1;
         outLines.push(`### \`${p}\`: ✗ ${outline.error}`);
         outlineHandled = true;
       }
@@ -2939,6 +2934,7 @@ export async function inspectPipeline(ctx, input = {}) {
             }
           }
       } else {
+        inspectionGaps += 1;
         outLines.push(`### \`${p}\`: ✗ ${read.error}`);
       }
     }
@@ -2979,7 +2975,8 @@ export async function inspectPipeline(ctx, input = {}) {
         '> Use `symbol` or a bounded `ranges` slice for inspection. Whole-file replacement belongs in `change`/`work` edit payloads, not in an inspect read; then continue with `change`/`work`.',
       ].join('\n')
     : '';
-  return `# ContextOS inspect\n\n${gateNotice ? `${gateNotice}\n\n` : ''}${text}`;
+  const sourceStatus = inspectionGaps ? 'status=partial error=INSPECT_SOURCE_UNAVAILABLE\n\n' : '';
+  return `# ContextOS inspect\n\n${sourceStatus}${gateNotice ? `${gateNotice}\n\n` : ''}${text}`;
 }
 
 export async function verifyPipeline(ctx, input = {}) {
@@ -3377,10 +3374,10 @@ export async function shipPipeline(ctx, input = {}) {
     return [
       `# ContextOS ship — BLOCKED (${hasArchitectureContract ? 'explicit architecture contract' : 'architecture governance gate'})`,
       '',
-      '- Every architecture-tracked source path needs exactly one curated Block owner and membership in at least one Chain.',
+      '- Every architecture-tracked source path needs exactly one curated Block owner. Chains provide optional feature navigation.',
       ...details,
       '',
-      '- Bind a semantic Block with block.bind_auto and add membership with chain.compose. chain.link records a directed relationship, not membership.',
+      '- Bind a semantic Block with block.bind_auto. Optionally compose feature navigation with chain.compose; chain.link records a directed relationship.',
       ...(extraLines.length ? ['', '## Attempted', ...extraLines] : []),
     ].join('\n');
   }
@@ -3401,7 +3398,7 @@ export async function shipPipeline(ctx, input = {}) {
             ...architectureGaps.slice(0, 5).map(formatArchitectureGap),
             `- (${architectureGaps.length - 5} additional architecture gap(s) omitted; pass diagnostics:true or full:true)`,
           ])
-    : ['- Every architecture-tracked source path has exactly one curated Block owner and Chain membership.'];
+    : ['- Every architecture-tracked source path has exactly one curated Block owner. Chains provide optional feature navigation.'];
 
   const architectureLines = architectureUnavailable
     ? ['- Gap counts unavailable: Block/Chain graph could not be read (' + (known.error || chainResult.error || 'invalid response') + ').']
@@ -3496,6 +3493,64 @@ export async function shipPipeline(ctx, input = {}) {
   return `# ContextOS ship\n\n${text}`;
 }
 
+// Pipeline steps may consume an id produced by an earlier step without the
+// host knowing it in advance: `{jobId:"<id from step 1>"}` or
+// `{jobId:"$step1.jobId"}` resolve against already completed step results.
+// An unresolvable reference fails the step instead of dispatching a literal
+// placeholder, which used to surface as `Unknown agent job '<id from step 1>'`.
+const PIPELINE_STEP_REFERENCE = /^(?:\$step(\d+)\.(\w+)|<(\w+) from step (\d+)>)$/i;
+
+function pipelineStepJobId(result) {
+  if (!result || typeof result !== 'object') return null;
+  const outputs = [];
+  if (result.output !== undefined) outputs.push(result.output);
+  for (const item of Array.isArray(result.items) ? result.items : []) {
+    if (item && item.output !== undefined) outputs.push(item.output);
+  }
+  // A detached worker answers `{id:"agent-…",status:"running"}`, an inline
+  // report may carry `jobId`; accept the tool-scoped id shape as well.
+  const jobTools = new Set(['agent', 'integrate', 'micro']);
+  const tool = String(result.tool || '').toLowerCase();
+  for (const output of outputs) {
+    if (output && typeof output === 'object') {
+      const candidates = [output.jobId, output.job?.id, output.data?.jobId, output.data?.job?.id, output.result?.jobId];
+      if (jobTools.has(tool)) candidates.push(output.id);
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+      }
+    }
+    const text = typeof output === 'string' ? output : JSON.stringify(output ?? '');
+    const match = text.match(/(?:jobId|"id")["'\s:=]{1,6}([A-Za-z][A-Za-z0-9._-]{3,})/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function resolvePipelineStepReferences(value, results) {
+  if (typeof value === 'string') {
+    const match = value.trim().match(PIPELINE_STEP_REFERENCE);
+    if (!match) return value;
+    const stepNumber = Number(match[1] || match[4]);
+    const field = String(match[2] || match[3] || '').toLowerCase();
+    if (!Number.isFinite(stepNumber) || stepNumber < 1 || !['id', 'job', 'jobid'].includes(field)) {
+      throw new Error(`PIPELINE_STEP_REFERENCE_UNSUPPORTED: '${value.trim()}' resolves only an earlier step job id.`);
+    }
+    const entry = (Array.isArray(results) ? results : []).find((result) => result && result.step === stepNumber);
+    const jobId = pipelineStepJobId(entry);
+    if (!jobId) {
+      throw new Error(`PIPELINE_STEP_REFERENCE_UNRESOLVED: step ${stepNumber} produced no job id yet; reference only earlier completed steps.`);
+    }
+    return jobId;
+  }
+  if (Array.isArray(value)) return value.map((item) => resolvePipelineStepReferences(item, results));
+  if (value && typeof value === 'object') {
+    const resolved = {};
+    for (const [key, item] of Object.entries(value)) resolved[key] = resolvePipelineStepReferences(item, results);
+    return resolved;
+  }
+  return value;
+}
+
 function normalizeAction(action, projectRoot) {
   if (!action || typeof action !== 'object') {
     throw new Error(`Invalid action in pipeline: expected object, got ${typeof action}`);
@@ -3531,7 +3586,11 @@ function normalizeAction(action, projectRoot) {
 
   // Shorthand keys:
   if (!tool) {
-    if ('inspect' in action) {
+    if ('ask' in action) {
+      tool = 'ask';
+      args = typeof action.ask === 'string' ? { request: action.ask } : { ...action.ask };
+      if (action.maxChars !== undefined && args.maxChars === undefined) args.maxChars = action.maxChars;
+    } else if ('inspect' in action) {
       tool = 'inspect';
       args = typeof action.inspect === 'string'
         ? { path: action.inspect }
@@ -3611,10 +3670,6 @@ function normalizeAction(action, projectRoot) {
     }
   }
 
-  if (tool === 'ask') {
-    tool = 'inspect';
-  }
-
   if (tool === 'command' || tool === 'run' || tool === 'run_command') {
     const commandArgs = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
     tool = 'ops';
@@ -3657,8 +3712,10 @@ function applyPipelineRunCommandDefaults(normalized) {
     ? input.args
     : null;
   const target = nested || input;
-  if (input.raw === undefined && target.raw === undefined) target.raw = true;
-  if (input.maxChars === undefined && target.maxChars === undefined) target.maxChars = Infinity;
+  // Pipeline steps used to force raw, unbounded output, which dumped whole logs
+  // into the conversation and defeated the purpose of running a command through a
+  // durable receipt. Keep the normal bounded preview: the full log stays reachable
+  // through the command id or the receipt log handle.
   return normalized;
 }
 
@@ -4038,6 +4095,9 @@ function inspectCoveredByDecision(normalized, coveredPaths) {
 
 export async function pipelinePipeline(ctx, input = {}) {
   let steps = input.steps || input.flow || input.actions;
+  if (input.mode === 'parallel' && Array.isArray(steps) && steps.length) {
+    steps = [{ parallel: steps }];
+  }
   if (!steps) {
     if (input.parallel) steps = [{ parallel: input.parallel }];
     else if (input.chain) steps = [{ chain: input.chain }];
@@ -4095,9 +4155,13 @@ export async function pipelinePipeline(ctx, input = {}) {
   const receiptMode = isReceiptMode(mode);
   const exploreActionCount = countPipelineTool(steps, 'explore', ctx.projectRoot);
   const decisionPackage = !receiptMode && (exploreActionCount > 0 || input.decisionPackage === true) && input.decisionPackage !== false;
+  const onboardingPipeline = collectPipelineActionSpecs(steps).some((step) => {
+    try { const action = normalizeAction(step, ctx.projectRoot); return action.tool === 'ask' && Boolean(action.input.onboard); }
+    catch { return false; }
+  });
   const requestedResponseBudget = Number.isFinite(Number(input.maxChars)) && Number(input.maxChars) > 0
     ? Math.floor(Number(input.maxChars))
-    : Infinity;
+    : onboardingPipeline ? 32000 : Infinity;
   const results = [];
   let halted = false;
   let haltReason = null;
@@ -4157,7 +4221,7 @@ export async function pipelinePipeline(ctx, input = {}) {
     ...ctx,
     orchestrator: {
       ...ctx.orchestrator,
-      dispatch: (tool, actionInput, evidence) => dispatchWithoutClamp(tool, boundedWait(tool, actionInput), evidence),
+      dispatch: (tool, actionInput, evidence) => dispatchWithoutClamp(tool, resolvePipelineStepReferences(boundedWait(tool, actionInput), results), evidence),
     },
   };
 
@@ -4191,6 +4255,7 @@ export async function pipelinePipeline(ctx, input = {}) {
             index: idx + 1,
             tool: pipelineActionName(normalized),
             ok: !isFail,
+            partial: actionPartial(normalized, res),
             output: res,
             requestedMaxChars: explicitActionMaxChars(action),
           };
@@ -4245,6 +4310,7 @@ export async function pipelinePipeline(ctx, input = {}) {
             index: j + 1,
             tool: pipelineActionName(normalized),
             ok: !isFail,
+            partial: actionPartial(normalized, res),
             output: res,
             requestedMaxChars: explicitActionMaxChars(action),
           });
@@ -4304,6 +4370,7 @@ export async function pipelinePipeline(ctx, input = {}) {
         kind: 'single',
         tool: pipelineActionName(normalized),
         ok: !isFail,
+        partial: actionPartial(normalized, res),
         output: res,
         requestedMaxChars: explicitActionMaxChars(step),
       });
@@ -4387,6 +4454,7 @@ export async function pipelinePipeline(ctx, input = {}) {
           index: subResults.length + 1,
           tool: pipelineActionName(normalized),
           ok: !isFail,
+          partial: actionPartial(normalized, res),
           output: res,
           requestedMaxChars: explicitActionMaxChars(action),
         });
@@ -4425,14 +4493,15 @@ export async function pipelinePipeline(ctx, input = {}) {
   const totalSteps = (steps.length - resumeStepFrom) + branchResults.reduce((sum, result) => sum + result.items.length, 0);
   const recovered = branchResults.some((branch) => branch.ok);
   const continuationStop = Boolean(halted && haltReason?.startsWith('budget exceeded: maxDurationMs='));
-  const pipelineStatus = continuationStop
+  const hasPartialActions = () => [...results, ...branchResults].flatMap((result) => result.items || [result]).some((item) => item.partial);
+  let pipelineStatus = continuationStop
     ? 'PARTIAL'
     : halted
       ? 'HALTED'
       : (failureCount
           ? (recovered ? 'RECOVERED' : (continueOnFailure ? 'PARTIAL' : 'FAIL'))
-          : 'OK');
-  const headerLines = [`pipeline=${pipelineStatus} actions=${totalActions}/${totalSteps}${receiptMode ? ' mode=receipt' : ''}`];
+          : (hasPartialActions() ? 'PARTIAL' : 'OK'));
+  const headerLines = [`pipeline=${pipelineStatus} actions=${totalActions} steps=${totalSteps}${receiptMode ? ' mode=receipt' : ''}`];
   if (halted && haltReason) headerLines.push(`stop=${haltReason}`);
   if (continuationStop) {
     const handle = resume || { kind: 'pipeline', fromStep: 1, totalSteps: steps.length };
@@ -4455,8 +4524,14 @@ export async function pipelinePipeline(ctx, input = {}) {
       : null;
   }
 
-  function pipelineOutputText(output) {
+  function pipelineOutputText(output, maxChars) {
     if (output == null) return '';
+    if (output && typeof output === 'object' && (output.resultId || output.overview)) {
+      return renderRequestResult(output, {
+        maxChars: maxChars || (output.navigation?.mode === 'onboard' ? 32000 : 12000),
+        onSourceDelivered: (record) => ctx.sourceDeliveries?.push({ resultId: output.resultId, record }),
+      });
+    }
     const receipt = commandReceiptOutput(output);
     if (receipt) {
       const status = receipt.exitCode === 0 ? '' : `exit=${receipt.exitCode}\n`;
@@ -4519,12 +4594,14 @@ export async function pipelinePipeline(ctx, input = {}) {
 
   function renderBody(item) {
     const rawOutput = item.output !== undefined ? item.output : item.error;
-    return receiptMode ? formatReceiptOutput(rawOutput) : pipelineOutputText(rawOutput);
+    const body = receiptMode ? formatReceiptOutput(rawOutput) : pipelineOutputText(rawOutput, item.requestedMaxChars);
+    if (item.tool === 'ask' && /^status=partial\b/.test(body)) item.partial = true;
+    return body;
   }
 
   function renderAction(item, label) {
-    const status = item.ok ? '' : ' [FAIL]';
     const body = renderBody(item);
+    const status = !item.ok ? ' [FAIL]' : item.partial ? ' [PARTIAL]' : '';
     return `### ${label}: ${item.tool}${status}${body ? `\n${body}` : ''}`;
   }
 
@@ -4535,12 +4612,14 @@ export async function pipelinePipeline(ctx, input = {}) {
   const sections = [];
   for (const result of results) {
     if (result.kind === 'parallel') {
-      sections.push(`## Step ${result.step}: parallel${result.ok ? '' : ' [FAIL]'}\n\n${renderActions(result.items, `Action ${result.step}`)}`);
+      const body = renderActions(result.items, `Action ${result.step}`);
+      sections.push(`## Step ${result.step}: parallel${!result.ok ? ' [FAIL]' : result.items.some((item) => item.partial) ? ' [PARTIAL]' : ''}\n\n${body}`);
     } else if (result.kind === 'chain') {
-      sections.push(`## Step ${result.step}: chain${result.ok ? '' : ' [FAIL]'}\n\n${renderActions(result.items, `Action ${result.step}`)}`);
+      const body = renderActions(result.items, `Action ${result.step}`);
+      sections.push(`## Step ${result.step}: chain${!result.ok ? ' [FAIL]' : result.items.some((item) => item.partial) ? ' [PARTIAL]' : ''}\n\n${body}`);
     } else {
       const body = renderBody(result);
-      sections.push(`## Step ${result.step}: ${result.tool}${result.ok ? '' : ' [FAIL]'}${body ? `\n\n${body}` : ''}`);
+      sections.push(`## Step ${result.step}: ${result.tool}${!result.ok ? ' [FAIL]' : result.partial ? ' [PARTIAL]' : ''}${body ? `\n\n${body}` : ''}`);
     }
   }
   for (const result of branchResults) {
@@ -4577,8 +4656,16 @@ export async function pipelinePipeline(ctx, input = {}) {
     return /\[L\d+-L\d+\]/.test(receipt)
       && !/✗|\[body not inlined|\[response truncated|Symbol .* not found/.test(receipt);
   });
+  if (pipelineStatus === 'OK' && hasPartialActions()) {
+    pipelineStatus = 'PARTIAL';
+    headerLines[0] = headerLines[0].replace('pipeline=OK', 'pipeline=PARTIAL');
+  }
   const raw = [`# ContextOS pipeline`, ...headerLines, ...sections].join('\n\n');
   const exceedsBudget = Number.isFinite(requestedResponseBudget) && raw.length > requestedResponseBudget;
+  if (exceedsBudget && pipelineStatus === 'OK') {
+    pipelineStatus = 'PARTIAL';
+    headerLines[0] = headerLines[0].replace('pipeline=OK', 'pipeline=PARTIAL');
+  }
   const decisionReady = decisionPackage
     && failureCount === 0
     && sourceEvidenceComplete
@@ -4621,6 +4708,177 @@ function isIntegratableFile(value) {
   try { return fs.statSync(value).isFile(); } catch { return false; }
 }
 
+// In-place implementation edits the project working tree directly, so the diff
+// is reconstructed from the pre-dispatch snapshot instead of an isolated copy.
+// The same snapshot makes the change revertible: revert restores the recorded
+// bytes and removes files the worker created under its allowed paths.
+function walkInPlaceTargets(root, relative, visit) {
+  const full = path.join(root, relative);
+  let stat = null;
+  try { stat = fs.statSync(full); } catch { return; }
+  if (stat.isFile()) { visit(relative); return; }
+  if (!stat.isDirectory()) return;
+  let entries = [];
+  try { entries = fs.readdirSync(full, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (['.git', '.contextos', 'node_modules'].includes(entry.name)) continue;
+    walkInPlaceTargets(root, `${relative}/${entry.name}`, visit);
+  }
+}
+
+function readInPlaceFile(root, relative) {
+  try {
+    const full = path.join(root, relative);
+    if (!fs.statSync(full).isFile()) return { exists: false };
+    return { exists: true, content: fs.readFileSync(full, 'utf8') };
+  } catch { return { exists: false }; }
+}
+
+async function refreshInPlaceArchitecture(ctx, changedPaths) {
+  if (!changedPaths.length || !ctx.caps || typeof ctx.caps.block !== 'function') return null;
+  try {
+    const result = await bindChangedArchitecture(ctx.caps, changedPaths, undefined, { projectRoot: ctx.projectRoot });
+    return result && result.ok ? result : { ok: false, errorCode: result?.errorCode, error: result?.error || 'architecture refresh failed' };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+function inPlaceArchitectureNote(refreshed) {
+  if (!refreshed) return '';
+  if (refreshed.ok !== true) {
+    return refreshed.errorCode === 'ARCHITECTURE_REQUIRED'
+      ? '- Architecture: changed paths are not covered by a Block; bind them with change({architecture:{blocks:[...]}}).'
+      : `- Architecture: refresh failed: ${clip(String(refreshed.error || 'unknown'), 160)}`;
+  }
+  return refreshed.refreshed ? `- Architecture: refreshed ${refreshed.refreshed} Block anchor(s).` : '';
+}
+
+async function restoreInPlaceSnapshot(root, before, changedPaths) {
+  const failed = [];
+  for (const relative of changedPaths) {
+    const recorded = before[relative];
+    const target = path.join(root, relative);
+    try {
+      if (recorded?.exists === true) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, String(recorded.content ?? ''));
+      } else {
+        fs.rmSync(target, { force: true });
+      }
+    } catch (error) { failed.push(`${relative} (${error.message})`); }
+  }
+  return failed;
+}
+
+async function integrateInPlaceJob(ctx, { jobId, job, implementation, input, deadline }) {
+  const root = fs.realpathSync(ctx.projectRoot);
+  const before = implementation.before && typeof implementation.before === 'object' && !Array.isArray(implementation.before)
+    ? implementation.before
+    : null;
+  if (!before) {
+    return [
+      '# ContextOS integrate',
+      '- status=blocked errorCode=INTEGRATE_INPLACE_SNAPSHOT_MISSING',
+      `- Agent job \`${jobId}\` ran in-place but recorded no pre-dispatch snapshot, so its change cannot be reviewed or reverted.`,
+      '- Next: dispatch it again with execution:"implement" and context.allowedPaths; the host records the snapshot at dispatch.',
+    ].join('\n');
+  }
+  const current = new Map();
+  for (const relative of Object.keys(before)) current.set(relative, readInPlaceFile(root, relative));
+  const created = [];
+  for (const raw of implementation.allowedPaths || []) {
+    const relative = String(raw || '').replace(/\\/g, '/').trim().replace(/^\.\//, '');
+    if (!relative || relative.startsWith('/') || relative.split('/').includes('..')) continue;
+    walkInPlaceTargets(root, relative, (file) => {
+      if (before[file] || current.has(file)) return;
+      current.set(file, readInPlaceFile(root, file));
+      created.push(file);
+    });
+  }
+  const changedPaths = [];
+  for (const [relative, recorded] of Object.entries(before)) {
+    const now = current.get(relative) || { exists: false };
+    const same = recorded?.exists === true
+      ? now.exists === true && now.content === String(recorded.content ?? '')
+      : now.exists === false;
+    if (!same) changedPaths.push(relative);
+  }
+  for (const relative of created) if (!changedPaths.includes(relative)) changedPaths.push(relative);
+
+  if (input.revert === true) {
+    if (!changedPaths.length) {
+      return [
+        '# ContextOS integrate',
+        '- status=noop changed=0 mode=in-place',
+        `- Agent job \`${jobId}\` left the recorded paths unchanged; nothing to revert.`,
+      ].join('\n');
+    }
+    const failed = await restoreInPlaceSnapshot(root, before, changedPaths);
+    const restored = changedPaths.filter((file) => !failed.some((entry) => entry.startsWith(`${file} (`)));
+    const refreshed = await refreshInPlaceArchitecture(ctx, restored);
+    return [
+      '# ContextOS integrate',
+      `- status=reverted changed=${restored.length} mode=in-place`,
+      `- Files: ${changedPaths.map((file) => `\`${file}\``).join(', ')}`,
+      `- Restored the pre-dispatch content recorded at dispatch${created.length ? `; removed ${created.length} file(s) created by the worker` : ''}.`,
+      ...(failed.length ? [`- Failed: ${failed.join(', ')}`] : []),
+      inPlaceArchitectureNote(refreshed),
+    ].filter(Boolean).join('\n');
+  }
+
+  const workerChecks = Array.isArray(job.report?.checks)
+    ? job.report.checks.filter((check) => typeof check === 'string' && check.trim())
+    : [];
+  if (!changedPaths.length) {
+    return [
+      '# ContextOS integrate',
+      '- status=noop changed=0 mode=in-place',
+      `- Agent job \`${jobId}\` produced no differences inside its allowed paths.`,
+      workerChecks.length
+        ? `- Worker checks: ${workerChecks.map((check) => `\`${check}\``).join(', ')}`
+        : '- Worker checks: none recorded.',
+    ].join('\n');
+  }
+  const requestedVerify = (input.verify === true
+    ? (Array.isArray(implementation.verify) ? implementation.verify : [])
+    : (Array.isArray(input.verify) ? input.verify : []))
+    .filter((command) => typeof command === 'string' && command.trim());
+  const verifyWindowMs = Math.max(0, deadline - Date.now() - 2_000);
+  const verifyCommands = verifyWindowMs >= 5_000 ? requestedVerify : [];
+  const verifyDeferred = requestedVerify.length > 0 && verifyCommands.length === 0;
+  let verdict = null;
+  let verification = '';
+  if (verifyCommands.length) {
+    verification = await verifyPipeline(ctx, {
+      commands: verifyCommands,
+      timeoutMs: Math.min(Number(ctx.profile?.timeoutMs) || Infinity, verifyWindowMs),
+      verifyTimeoutMs: verifyWindowMs,
+    });
+    verdict = (String(verification).match(/## Verdict:\s*(PASS|FAIL)/) || [])[1] || null;
+  }
+  const revertedForFailure = verdict === 'FAIL' && input.autoRevert === true;
+  if (revertedForFailure) await restoreInPlaceSnapshot(root, before, changedPaths);
+  const refreshed = await refreshInPlaceArchitecture(ctx, changedPaths);
+  const header = [
+    '# ContextOS integrate',
+    `- status=${revertedForFailure ? 'reverted' : 'applied'} changed=${changedPaths.length} mode=in-place jobId=${jobId}`,
+    `- Files: ${changedPaths.map((file) => `\`${file}\``).join(', ')}`,
+    workerChecks.length
+      ? `- Worker checks: ${workerChecks.map((check) => `\`${check}\``).join(', ')}`
+      : '- Worker checks: none recorded.',
+    verifyDeferred
+      ? '- Host verification: deferred (host window nearly closed); run verify separately.'
+      : verifyCommands.length
+        ? `- Host verification: ${verdict || 'unknown'} for ${verifyCommands.map((command) => `\`${command}\``).join(', ')}`
+        : '- Host verification: skipped (worker checks carried; run remaining acceptance once after integrate).',
+    revertedForFailure ? '- autoRevert: verification failed, so the recorded pre-dispatch content was restored.' : '',
+    `- Revert: integrate({jobId:"${jobId}", revert:true}) restores the recorded pre-dispatch content.`,
+    inPlaceArchitectureNote(refreshed),
+  ].filter(Boolean).join('\n');
+  return `${header}${verification ? `\n${verification}` : ''}`;
+}
+
 /**
  * Integrate a completed CLI implementation from its isolated workspace into the
  * project. Only paths the worker was allowed to edit are considered, and the
@@ -4639,8 +4897,8 @@ export async function integratePipeline(ctx, input = {}) {
     return [
       '# ContextOS integrate',
       '- status=blocked errorCode=INTEGRATE_SCOPE_REQUIRED',
-      `- Agent job \`${jobId}\` has no isolated implementation workspace.`,
-      '- Next: dispatch it with execution:"implement", workspace, context.allowedPaths and context.acceptance.',
+      `- Agent job \`${jobId}\` has no recorded implementation scope.`,
+      '- Next: dispatch it with execution:"implement", context.allowedPaths and context.acceptance; add workspace only for an isolated copy.',
     ].join('\n');
   }
   // Keep the whole merge inside the host MCP call window: waiting for the job
@@ -4665,6 +4923,9 @@ export async function integratePipeline(ctx, input = {}) {
         `- resume={"kind":"integrate","jobId":"${jobId}"}`,
       ].join('\n');
     }
+  }
+  if (implementation.mode === 'in-place') {
+    return await integrateInPlaceJob(ctx, { jobId, job, implementation, input, deadline });
   }
   const root = fs.realpathSync(ctx.projectRoot);
   let workspace;

@@ -229,7 +229,11 @@ function taskContext(options, input, workspace) {
     evidenceProvenance,
     resultRecovery,
     knownEvidenceRule,
-    options.execution === 'implement' ? 'Edit only allowedPaths in this isolated workspace. The host will independently review the diff and acceptance checks.' : 'Analysis task: do not edit project files.',
+    options.execution === 'implement'
+      ? (options.inPlaceWorkspace
+        ? 'Edit only allowedPaths directly in the project working tree. The host reviews the diff, can revert it from the recorded snapshot, and runs the acceptance checks.'
+        : 'Edit only allowedPaths in this isolated workspace. The host will independently review the diff and acceptance checks.')
+      : 'Analysis task: do not edit project files.',
     'ContextOS is this worker\'s primary development surface; native tools are the fallback for a quick single command or read that needs no OS evidence, architecture or delegation. Code modifications must go through contextos({action:"change",...}) so the canvas stays current. Run required checks with contextos({action:"command",args:{command,id}}), read exact source with ask, and recover prior output with the same command id. If a native tool is denied, continue through ContextOS when the task allows it; report a blocker only when the required path itself fails. Do not scan generated bundles, node_modules, .git, build output, or unrelated files. Fetch only the missing dependency needed for this assignment. Await a started test instead of running it again.',
     options.evidenceBroker
       ? 'Use contextos({action:"ask",args:{inspect:[{path:"known-file",ranges:[[first,last]]}]},projectRoot:workspace}) for exact source. For missing semantic evidence use ask args={request:"specific question",purpose:"why it is needed"}; API Micro is a lean OS-capable assistant. Use command args={command:"check",id:"unique-check-id"}; get the same command id to recover output without rerunning. args is always an object. Request only evidence not present in the resolved input/preload body. Native reads are allowed when already available.'
@@ -283,10 +287,13 @@ export async function runCliMicro(config = {}, options = {}) {
     base.executionMode = options.execution === 'implement' ? 'cli-implementation' : 'cli-analysis';
   }
   try {
-    if (options.execution === 'implement' && (workspace === fs.realpathSync(projectRoot) || !options.context?.allowedPaths?.length || !options.context?.acceptance?.length)) {
-      return fail('CLI_IMPLEMENTATION_SCOPE_REQUIRED', 'Implementation needs a separate workspace, allowedPaths and acceptance criteria.');
+    // In-place implementation (workspace === projectRoot) is allowed: the dispatch records a
+    // before-snapshot of allowedPaths, so the host can verify and revert the change.
+    if (options.execution === 'implement' && (!options.context?.allowedPaths?.length || !options.context?.acceptance?.length)) {
+      return fail('CLI_IMPLEMENTATION_SCOPE_REQUIRED', 'Implementation needs allowedPaths and acceptance criteria.');
     }
-    task = taskContext({ ...options, osInvocation: cli.osInvocation }, options.resolvedInput, workspace);
+    const inPlaceWorkspace = (() => { try { return workspace === fs.realpathSync(projectRoot); } catch { return false; } })();
+    task = taskContext({ ...options, osInvocation: cli.osInvocation, inPlaceWorkspace }, options.resolvedInput, workspace);
     if (task.length > limit(options.maxInputChars ?? config.maxInputChars, 16000)) return fail('CLI_CONTEXT_TOO_LARGE', 'Task context exceeds its configured limit; narrow evidence, do not silently truncate the assignment.');
   } catch (error) { return fail('CLI_CONTEXT_INVALID', error.message); }
   const implementationBefore = options.execution === 'implement'
@@ -310,6 +317,8 @@ export async function runCliMicro(config = {}, options = {}) {
   const maxBytes = limit(cli.maxOutputBytes, 4_000_000), timeout = limit(options.timeoutMs ?? config.timeoutMs, 86_400_000);
   let rawBytes = 0, stdout = '', stderr = '', buffer = '', terminal = null, actualModel = null, parseError = null, stopReason = null, contextUsagePeak = null;
   const records = [];
+  let stdoutBytes = 0, stderrBytes = 0, progressBuffer = '';
+  const progress = stage => { try { options.onProgress?.({ stage, stdoutBytes, stderrBytes }); } catch {} };
   const stepUsagePath = cli.output.usage?.stepPath || cli.output.contextUsage?.path || null;
   let stepUsage = null;
   const readRecord = record => {
@@ -366,7 +375,9 @@ export async function runCliMicro(config = {}, options = {}) {
         env: { ...process.env, ...(cli.env || {}), CONTEXTOS_WORKER_MODE: '1',
           ...(apiProfileFile ? { CONTEXTOS_API_MICRO_PROFILE: apiProfileFile } : {}),
           CONTEXTOS_WORKER_ROOT: workspace, CONTEXTOS_PROJECT_ROOT: workspace,
+          CONTEXTOS_CLI_PROGRESS: '1',
           CONTEXTOS_MICRO_REPORT_ROOT: projectRoot, CONTEXTOS_MICRO_REPORT_JOB: options.agentJobId || options.reportJobId || '' }, stdio: ['pipe', 'pipe', 'pipe'] });
+      progress('provider-launched');
       const timer = setTimeout(() => stop('timeout'), timeout);
       const abort = () => stop('cancelled');
       options.signal?.addEventListener('abort', abort, { once: true });
@@ -377,6 +388,7 @@ export async function runCliMicro(config = {}, options = {}) {
       child.on('error', error => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); resolve({ error }); });
       child.on('close', (code, signal) => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); resolve({ code, signal }); });
       child.stdout.on('data', chunk => {
+        stdoutBytes += Buffer.byteLength(chunk); progress('provider-output');
         rawBytes += Buffer.byteLength(chunk);
         if (rawBytes > maxBytes) { stop('output-limit'); return; }
         try { fs.appendFileSync(rawFile, chunk); } catch { stop('log-unavailable'); }
@@ -394,6 +406,18 @@ export async function runCliMicro(config = {}, options = {}) {
         }
       });
       child.stderr.on('data', chunk => {
+        stderrBytes += Buffer.byteLength(chunk);
+        let structuredProgress = false;
+        progressBuffer = (progressBuffer + chunk).slice(-16_000);
+        let newline;
+        while ((newline = progressBuffer.indexOf('\n')) >= 0) {
+          const line = progressBuffer.slice(0, newline); progressBuffer = progressBuffer.slice(newline + 1);
+          if (!line.startsWith('[contextos-progress] ')) continue;
+          try { const event = JSON.parse(line.slice(21));
+            if (typeof event.stage === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(event.stage)) { structuredProgress = true; progress(event.stage); }
+          } catch {}
+        }
+        if (!structuredProgress && !progressBuffer.startsWith('[contextos-progress] ')) progress('provider-diagnostic');
         rawBytes += Buffer.byteLength(chunk);
         if (rawBytes > maxBytes) { stop('output-limit'); return; }
         stderr = (stderr + chunk).slice(-2000);
@@ -402,9 +426,11 @@ export async function runCliMicro(config = {}, options = {}) {
       if (cli.input.keepOpen !== true) child.stdin.end();
     });
     if (cli.output.format === 'jsonl' && buffer.trim() && !parseError) {
-      try { readRecord(JSON.parse(buffer)); } catch (error) { parseError = error.message; }
+      try { readRecord(JSON.parse(buffer)); } catch (error) { if (!stopReason) parseError = error.message; }
     }
-    if (cli.output.format === 'json') { try { readRecord(JSON.parse(stdout)); } catch (error) { parseError = error.message; } }
+    if (cli.output.format === 'json' && (stdout.trim() || !stopReason)) {
+      try { readRecord(JSON.parse(stdout)); } catch (error) { if (!stopReason) parseError = error.message; }
+    }
     const terminalUsageRaw = cli.output.usage ? get(terminal, cli.output.usage.path) : null;
     // A host may abort a long CLI call before its terminal record arrives; the
     // step stream still carries real provider usage, so account it instead of
@@ -433,11 +459,11 @@ export async function runCliMicro(config = {}, options = {}) {
       invocation: { providerLaunches: 1, providerRequests: null, toolRounds: null, shortCircuited: false },
       cost: { estimatedUsd: null, pricingConfigured: false, note: 'CLI billing/quota is controlled by its provider; no free-cost assumption.' } };
     if (exited.error) return fail('CLI_SPAWN_FAILED', exited.error.message, extra);
-    if (priorSession && cliSessionId !== options.cliSessionId) return fail('CLI_RESUME_SESSION_MISMATCH', 'The CLI returned a different resumed conversation.', extra);
+    if (!stopReason && priorSession && cliSessionId !== options.cliSessionId) return fail('CLI_RESUME_SESSION_MISMATCH', 'The CLI returned a different resumed conversation.', extra);
     if (priorSession && cumulative && !usage) return fail('CLI_RESUME_USAGE_INVALID', 'Cumulative usage decreased or its baseline was unavailable.', extra);
     if (stopReason || parseError) {
       extra.providerUsageComplete = false;
-      return fail(stopReason === 'timeout' ? 'CLI_TIMEOUT' : stopReason === 'cancelled' ? 'CLI_CANCELLED' : stopReason === 'output-limit' ? 'CLI_OUTPUT_LIMIT' : stopReason === 'log-unavailable' ? 'CLI_LOG_UNAVAILABLE' : 'CLI_PROTOCOL_ERROR', parseError || stopReason, extra);
+      return fail(stopReason === 'timeout' ? 'CLI_TIMEOUT' : stopReason === 'cancelled' ? 'CLI_CANCELLED' : stopReason === 'output-limit' ? 'CLI_OUTPUT_LIMIT' : stopReason === 'log-unavailable' ? 'CLI_LOG_UNAVAILABLE' : 'CLI_PROTOCOL_ERROR', stopReason || parseError, extra);
     }
     if (exited.code !== 0) return fail('CLI_EXIT_FAILED', `CLI exited with code ${exited.code}. ${stderr.slice(-600)}`, extra);
     if (cli.output.format !== 'text' && (!terminal || records.length !== 1)) return fail('CLI_TERMINAL_MISSING', 'Expected one terminal task result; no automatic retry was made.', extra);

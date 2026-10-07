@@ -8,7 +8,9 @@ import { Tracer } from './tracer.mjs';
 import { createCapabilities } from './capabilities.mjs';
 import { globalProfilePath, loadProfile, saveProfile } from './profile.mjs';
 import { changePipeline, explorePipeline, extractFailureEvidence, inspectPipeline, integratePipeline, pipelinePipeline, shipPipeline, verifyPipeline, workPipeline } from './pipelines.mjs';
+import { executeCommand } from './command-service.mjs';
 import { executeAgent } from './agent-service.mjs';
+import { requestContextOS, recordVisibleEvidenceDelivery } from './request-service.mjs';
 import { MICRO_PRESETS, runMicroTask, runMicroTasksParallel } from './micro-client.mjs';
 import { microPreloadReceipt, runTaskMicroPreload } from './micro-preload.mjs';
 import { buildMicroHistory, closeMicroSession, completeMicroTurn, createMicroSession, deleteMicroSession, failMicroTurn, listMicroSessions, microSessionSnapshot, readMicroSession, startMicroTurn } from './micro-session.mjs';
@@ -99,7 +101,7 @@ function routeKind(tool, input = {}) {
   if (tool === 'work') return 'discovery';
   if (tool === 'verify') return 'verification';
   if (tool === 'ship') return 'closure';
-  if (tool === 'explore' || tool === 'inspect') return 'discovery';
+  if (tool === 'explore' || tool === 'inspect' || tool === 'ask') return 'discovery';
   if (tool === 'pipeline') return 'orchestration';
   if (tool !== 'ops') return 'unknown';
 
@@ -120,16 +122,45 @@ function routeKind(tool, input = {}) {
   return 'discovery';
 }
 
+// Only idempotent reads belong here. A memoized entry is answered with a
+// "(reused)" receipt instead of running the action, so a state change listed
+// here would silently report success without doing the work.
 const SEMANTIC_OPS_READS = new Set([
-  'os_context:brief', 'os_context:search', 'os_context:status',
-  'plan:list', 'plan:open', 'plan:check',
-  'task:list', 'task:open', 'task:check', 'task:status',
+  'os_context:brief', 'os_context:search',
+  'plan:list', 'plan:open',
+  'task:list', 'task:open',
   'block:list', 'block:open', 'block:search',
-  'chain:list', 'chain:open', 'chain:validate',
+  'chain:list', 'chain:open', 'chain:validate', 'chain:links',
   'knowledge:list', 'knowledge:read', 'knowledge:status',
-  'session:history', 'session:resume', 'session:status',
+  'session:history', 'session:status',
   'profile:get', 'artifact:read', 'artifact:stat', 'artifact:list',
   'telemetry:audit', 'telemetry:compare', 'telemetry:summary',
+]);
+
+// Mutating verbs, keyed by action name rather than by capability. A memoized
+// write would answer "(reused)" for work that never ran, so this guard is
+// checked before the read set and keeps a future capability from reintroducing
+// the bug by reusing a mutating verb.
+const MUTATING_OPS_ACTIONS = new Set([
+  'create', 'update', 'upsert', 'complete', 'delete', 'archive', 'start', 'finish',
+  'close', 'set', 'bind', 'bind_auto', 'prune_derived', 'compose', 'link', 'unlink',
+  'evict', 'edit', 'changeset', 'note', 'check', 'resume',
+  'rule_write', 'rule_delete', 'decision_write',
+]);
+
+// Orientation reads answer "how is this wired" and "what is the current plan and
+// rule set" from local state. They are deliberate orientation calls, so they get a
+// dedicated bounded budget instead of the compact diagnostic ops budget in
+// response-budget.mjs. Diagnostic dumps (session:history, telemetry:*), artifact
+// bodies and raw code reads stay on the compact budget and use full:true to widen.
+const ORIENTATION_OPS_READS = new Set([
+  'os_context:brief', 'os_context:search',
+  'block:list', 'block:open', 'block:search',
+  'chain:list', 'chain:open', 'chain:validate', 'chain:links',
+  'plan:list', 'plan:open', 'plan:get',
+  'task:list', 'task:open',
+  'knowledge:list', 'knowledge:read', 'knowledge:status',
+  'session:status',
 ]);
 
 const CONVERGENCE_DISCOVERY_LIMIT = 6;
@@ -288,6 +319,7 @@ function semanticOpsMemoSpec(input = {}) {
   if (input.capability === 'telemetry') return null;
   const capability = String(input.capability || '');
   const action = String(input.action || '');
+  if (MUTATING_OPS_ACTIONS.has(action)) return null;
   if (!SEMANTIC_OPS_READS.has(`${capability}:${action}`)) return null;
   const nested = input.args && typeof input.args === 'object' && !Array.isArray(input.args)
     ? input.args
@@ -547,6 +579,7 @@ function retainContinuableMicroSession(ctx, args, result, projected, { withOS = 
       receiptId: projected?.receiptId || null,
     });
     return {
+      status: 'partial',
       session: completed,
       resume: projected?.resume || { kind: 'micro', action: 'send', sessionId: completed.id },
     };
@@ -774,6 +807,15 @@ function nestedResponseRequests(input = {}) {
   };
   visit(input);
   return values;
+}
+
+
+function hasGoalOnboardingRequest(value) {
+  if (Array.isArray(value)) return value.some(hasGoalOnboardingRequest);
+  if (!value || typeof value !== 'object') return false;
+  const tool = value.tool || value.action || value.type;
+  if (tool === 'ask' && (value.args?.onboard || value.onboard) || value.ask?.onboard) return true;
+  return ['steps', 'flow', 'actions', 'parallel', 'chain'].some((key) => hasGoalOnboardingRequest(value[key]));
 }
 
 function nestedFullRequest(values = []) {
@@ -1044,7 +1086,7 @@ export class Orchestrator {
     }
   }
 
-  _context(tracer, { turnMemo = new Map(), internal = false, actionEvidence = null } = {}) {
+  _context(tracer, { turnMemo = new Map(), internal = false, actionEvidence = null, sourceDeliveries = [] } = {}) {
     return {
       service: this.service,
       caps: createCapabilities({ service: this.service, projectRoot: this.projectRoot, projectId: this.projectId }),
@@ -1057,6 +1099,7 @@ export class Orchestrator {
       turnMemo,
       internal,
       actionEvidence,
+      sourceDeliveries,
       // Pipeline children are internal work. Only the top-level host request
       // restores deferred Micro results, once, after its own action completes.
       orchestrator: {
@@ -1065,6 +1108,7 @@ export class Orchestrator {
           internal: true,
           turnMemo,
           actionEvidence: childActionEvidence,
+          sourceDeliveries,
         }),
       },
     };
@@ -1084,7 +1128,7 @@ export class Orchestrator {
     });
   }
 
-  async _dispatch(tool, input = {}, { recoverMicroDeliveries = false, internal = false, turnMemo = null, actionEvidence = null } = {}) {
+  async _dispatch(tool, input = {}, { recoverMicroDeliveries = false, internal = false, turnMemo = null, actionEvidence = null, sourceDeliveries = [] } = {}) {
     await this._selfHeal();
     const seed = this.store.current || this.store.ensureSession(input.intent || input.summary || '');
     const route = routeKind(tool, input);
@@ -1105,7 +1149,7 @@ export class Orchestrator {
       if (turnMemo instanceof Map) turnMemo.clear();
     }
     const tracer = new Tracer({ projectRoot: this.projectRoot, sessionId: seed.id });
-    const ctx = this._context(tracer, { turnMemo: turnMemo || new Map(), internal, actionEvidence });
+    const ctx = this._context(tracer, { turnMemo: turnMemo || new Map(), internal, actionEvidence, sourceDeliveries });
     if (this.healed) tracer.step('heal', this.healed);
     const startedAt = Date.now();
     const routingHint = internal ? null : this._routingHint(seed.id, tool, input);
@@ -1170,6 +1214,12 @@ export class Orchestrator {
             }
             break;
           }
+          case 'ask':
+            result = await requestContextOS('ask', input, {
+              projectRoot: ctx.projectRoot, profile: ctx.profile,
+              onUsage: (row) => appendRoleUsage(ctx.projectRoot, row),
+            });
+            break;
           case 'inspect':
             result = await inspectPipeline(ctx, input);
             break;
@@ -1275,17 +1325,22 @@ export class Orchestrator {
         : {};
       const nestedRequests = nestedResponseRequests(input);
       const requestedMaxChars = nestedMaxChars(nestedRequests);
+      const onboardingPipeline = tool === 'pipeline' && hasGoalOnboardingRequest(input);
       const responseMaxChars = typeof input.maxChars === 'number'
         ? input.maxChars
         : (typeof responseArgs.maxChars === 'number'
             ? responseArgs.maxChars
-            : (requestedMaxChars ?? undefined));
+            : (requestedMaxChars ?? (onboardingPipeline ? 32000 : undefined)));
       const focusedWorkRead = tool === 'work' && (input.inspect !== undefined || input.read !== undefined)
         && responseMaxChars !== undefined
         && ![...MUTATION_INPUT_KEYS].some((key) => input[key] !== undefined);
       const explicitInspectWiden = tool === 'inspect' && responseMaxChars !== undefined;
       const receiptLogRecovery = tool === 'verify' && input.mode === 'logs' && responseMaxChars !== undefined;
       const failureSourceRecovery = tool === 'change' && /(?:^|\n)## Failure source\n/.test(response);
+      // Orientation reads are the project map, so one call must be able to return
+      // the whole bounded outline; diagnostics keep the compact ops budget.
+      const opsOrientationRead = tool === 'ops'
+        && ORIENTATION_OPS_READS.has(`${input.capability}:${input.action}`);
       const decisionPackageBudget = focusedWorkRead
         ? Math.min(responseMaxChars ?? RESPONSE_BUDGETS.pipelineDecision, INSPECT_RESPONSE_HARD_CAP)
         : receiptLogRecovery
@@ -1296,15 +1351,18 @@ export class Orchestrator {
         ? Math.min(responseMaxChars, INSPECT_RESPONSE_HARD_CAP)
         : (decisionPackage && responseMaxChars === undefined && tool !== 'work'
             ? RESPONSE_BUDGETS.pipelineDecision
+            : opsOrientationRead
+            ? (responseMaxChars === undefined ? RESPONSE_BUDGETS.opsOrientation : responseMaxChars)
             : responseMaxChars);
       const nestedFull = nestedFullRequest(nestedRequests);
-      const allowWiden = input.allowWiden === true
+      const allowWiden = onboardingPipeline || input.allowWiden === true
         || responseArgs.allowWiden === true
         || nestedFull
         || explicitInspectWiden
         || receiptLogRecovery
         || failureSourceRecovery
         || focusedWorkRead
+        || opsOrientationRead
         || Boolean(decisionPackage);
       const full = input.full === true || input.budget === 'full' || input.mode === 'full'
         || responseArgs.full === true || responseArgs.budget === 'full'
@@ -1320,6 +1378,7 @@ export class Orchestrator {
         routingHint: isJsonValueString(response) ? null : hostHint,
       });
       const deliveredText = attachChildMessages(attachMicroDeliveryData(finalized.text, deliveryClaims, deliveryWarning));
+      if (!internal && sourceDeliveries.length) await recordVisibleEvidenceDelivery(this.projectRoot, sourceDeliveries, deliveredText);
       recordTelemetry(this.projectRoot, {
         sessionId: seed.id,
         tool,
@@ -1515,6 +1574,15 @@ export class Orchestrator {
           return render(data);
         }
       case 'run_command': {
+        // A caller-supplied id is the addressable contract that
+        // command({action:"get",id}) and cancel depend on. Route those through the
+        // command service so a pipeline step and a top-level command share one
+        // persistence path instead of producing an unreachable receipt.
+        if (typeof args.id === 'string' && args.id.trim()) {
+          const result = await executeCommand({ ...args }, { projectRoot: this.projectRoot });
+          if (result && typeof result === 'object' && result.receipt?.id) store.attachReceipt(result.receipt);
+          return render(result);
+        }
         const receipt = await service.runCommand(args);
         if (receipt && typeof receipt === 'object' && receipt.command) {
           store.attachReceipt(receipt);
@@ -1526,7 +1594,11 @@ export class Orchestrator {
       case 'knowledge':
         return render(await service.knowledge({ ...args, action }));
       case 'session': {
-        if (action === 'note') return render(store.note(args.text, args.kind || 'note'));
+        if (action === 'note') {
+          const noted = store.note(args.text, args.kind || 'note');
+          const notes = Array.isArray(noted?.notes) ? noted.notes.length : 0;
+          return `Session '${noted?.id || 'unknown'}' note recorded (kind=${args.kind || 'note'}, notes=${notes}).`;
+        }
         if (action === 'close') return render(store.close(args.summary || ''));
         if (action === 'history') {
           return render(store.recentHistory(args.limit, {
@@ -2039,14 +2111,17 @@ export class Orchestrator {
               const rawResult = task.preload?.ok === false
                 ? microPreloadFailure(task.preload, task.delivery)
                 : (resultById.get(id) || { ok: false, error: `Micro batch task '${id}' did not return a result.` });
+              const projected = projectMicroResult(rawResult, {
+                projectRoot: this.projectRoot,
+                hostSessionId: ctx.sessionId,
+                full: args.full === true,
+                maxChars: args.maxChars,
+              });
+              const retained = retainContinuableMicroSession(ctx, { ...batchDefaults, ...task }, rawResult, projected, { withOS: task.withOS });
               return {
                 id,
-                ...projectMicroResult(rawResult, {
-                  projectRoot: this.projectRoot,
-                  hostSessionId: ctx.sessionId,
-                  full: args.full === true,
-                  maxChars: args.maxChars,
-                }),
+                ...projected,
+                ...(retained || {}),
                 ...(rawResult.preload ? { preload: rawResult.preload } : {}),
               };
             }),

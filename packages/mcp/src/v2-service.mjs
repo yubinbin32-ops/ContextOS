@@ -8,7 +8,7 @@ import {
   withProjectWriteLock,
 } from '../../storage/src/index.mjs';
 import { PlanService, TaskService, KnowledgeService } from '../../application/src/index.mjs';
-import { Block, assertBlockHasRealCode } from '../../domain/src/index.mjs';
+import { Block, Chain, LINK_KINDS, LINK_PROVENANCES, assertBlockHasRealCode } from '../../domain/src/index.mjs';
 import {
   CodeTools,
   LanguageRegistry,
@@ -29,9 +29,9 @@ const READ_ONLY_ACTIONS = {
   plan: new Set(['list', 'get', 'open']),
   task: new Set(['list', 'open']),
   code: new Set(['outline', 'read', 'search']),
-  block: new Set(['list', 'open', 'search']),
+  block: new Set(['list', 'open', 'search', 'owners']),
   chain: new Set(['list', 'open', 'links', 'validate', 'validate_layout']),
-  knowledge: new Set(['rule_list', 'rule_open', 'decision_open']),
+  knowledge: new Set(['rule_list', 'rule_open', 'decision_open', 'list', 'read', 'open', 'get', 'status']),
 };
 
 const LIST_PAGE_DEFAULT = 20;
@@ -1052,9 +1052,93 @@ export class ContextOSV2Service {
     }
   }
 
+  // Ownership is determined by saved locators and actual files, never a guessed directory owner.
+  _refCoversPath(ref, target) {
+    const anchor = this._resolveProjectPath(ref.path, 'artifactRef path').relativePath;
+    if (anchor === target) return true;
+    if (ref.anchorKind !== 'tree') return false;
+    const manifest = ref.manifest ? this._resolveProjectPath(ref.manifest, 'artifactRef manifest').relativePath : null;
+    return manifest === target || target.startsWith(anchor.replace(/\/$/, '') + '/');
+  }
+
+  _assertSourceInsideProject(fullPath) {
+    const relative = path.relative(fs.realpathSync(this.projectRoot), fs.realpathSync(fullPath));
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) {
+      throw new Error('Source anchor resolves outside project root');
+    }
+  }
+
+  _findAnchorSymbol(structure, symbol, locator = {}) {
+    const bare = symbol.includes('#') ? symbol.split('#').pop().trim() : symbol;
+    const predicates = [
+      (entry) => entry.name === bare,
+      (entry) => entry.shortName === bare,
+      (entry) => entry.name.endsWith(`.${bare}`),
+      (entry) => entry.containerName && `${entry.containerName}.${entry.shortName || entry.name}`.endsWith(`.${bare}`),
+    ];
+    for (const matches of predicates.map((predicate) => structure.symbols.filter(predicate))) {
+      if (!matches.length) continue;
+      // Conditional platform branches can declare the same symbol twice. The
+      // saved hash/range identifies which real declaration owns this locator.
+      return matches.find((entry) => locator.hash && entry.hash === locator.hash)
+        || matches.find((entry) => entry.startLine === locator.startLine && entry.endLine === locator.endLine)
+        || matches.find((entry) => entry.startLine === locator.startLine)
+        || matches[0];
+    }
+    return null;
+  }
+
+  // Explicitly opted in; default validation and first-contact never read all source anchors.
+  _sourceAnchorIssues(blocks, paths = []) {
+    const scope = (Array.isArray(paths) ? paths : []).map((target) => this._resolveProjectPath(target).relativePath);
+    const cache = new Map();
+    const issues = [];
+    for (const block of blocks) {
+      for (const ref of block.artifactRefs || []) {
+        if (scope.length && !scope.some((target) => this._refCoversPath(ref, target))) continue;
+        const issue = { blockId: block.id, path: ref.path, ...(ref.symbol ? { symbol: ref.symbol } : {}) };
+        try {
+          const { fullPath, relativePath } = this._resolveProjectPath(ref.path, 'artifactRef path');
+          this._assertSourceInsideProject(fullPath);
+          const stat = fs.statSync(fullPath);
+          let currentHash;
+          if (ref.anchorKind === 'tree') {
+            if (!stat.isDirectory()) { issues.push({ ...issue, kind: 'anchor-type' }); continue; }
+            if (ref.manifest) this._assertSourceInsideProject(this._resolveProjectPath(ref.manifest).fullPath);
+            const key = JSON.stringify([relativePath, ref.hashMode, ref.manifest]);
+            if (!cache.has(key)) cache.set(key, calculateTreeHash(this.projectRoot, relativePath, { hashMode: ref.hashMode, manifest: ref.manifest }));
+            currentHash = cache.get(key).hash;
+          } else {
+            if (!stat.isFile()) { issues.push({ ...issue, kind: 'anchor-type' }); continue; }
+            if (!cache.has(relativePath)) {
+              const content = fs.readFileSync(fullPath, 'utf8');
+              cache.set(relativePath, { content, hash: calculateHash(content), structure: null });
+            }
+            const source = cache.get(relativePath);
+            if (ref.symbol && ref.anchorKind !== 'file') {
+              source.structure ||= LanguageRegistry.parseStructure(relativePath, source.content);
+              const symbol = this._findAnchorSymbol(source.structure, ref.symbol, ref);
+              if (!symbol) { issues.push({ ...issue, kind: 'missing-symbol' }); continue; }
+              currentHash = symbol.hash;
+            } else currentHash = source.hash;
+          }
+          if (ref.hash !== currentHash) issues.push({ ...issue, kind: 'hash-drift', expectedHash: ref.hash, actualHash: currentHash });
+        } catch (error) {
+          issues.push({ ...issue, kind: error.code === 'ENOENT' ? 'missing-path' : 'unreadable-anchor', message: error.message });
+        }
+      }
+    }
+    return issues;
+  }
+
   async block(input) {
-    if (this._isReadOnly('block', input.action)) return this._block(input);
-    return this._withWriteLock('block', () => this._block(input));
+    // Accept the `blockId` alias on reads so a caller mirroring `ask({blockId})` gets a
+    // real lookup instead of an unbound SQLite parameter error from getBlock(undefined).
+    const normalized = input && input.id === undefined && input.blockId !== undefined
+      ? { ...input, id: input.blockId }
+      : input;
+    if (this._isReadOnly('block', normalized.action)) return this._block(normalized);
+    return this._withWriteLock('block', () => this._block(normalized));
   }
 
   async _block({
@@ -1067,14 +1151,77 @@ export class ContextOSV2Service {
     symbols = [],
     hashMode = null,
     manifest = null,
+    anchorKind = null,
     replacePaths = false,
     refreshPaths = false,
     includeRefs = false,
     limit,
     offset,
+    maxLocators,
     format = 'markdown',
   }) {
     switch (action) {
+      case 'owners': {
+        if (!Array.isArray(paths) || !paths.length) throw new Error("Block owners requires a non-empty paths array.");
+        if (paths.length > 500) throw new Error('Block owners accepts at most 500 paths per batch.');
+        const blocks = this.db.listBlocks(this.projectId).filter(isCuratedBlockRecord);
+        const chains = this.db.listChains(this.projectId);
+        const manifestCache = new Map();
+        const items = [...new Set(paths)].map((requestedPath) => {
+          const resolved = this._resolveProjectPath(requestedPath, 'owners path');
+          const target = resolved.relativePath;
+          let source = null;
+          try {
+            this._assertSourceInsideProject(resolved.fullPath);
+            if (fs.statSync(resolved.fullPath).isFile()) {
+              const content = fs.readFileSync(resolved.fullPath, 'utf8');
+              source = { content, structure: null };
+            }
+          } catch {}
+          const owners = !source ? [] : blocks.flatMap((block) => {
+            const refs = (block.artifactRefs || []).flatMap((ref) => {
+              if (!this._refCoversPath(ref, target)) return [];
+              try {
+                const anchor = this._resolveProjectPath(ref.path, 'artifactRef path');
+                this._assertSourceInsideProject(anchor.fullPath);
+                if (ref.anchorKind === 'tree') {
+                  if (!fs.statSync(anchor.fullPath).isDirectory()) return [];
+                  let anchorStatus = 'unchecked';
+                  if (ref.hashMode === 'manifest') {
+                    try {
+                      const manifestPath = this._resolveProjectPath(ref.manifest, 'artifactRef manifest').fullPath;
+                      this._assertSourceInsideProject(manifestPath);
+                      if (!manifestCache.has(manifestPath)) manifestCache.set(manifestPath, calculateHash(fs.readFileSync(manifestPath, 'utf8')));
+                      anchorStatus = manifestCache.get(manifestPath) === ref.hash ? 'fresh' : 'stale';
+                    } catch { anchorStatus = 'stale'; }
+                  }
+                  return [{ ...ref, matchKind: target === ref.manifest ? 'tree-manifest' : 'tree-member', anchorStatus }];
+                }
+                if (ref.symbol && ref.anchorKind !== 'file') {
+                  source.structure ||= LanguageRegistry.parseStructure(target, source.content);
+                  const symbol = this._findAnchorSymbol(source.structure, ref.symbol, ref);
+                  return symbol ? [{ ...ref, matchKind: 'exact-symbol', anchorStatus: symbol.hash === ref.hash ? 'fresh' : 'stale' }] : [];
+                }
+                return [{ ...ref, matchKind: 'exact-file', anchorStatus: calculateHash(source.content) === ref.hash ? 'fresh' : 'stale' }];
+              } catch { return []; }
+            });
+            return refs.length ? [{
+              id: block.id, title: block.title, kind: block.kind,
+              chainIds: chains.filter((chain) => (chain.memberIds || []).includes(block.id)).map((chain) => chain.id),
+              refs,
+            }] : [];
+          });
+          return { path: target, status: owners.length === 1 ? 'owned' : owners.length ? 'multiple' : 'missing', owners };
+        });
+        const result = {
+          items,
+          missing: items.filter((item) => item.status === 'missing').map((item) => item.path),
+          multiple: items.filter((item) => item.status === 'multiple').map((item) => item.path),
+        };
+        return format === 'json' ? result : '# Block owners\n' + items.map((item) =>
+          `- ${item.path}: ${item.status}${item.owners.length ? ' (' + item.owners.map((owner) => owner.id).join(', ') + ')' : ''}`
+        ).join('\n');
+      }
       case 'list': {
         const page = createListPage(this.db.listBlocks(this.projectId), limit, offset);
         const items = page.items.map((block) => {
@@ -1088,6 +1235,9 @@ export class ContextOSV2Service {
         return rendered + '\\n\\n' + formatListRange(result, 'Blocks');
       }
       case 'open': {
+        if (!id) {
+          throw new Error("Block open requires 'id' (or the blockId alias), e.g. ops({capability:'block',action:'open',args:{id:'block-orchestrator'}}).");
+        }
         const block = this.db.getBlock(id);
         if (!block) throw new Error(`Block '${id}' not found`);
         const allLinks = this.db.listLinks(this.projectId);
@@ -1104,7 +1254,7 @@ export class ContextOSV2Service {
             },
           };
         }
-        return MarkdownRenderer.renderBlock({ ...block, tier }, { inboundLinks, outboundLinks });
+        return MarkdownRenderer.renderBlock({ ...block, tier }, { inboundLinks, outboundLinks, maxLocators });
       }
       case 'search': {
         const queryLower = (query || '').toLowerCase();
@@ -1261,13 +1411,18 @@ export class ContextOSV2Service {
           const fileSymbols = structure?.symbols || [];
           const declaredSymbols = fileSymbols.filter((symbol) => symbol.kind !== 'file');
           let matchedSymbols = declaredSymbols;
+          // Generated artifacts (bundled servers, single-file deliveries) carry
+          // no meaningful symbol ownership: every declaration is machine emitted,
+          // so symbol anchors both bloat the graph and drift on each rebuild.
+          // `anchorKind:"file"` binds one whole-file locator instead.
+          const wholeFileAnchor = String(anchorKind || '').toLowerCase() === 'file';
 
           if (symbolFilters.size > 0) {
             const fileBase = path.basename(cleanRelPath).replace(/\.[^.]+$/, '');
             matchedSymbols = declaredSymbols.filter((sym) => matchesFilter(sym, fileBase));
           }
 
-          if (matchedSymbols.length > 0) {
+          if (!wholeFileAnchor && matchedSymbols.length > 0) {
             const CONTAINER_KINDS = new Set(['class', 'struct', 'trait', 'interface', 'extension', 'impl', 'record', 'object', 'enum']);
             const topLevelOnly = matchedSymbols.filter((s) => CONTAINER_KINDS.has(s.kind) || s.kind === 'function');
             const targetSymbols = topLevelOnly.length > 0 ? topLevelOnly : matchedSymbols;
@@ -1286,7 +1441,7 @@ export class ContextOSV2Service {
           } else {
             // Never degrade silently: binding a whole file when a symbol was
             // asked for produces an anchor nobody can trust.
-            if (symbolFilters.size > 0) {
+            if (symbolFilters.size > 0 && !wholeFileAnchor) {
               throw new Error(
                 `Symbol(s) ${[...symbolFilters].map((s) => `'${s}'`).join(', ')} not found in '${cleanRelPath}'. Use a fully qualified name like 'ClassName.method', or drop 'symbols' to bind the file.`
               );
@@ -1369,11 +1524,16 @@ export class ContextOSV2Service {
 
   // ================= 5. chain =================
   async chain(input) {
-    if (this._isReadOnly('chain', input.action)) return this._chain(input);
-    return this._withWriteLock('chain', () => this._chain(input));
+    // Accept the `chainId` alias on reads so a caller mirroring `ask({chainId})` gets a
+    // real lookup instead of an unbound SQLite parameter error from getChain(undefined).
+    const normalized = input && input.id === undefined && input.chainId !== undefined
+      ? { ...input, id: input.chainId }
+      : input;
+    if (this._isReadOnly('chain', normalized.action)) return this._chain(normalized);
+    return this._withWriteLock('chain', () => this._chain(normalized));
   }
 
-  async _chain({ action, id, chainData = {}, linkData = {}, replaceMembers = false, includeMembers = false, limit, offset, format = 'markdown' }) {
+  async _chain({ action, id, chainData = {}, linkData = {}, replaceMembers = false, includeMembers = false, checkSources = false, paths = [], limit, offset, format = 'markdown' }) {
     switch (action) {
       case 'list': {
         const page = createListPage(this.db.listChains(this.projectId), limit, offset);
@@ -1386,9 +1546,67 @@ export class ContextOSV2Service {
         return body + '\n\n' + formatListRange(result, 'Chains');
       }
       case 'open': {
+        if (!id) {
+          throw new Error("Chain open requires 'id' (or the chainId alias), e.g. ops({capability:'chain',action:'open',args:{id:'chain-code-intel'}}).");
+        }
         const chain = this.db.getChain(id);
         if (!chain) throw new Error(`Chain '${id}' not found`);
-        return format === 'json' ? chain : `# Chain: [${chain.id}] ${chain.title}\nMembers: ${chain.memberIds.join(', ')}`;
+        // A chain is the aggregation boundary for architecture questions, so `open`
+        // returns member cards and edges instead of a bare id list; callers otherwise
+        // had to open every member Block one by one to understand one feature.
+        const allLinks = this.db.listLinks(this.projectId);
+        const memberIds = new Set(chain.memberIds);
+        const members = chain.memberIds.map((memberId, index) => {
+          const block = this.db.getBlock(memberId);
+          if (!block) return { order: index + 1, id: memberId, missing: true };
+          return {
+            order: index + 1,
+            id: block.id,
+            title: block.title,
+            kind: block.kind,
+            tier: MarkdownRenderer.getBlockTier(block),
+            summary: block.summary || '',
+            locators: (block.artifactRefs || []).slice(0, 3).map((ref) => ({
+              path: ref.anchorKind === 'tree' ? ref.manifest : ref.path,
+              symbol: ref.symbol || null,
+              startLine: Number.isSafeInteger(ref.startLine) ? ref.startLine : null,
+              endLine: Number.isSafeInteger(ref.endLine) ? ref.endLine : null,
+            })),
+            inbound: allLinks.filter((link) => link.to === block.id && !memberIds.has(link.from))
+              .map((link) => ({ from: link.from, kind: link.kind || null, reason: link.reason || '' })),
+            outbound: allLinks.filter((link) => link.from === block.id && !memberIds.has(link.to))
+              .map((link) => ({ to: link.to, kind: link.kind || null, reason: link.reason || '' })),
+          };
+        });
+        const internalEdges = allLinks.filter((link) => memberIds.has(link.from) && memberIds.has(link.to))
+          .map((link) => ({ from: link.from, to: link.to, kind: link.kind || null, reason: link.reason || '' }));
+        if (format === 'json') return { ...chain, members, internalEdges };
+        const lines = [
+          `# Chain: [${chain.id}] ${chain.title}`,
+          `- Kind: ${chain.kind} | Members: ${chain.memberIds.length}`,
+        ];
+        if (chain.summary) lines.push(`- Summary: ${chain.summary}`);
+        const MAX_CHAIN_MEMBERS = 24;
+        lines.push('', '## Members (in order):');
+        for (const member of members.slice(0, MAX_CHAIN_MEMBERS)) {
+          if (member.missing) { lines.push(`${member.order}. \`[${member.id}]\` (missing Block)`); continue; }
+          lines.push(`${member.order}. \`[${member.id}]\` ${member.title} (${member.kind}; ${member.tier})`);
+          if (member.summary) lines.push(`   - Responsibility: ${member.summary}`);
+          if (member.locators.length) lines.push(`   - Entry: ${member.locators.map((locator) => `${locator.path}${locator.symbol ? ` ${locator.symbol}` : ''}${locator.startLine ? ` [L${locator.startLine}-L${locator.endLine}]` : ''}`).join('; ')}`);
+          const edges = [
+            ...member.outbound.map((edge) => `-> ${edge.to}${edge.reason ? ` (${edge.reason})` : ''}`),
+            ...member.inbound.map((edge) => `<- ${edge.from}${edge.reason ? ` (${edge.reason})` : ''}`),
+          ];
+          if (edges.length) lines.push(`   - Edges: ${edges.join('; ')}`);
+        }
+        if (members.length > MAX_CHAIN_MEMBERS) {
+          lines.push(`- … ${members.length - MAX_CHAIN_MEMBERS} more member(s): ${members.slice(MAX_CHAIN_MEMBERS).map((member) => member.id).slice(0, 24).join(', ')}`);
+        }
+        if (internalEdges.length) {
+          lines.push('', '## Internal Flow:');
+          for (const edge of internalEdges) lines.push(`- ${edge.from} -> ${edge.to}${edge.reason ? ` (${edge.reason})` : ''}`);
+        }
+        return lines.join('\n');
       }
       case 'compose': {
         const chainId = chainData.id || id;
@@ -1420,13 +1638,13 @@ export class ContextOSV2Service {
         if (nonCuratedMembers.length) {
           throw new Error(`Chain '${chainId}' cannot include non-curated module Block(s): ${nonCuratedMembers.join(', ')}.`);
         }
-        this.db.saveChain({
+        this.db.saveChain(new Chain({
           ...(existing || {}),
           ...chainData,
           id: chainId,
           memberIds,
           projectId: this.projectId,
-        });
+        }).toJSON());
         return `Chain '${chainId}' composed successfully.`;
       }
       case 'delete': {
@@ -1440,14 +1658,18 @@ export class ContextOSV2Service {
       case 'unlink': {
         const from = linkData.from || linkData.from_id;
         const to = linkData.to || linkData.to_id;
-        if (id) {
-          this.db.deleteLink(id);
+        const linkId = id || linkData.id;
+        if (linkId) {
+          const link = this.db.getLink(linkId);
+          if (link && link.projectId !== this.projectId) throw new Error(`Link '${linkId}' belongs to another project.`);
+          this.db.deleteLink(linkId);
         } else if (from && to) {
-          this.db.deleteLinkBetween(from, to);
+          if (linkData.kind !== undefined && !LINK_KINDS.includes(linkData.kind)) throw new Error(`Invalid link kind: ${linkData.kind}`);
+          this.db.deleteLinkBetween(from, to, linkData.kind ?? null, this.projectId);
         } else {
           throw new Error("Action 'unlink' requires link id or { from, to } in linkData");
         }
-        return `Link between '${from}' and '${to}' removed.`;
+        return linkId ? `Link '${linkId}' removed.` : `Link${linkData.kind ? ` kind '${linkData.kind}'` : 's (all kinds)'} from '${from}' to '${to}' removed.`;
       }
       case 'links': {
         const links = this.db.listLinks(this.projectId);
@@ -1502,12 +1724,33 @@ export class ContextOSV2Service {
               blockIds: [...new Set(owners)],
             };
           });
+        const explicitBlocks = blocks.filter(isCuratedBlockRecord);
+        const declaredPaths = [...new Set(explicitBlocks.flatMap((block) =>
+          (block.artifactRefs || []).flatMap((ref) => [ref.path, ...(ref.manifest ? [ref.manifest] : [])])
+        ))];
+        const duplicateOwners = declaredPaths.flatMap((target) => {
+          const blockIds = explicitBlocks.filter((block) =>
+            (block.artifactRefs || []).some((ref) => this._refCoversPath(ref, target))
+          ).map((block) => block.id);
+          return blockIds.length > 1 ? [{ path: target, blockIds }] : [];
+        });
+        const invalidLinks = links
+          .filter((link) => !LINK_KINDS.includes(link.kind) || !LINK_PROVENANCES.includes(link.provenance))
+          .map((link) => ({ id: link.id, kind: link.kind, provenance: link.provenance }));
+        const sourceIssues = checkSources === true ? this._sourceAnchorIssues(blocks, paths) : [];
         const layout = NetworkLayoutEngine.computeLayout({ blocks, chains, links });
         return {
+          advisories: { standaloneBlocks: orphanBlocks },
+          sourceCheck: checkSources === true ? 'checked' : 'skipped',
+          sourceIssues,
+          invalidLinks,
+          duplicateOwners,
           valid: missingMembers.length === 0
-            && orphanBlocks.length === 0
             && danglingLinks.length === 0
-            && duplicateArtifactRefs.length === 0,
+            && duplicateArtifactRefs.length === 0
+            && duplicateOwners.length === 0
+            && invalidLinks.length === 0
+            && sourceIssues.length === 0,
           nodeCount: layout.nodes.length,
           edgeCount: layout.edges.length,
           bounds: layout.bounds,
@@ -1859,7 +2102,7 @@ export class ContextOSV2Service {
     return this._withWriteLock('knowledge', () => this._knowledge(input));
   }
 
-  async _knowledge({ action, ruleId, ruleData = {}, sectionId, sectionTitle, content, format = 'markdown' }) {
+  async _knowledge({ action, id, ruleId, ruleData = {}, sectionId, sectionTitle, content, format = 'markdown' }) {
     switch (action) {
       case 'rule_list': {
         const rules = KnowledgeService.listRules(this.projectRoot);
@@ -1870,6 +2113,45 @@ export class ContextOSV2Service {
         const rule = KnowledgeService.getRule(this.projectRoot, ruleId);
         if (!rule) throw new Error(`Rule '${ruleId}' not found`);
         return format === 'json' ? rule : `# Rule: ${rule.title} (${rule.category})\n\n${rule.content}`;
+      }
+      case 'list': {
+        const rules = KnowledgeService.listRules(this.projectRoot);
+        const { document } = KnowledgeService.getDecision(this.projectRoot);
+        const sections = document.listSections();
+        if (format === 'json') return { rules, decisionSections: sections };
+        const ruleLines = rules.length
+          ? rules.map((r) => `- [${r.category.toUpperCase()}] **${r.title}** (\`${r.id}\`) - ${r.summary}`)
+          : ['- No rules defined yet.'];
+        const sectionLines = sections.length
+          ? sections.map((s) => `- [DECISION] **${s.title}** (\`${s.id}\`)`)
+          : ['- Decision document has no [section] headings yet.'];
+        return ['# Project Rules', ...ruleLines, '', '# Decision Sections', ...sectionLines].join('\n');
+      }
+      case 'read':
+      case 'open':
+      case 'get': {
+        const requestedId = ruleId || id || sectionId;
+        if (!requestedId) {
+          throw new Error("knowledge read requires 'ruleId' (a rule id) or 'sectionId' (a DECISION.md section id).");
+        }
+        const rule = KnowledgeService.getRule(this.projectRoot, requestedId);
+        if (rule) return format === 'json' ? rule : `# Rule: ${rule.title} (${rule.category})\n\n${rule.content}`;
+        const { document } = KnowledgeService.getDecision(this.projectRoot);
+        const section = document.getSection(requestedId);
+        if (section) return format === 'json' ? section : `## [${section.id}] ${section.title}\n\n${section.content}`;
+        throw new Error(`Knowledge '${requestedId}' was not found as a project rule or DECISION.md section.`);
+      }
+      case 'status': {
+        const rules = KnowledgeService.listRules(this.projectRoot);
+        const { document } = KnowledgeService.getDecision(this.projectRoot);
+        const sections = document.listSections();
+        const byCategory = [...new Set(rules.map((r) => r.category))].sort().map((category) => ({
+          category,
+          count: rules.filter((r) => r.category === category).length,
+        }));
+        if (format === 'json') return { rules: rules.length, decisionSections: sections.length, byCategory };
+        return ['# Knowledge', `- Rules: ${rules.length}`, `- Decision sections: ${sections.length}`,
+          ...byCategory.map((entry) => `- ${entry.category}: ${entry.count}`)].join('\n');
       }
       case 'rule_write': {
         const saved = KnowledgeService.saveRule(this.projectRoot, ruleData);

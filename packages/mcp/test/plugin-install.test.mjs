@@ -16,7 +16,7 @@ function fixture(version = '2.6.0', sourceIsRepo = false) {
   const contextosHome = path.join(root, 'contextos');
   const plugin = path.join(repo, 'plugins/contextos');
   const state = path.join(root, 'state.json');
-  const files = { 'server/web-tree-sitter.wasm': 'runtime-wasm', 'grammars/tree-sitter-python.wasm': 'python-grammar', 'grammars/tree-sitter-javascript.wasm': 'javascript-grammar', 'server/contextos-mcp.mjs': 'new bundle\n', 'skills/contextos/SKILL.md': '---\nname: contextos\ndescription: "Required scaffold: use ContextOS."\n---\nnew skill\n', 'skills/contextos/references/setup.md': 'new setup reference\n', 'skills/contextos-ops/SKILL.md': '---\nname: contextos-ops\ndescription: "Required operations guide: configure ContextOS."\n---\nnew ops skill\n', 'skills/contextos-ops/references/micro-setup.md': 'new ops reference\n', '.codex-plugin/plugin.json': '{"name":"contextos","version":"2.7.1"}', '.mcp.json': '{}' };
+  const files = { 'server/web-tree-sitter.wasm': 'runtime-wasm', 'grammars/tree-sitter-python.wasm': 'python-grammar', 'grammars/tree-sitter-javascript.wasm': 'javascript-grammar', 'server/contextos-mcp.mjs': 'new bundle\n', 'skills/contextos/SKILL.md': '---\nname: contextos\ndescription: "Required scaffold: use ContextOS."\n---\nnew skill\n', 'skills/contextos/notes/setup.md': 'new setup reference\n', 'skills/contextos-ops/SKILL.md': '---\nname: contextos-ops\ndescription: "Required operations guide: configure ContextOS."\n---\nnew ops skill\n', 'skills/contextos-ops/notes/micro-setup.md': 'new ops reference\n', '.codex-plugin/plugin.json': '{"name":"contextos","version":"2.7.1"}', '.mcp.json': '{}' };
   for (const target of [plugin, source, path.join(codexHome, 'plugins/cache/personal/contextos', version)]) {
     for (const [relative, content] of Object.entries(files)) {
       fs.mkdirSync(path.dirname(path.join(target, relative)), { recursive: true });
@@ -114,8 +114,8 @@ test('installer repairs the full cached skill tree and check detects missing or 
   try {
     const installed = f.run();
     assert.equal(installed.status, 0, installed.stderr);
-    assert.equal(fs.readFileSync(path.join(installPath, 'references/setup.md'), 'utf8'), 'new setup reference\n');
-    assert.equal(fs.readFileSync(path.join(opsInstallPath, 'references/micro-setup.md'), 'utf8'), 'new ops reference\n');
+    assert.equal(fs.readFileSync(path.join(installPath, 'notes/setup.md'), 'utf8'), 'new setup reference\n');
+    assert.equal(fs.readFileSync(path.join(opsInstallPath, 'notes/micro-setup.md'), 'utf8'), 'new ops reference\n');
     const runtimeSkillPath = path.join(f.contextosHome, 'skills/contextos/SKILL.md');
     assert.equal(fs.readFileSync(runtimeSkillPath, 'utf8'), '---\nname: contextos\ndescription: "Required scaffold: use ContextOS."\n---\nnew skill\n');
     fs.writeFileSync(runtimeSkillPath, 'stale runtime skill');
@@ -133,23 +133,23 @@ test('installer repairs the full cached skill tree and check detects missing or 
     assert.equal(f.run().status, 0, 'install repairs the missing ops skill');
     assert.equal(fs.readFileSync(path.join(opsInstallPath, 'SKILL.md'), 'utf8'), '---\nname: contextos-ops\ndescription: "Required operations guide: configure ContextOS."\n---\nnew ops skill\n');
 
-    fs.writeFileSync(path.join(installPath, 'references/obsolete.md'), 'stale cached reference');
+    fs.writeFileSync(path.join(installPath, 'notes/obsolete.md'), 'stale cached reference');
     const repaired = f.run();
     assert.equal(repaired.status, 0, repaired.stderr);
-    assert.equal(fs.existsSync(path.join(installPath, 'references/obsolete.md')), false, 'sync removes stale skill files');
+    assert.equal(fs.existsSync(path.join(installPath, 'notes/obsolete.md')), false, 'sync removes stale skill files');
 
-    fs.rmSync(path.join(installPath, 'references/setup.md'));
+    fs.rmSync(path.join(installPath, 'notes/setup.md'));
     const missing = f.run('--check');
     assert.notEqual(missing.status, 0);
     assert.match(missing.stderr, /skill tree is missing or has stale files/);
-    assert.equal(fs.existsSync(path.join(installPath, 'references/setup.md')), false, '--check does not repair the cache');
+    assert.equal(fs.existsSync(path.join(installPath, 'notes/setup.md')), false, '--check does not repair the cache');
 
-    fs.writeFileSync(path.join(installPath, 'references/setup.md'), 'new setup reference\n');
-    fs.writeFileSync(path.join(installPath, 'references/obsolete.md'), 'stale cached reference');
+    fs.writeFileSync(path.join(installPath, 'notes/setup.md'), 'new setup reference\n');
+    fs.writeFileSync(path.join(installPath, 'notes/obsolete.md'), 'stale cached reference');
     const stale = f.run('--check');
     assert.notEqual(stale.status, 0);
     assert.match(stale.stderr, /skill tree is missing or has stale files/);
-    assert.equal(fs.existsSync(path.join(installPath, 'references/obsolete.md')), true, '--check leaves stale files untouched');
+    assert.equal(fs.existsSync(path.join(installPath, 'notes/obsolete.md')), true, '--check leaves stale files untouched');
   } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 });
 

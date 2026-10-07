@@ -131,6 +131,7 @@ test('V2Database basic CRUD and relations', () => {
     memberIds: ['block-1'],
   });
 
+  db.saveBlock({ id: 'block-2', projectId: 'proj-test', title: 'Block 2', artifactRefs: [{ path: 'src/callee.js', hash: 'h3' }] });
   db.saveLink({
     id: 'link-1',
     projectId: 'proj-test',
@@ -587,4 +588,31 @@ test('importing an externally rewritten graph does not create a dirty export loo
 
   db.close();
   fs.rmSync(tempDir, { recursive: true, force: true });
+});
+
+test('Link storage validates endpoints and kinds atomically, including aliased ids and timestamps', () => {
+  const db = new V2Database(':memory:');
+  try {
+    db.ensureProject('p', '/tmp/p');
+    db.ensureProject('q', '/tmp/q');
+    for (const [id, projectId] of [['a','p'], ['b','p'], ['foreign','q']]) {
+      db.saveBlock({ id, projectId, title: id, artifactRefs: [{ path: id + '.mjs', hash: 'verified' }] });
+    }
+    db.saveChain({ id: 'group', projectId: 'p', title: 'Group', memberIds: ['a'] });
+    db.saveLink({ project_id: 'p', from_id: 'a', to_id: 'b', link_type: 'calls', created_at: '2001-01-01T00:00:00.000Z' });
+    db.saveLink({ projectId: 'p', sourceId: 'a', targetId: 'b', kind: 'depends_on' });
+    const before = db.listLinks('p');
+    assert.equal(before.length, 2);
+    assert.equal(before.find(link => link.kind === 'calls').createdAt, '2001-01-01T00:00:00.000Z');
+    for (const update of [{ to: 'missing' }, { from: 'missing' }, { to: 'group' }, { to: 'foreign' }, { kind: 'unknown' }]) {
+      assert.throws(() => db.saveLink({ ...before[0], ...update }), /existing Block|Invalid link kind/);
+      assert.deepEqual(db.listLinks('p'), before);
+    }
+    assert.throws(() => db.saveLink({ ...before[0], projectId: 'q', from: 'foreign', to: 'foreign' }), /another project/);
+    assert.deepEqual(db.listLinks('p'), before);
+    db.deleteLinkBetween('a', 'b', 'calls', 'p');
+    assert.deepEqual(db.listLinks('p').map(link => link.kind), ['depends_on']);
+    db.deleteLinkBetween('a', 'b');
+    assert.deepEqual(db.listLinks('p'), []);
+  } finally { db.close(); }
 });

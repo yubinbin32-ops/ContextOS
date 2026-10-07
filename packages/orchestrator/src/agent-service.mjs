@@ -23,6 +23,17 @@ function startJobCancellationWatcher(projectRoot, jobId, controller) {
   check();
   return { stop() { stopped = true; clearInterval(timer); } };
 }
+export function agentProgressSnapshot(job, now = Date.now()) {
+  const progress = job.progress || {};
+  const lastActivityAt = progress.lastActivityAt || job.createdAt || job.updatedAt || null;
+  const elapsed = lastActivityAt ? now - Date.parse(lastActivityAt) : 0;
+  const idleMs = job.status === 'running' && Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0;
+  return { stage: progress.stage || (job.status === 'running' ? 'queued' : job.status),
+    lastActivityAt, idleMs, noProgress: job.status === 'running' && idleMs >= 60_000,
+    processAlive: job.status === 'running' && isProcessAlive(job.leasePid),
+    stdoutBytes: progress.stdoutBytes || 0, stderrBytes: progress.stderrBytes || 0,
+    events: progress.events || 0 };
+}
 const compactJob = (job) => {
   if (!job) return {
     status: 'missing',
@@ -40,6 +51,7 @@ const compactJob = (job) => {
   return {
     id: job.jobId,
     status: job.status,
+    progress: agentProgressSnapshot(job),
     report,
     mailbox: {
       canSend: job.status === 'running',
@@ -191,6 +203,68 @@ function cliProviderName(adapter, resultProvider = null) {
   return typeof configured === 'string' && configured.trim() ? configured : 'cli';
 }
 
+// The installed plugin ships a single bundled server that implements the
+// `--agent-worker` entry itself, so a detached worker must re-exec the current
+// entry whenever the sibling worker module is not present beside it. Without
+// this fallback the spawn dies with MODULE_NOT_FOUND and every background job
+// reports only "worker exited before completion". The resolved shape also
+// carries the argv contract: the bundled entry needs the `--agent-worker` flag
+// while the source worker module takes `<projectRoot> <jobId>` directly.
+// In-place implementation edits the project working tree directly, so the change has
+// to be revertible without git: dispatch records the exact pre-dispatch content of the
+// allowed paths. The cap keeps a job record small enough to stay a receipt rather than
+// a repository copy.
+const IN_PLACE_SNAPSHOT_MAX_FILES = 200;
+const IN_PLACE_SNAPSHOT_MAX_BYTES = 2 * 1024 * 1024;
+
+function snapshotInPlaceTargets(projectRoot, allowedPaths = []) {
+  const root = path.resolve(projectRoot);
+  const snapshot = {};
+  let files = 0;
+  let bytes = 0;
+  const visit = (absolute, relative) => {
+    let stat = null;
+    try { stat = fs.statSync(absolute); } catch { snapshot[relative] = { exists: false }; return; }
+    if (stat.isDirectory()) {
+      let entries = [];
+      try { entries = fs.readdirSync(absolute, { withFileTypes: true }); } catch { return; }
+      for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+        if (['.git', '.contextos', 'node_modules'].includes(entry.name)) continue;
+        visit(path.join(absolute, entry.name), `${relative}/${entry.name}`);
+      }
+      return;
+    }
+    if (!stat.isFile()) return;
+    files += 1;
+    bytes += stat.size;
+    if (files > IN_PLACE_SNAPSHOT_MAX_FILES || bytes > IN_PLACE_SNAPSHOT_MAX_BYTES) {
+      throw new Error(`CLI_INPLACE_SNAPSHOT_TOO_LARGE: context.allowedPaths covers ${files} file(s) and ${bytes} byte(s); keep it under ${IN_PLACE_SNAPSHOT_MAX_FILES} files and ${IN_PLACE_SNAPSHOT_MAX_BYTES} bytes, narrow the paths, or dispatch with an isolated workspace.`);
+    }
+    snapshot[relative] = { exists: true, content: fs.readFileSync(absolute, 'utf8') };
+  };
+  for (const entry of allowedPaths) {
+    if (typeof entry !== 'string' || !entry.trim()) continue;
+    if (/[*?\[]/.test(entry)) {
+      throw new Error(`CLI_INPLACE_SNAPSHOT_INVALID: '${entry}' is a glob; in-place implementation needs explicit repository-relative paths so the change stays revertible.`);
+    }
+    const relative = String(entry).replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+    if (!relative || relative.startsWith('/') || relative.split('/').includes('..')) {
+      throw new Error(`CLI_INPLACE_SNAPSHOT_INVALID: '${entry}' must be a repository-relative path inside the project.`);
+    }
+    visit(path.join(root, relative), relative);
+  }
+  return snapshot;
+}
+
+export function resolveAgentWorkerEntry(moduleUrl, explicitEntry = null) {
+  if (explicitEntry) return { entry: explicitEntry, bundled: true };
+  const sibling = fileURLToPath(new URL('./agent-worker.mjs', moduleUrl));
+  try {
+    if (fs.existsSync(sibling)) return { entry: sibling, bundled: false };
+  } catch (_) {}
+  return { entry: fileURLToPath(moduleUrl), bundled: true };
+}
+
 export async function executeAgent(args, { projectRoot, adapter, name, roles, runner = runMicroTask, onUsage, signal, workerEntry, killProcess = (pid, signalName) => process.kill(pid, signalName), processAlive = isProcessAlive } = {}) {
   const action = args.action || 'run';
   const jobId = args.jobId || args.id || (args.resume && typeof args.resume === 'object' ? args.resume.jobId : undefined);
@@ -316,19 +390,33 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
   if (!(args.task || args.prompt)) throw new Error('CLI task text is required.');
   if (args.execution === 'implement') {
     const missingScope = [];
-    if (!args.workspace) missingScope.push('workspace');
     if (!Array.isArray(args.context?.allowedPaths) || args.context.allowedPaths.length === 0) missingScope.push('context.allowedPaths');
     if (!Array.isArray(args.context?.acceptance) || args.context.acceptance.length === 0) missingScope.push('context.acceptance');
     if (missingScope.length) throw new Error(`Implementation dispatch rejected before the job starts; missing[${missingScope.length}]: ${missingScope.join(', ')}.`);
   }
+  // A detached worker cannot create the isolated copy for the caller: it resolves the
+  // workspace with realpathSync and would die with a raw ENOENT reported only after the
+  // job was created. Reject the dispatch synchronously with the remedy instead. Omitting
+  // workspace is the supported in-place mode and is not affected by this guard.
+  if (args.workspace && !fs.existsSync(String(args.workspace))) {
+    throw new Error(
+      `CLI_WORKSPACE_MISSING: the isolated workspace '${args.workspace}' does not exist. Create it before dispatch, `
+      + `for example: git -C ${projectRoot} worktree add ${args.workspace} HEAD (or copy the tree when the CLI must run npm scripts).`
+    );
+  }
   const id = jobId || `agent-${crypto.randomUUID()}`;
-  const implementationScope = args.execution === 'implement' && args.workspace
+  const inPlaceImplementation = args.execution === 'implement' && !args.workspace;
+  const implementationScope = args.execution === 'implement'
     ? {
-        workspace: String(args.workspace),
+        mode: inPlaceImplementation ? 'in-place' : 'isolated',
+        workspace: String(args.workspace || projectRoot),
         allowedPaths: Array.isArray(args.context?.allowedPaths) ? args.context.allowedPaths : [],
         acceptance: Array.isArray(args.context?.acceptance) ? args.context.acceptance : [],
         verify: Array.isArray(args.context?.verify) ? args.context.verify : [],
         baseRevision: args.context?.baseRevision || null,
+        ...(inPlaceImplementation
+          ? { before: snapshotInPlaceTargets(projectRoot, args.context?.allowedPaths || []) }
+          : {}),
       }
     : null;
   const requestedDelivery = ['immediate', 'defer', 'errors-only', 'auto'].includes(args.delivery)
@@ -354,9 +442,10 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
       });
   if (!created.created && !workerResume) return compactJob(created.job);
   if (args.background === true && !workerResume && process.env.CONTEXTOS_AGENT_INPROCESS !== '1') {
-    const workerArgs = workerEntry
-      ? [workerEntry, '--agent-worker', projectRoot, id]
-      : [fileURLToPath(new URL('./agent-worker.mjs', import.meta.url)), projectRoot, id];
+    const worker = resolveAgentWorkerEntry(import.meta.url, workerEntry);
+    const workerArgs = worker.bundled
+      ? [worker.entry, '--agent-worker', projectRoot, id]
+      : [worker.entry, projectRoot, id];
     let workerStderr = 'ignore';
     try {
       const jobDir = path.join(projectRoot, '.contextos', 'micro-deliveries', 'jobs');
@@ -385,6 +474,19 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
   }
   const startedAt = new Date().toISOString();
   const started = Date.now();
+  let lastProgressWrite = 0;
+  let latestProgress = { stage: 'starting', lastActivityAt: startedAt, stdoutBytes: 0, stderrBytes: 0, events: 0 };
+  const onProgress = (event = {}) => {
+    const stage = typeof event.stage === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(event.stage) ? event.stage : latestProgress.stage;
+    const next = { stage, lastActivityAt: new Date().toISOString(),
+      stdoutBytes: Number.isSafeInteger(event.stdoutBytes) ? event.stdoutBytes : latestProgress.stdoutBytes,
+      stderrBytes: Number.isSafeInteger(event.stderrBytes) ? event.stderrBytes : latestProgress.stderrBytes,
+      events: latestProgress.events + 1 };
+    const shouldWrite = stage !== latestProgress.stage || Date.now() - lastProgressWrite >= 1000;
+    latestProgress = next;
+    if (shouldWrite) { updateMicroJob(projectRoot, id, { progress: latestProgress }); lastProgressWrite = Date.now(); }
+  };
+  onProgress({ stage: 'starting' });
   const run = async () => {
     let result = null;
     let runnerError = null;
@@ -396,7 +498,7 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
         result = await runner({ provider: 'cli', cli: adapter, model: adapter.model, thinking: adapter.thinking }, {
           ...args, delivery: deliveryMode, provider: 'cli', projectRoot, agentJobId: id, reportJobId: id, withOS: true,
           evidenceBroker: true, apiMicro: roles?.micro,
-          reportFormat: 'structured', signal: controller.signal,
+          reportFormat: 'structured', signal: controller.signal, onProgress,
         });
       } catch (error) {
         runnerError = error;
@@ -405,7 +507,7 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
 
       const completed = !runnerError && result?.ok === true;
       const status = controller.signal.aborted ? 'cancelled' : completed ? 'completed' : 'failed';
-      const errorMessage = runnerError?.message || result?.error || (completed ? null : status === 'cancelled' ? 'CLI task was cancelled.' : 'CLI task failed.');
+      const errorMessage = status === 'cancelled' ? 'CLI task was cancelled.' : runnerError?.message || result?.error || (completed ? null : 'CLI task failed.');
       const providerLaunches = result?.providerLaunches ?? result?.invocation?.providerLaunches ?? null;
       const actualModel = result?.actualModel || result?.invocation?.actualModel || null;
       const requestedModel = result?.requestedModel || adapter.model || null;
@@ -438,7 +540,9 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
       const normalizedReport = normalizeAgentReport(result?.agentReport || result?.structured || {
         answer: result?.content || errorMessage || '', needsHost: !completed,
       }, { jobId: id, status, answeredQuestions, cliUsage });
-      const report = !hasAgentReportContent(normalizedReport) && hasAgentReportContent(previousReport)
+      const retainPrevious = !hasAgentReportContent(normalizedReport)
+        || (status === 'cancelled' && !result?.agentReport && !result?.structured && !result?.content);
+      const report = retainPrevious && hasAgentReportContent(previousReport)
         ? {
             ...normalizedReport,
             summary: previousReport.summary || '',
@@ -461,9 +565,10 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
       // central metering callback; a ledger failure must not rewrite task status.
       let job = updateMicroJob(projectRoot, id, {
         status,
+        progress: { ...latestProgress, stage: status, lastActivityAt: new Date().toISOString() },
         report,
         error: errorMessage,
-        cliSessionId: result?.cliSessionId || null,
+        cliSessionId: result?.cliSessionId || (status === 'cancelled' ? args.cliSessionId || previousJob?.cliSessionId : null) || null,
         deniedActions: result?.deniedActions || null,
         delivery: deliveryMode,
         providerUsageComplete: result?.providerUsageComplete ?? null,

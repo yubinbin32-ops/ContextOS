@@ -86,7 +86,13 @@ export const RESPONSE_BUDGETS = Object.freeze({
   // Keep the default small; callers that truly need the body can opt into
   // full:true and fetch the artifact explicitly.
   ops: 1200,
-  micro: 1200,
+  // Orientation reads (os_context overview, block/chain architecture, plan/task
+  // progress, knowledge rules) are the project map, not diagnostic plumbing: one
+  // call must return the whole bounded outline, otherwise the host needs a second
+  // artifact read just to learn how a feature is wired or what the current norms
+  // are. Diagnostic ops keep the compact budget above; callers can still tighten
+  // with an explicit maxChars or widen with full:true.
+  opsOrientation: 6000,
 });
 
 export function estimateTokens(value) {
@@ -784,6 +790,20 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
     return projected;
   }
   const projected = clipText(content, maxChars, { label: 'micro answer', keepTail: false });
+  // A truncated implement turn that applied nothing must not read as a finished
+  // report: keep the run resumable (ok:true + continue guidance) but surface the
+  // pending implementation so the host continues the session instead of trusting
+  // the completion claim.
+  const implementationPending = result?.implementationEvidence?.applied === false && providerTruncated;
+  const normalizedReport = result.agentReport
+    ? normalizeAgentReport(result.agentReport, { jobId: result.agentReport.jobId, status: result.agentReport.status, maxChars })
+    : null;
+  if (normalizedReport && implementationPending) {
+    normalizedReport.status = 'partial';
+    normalizedReport.needsHost = true;
+    normalizedReport.needsHostReason = 'reported';
+    normalizedReport.truncated = true;
+  }
   const response = {
     ok: true,
     delivery: 'immediate',
@@ -792,7 +812,10 @@ export function projectMicroResult(result, { projectRoot, hostSessionId = null, 
     chars: content.length,
     truncated: projected.length < content.length || providerTruncated,
     ...truncationNote,
-    ...(result.agentReport ? { report: normalizeAgentReport(result.agentReport, { jobId: result.agentReport.jobId, status: result.agentReport.status, maxChars }) } : { content: projected }),
+    ...(normalizedReport ? { report: normalizedReport } : { content: projected }),
+    ...(implementationPending
+      ? { partialReason: 'implementation-pending', needsHost: true, implementationEvidence: result.implementationEvidence }
+      : {}),
     ...(deliveryFallback ? { deliveryFallback } : {}),
     ...(requestedDelivery === 'auto' && result.needsHost === true ? { needsHost: true } : {}),
     ...projectProviderUsage(result),

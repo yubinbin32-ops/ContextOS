@@ -104,11 +104,35 @@ test('command receipts are compacted and action diagnostics stay bounded', () =>
 test('projectMicroResult keeps the full Micro report by default', () => {
   const root = makeTempProject();
   try {
-    const content = `BEGIN\n${'x'.repeat(RESPONSE_BUDGETS.micro + 500)}\nEND`;
+    const content = `BEGIN\n${'x'.repeat(2500)}\nEND`;
     const projected = projectMicroResult({ ok: true, content }, { projectRoot: root });
     assert.equal(projected.content, content);
     assert.equal(projected.chars, content.length);
     assert.equal(projected.truncated, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('projectMicroResult marks a truncated implement turn without an applied change as pending', () => {
+  const root = makeTempProject();
+  try {
+    const projected = projectMicroResult({
+      ok: true,
+      content: 'Micro provider request budget exceeded',
+      providerTruncated: true,
+      finishReason: 'length',
+      sessionId: 'sess-fixture',
+      agentReport: { status: 'completed', summary: 'finished', changes: [], checks: [], blockers: [], needsHost: false },
+      implementationEvidence: { applied: false, source: 'none', changedPaths: [], receiptIds: [] },
+    }, { projectRoot: root });
+    assert.equal(projected.ok, true, 'the retained session stays resumable');
+    assert.equal(projected.partialReason, 'implementation-pending');
+    assert.equal(projected.report.status, 'partial');
+    assert.equal(projected.report.needsHost, true);
+    assert.equal(projected.report.truncated, true);
+    assert.equal(projected.implementationEvidence.applied, false);
+    assert.match(projected.guidance, /Continue session sess-fixture/);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

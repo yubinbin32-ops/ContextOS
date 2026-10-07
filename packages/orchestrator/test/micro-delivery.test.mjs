@@ -354,3 +354,21 @@ test('Micro errors-only hides successful non-graph work and exposes failed tool 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a dead detached worker surfaces the captured worker log tail', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-job-worker-log-'));
+  const jobId = 'agent-worker-log-tail';
+  try {
+    createMicroJob(root, { jobId, kind: 'agent', provider: 'cli', adapter: 'codex', worker: { version: 1, args: {} } });
+    const logFile = path.join(root, '.contextos', 'micro-deliveries', 'jobs', `${jobId}.worker.log`);
+    fs.mkdirSync(path.dirname(logFile), { recursive: true });
+    fs.writeFileSync(logFile, 'noise line\nError: Cannot find module agent-worker.mjs\n');
+    updateMicroJob(root, jobId, { leasePid: 999999 });
+    const job = readMicroJob(root, jobId);
+    assert.equal(job.status, 'failed');
+    assert.match(job.error, /Micro background worker exited before completion\./);
+    assert.match(job.error, /Cannot find module agent-worker\.mjs/, 'the worker log tail must explain the failure');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -225,6 +225,8 @@ export class MarkdownRenderer {
 
     if (plan.ruleRefs?.length > 0) {
       lines.push(`- Referenced Rules: ${plan.ruleRefs.map((r) => `\`${r}\``).join(', ')}`);
+    } else {
+      lines.push('- Referenced Rules: (none bound) - this plan carries no governing rule; bind project rules before implementing or the work will drift from them.');
     }
 
     lines.push('\n## Phases:');
@@ -426,7 +428,7 @@ export class MarkdownRenderer {
     return lines.join('\n');
   }
 
-  static renderBlock(block, { inboundLinks = [], outboundLinks = [] } = {}) {
+  static renderBlock(block, { inboundLinks = [], outboundLinks = [], maxLocators } = {}) {
     const lines = [];
     lines.push(`# Block: [${block.id}] ${block.title || block.id} (${block.kind || 'service'})`);
     const tier = block.tier || MarkdownRenderer.getBlockTier(block);
@@ -434,6 +436,18 @@ export class MarkdownRenderer {
     if (block.summary) lines.push(`**Summary**: ${block.summary}`);
     if (block.details) lines.push(`\n${block.details}`);
 
+    // A Block read is an architecture index, not a source dump: cap the
+    // topology and the locator list so one call returns the whole map instead
+    // of a clipped list that forces a second artifact read. Exact source stays
+    // in ask({inspect}) / change; this renderer only names where it lives.
+    const MAX_NEIGHBOR_LINKS = 12;
+    // `options.maxLocators` (1-200) overrides the default locator sample cap;
+    // a non-numeric or out-of-range value falls back to the default.
+    const DEFAULT_MAX_LOCATOR_LINES = 12;
+    const MAX_LOCATOR_LINES = Number.isFinite(maxLocators) && maxLocators >= 1 && maxLocators <= 200
+      ? maxLocators
+      : DEFAULT_MAX_LOCATOR_LINES;
+    const MAX_ROLLUP_FILES = 12;
     const safeInbound = inboundLinks || [];
     const safeOutbound = outboundLinks || [];
 
@@ -442,46 +456,70 @@ export class MarkdownRenderer {
       lines.push('- 📥 **Called by (入度)**: *(none / root entrypoint)*');
     } else {
       lines.push('- 📥 **Called by (入度)**:');
-      for (const link of safeInbound) {
+      for (const link of safeInbound.slice(0, MAX_NEIGHBOR_LINKS)) {
         const reason = link.reason ? ` (${link.reason})` : '';
         lines.push(`  - \`[${link.from || 'unknown'}]\` -[${link.kind || 'calls'}]-> this block${reason}`);
       }
+      if (safeInbound.length > MAX_NEIGHBOR_LINKS) lines.push(`  - … ${safeInbound.length - MAX_NEIGHBOR_LINKS} more caller(s).`);
     }
 
     if (safeOutbound.length === 0) {
       lines.push('- 📤 **Calls (出度)**: *(none / terminal node)*');
     } else {
       lines.push('- 📤 **Calls (出度)**:');
-      for (const link of safeOutbound) {
+      for (const link of safeOutbound.slice(0, MAX_NEIGHBOR_LINKS)) {
         const reason = link.reason ? ` (${link.reason})` : '';
         lines.push(`  - this block -[${link.kind || 'calls'}]-> \`[${link.to || 'unknown'}]\`${reason}`);
       }
+      if (safeOutbound.length > MAX_NEIGHBOR_LINKS) lines.push(`  - … ${safeOutbound.length - MAX_NEIGHBOR_LINKS} more callee(s).`);
     }
 
-    lines.push('\n## Bound Code Locators:');
-    if ((block.artifactRefs || []).length === 0) {
+    const locators = (block.artifactRefs || []).filter(Boolean);
+    const locatorLine = (ref) => {
+      if (typeof ref === 'string') return `- \`${ref}\``;
+      const range = ref.startLine && ref.endLine ? ` [L${ref.startLine}-L${ref.endLine}]` : '';
+      const sym = ref.symbol ? ` symbol: \`${ref.symbol}\`` : '';
+      const role = ref.role ? `role: ${ref.role}` : '';
+      const hash = ref.hash ? `hash: \`${ref.hash}\`` : '';
+      const metaParts = [role, hash].filter(Boolean);
+      const metaStr = metaParts.length > 0 ? ` (${metaParts.join(', ')})` : '';
+      return `- \`${ref.path || 'unknown'}\`${range}${sym}${metaStr}`;
+    };
+    lines.push(`\n## Bound Code Locators${locators.length > MAX_LOCATOR_LINES ? ` (${MAX_LOCATOR_LINES} of ${locators.length})` : ''}:`);
+    if (locators.length === 0) {
       lines.push('*Warning: No bound code locators.*');
     } else {
-      for (const ref of block.artifactRefs) {
-        if (!ref) continue;
-        if (typeof ref === 'string') {
-          lines.push(`- \`${ref}\``);
-        } else if (typeof ref === 'object') {
-          const range = ref.startLine && ref.endLine ? ` [L${ref.startLine}-L${ref.endLine}]` : '';
-          const sym = ref.symbol ? ` symbol: \`${ref.symbol}\`` : '';
-          const role = ref.role ? `role: ${ref.role}` : '';
-          const hash = ref.hash ? `hash: \`${ref.hash}\`` : '';
-          const metaParts = [role, hash].filter(Boolean);
-          const metaStr = metaParts.length > 0 ? ` (${metaParts.join(', ')})` : '';
-          lines.push(`- \`${ref.path || 'unknown'}\`${range}${sym}${metaStr}`);
+      for (const ref of locators.slice(0, MAX_LOCATOR_LINES)) lines.push(locatorLine(ref));
+      if (locators.length > MAX_LOCATOR_LINES) {
+        const files = new Map();
+        for (const ref of locators) {
+          const file = typeof ref === 'string' ? ref : (ref.path || 'unknown');
+          const entry = files.get(file) || { count: 0, min: null, max: null };
+          entry.count += 1;
+          if (typeof ref === 'object' && Number.isSafeInteger(ref.startLine)) entry.min = entry.min === null ? ref.startLine : Math.min(entry.min, ref.startLine);
+          if (typeof ref === 'object' && Number.isSafeInteger(ref.endLine)) entry.max = entry.max === null ? ref.endLine : Math.max(entry.max, ref.endLine);
+          files.set(file, entry);
         }
+        const rollup = [...files.entries()].slice(0, MAX_ROLLUP_FILES)
+          .map(([file, entry]) => `\`${file}\`${entry.min !== null ? ` L${entry.min}-L${entry.max}` : ''} (${entry.count})`);
+        const hiddenFiles = files.size - rollup.length;
+        lines.push(`- … ${locators.length - MAX_LOCATOR_LINES} more locator(s) across ${files.size} file(s): ${rollup.join('; ')}${hiddenFiles > 0 ? `; … ${hiddenFiles} more file(s)` : ''}`);
       }
+      lines.push('- Exact source: ask({inspect:[{path:"<file>", ranges:[[start,end]]}]}); anchor detail: block({action:"owners", args:{paths:[...]}}).');
     }
 
-    if (block.history?.length > 0) {
+    const history = (block.history || []).filter((entry) => entry && typeof entry === 'object').slice(-5);
+    if (history.length) {
       lines.push('\n## Change History:');
-      for (const h of block.history.slice(-5)) {
-        lines.push(`- Rev ${h.revision}: ${h.description} (${h.changedAt})`);
+      for (const entry of history) {
+        if (entry.revision !== undefined || entry.description !== undefined) {
+          const at = entry.changedAt || entry.at || entry.timestamp || '';
+          lines.push(`- Rev ${entry.revision ?? '?'}: ${entry.description || '(no description)'}${at ? ` (${at})` : ''}`);
+        } else {
+          const at = entry.at || entry.changedAt || entry.timestamp || '';
+          const reason = entry.reason ? `: ${String(entry.reason).slice(0, 160)}` : '';
+          lines.push(`- ${entry.kind || 'change'}${at ? ` (${at})` : ''}${reason}`);
+        }
       }
     }
 

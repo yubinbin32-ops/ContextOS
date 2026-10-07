@@ -202,6 +202,42 @@ test('ContextOSV2Service integrates block taxonomy and micro-topology neighborho
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
+test('ContextOSV2Service block open forwards maxLocators to renderBlock', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-max-locators-test-'));
+  fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+  const artifactRefs = Array.from({ length: 15 }, (_, index) => {
+    const relativePath = `src/locator-${index}.mjs`;
+    fs.writeFileSync(path.join(tempDir, relativePath), `export const value${index} = ${index};\n`);
+    return relativePath;
+  });
+  const service = new ContextOSV2Service({ projectRoot: tempDir, projectId: 'test-max-locators' });
+
+  try {
+    await service.block({
+      action: 'bind',
+      id: 'block-locator-limit',
+      blockData: { title: 'Locator Limit Block', artifactRefs },
+    });
+
+    const locatorLineCount = (markdown) => markdown
+      .split('## Bound Code Locators')[1]
+      .split('\n')
+      .filter((line) => line.startsWith('- `'))
+      .length;
+
+    const limited = await service.block({ action: 'open', id: 'block-locator-limit', maxLocators: 3 });
+    assert.ok(limited.includes('## Bound Code Locators (3 of 15):'));
+    assert.equal(locatorLineCount(limited), 3);
+
+    const fallback = await service.block({ action: 'open', id: 'block-locator-limit', maxLocators: 0 });
+    assert.ok(fallback.includes('## Bound Code Locators (12 of 15):'));
+    assert.equal(locatorLineCount(fallback), 12);
+  } finally {
+    service.close();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('MarkdownRenderer handles edge cases: null refs and string refs', () => {
   // 1. Null/undefined elements in artifactRefs must not crash getBlockTier
   const nullRefTier = MarkdownRenderer.getBlockTier({
@@ -221,4 +257,25 @@ test('MarkdownRenderer handles edge cases: null refs and string refs', () => {
   assert.ok(renderedBlock.includes('`src/simple-file.js`'));
   assert.ok(renderedBlock.includes('`src/object-file.js`'));
   assert.ok(renderedBlock.includes('hash: `hash123`'));
+});
+
+test('MarkdownRenderer.renderBlock stays a concise architecture index for large blocks', () => {
+  const refs = Array.from({ length: 200 }, (_, index) => ({
+    path: `src/file-${index % 8}.js`, startLine: index + 1, endLine: index + 2,
+    symbol: `fn${index}`, role: 'implementation', hash: `h${index}`,
+  }));
+  const md = MarkdownRenderer.renderBlock({
+    id: 'block-big', title: 'Big', summary: 'Big block', artifactRefs: refs,
+    history: [
+      { kind: 'artifact-ref-pruned', at: '2026-10-07T00:00:00.000Z', reason: 'pruned stale anchors' },
+      { revision: 3, description: 'bound new path', changedAt: '2026-10-08T00:00:00.000Z' },
+    ],
+  });
+  assert.ok(Array.from(md).length < 6000, `block open must stay inside the orientation budget (got ${Array.from(md).length})`);
+  assert.ok(md.includes('## Bound Code Locators (12 of 200):'));
+  assert.ok(md.includes('more locator(s) across 8 file(s)'));
+  assert.ok(md.includes('ask({inspect:'));
+  assert.ok(md.includes('- artifact-ref-pruned (2026-10-07T00:00:00.000Z): pruned stale anchors'));
+  assert.ok(md.includes('- Rev 3: bound new path (2026-10-08T00:00:00.000Z)'));
+  assert.ok(!md.includes('undefined'));
 });

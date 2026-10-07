@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import fs from 'node:fs';
 import { V2_SQL_SCHEMA } from './schema.mjs';
+import { Link } from '../../domain/src/link.mjs';
 
 export class V2Database {
   constructor(filePath = ':memory:') {
@@ -1085,7 +1086,27 @@ export class V2Database {
   }
 
   // --- Link ---
-  saveLink(link) {
+  saveLink(input) {
+    const link = new Link({
+      ...input,
+      projectId: input.projectId || input.project_id || 'contextos',
+      from: input.from ?? input.from_id ?? input.source_id ?? input.sourceId,
+      to: input.to ?? input.to_id ?? input.target_id ?? input.targetId,
+      kind: input.kind ?? input.link_type ?? input.linkType ?? 'depends_on',
+      createdAt: input.createdAt ?? input.created_at,
+      updatedAt: input.updatedAt ?? input.updated_at,
+    }).toJSON();
+    // Validate before any INSERT/UPDATE. A failed relation must leave prior state intact.
+    for (const endpoint of [link.from, link.to]) {
+      const block = this.getBlock(endpoint);
+      if (!block || block.projectId !== link.projectId) {
+        throw new Error(`Link endpoint '${endpoint}' must be an existing Block in project '${link.projectId}' (Chains are groups).`);
+      }
+    }
+    const previous = this.getLink(link.id);
+    if (previous && previous.projectId !== link.projectId) {
+      throw new Error(`Link id '${link.id}' belongs to another project.`);
+    }
     const stmt = this.db.prepare(`
       INSERT INTO links (
         id, project_id, from_id, to_id, kind, provenance, confidence, reason, revision, created_at, updated_at
@@ -1102,7 +1123,7 @@ export class V2Database {
         updated_at = excluded.updated_at
     `);
     stmt.run(
-      link.id || `${link.from || link.source_id}->${link.to || link.target_id}`,
+      link.id,
       link.projectId || link.project_id || 'contextos',
       link.from || link.from_id || link.source_id || link.sourceId,
       link.to || link.to_id || link.target_id || link.targetId,
@@ -1160,9 +1181,14 @@ export class V2Database {
     return true;
   }
 
-  deleteLinkBetween(fromId, toId) {
-    const stmt = this.db.prepare('DELETE FROM links WHERE (from_id = ? AND to_id = ?) OR (id = ?)');
-    stmt.run(fromId, toId, `${fromId}->${toId}`);
+  // A pair without kind preserves the legacy operation: delete every relation of that pair.
+  // kind selects one relation family; exact ids are handled by deleteLink.
+  deleteLinkBetween(fromId, toId, kind = null, projectId = null) {
+    const filters = ['from_id = ?', 'to_id = ?'];
+    const values = [fromId, toId];
+    if (kind !== null) { filters.push('kind = ?'); values.push(kind); }
+    if (projectId !== null) { filters.push('project_id = ?'); values.push(projectId); }
+    this.db.prepare('DELETE FROM links WHERE ' + filters.join(' AND ')).run(...values);
     return true;
   }
 

@@ -303,7 +303,7 @@ test('kernel e2e: pipeline shorthand preserves ship architecture in receipt mode
     ],
   });
   assert.match(result, /^# ContextOS pipeline/m);
-  assert.match(result, /pipeline=OK actions=2\/1 mode=receipt/);
+  assert.match(result, /pipeline=OK actions=2 steps=1 mode=receipt/);
   assert.match(result, /## Step 1: chain/);
   assert.match(result, /### Action 1\.1: verify/);
   assert.match(result, /### Action 1\.2: ship/);
@@ -404,7 +404,7 @@ test('kernel e2e: ship architecture accepts common model aliases without extra r
   service.close();
 });
 
-test('kernel e2e: ship requires one curated owner and Chain membership in strict mode', async () => {
+test('kernel e2e: strict ship requires one curated owner and permits a standalone Block', async () => {
   const projectRoot = makeTempProject();
   fs.writeFileSync(
     path.join(projectRoot, '.contextos', 'profile.json'),
@@ -425,6 +425,8 @@ test('kernel e2e: ship requires one curated owner and Chain membership in strict
   const unownedResult = await orchestrator.dispatch('ship', { summary: 'shipping new billing package' });
   assert.match(unownedResult, /BLOCKED \(architecture governance gate\)/);
   assert.match(unownedResult, /packages\/billing\/index\.mjs/);
+  assert.match(unownedResult, /needs exactly one curated Block owner\. Chains provide optional feature navigation/);
+  assert.ok(!unownedResult.includes('membership in at least one Chain'));
   const blocksAfterUnownedShip = await service.block({ action: 'list', format: 'json' });
   assert.ok(!blocksAfterUnownedShip.items.some((block) => String(block.id).startsWith('mod-')));
 
@@ -469,24 +471,11 @@ test('kernel e2e: ship requires one curated owner and Chain membership in strict
       blockData: { title: 'Billing Package', kind: 'package' },
     },
   });
-  const noChainResult = await orchestrator.dispatch('ship', { summary: 'billing block without chain' });
-  assert.match(noChainResult, /BLOCKED \(architecture governance gate\)/);
-  assert.match(noChainResult, /not a member of a Chain/);
+  const standaloneGraph = await service.chain({ action: 'validate', checkSources: true });
+  assert.equal(standaloneGraph.valid, true);
+  assert.ok(standaloneGraph.advisories.standaloneBlocks.includes('block-billing'));
+  assert.equal((await service.chain({ action: 'list', format: 'json' })).items.length, 0);
 
-  await orchestrator.dispatch('ops', {
-    capability: 'chain',
-    action: 'compose',
-    args: {
-      chainData: { id: 'chain-billing', title: 'Billing Chain', memberIds: ['block-billing'] },
-    },
-  });
-  await assert.rejects(
-    () => service.chain({
-      action: 'compose',
-      chainData: { id: 'chain-derived', title: 'Invalid derived chain', memberIds: ['mod-legacy-billing'] },
-    }),
-    /cannot include derived ModuleIndex ids/
-  );
   const duplicateOwner = await service.block({
     action: 'bind_auto',
     id: 'block-billing-duplicate',
@@ -503,6 +492,32 @@ test('kernel e2e: ship requires one curated owner and Chain membership in strict
   assert.match(duplicateResult, /multiple curated Block owners/);
   await service.block({ action: 'delete', id: 'block-billing-duplicate' });
 
+  const noChainResult = await orchestrator.dispatch('ship', { summary: 'billing block without chain' });
+  assert.match(noChainResult, /# ContextOS ship/);
+  assert.ok(!noChainResult.includes('BLOCKED'));
+  assert.match(noChainResult, /Curated architecture: 0 gap/);
+  assert.match(noChainResult, /Chains provide optional feature navigation/);
+  const afterStandaloneShip = await service.chain({ action: 'list', format: 'json' });
+  assert.equal(afterStandaloneShip.items.length, 0, 'shipping a standalone Block must not create a fallback Chain');
+
+  await orchestrator.dispatch('ops', {
+    capability: 'chain',
+    action: 'compose',
+    args: {
+      chainData: { id: 'chain-billing', title: 'Billing Chain', memberIds: ['block-billing'] },
+    },
+  });
+  await assert.rejects(
+    () => service.chain({
+      action: 'compose',
+      chainData: { id: 'chain-derived', title: 'Invalid derived chain', memberIds: ['mod-legacy-billing'] },
+    }),
+    /cannot include derived ModuleIndex ids/
+  );
+  await orchestrator.dispatch('change', {
+    edits: [{ path: 'packages/billing/index.mjs', target: 'billingEngine = 2', replacement: 'billingEngine = 3' }],
+    verify: true,
+  });
   const passedResult = await orchestrator.dispatch('ship', { summary: 'billing package with curated Block and Chain' });
   assert.match(passedResult, /# ContextOS ship/);
   assert.ok(!passedResult.includes('BLOCKED'));
@@ -546,7 +561,7 @@ test('non-strict ship reports typed per-path architecture gaps without creating 
   }
 
   const result = await orchestrator.dispatch('ship', { summary: 'exercise all advisory architecture gaps' });
-  assert.match(result, /Gap counts: missing curated Block 1; multiple curated Block owners 1; owner without Chain membership 1\./);
+  assert.match(result, /Gap counts: missing curated Block 1; multiple curated Block owners 1; owner without Chain membership 0\./);
   assert.ok(result.includes('packages/search/missing.mjs'));
   assert.ok(result.includes('packages/search/duplicate.mjs'));
   assert.ok(result.includes('packages/search/unchained.mjs'));
@@ -554,6 +569,14 @@ test('non-strict ship reports typed per-path architecture gaps without creating 
   assert.ok(result.includes('block-search-second'));
   assert.match(result, /Curated architecture diagnostics/);
   assert.match(result, /Module index hints \(navigation only\)/);
+  const standaloneOwners = await service.block({ action: 'owners', paths: ['packages/search/unchained.mjs'], format: 'json' });
+  assert.equal(standaloneOwners.items[0].status, 'owned');
+  assert.equal(standaloneOwners.items[0].owners[0].id, 'block-search-unchained');
+  assert.deepEqual(standaloneOwners.items[0].owners[0].chainIds, []);
+  assert.ok(standaloneOwners.items[0].owners[0].refs.every(ref => ref.anchorStatus === 'fresh'));
+  const advisoryGraph = await service.chain({ action: 'validate' });
+  assert.ok(advisoryGraph.advisories.standaloneBlocks.includes('block-search-unchained'));
+  assert.equal((await service.chain({ action: 'list', format: 'json' })).items.length, 0, 'advisory ship must not invent a fallback Chain');
   const blocks = await service.block({ action: 'list', format: 'json', includeRefs: true });
   assert.ok(!blocks.items.some((block) => String(block.id).startsWith('mod-')));
   service.close();

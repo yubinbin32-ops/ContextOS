@@ -16,6 +16,9 @@ function write(file, state) {
   fs.writeFileSync(temporary, JSON.stringify(state), { mode: 0o600 });
   fs.renameSync(temporary, file);
 }
+export function pendingMicroMessages(root, jobId) {
+  return read(mailboxPath(root, jobId)).messages.length;
+}
 export function sendMicroMessage(root, jobId, message) {
   const file = mailboxPath(root, jobId);
   const job = readMicroJob(root, jobId);

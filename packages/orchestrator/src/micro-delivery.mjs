@@ -53,6 +53,25 @@ function jobPath(projectRoot, jobId) {
   return path.join(jobsDir(projectRoot), `${validatedJobId(jobId)}.json`);
 }
 
+// A dead lease with no report must still explain itself: the worker log holds
+// the real cause (missing module, auth failure, adapter crash) that a bare
+// "worker exited before completion" hides.
+const WORKER_LOG_TAIL_BYTES = 600;
+function workerLogExcerpt(projectRoot, jobId) {
+  try {
+    const file = path.join(jobsDir(projectRoot), `${validatedJobId(jobId)}.worker.log`);
+    const stat = fs.statSync(file);
+    if (!stat.size) return null;
+    const start = Math.max(0, stat.size - WORKER_LOG_TAIL_BYTES);
+    const buffer = Buffer.alloc(stat.size - start);
+    const fd = fs.openSync(file, 'r');
+    try { fs.readSync(fd, buffer, 0, buffer.length, start); } finally { fs.closeSync(fd); }
+    const lines = buffer.toString('utf8').split('\n').map((line) => line.trim()).filter(Boolean);
+    const excerpt = lines.slice(-3).join(' | ').slice(0, 400);
+    return excerpt || null;
+  } catch { return null; }
+}
+
 export function cancellationMarkerPath(projectRoot, jobId) {
   return path.join(jobsDir(projectRoot), `${validatedJobId(jobId)}.cancel`);
 }
@@ -262,6 +281,7 @@ function normalizeJob(projectRoot, job) {
   const leaseAlive = status !== 'running' || !Number.isInteger(job.leasePid) || isProcessAlive(job.leasePid);
   const cancelRequested = Boolean(job.cancelRequestedAt);
   if (status === 'running' && (stale || !leaseAlive)) {
+    const workerLogTail = cancelRequested ? null : workerLogExcerpt(projectRoot, jobId);
     return {
       ...job,
       jobId,
@@ -270,7 +290,8 @@ function normalizeJob(projectRoot, job) {
         ? 'Micro background job was cancelled.'
         : stale
           ? 'Micro background job expired before completion.'
-          : 'Micro background worker exited before completion.',
+          : 'Micro background worker exited before completion.'
+            + (workerLogTail ? ` Worker log: ${workerLogTail}` : ''),
       updatedAt: new Date().toISOString(),
     };
   }

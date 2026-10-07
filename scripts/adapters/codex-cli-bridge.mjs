@@ -131,12 +131,36 @@ async function main() {
     : ['exec', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox', '--json', '-m', model, '-c', `model_reasoning_effort=${thinking}`, '-C', workspace, '-o', lastMessageFile];
 
   const child = spawn('codex', args, { cwd: workspace, stdio: ['pipe', 'pipe', 'pipe'] });
-  let stdout = '';
+  let streamBuffer = '';
   let stderr = '';
+  let summary = { threadId: null, usage: null, lastAgentMessage: '' };
+  const emitProgress = stage => {
+    if (process.env.CONTEXTOS_CLI_PROGRESS === '1') process.stderr.write(`[contextos-progress] ${JSON.stringify({ stage })}\n`);
+  };
+  const consume = line => {
+    const next = summarizeCodexStream(line);
+    if (next.threadId) summary.threadId = next.threadId;
+    if (next.usage) summary.usage = next.usage;
+    if (next.lastAgentMessage) summary.lastAgentMessage = next.lastAgentMessage;
+    let record; try { record = JSON.parse(line); } catch { return; }
+    const stage = record.type === 'thread.started' ? 'session-started'
+      : record.type === 'turn.started' ? 'model-running'
+      : record.type === 'turn.completed' ? 'model-completed'
+      : record.type === 'item.started' && record.item?.type === 'command_execution' ? 'command-running'
+      : record.type === 'item.completed' ? 'tool-completed' : 'provider-stream';
+    emitProgress(stage);
+  };
+  emitProgress('provider-launched');
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
-  child.stdout.on('data', (chunk) => { stdout += chunk; });
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  child.stdout.on('data', chunk => {
+    streamBuffer += chunk;
+    let newline;
+    while ((newline = streamBuffer.indexOf('\n')) >= 0) {
+      consume(streamBuffer.slice(0, newline)); streamBuffer = streamBuffer.slice(newline + 1);
+    }
+  });
+  child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-2000); emitProgress('provider-diagnostic'); });
   child.stdin.end(task);
 
   const exitCode = await new Promise((resolve) => {
@@ -147,7 +171,7 @@ async function main() {
     child.on('close', (code) => resolve(code ?? 1));
   });
 
-  const summary = summarizeCodexStream(stdout);
+  if (streamBuffer.trim()) consume(streamBuffer);
   const threadId = sessionId || summary.threadId;
   let lastAgentMessage = summary.lastAgentMessage;
   try {

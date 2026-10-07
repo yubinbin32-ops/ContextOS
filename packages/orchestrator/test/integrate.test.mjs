@@ -190,3 +190,52 @@ test('integrate walks directory entries in allowedPaths recursively and reports 
     f.cleanup();
   }
 });
+
+test('integrate reviews an in-place implementation from its snapshot and reverts it byte-for-byte', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-integrate-inplace-'));
+  const client = await boot();
+  try {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'package.json'), '{"name":"inplace-fixture","private":true,"type":"module"}\n');
+    fs.writeFileSync(path.join(root, 'src', 'math.mjs'), 'export const add = (a, b) => a + b;\n');
+    createMicroJob(root, { jobId: 'agent-inplace-fixture', provider: 'cli', adapter: 'fixture' });
+    updateMicroJob(root, 'agent-inplace-fixture', {
+      status: 'completed',
+      report: { checks: ['node --check src/math.mjs'] },
+      implementation: {
+        mode: 'in-place',
+        workspace: root,
+        allowedPaths: ['src/math.mjs'],
+        acceptance: ['addition stays correct'],
+        verify: ['node --check src/math.mjs'],
+        before: { 'src/math.mjs': { exists: true, content: 'export const add = (a, b) => a - b;\n' } },
+      },
+    });
+    const applied = await client.callTool({
+      name: 'contextos',
+      arguments: { action: 'integrate', args: { jobId: 'agent-inplace-fixture' }, projectRoot: root },
+    });
+    const appliedText = textOf(applied);
+    assert.ok(!applied.isError, appliedText);
+    assert.match(appliedText, /status=applied changed=1 mode=in-place/);
+    assert.match(appliedText, /Worker checks: `node --check src\/math\.mjs`/);
+    assert.match(appliedText, /Revert: integrate\(\{jobId:"agent-inplace-fixture", revert:true\}\)/);
+    assert.match(fs.readFileSync(path.join(root, 'src', 'math.mjs'), 'utf8'), /a \+ b/);
+    const reverted = await client.callTool({
+      name: 'contextos',
+      arguments: { action: 'integrate', args: { jobId: 'agent-inplace-fixture', revert: true }, projectRoot: root },
+    });
+    const revertedText = textOf(reverted);
+    assert.ok(!reverted.isError, revertedText);
+    assert.match(revertedText, /status=reverted changed=1 mode=in-place/);
+    assert.equal(fs.readFileSync(path.join(root, 'src', 'math.mjs'), 'utf8'), 'export const add = (a, b) => a - b;\n');
+    const replay = await client.callTool({
+      name: 'contextos',
+      arguments: { action: 'integrate', args: { jobId: 'agent-inplace-fixture', revert: true }, projectRoot: root },
+    });
+    assert.match(textOf(replay), /status=noop changed=0 mode=in-place/);
+  } finally {
+    await client.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

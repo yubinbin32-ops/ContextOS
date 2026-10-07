@@ -78,7 +78,6 @@ debugging, provider/model switching, thinking changes, adapter mapping, and
 permission grants are documented in the ContextOS skill package:
 
 - `plugins/contextos/skills/contextos-ops/SKILL.md`
-- `plugins/contextos/skills/contextos-ops/references/micro-setup.md`
 
 When a user asks to switch a role, the AI follows those instructions rather
 than editing runtime code or inventing flags.

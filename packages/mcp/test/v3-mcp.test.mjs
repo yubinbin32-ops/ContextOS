@@ -1043,7 +1043,7 @@ test("V3 inspect resolves globs and pipeline accepts receipt plus run aliases", 
     ],
   });
   assert.match(parallel, /^# ContextOS pipeline/m);
-  assert.match(parallel, /pipeline=OK actions=2\/1 mode=receipt/);
+  assert.match(parallel, /pipeline=OK actions=2 steps=1 mode=receipt/);
   assert.match(parallel, /## Step 1: parallel/);
   assert.match(parallel, /### Action 1\.1: run_command/);
   assert.match(parallel, /### Action 1\.2: inspect/);

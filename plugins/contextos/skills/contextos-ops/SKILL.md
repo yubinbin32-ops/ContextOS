@@ -25,7 +25,7 @@ Non-trivial tasks default to planning delegation first before self-executing. Th
 - CLI subagent tasks that may exceed host MCP tool call timeouts (AGY ~3 minutes) must be dispatched with `background: true` to avoid host timeouts aborting the child process and losing reports and token accounting. Collect the terminal report with a single bounded `agent({action: "wait", jobId, waitMs})` call, or skip the status round entirely and collect with `integrate({jobId, waitMs})` when the next step is integration. If the window closes, use the returned `resume`/`continueWith` handle, proceed with other work, and wait again later; never poll in a tight loop and never re-dispatch a running job. Use `messages` strictly for bidirectional host-worker communication (which returns `jobStatus`). Short tasks can run synchronously.
 - `agent({action: "cancel", jobId})` cancels detached CLI workers too: it writes a cancellation marker, signals the persisted `leasePid` on POSIX, and the worker settles `cancelled` without enqueueing a failure delivery. Cancelled jobs are terminal and are never redelivered.
 - **Substitutive CLI implementation flow**:
-  1. Dispatch implementation in background to an isolated copy: `agent({task, workspace: <isolated copy>, execution: "implement", context: {allowedPaths, acceptance, verify}, background: true})`.
+  1. Dispatch implementation in background to an isolated copy: `agent({task, workspace: <isolated copy>, execution: "implement", context: {allowedPaths, acceptance, verify}, background: true})`. The workspace must exist before dispatch: create it with `git -C <repo> worktree add <isolated copy> HEAD`, or copy the tree when the CLI must run npm scripts. A missing path is rejected with `CLI_WORKSPACE_MISSING`. Omitting `workspace` is the supported in-place mode: the dispatch snapshots `context.allowedPaths`, `integrate({jobId})` reviews the live diff as `mode=in-place`, and `integrate({jobId, revert:true})` restores the recorded content.
   2. Collect and merge in one round with `integrate({jobId, waitMs})`: integrate waits up to 280s for completion, then runs through `changePipeline`, enforces Block ownership, applies only `allowedPaths`, and runs recorded verify commands. A separate `agent({action: "wait"})` is a pure status round: use it only for report-only jobs, never before an integrate that can do the waiting itself.
   3. If the job is still running when the window closes, integrate reports `INTEGRATE_JOB_RUNNING`; repeat only the integrate call with the same jobId. Never re-dispatch a running job.
   4. Do not duplicate implementation: after `integrate` succeeds, the host must not re-implement the same files; review/integrate the result and execute only remaining project-level verification.
@@ -145,3 +145,249 @@ Track usage by role: `main`, `api-micro`, and `cli-agent`.
 - Raw tokens = `input + output`; diagnostic only. Cached input is included in input and reasoning in output.
 - Authoritative weighted cost = `cached input * 0.1 + uncached input * 2 + output * 10`; API Micro and CLI agent divide by 7 for main-equivalent cost, while main uses it directly.
 - Report raw tokens, weighted cost, peak input, and main-equivalent cost separately; never double-bill receipts.
+
+## Full setup and switching guide
+
+This section carries the concrete profile schema, adapter contracts, and troubleshooting that used to live in a separate reference file. Read it directly.
+
+### Profile schema and key paths
+
+Configuration is loaded from the global profile (`~/.contextos/profile.json` or `$CONTEXTOS_HOME/profile.json`) and project overrides (`<project>/.contextos/profile.json`).
+
+Canonical profile structure:
+
+```json
+{
+  "micro": {
+    "url": "https://api.deepseek.com/v1",
+    "model": "deepseek-v4.1-flash",
+    "keyEnv": "CONTEXTOS_API_MICRO_KEY",
+    "transport": "chat",
+    "thinking": "medium"
+  },
+  "agents": {
+    "default": "agy",
+    "adapters": {
+      "agy": {
+        "command": "agy",
+        "args": [
+          "--input-format", "stream-json",
+          "--output-format", "stream-json",
+          "--model", "{model}",
+          "--mode", "{mode}",
+          "--dangerously-skip-permissions"
+        ],
+        "resumeArgs": ["--conversation", "{sessionId}"],
+        "input": {
+          "format": "jsonl",
+          "keepOpen": true,
+          "template": { "event": "user", "message": { "content": "{task}" } }
+        },
+        "output": {
+          "format": "jsonl",
+          "terminal": { "path": "event", "value": "result" },
+          "resultPath": "result",
+          "contentPath": "response",
+          "statusPath": "status",
+          "successValues": ["SUCCESS"],
+          "usage": {
+            "path": "usage",
+            "input": "input_tokens",
+            "output": "output_tokens",
+            "cache": "cache_read_tokens",
+            "reasoning": "thinking_tokens",
+            "inputIncludesCache": false,
+            "reasoningIncludedInOutput": true
+          },
+          "contextUsage": {
+            "path": "step_update.usage",
+            "input": "input_tokens",
+            "cache": "cache_read_tokens",
+            "window": 233000,
+            "inputIncludesCache": false
+          }
+        },
+        "modes": { "analyze": "plan", "implement": "accept-edits" }
+      }
+    }
+  }
+}
+```
+
+Key path reference:
+
+- `micro.url`: Base URL of the OpenAI-compatible API endpoint (e.g. `https://api.deepseek.com/v1`).
+- `micro.model`: Exact model identifier (e.g. `deepseek-v4.1-flash`).
+- `micro.keyEnv`: Environment variable name containing the API key (e.g. `CONTEXTOS_API_MICRO_KEY`).
+- `micro.transport`: Transport format (`chat` for chat completions).
+- `micro.thinking`: Thinking effort level (`off`, `low`, `medium`, `high`).
+- `agents.default`: Name of the active CLI adapter (`codex` for the default Codex setup, `agy` for Antigravity).
+- `agents.adapters.<name>`: Adapter definition including CLI command, process arguments, stream parsing, and task modes.
+
+### Setting and switching providers, models, and keys
+
+1. **View effective configuration** with secrets redacted:
+
+```js
+contextos({ action: "ops", args: { capability: "profile", action: "get" } })
+```
+
+2. **Set the API key via environment variable (recommended).** Export it in the shell or host environment:
+
+```bash
+export CONTEXTOS_API_MICRO_KEY="sk-your-api-key-here"
+```
+
+```js
+contextos({ action: "ops", args: { capability: "profile", action: "set", args: {
+  scope: "global",
+  values: {
+    "micro.keyEnv": "CONTEXTOS_API_MICRO_KEY",
+    "micro.url": "https://api.deepseek.com/v1",
+    "micro.model": "deepseek-v4.1-flash",
+    "micro.thinking": "medium"
+  }
+} } })
+```
+
+3. **Key resolution order**: `profile.key`, then `profile.apiKey`, then the environment variable named by `profile.keyEnv` (default `CONTEXTOS_API_MICRO_KEY`). Prefer keeping secrets in the host environment and referencing `keyEnv` in the profile.
+
+4. **Isolated credential testing** without altering user profiles: set `CONTEXTOS_API_MICRO_PROFILE` to a JSON file `{"micro": {"url": ..., "model": ..., "key": ..., "transport": "chat", "thinking": "medium"}}`.
+
+5. **Validate with Doctor and probe**:
+
+```js
+contextos({ action: "ops", args: { capability: "micro", action: "doctor" } })
+contextos({ action: "ops", args: { capability: "micro", action: "doctor", args: { probe: true } } })
+```
+
+### CLI adapter setup (Codex, default)
+
+Codex CLI is the default adapter. It is a full agent with a large background prompt, so reserve it for multi-file or open-ended implementation and route bounded retrieval, summarization, verification, or at most one small single-file edit to API Micro.
+
+1. **Install and log in**: `codex --version`, `codex login status`.
+2. **Install the JSONL bridge.** ContextOS expects one JSON payload per task; the bridge converts `codex exec --json` events into that payload and adds `context_usage`, the peak per-request prompt size of the retained conversation.
+
+```bash
+mkdir -p ~/.contextos/adapters
+cp <repo>/scripts/adapters/codex-cli-bridge.mjs ~/.contextos/adapters/codex-cli-bridge.mjs
+```
+
+3. **Configure the adapter in the profile** using the absolute bridge path (`~` is not expanded by the process spawn):
+
+```json
+{
+  "agents": {
+    "default": "codex",
+    "adapters": {
+      "codex": {
+        "command": "node",
+        "args": ["/Users/username/.contextos/adapters/codex-cli-bridge.mjs", "--model", "{model}", "--workspace", "{workspace}", "--thinking", "{thinking}"],
+        "resumeArgs": ["--session-id", "{sessionId}"],
+        "model": "deepseek-v4.1-flash",
+        "thinking": "high",
+        "input": { "format": "text", "template": "{task}" },
+        "output": {
+          "format": "json",
+          "contentPath": "content",
+          "statusPath": "status",
+          "successValues": ["SUCCESS"],
+          "sessionPath": "thread_id",
+          "usage": {
+            "path": "usage",
+            "input": "input_tokens",
+            "output": "output_tokens",
+            "cache": "cached_input_tokens",
+            "reasoning": "reasoning_output_tokens",
+            "inputIncludesCache": true,
+            "reasoningIncludedInOutput": true,
+            "aggregation": "invocation"
+          },
+          "contextUsage": {
+            "path": "context_usage",
+            "input": "input_tokens",
+            "cache": "cached_input_tokens",
+            "window": 233000,
+            "inputIncludesCache": true
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The bridge reports usage for the current invocation, so `output.usage.aggregation` must be `invocation`, including on resume; `session` would incorrectly subtract per-invocation values as cumulative counters. The sample context window is adapter/model specific and must be verified for the selected model. The bridge passes `--dangerously-bypass-approvals-and-sandbox` to `codex exec` so background jobs never block on a confirmation prompt; do not add `--sandbox` or approval flags in `args`, because the bridge owns them.
+
+4. **Read the usage report.** `cliUsage.usedTokens` is the peak per-request prompt of the retained conversation and `cliUsage.percent` is that over the 233k window. Reuse the conversation while it stays below roughly 80%; start a new conversation once it crosses the line or when the next task no longer continues the same context. `role-usage.jsonl` still records the turn aggregate (`inputTokens`, `cachedInputTokens`, `outputTokens`) for cost accounting; the two numbers answer different questions.
+5. **Verify readiness** with `ops({capability:"micro", action:"doctor", args:{role:"cli", adapter:"codex", probe:true}})`. A probe passes when connectivity returns `PONG`.
+
+### CLI adapter setup (Antigravity `agy`)
+
+1. **Install and verify**: `agy --version`, `agy --help`, `agy auth status`.
+2. **Configure the adapter in `~/.contextos/profile.json`**:
+
+```json
+{
+  "agents": {
+    "default": "agy",
+    "adapters": {
+      "agy": {
+        "command": "agy",
+        "args": [
+          "--input-format", "stream-json",
+          "--output-format", "stream-json",
+          "--model", "{model}",
+          "--mode", "{mode}",
+          "--dangerously-skip-permissions"
+        ],
+        "resumeArgs": ["--conversation", "{sessionId}"],
+        "input": {
+          "format": "jsonl",
+          "keepOpen": true,
+          "template": { "event": "user", "message": { "content": "{task}" } }
+        },
+        "output": {
+          "format": "jsonl",
+          "terminal": { "path": "event", "value": "result" },
+          "resultPath": "result",
+          "contentPath": "response",
+          "statusPath": "status",
+          "successValues": ["SUCCESS"],
+          "contextUsage": {
+            "path": "step_update.usage",
+            "input": "input_tokens",
+            "cache": "cache_read_tokens",
+            "window": 233000,
+            "inputIncludesCache": false
+          }
+        },
+        "modes": { "analyze": "plan", "implement": "accept-edits" }
+      }
+    }
+  }
+}
+```
+
+3. **Preconfigure tool permissions** in `~/.gemini/antigravity-cli/settings.json` so child tasks do not block on confirmation prompts: `{"permissions": {"allow": ["mcp(contextos/contextos)"]}}`. AGY encodes reasoning effort in the model id; do not pass `--effort` with a suffixed model. Do not force `--sandbox` for MCP-backed work because it can isolate the CLI from its ContextOS MCP server. Keep `--dangerously-skip-permissions` for automation.
+4. **Register the ContextOS OS MCP server** in the CLI host's `mcp_config.json` as `{"mcpServers":{"contextos":{"command":"node","args":["--no-warnings=ExperimentalWarning","/Users/username/.contextos/server/contextos-mcp.mjs"]}}}`.
+5. **Sync the skill package** by copying or linking it into the CLI skills directory (for example `cp -R plugins/contextos/skills/* ~/.gemini/antigravity-cli/skills/`).
+6. **Verify readiness** with `ops({capability:"micro", action:"doctor", args:{role:"cli", adapter:"agy"}})`.
+
+### Doctor output interpretation
+
+Doctor reports readiness across standardized dimensions as `yes`, `no`, or `unknown`: `installed` (CLI binary or API URL reachable), `authenticated` (valid credentials or active CLI login), `model` (configured model confirmed supported), `effort` (thinking effort parameter mapped and accepted), `analyze` (analysis/planning mode supported), `implement` (editing mode supported with allowed paths).
+
+`thinking.mapped` is the effort actually sent to the provider and may differ from `thinking.requested` (DeepSeek, for example, maps `medium` to `high`); the pair is reported so the difference is visible, not as a mismatch error.
+
+Offline local doctor checks (`probe: false`) make no outbound model requests. Fields such as `authenticated`, `analyze` (`task_analyze`), or `implement` (`task_implement`) reporting `unknown; not probed` are expected normal states and do not indicate a failure or block delegation. As long as `installed`, `model`, and credential sources are configured, dispatch micro normally. Live network verification happens only when `probe: true` is explicitly passed.
+
+### Common errors and fixes
+
+1. **HTTP 401 / 403**: invalid, expired or deactivated API key, or insufficient balance. Check `CONTEXTOS_API_MICRO_KEY`, verify balance, update the key.
+2. **HTTP 404 / Model Not Found**: endpoint path missing `/v1` (e.g. `https://api.deepseek.com` instead of `https://api.deepseek.com/v1`), or the model ID does not exist on this route. Verify `micro.url` and `micro.model` against provider documentation.
+3. **Connection refused / DNS failure / timeout**: pre-auth network failure, proxy misconfiguration, or firewall. Verify connectivity, DNS and `HTTP_PROXY` / `HTTPS_PROXY`.
+4. **HTTP 200 with parse failure**: non-JSON response or incompatible stream events. Confirm the endpoint supports OpenAI-compatible Chat Completions and check `micro.transport`.
+5. **CLI permission prompt blocking**: add `--dangerously-skip-permissions`, remove conflicting `--effort` when the model id already carries an effort suffix, remove `--sandbox` for MCP-backed work, and add `"mcp(contextos/contextos)"` to the `settings.json` allowlist.
+6. **YAML frontmatter parse failure in skills**: an unquoted colon inside the description scalar (e.g. `description: Required: do this`). Quote it: `description: "Required: do this"`.
+7. **CLI subagent timeout on host tool calls (~3 minutes)**: long synchronous CLI tasks can exceed the host MCP client timeout; the host then kills the child and both the report and token accounting are lost. Dispatch long tasks with `background: true` and collect with `agent({action:"wait", jobId, waitMs})` or by listening on the mailbox with `agent({action:"messages", jobId, waitMs})`.

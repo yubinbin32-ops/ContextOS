@@ -422,15 +422,16 @@ test('runMicroTask retries pseudo tool-call output when tools are disabled', asy
   }
 });
 
-test('runMicroTask injects host skill guidance without micro-only restrictions', async () => {
+test('runMicroTask injects core host skill guidance without micro-only restrictions', async () => {
   const mock = createMockServer();
-  const guidance = loadMicroSkillGuidance({ projectRoot: process.cwd() });
+  const guidance = loadMicroSkillGuidance({ projectRoot: process.cwd(), includeOps: false });
   mock.setHandler((_req, res, body) => {
     const systemPrompt = body.messages[0].content;
     assert.equal(systemPrompt, guidance);
     assert.match(systemPrompt, /name: contextos/);
-    assert.match(systemPrompt, /ContextOS operations and diagnosis/);
-    assert.match(systemPrompt, /Pipeline is the default container for 3 or more known independent reads/);
+    assert.doesNotMatch(systemPrompt, /ContextOS operations and diagnosis/);
+    assert.match(systemPrompt, /## Tool index/);
+    assert.match(systemPrompt, /Route diagnosis by scope/);
     assert.doesNotMatch(systemPrompt, /You are a bounded executor/);
     assert.doesNotMatch(systemPrompt, /When a change is rejected because it exceeds allowedPaths/);
     assert.doesNotMatch(systemPrompt, /Do not delegate to another agent/);
@@ -678,7 +679,7 @@ test('runMicroTask sends proper payload and headers', async () => {
     assert.equal(payload.reasoning_effort, 'low');
     assert.equal(payload.messages.length, 2);
     assert.equal(payload.messages[0].role, 'system');
-    assert.equal(payload.messages[0].content, loadMicroSkillGuidance({ projectRoot: process.cwd() }));
+    assert.equal(payload.messages[0].content, loadMicroSkillGuidance({ projectRoot: process.cwd(), includeOps: false }));
     assert.equal(payload.messages[1].role, 'user');
     assert.match(payload.messages[1].content, /Analyze this error/);
     assert.match(payload.messages[1].content, /<INPUT>\nTypeError: undefined is not a function\n<\/INPUT>/);
@@ -1025,7 +1026,7 @@ test('runMicroTask enforces budgets before final tool-convergence dispatch', asy
           tool_calls: [{
             id: 'call-1',
             type: 'function',
-            function: { name: 'inspect', arguments: JSON.stringify({ path: 'a.mjs' }) },
+            function: { name: 'inspect', arguments: JSON.stringify({ path: 'a.mjs', budget: 'full' }) },
           }],
         },
       }],
@@ -1043,8 +1044,8 @@ test('runMicroTask enforces budgets before final tool-convergence dispatch', asy
       // ContextOS skill guidance is injected into every Micro request, so keep
       // the initial prompt under the limit while a long tool result pushes the
       // convergence turn over it.
-      maxProviderTokens: 6000,
-      caps: { inspect: async () => 'x'.repeat(20000) },
+      maxProviderTokens: 20000,
+      caps: { inspect: async () => 'x'.repeat(100000) },
     });
     assert.equal(result.ok, false);
     assert.equal(result.budgetExceeded, 'providerTokens');
@@ -1221,7 +1222,7 @@ test('runMicroTask preserves conversation history for multi-turn tasks', async (
     });
 
     const messages = mock.requests[0].body.messages;
-    assert.equal(messages[0].content, loadMicroSkillGuidance({ projectRoot: process.cwd() }));
+    assert.equal(messages[0].content, loadMicroSkillGuidance({ projectRoot: process.cwd(), includeOps: false }));
     assert.equal(messages[1].content, 'Turn 1 user');
 
     assert.equal(messages[2].content, 'Turn 1 assistant');
@@ -1907,4 +1908,69 @@ test('micro os inspect normalizes natural range forms before dispatch', async ()
     { tool: 'inspect', input: { path: 'src/example.mjs', ranges: [[2, 3]] } },
     { tool: 'inspect', input: { path: 'src/example.mjs', ranges: [[4, 6]] } },
   ]);
+});
+
+
+test('repeated unchanged reads converge with a revalidated checkpoint and continue the same session without rereading', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-micro-progress-'));
+  const mock = createMockServer();
+  let mode = 'repeat';
+  let calls = 0;
+  fs.writeFileSync(path.join(root, 'entry.mjs'), 'export const entry = 1;\n');
+  mock.setHandler((_req, res) => {
+    const answer = mode === 'repeat' ? { role: 'assistant', content: null, tool_calls: [{ id: 'read-' + mock.requests.length,
+      type: 'function', function: { name: 'os', arguments: JSON.stringify({ action: 'inspect', path: 'entry.mjs' }) } }] }
+      : { role: 'assistant', content: 'Finished from retained verified source.' };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message: answer }], usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 } }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const options = { projectRoot: root, withOS: true, prompt: 'Inspect the entry and finish',
+      caps: { inspect: async () => { calls += 1; return { path: 'entry.mjs', data: fs.readFileSync(path.join(root, 'entry.mjs'), 'utf8') }; } } };
+    const partial = await runMicroTask({ url, model: 'fixture-model' }, options);
+    assert.equal(partial.errorCode, 'MICRO_NO_PROGRESS');
+    assert.equal(partial.status, 'partial');
+    assert.equal(partial.providerRequests, 3);
+    assert.equal(calls, 1);
+    assert.equal(partial.checkpoint.retained, true);
+    assert.match(partial.checkpoint.verifiedEvidence[0].contentHash, /^[a-f0-9]{64}$/);
+    assert.equal(partial.toolCalls.length, 0, 'partial checkpoint does not expose a provider trace');
+    mode = 'finish';
+    const resumed = await runMicroTask({ url, model: 'fixture-model' }, { ...options, sessionId: partial.sessionId,
+      prompt: 'Finish from the retained source and identify the entry.' });
+    assert.equal(resumed.ok, true);
+    assert.equal(resumed.sessionId, partial.sessionId);
+    assert.equal(calls, 1);
+    assert.match(JSON.stringify(mock.requests.at(-1).body.messages), /Retained local tool evidence/);
+    assert.match(JSON.stringify(mock.requests.at(-1).body.messages), /export const entry = 1/);
+  } finally { await mock.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('source changes and verify operations reset read reuse instead of being mistaken for no progress', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ctxos-micro-changed-evidence-'));
+  const mock = createMockServer();
+  const file = path.join(root, 'entry.mjs');
+  fs.writeFileSync(file, 'export const entry = 1;\n');
+  let executions = 0;
+  mock.setHandler((_req, res) => {
+    const round = mock.requests.length;
+    if (round === 2) fs.writeFileSync(file, 'export const entry = 2;\n');
+    const action = round === 3 ? 'verify' : 'inspect';
+    const message = round < 5 ? { role: 'assistant', content: null, tool_calls: [{ id: 'op-' + round, type: 'function',
+      function: { name: 'os', arguments: JSON.stringify({ action, args: action === 'verify' ? { commands: ['fixture check'] } : { path: 'entry.mjs' } }) } }] }
+      : { role: 'assistant', content: 'Verified changed source.' };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message }], usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 } }));
+  });
+  const { url } = await mock.listen();
+  try {
+    const result = await runMicroTask({ url, model: 'fixture-model' }, { projectRoot: root, withOS: true, prompt: 'Verify the current source',
+      invocation: { tools: { enabled: true, allowCommands: true } },
+      orchestrator: { dispatch: async (tool) => { if (tool === 'inspect') executions += 1; return JSON.stringify({ status: 'passed', path: 'entry.mjs', text: fs.readFileSync(file, 'utf8') }); } } });
+    assert.equal(result.ok, true);
+    assert.equal(executions, 3, 'source mutation and verify independently invalidate cached reads');
+    assert.equal(result.deduplicatedToolCallCount, 0);
+    assert.equal(result.providerRequests, 5);
+  } finally { await mock.close(); fs.rmSync(root, { recursive: true, force: true }); }
 });

@@ -32,10 +32,18 @@ assert.ok(
 const skillPath = path.join("plugins", "contextos", "skills", "contextos", "SKILL.md");
 assert.ok(fs.existsSync(skillPath), "ContextOS Skill is missing");
 const skillText = fs.readFileSync(skillPath, "utf8");
-const capabilityReference = path.join("plugins", "contextos", "skills", "contextos", "references", "capabilities.md");
-assert.ok(fs.existsSync(capabilityReference), "ContextOS capability reference is missing");
-assert.ok(fs.existsSync("plugins/contextos/skills/contextos-ops/references/micro-setup.md"), "AI provider setup reference must be packaged");
-assert.ok(skillText.length < 7000, `Skill must stay lean for context budgets (got ${skillText.length} chars; limit 7000)`);
+// Skills are single self-contained files: the tool index and setup guide must be
+// inside SKILL.md, because installed hosts load only the skill body and never
+// resolve sibling reference files.
+for (const relative of ["plugins/contextos/skills/contextos-ops/SKILL.md"]) {
+  assert.ok(fs.existsSync(relative), `Skill is missing: ${relative}`);
+}
+for (const required of ["## Tool index", "ops({capability", "pipeline(", "integrate", "onboard"]) {
+  assert.ok(skillText.includes(required), `ContextOS skill lost required guidance: ${required}`);
+}
+const opsSkillText = fs.readFileSync("plugins/contextos/skills/contextos-ops/SKILL.md", "utf8");
+assert.ok(opsSkillText.includes("Full setup and switching guide"), "Ops skill must be self-contained");
+assert.ok(opsSkillText.includes("Common errors and fixes"), "Ops skill must carry setup troubleshooting");
 
 try {
   await client.connect(transport);

@@ -4,11 +4,55 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { executeAgent } from '../src/agent-service.mjs';
+import { agentProgressSnapshot, executeAgent } from '../src/agent-service.mjs';
 import { claimMicroDeliveries, createMicroJob, cancellationMarkerPath, enqueueMicroDelivery, readMicroJob, reportMicroJob, updateMicroJob } from '../src/micro-delivery.mjs';
 import { sendMicroMessage, receiveMicroMessages } from '../src/micro-mailbox.mjs';
 
 process.env.CONTEXTOS_AGENT_INPROCESS = '1';
+
+test('implementation dispatch rejects a missing isolated workspace before creating a job', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-agent-workspace-'));
+  try {
+    const missing = path.join(root, 'not-created-yet');
+    await assert.rejects(
+      executeAgent({
+        task: 'implement a bounded change',
+        id: 'agent-missing-workspace',
+        execution: 'implement',
+        workspace: missing,
+        context: { allowedPaths: ['src/a.mjs'], acceptance: ['node --test'] },
+      }, { projectRoot: root, name: 'worker', adapter: { command: 'worker', model: 'capable' } }),
+      /CLI_WORKSPACE_MISSING/
+    );
+    assert.equal(readMicroJob(root, 'agent-missing-workspace'), null, 'a rejected dispatch must not create a job');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('in-place implementation dispatch records a revertible before-snapshot of allowed paths', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-agent-inplace-'));
+  try {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'a.mjs'), 'export const a = 1;\n');
+    const job = await executeAgent({
+      task: 'in-place bounded change', id: 'agent-inplace-snapshot', execution: 'implement',
+      context: { allowedPaths: ['src/a.mjs'], acceptance: ['a stays correct'] },
+    }, {
+      projectRoot: root, name: 'worker', adapter: { command: 'worker', model: 'capable' },
+      runner: async () => ({ ok: true, provider: 'cli-provider', content: 'done',
+        agentReport: { summary: 'changed a', changes: ['src/a.mjs'], checks: [], blockers: [], needsHost: false } }),
+    });
+    assert.equal(job.status, 'completed');
+    const stored = readMicroJob(root, 'agent-inplace-snapshot');
+    assert.equal(stored.implementation.mode, 'in-place');
+    assert.equal(stored.implementation.workspace, root);
+    assert.equal(stored.implementation.before['src/a.mjs'].exists, true);
+    assert.match(stored.implementation.before['src/a.mjs'].content, /a = 1/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('CLI is pinned, source is not read by the dispatcher, and only structured report is returned', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-agent-service-'));
@@ -787,5 +831,47 @@ test('batch status stays running for active work and becomes partial for failure
     await executeAgent({ action: 'cancel', id: 'batch-cancelled' }, { projectRoot: root });
     assert.equal(cancelSignal.aborted, true);
     assert.equal((await cancelledRun).status, 'partial');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('agent health distinguishes an alive process from observable progress', () => {
+  const now = Date.now();
+  const snapshot = agentProgressSnapshot({ status: 'running', leasePid: process.pid,
+    progress: { stage: 'model-running', lastActivityAt: new Date(now - 61_000).toISOString(), stdoutBytes: 10, stderrBytes: 20, events: 3 } }, now);
+  assert.equal(snapshot.processAlive, true);
+  assert.equal(snapshot.noProgress, true);
+  assert.equal(snapshot.stage, 'model-running');
+  assert.equal(snapshot.idleMs, 61_000);
+  assert.equal(agentProgressSnapshot({ status: 'completed', progress: { lastActivityAt: new Date(0).toISOString() } }, now).idleMs, 0);
+});
+
+test('agent progress persists sanitized metadata and cancellation keeps its own reason', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-agent-progress-'));
+  try {
+    const result = await executeAgent({ task: 'bounded progress test', id: 'agent-progress', cliSessionId: 'retained-cli-thread' }, {
+      projectRoot: root, adapter: { command: 'worker', model: 'capable' },
+      runner: async (_config, args) => {
+        args.onProgress({ stage: 'model-running', stdoutBytes: 12, stderrBytes: 34, privateTrace: 'NEVER_PUBLIC' });
+        const job = await executeAgent({ action: 'get', id: 'agent-progress' }, { projectRoot: root });
+        assert.equal(job.progress.stage, 'model-running');
+        assert.equal(job.progress.stdoutBytes, 12);
+        assert.equal(job.progress.noProgress, false);
+        reportMicroJob(root, 'agent-progress', JSON.stringify({ summary: 'Completed one module', changes: ['src/amount.mjs'], checks: ['unit test passed'], needsHost: false }));
+        await executeAgent({ action: 'cancel', id: 'agent-progress' }, { projectRoot: root });
+        return { ok: false, error: 'Unexpected end of JSON input', agentReport: { status: 'failed', summary: '', needsHost: true }, invocation: { providerLaunches: 1 } };
+      },
+    });
+    assert.equal(result.status, 'cancelled');
+    assert.equal(result.progress.stage, 'cancelled');
+    assert.equal(result.cliSessionId, 'retained-cli-thread');
+    assert.equal(result.report.status, 'cancelled');
+    assert.equal(result.report.needsHostReason, 'cancelled');
+    assert.equal(result.deliveryAccounting.status, 'not-requested');
+    assert.equal(result.report.summary, 'Completed one module');
+    assert.deepEqual(result.report.changes, ['src/amount.mjs']);
+    assert.deepEqual(result.report.checks, ['unit test passed']);
+    assert.deepEqual(result.missing, ['CLI task was cancelled.']);
+    assert.ok(!JSON.stringify(result).includes('NEVER_PUBLIC'));
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

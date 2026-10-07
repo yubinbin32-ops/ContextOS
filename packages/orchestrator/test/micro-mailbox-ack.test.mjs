@@ -4,7 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createMicroJob } from '../src/micro-delivery.mjs';
-import { sendMicroMessage, receiveMicroMessages, acknowledgeMicroMessages } from '../src/micro-mailbox.mjs';
+import {
+  acknowledgeMicroMessages,
+  pendingMicroMessages,
+  receiveMicroMessages,
+  sendMicroMessage,
+} from '../src/micro-mailbox.mjs';
 
 test('peek preserves queued corrections until only delivered ids are acknowledged', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-mailbox-ack-'));
@@ -18,5 +23,18 @@ test('peek preserves queued corrections until only delivered ids are acknowledge
     assert.deepEqual(receiveMicroMessages(root, 'child', { peek: true }), [{ id: 2, message: 'second correction' }]);
     assert.equal(receiveMicroMessages(root, 'child').length, 1);
     assert.deepEqual(receiveMicroMessages(root, 'child'), []);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('pendingMicroMessages reports the remaining undelivered queue length', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'os-mailbox-pending-'));
+  try {
+    createMicroJob(root, { jobId: 'child' });
+    assert.equal(pendingMicroMessages(root, 'child'), 0);
+    sendMicroMessage(root, 'child', 'first correction');
+    sendMicroMessage(root, 'child', 'second correction');
+    assert.equal(pendingMicroMessages(root, 'child'), 2);
+    assert.equal(receiveMicroMessages(root, 'child').length, 2);
+    assert.equal(pendingMicroMessages(root, 'child'), 0);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

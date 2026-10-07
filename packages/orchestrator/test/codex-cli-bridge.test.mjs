@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { readPeakContextUsage, summarizeCodexStream } from '../../../scripts/adapters/codex-cli-bridge.mjs';
@@ -69,4 +69,25 @@ test('readPeakContextUsage reports the peak per-request prompt, not the turn sum
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+
+test('bridge keeps its JSON terminal compatible while exposing safe incremental stages', { skip: process.platform === 'win32' }, () => {
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'ctxos-codex-progress-'));
+ try {
+  const bin=path.join(root,'bin');fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin,'codex'), `#!/usr/bin/env node
+console.log(JSON.stringify({type:'thread.started',thread_id:'progress-thread'}));
+console.log(JSON.stringify({type:'turn.started'}));
+console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'PRIVATE_BODY'}}));
+console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,cached_input_tokens:3,output_tokens:2}}));
+`,{mode:0o755});
+  const result=spawnSync(process.execPath,[fileURLToPath(new URL('../../../scripts/adapters/codex-cli-bridge.mjs',import.meta.url)),'--workspace',root],{
+   input:'ping',encoding:'utf8',env:{...process.env,PATH:bin+path.delimiter+path.dirname(process.execPath)+path.delimiter+process.env.PATH,CONTEXTOS_CLI_PROGRESS:'1'}
+  });
+  assert.equal(result.status,0);
+  const terminal=JSON.parse(result.stdout);assert.equal(terminal.status,'SUCCESS');assert.equal(terminal.content,'PRIVATE_BODY');
+  assert.match(result.stderr,/session-started/);assert.match(result.stderr,/model-running/);assert.match(result.stderr,/model-completed/);
+  assert.ok(!result.stderr.includes('PRIVATE_BODY'));
+ }finally{fs.rmSync(root,{recursive:true,force:true})}
 });

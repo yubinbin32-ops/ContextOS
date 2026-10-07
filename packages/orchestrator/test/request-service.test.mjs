@@ -634,6 +634,7 @@ test('renderer cites reusable results compactly and makes clipped references rec
 
   const clipped = renderRequestResult({ ...result, reused: [{ ...result.reused[0], path: 'src/' + 'known-file-'.repeat(15) + '.mjs' }] }, { maxChars: 256 });
   assert.match(clipped, /^status=partial resultStatus=complete result=result-current/);
+  assert.match(clipped, /partialReason=[a-z+-]+/, 'a partial delivery names its cause so the host can tell it from an ambiguous goal');
   assert.match(clipped, /missing\[1\]/, 'the durable result ID allows explicit recovery when even the reference details cannot fit');
   assert.ok(!clipped.includes('hash='));
 });
@@ -664,7 +665,7 @@ test('renderer acknowledges only complete source blocks that survive final metad
   assert.match(fallback, /^status=partial/);
   assert.ok(fallback.includes('small source'), 'a trailing message that does not fit must not erase a complete source block');
   assert.match(fallback, /display details omitted=messages\[1\]/);
-  assert.match(fallback, /recover result=result-render with larger maxChars/);
+  assert.match(fallback, /recover result=result-render with larger maxChars in args/);
   assert.deepEqual(fallbackDelivery, [{ ...records[0], text: 'small source' }]);
   assert.deepEqual(fallbackMetrics, { renderedSourceBytes: 12, renderedSourceChars: 12 });
 
@@ -692,7 +693,7 @@ test('renderer keeps a roughly 9.2K source block when many gap details overflow 
   assert.ok(output.includes(source), 'the complete source fits and keeps priority over verbose gap metadata');
   assert.match(output, /^status=partial/);
   assert.match(output, /missing\[24\]/);
-  assert.match(output, /gap detail\(s\) omitted; recover result=result-large with larger maxChars for exact ranges/);
+  assert.match(output, /gap detail\(s\) omitted; recover result=result-large with larger maxChars in args for exact ranges/);
   assert.ok(Array.from(output).length <= 12_000);
   assert.deepEqual(delivered, [record]);
   assert.deepEqual(metrics, { renderedSourceBytes: 9_200, renderedSourceChars: 9_200 });
@@ -708,6 +709,7 @@ test('overlong gap detail cannot displace a near-budget source block', () => {
   });
 
   assert.match(output, new RegExp(`^status=partial resultStatus=completed result=${resultId}`));
+  assert.match(output, /partialReason=[a-z+-]+/);
   assert.ok(output.includes(record.text), 'an overlong gap explanation is abbreviated before the source block is dropped');
   assert.match(output, /missing\[1\]/);
   assert.ok(!output.includes('g'.repeat(100)), 'the unavailable long detail is not partially copied into the response');
@@ -726,7 +728,7 @@ test('renderer omits an oversized summary as a whole while preserving exact sour
   assert.match(output, /^status=partial resultStatus=completed/);
   assert.ok(output.includes(record.text));
   assert.ok(!output.includes(`summary=${'S'.repeat(20)}`), 'summary text is omitted whole rather than truncated into a misleading claim');
-  assert.match(output, /display details omitted=summary; recover result=result-summary with larger maxChars/);
+  assert.match(output, /display details omitted=summary; recover result=result-summary with larger maxChars in args/);
   assert.ok(Array.from(output).length <= 512);
   assert.deepEqual(delivered, [record]);
 });
@@ -741,7 +743,8 @@ test('near-limit source and receipt survive summary omission and final status gr
   const completeHeader = `status=completed result=${resultId}\nreceipt=${receipt.id} exit=${receipt.exitCode} log=${receipt.logHandle}`;
   const sourcePrefix = `\n\n${path} [[1,1]] hash=${contentHash}\n`;
   const fullNotice = `\ndisplay details omitted=summary; recover result=${resultId} with larger maxChars`;
-  const statusGrowth = chars(`status=partial resultStatus=completed`) - chars('status=completed');
+  const statusGrowth = chars(`status=partial resultStatus=completed`) - chars('status=completed')
+    + chars(' partialReason=evidence-gap+display-budget+source-budget');
   const sourceText = 'N'.repeat(limit - chars(completeHeader) - chars(sourcePrefix) - chars(fullNotice) - Math.floor(statusGrowth / 2));
   const record = { path, ranges: [[1, 1]], contentHash, text: sourceText };
   const delivered = [];
@@ -751,6 +754,7 @@ test('near-limit source and receipt survive summary omission and final status gr
   });
 
   assert.match(output, new RegExp(`^status=partial resultStatus=completed result=${resultId}`));
+  assert.match(output, /partialReason=[a-z+-]+/);
   assert.ok(output.includes(`receipt=${receipt.id} exit=0 log=${receipt.logHandle}`));
   assert.ok(output.includes(sourceText), 'the complete near-limit source remains ahead of optional summary metadata');
   assert.ok(output.includes('omitted summary; larger maxChars'), 'the compact notice explains how to retrieve the omitted summary');

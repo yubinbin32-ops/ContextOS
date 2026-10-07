@@ -4,6 +4,9 @@ import {
   Plan,
   Task,
   Block,
+  Chain,
+  Link,
+  linkIdentity,
   ArtifactRef,
   DecisionDocument,
   Rule,
@@ -452,4 +455,20 @@ test('Directory anchors preserve manifest provenance and cover descendant files'
     [block]
   );
   assert.deepEqual(coverage.uncoveredFiles, ['src/app.mjs']);
+});
+test('Link relation identity preserves explicit ids and Chain supports historical group kinds', () => {
+  const base = { projectId: 'p', from: 'a', to: 'b' };
+  const calls = new Link({ ...base, kind: 'calls' });
+  const depends = new Link({ ...base, kind: 'depends_on' });
+  assert.notEqual(calls.id, depends.id);
+  assert.equal(calls.id, linkIdentity('a', 'b', 'calls'));
+  assert.equal(new Link({ ...base, kind: 'calls', id: 'a->b' }).id, 'a->b');
+  for (const kind of ['bundles', 'verified_by', 'validates', 'extends', 'verifies']) {
+    assert.equal(new Link({ ...base, kind }).kind, kind);
+  }
+  assert.throws(() => new Link({ ...base, kind: 'unknown' }), /Invalid link kind/);
+  assert.throws(() => new Link({ ...base, from: null }), /endpoint/);
+  for (const kind of ['leaf', 'composite', 'linear', 'feature']) {
+    assert.equal(new Chain({ id: kind, projectId: 'p', title: 'Group', kind }).kind, kind);
+  }
 });

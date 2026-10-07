@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import test from 'node:test';
 
 import { Orchestrator } from '../src/index.mjs';
+import { pipelinePipeline } from '../src/pipelines.mjs';
 import { createCapabilities } from '../src/capabilities.mjs';
 import { observe } from '../src/observer.mjs';
 import { classifyIntent, extractPaths } from '../src/intent-router.mjs';
@@ -114,6 +115,37 @@ test('session history is compact by default and can target one closed session', 
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0].id, session.id);
   assert.ok(response.length < 2200, 'MCP history response must stay within the ops budget');
+});
+
+test('architecture ops reads return the whole bounded outline in one call', async () => {
+  const projectRoot = makeTempProject();
+  const members = Array.from({ length: 12 }, (_, index) => `member-${index}`);
+  const longOutline = [
+    '# Chain: [chain-big] Big feature flow',
+    '- Kind: feature | Members: 12',
+    '',
+    '## Members (in order):',
+  ].concat(members.map((id, index) => [
+    `${index + 1}. \`[${id}]\` Layer ${index} (service; Tier 2: Application Services)`,
+    `   - Responsibility: ${'handles one bounded step of the feature flow '.repeat(3)}${id}`,
+    `   - Entry: src/file${index}.mjs fn${index} [L1-L20]`,
+  ].join('\n'))).concat([
+    '',
+    '## Internal Flow:',
+    ...members.slice(1).map((id, index) => `- ${members[index]} -> ${id}`),
+  ]).join('\n');
+  const service = fakeService();
+  service.chain = async (args = {}) => (args.action === 'open' ? longOutline : []);
+  const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
+  const response = await orchestrator.dispatch('ops', {
+    capability: 'chain',
+    action: 'open',
+    args: { id: 'chain-big' },
+  });
+  assert.ok(longOutline.length > RESPONSE_BUDGETS.ops, 'fixture outline must exceed the compact ops budget');
+  assert.ok(longOutline.length < RESPONSE_BUDGETS.opsOrientation, 'fixture outline must fit the orientation budget');
+  assert.equal(response.includes('truncated'), false, 'architecture reads must not be clipped by the compact ops budget');
+  assert.ok(response.includes('## Internal Flow:'), 'the full internal flow must survive delivery');
 });
 
 test('artifact get and open aliases resolve to bounded reads', async () => {
@@ -548,20 +580,22 @@ test('repeated semantic capability reads reuse a compact receipt until a mutatio
   };
   const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
 
+  // 'list' is a real read; 'check' is a checkpoint write and is guarded by the
+  // mutation set, so a mutation must never be used as the reuse example here.
   const first = await orchestrator.dispatch('ops', {
     projectRoot,
     capability: 'plan',
-    action: 'check',
-    args: { id: 'plan-1' },
+    action: 'list',
+    args: {},
   });
   const second = await orchestrator.dispatch('ops', {
     projectRoot,
     capability: 'plan',
-    action: 'check',
-    args: { id: 'plan-1' },
+    action: 'list',
+    args: {},
   });
   assert.match(first, /plan-1/);
-  assert.match(second, /plan\.check \(reused\)/);
+  assert.match(second, /plan\.list \(reused\)/);
   assert.equal(planCalls.length, 1);
 
   await orchestrator.dispatch('ops', {
@@ -573,10 +607,11 @@ test('repeated semantic capability reads reuse a compact receipt until a mutatio
   const afterMutation = await orchestrator.dispatch('ops', {
     projectRoot,
     capability: 'plan',
-    action: 'check',
-    args: { id: 'plan-1' },
+    action: 'list',
+    args: {},
   });
   assert.match(afterMutation, /plan-1/);
+  assert.doesNotMatch(afterMutation, /\(reused\)/, 'a mutation must invalidate the cached read');
   assert.equal(planCalls.length, 3, 'mutation and the following read must reach the service');
 });
 
@@ -1123,7 +1158,7 @@ test('change without edits binds architecture in the same call', async () => {
   );
 });
 
-test('change auto-composes uncovered Blocks into a changed-surface Chain', async () => {
+test('change keeps explicitly owned standalone Blocks without composing a fallback Chain', async () => {
   const projectRoot = makeTempProject();
   const service = fakeService();
   const orchestrator = new Orchestrator({ service, projectRoot, projectId: 'fixture' });
@@ -1135,14 +1170,12 @@ test('change auto-composes uncovered Blocks into a changed-surface Chain', async
   });
 
   assert.match(result, /1 curated Block\(s\) bound/);
-  assert.match(result, /1 Chain\(s\) composed/);
+  assert.match(result, /0 Chain\(s\) composed/);
   assert.doesNotMatch(result, /NOT applied/);
   const composed = service.calls.filter((call) =>
     call.capability === 'chain' && call.args.action === 'compose'
   );
-  assert.equal(composed.length, 1);
-  assert.equal(composed[0].args.chainData.id, 'chain-changed-surface');
-  assert.deepEqual(composed[0].args.chainData.memberIds, ['block-api']);
+  assert.deepEqual(composed, []);
 });
 
 test('ship on an unverified reopened session points at receipt re-attachment', async () => {
@@ -1779,7 +1812,7 @@ test('pipeline executes parallel and sequential chains with any tool', async () 
     ],
   });
   assert.match(parallelRes, /^# ContextOS pipeline/m);
-  assert.match(parallelRes, /pipeline=OK actions=3\/1/);
+  assert.match(parallelRes, /pipeline=OK actions=3 steps=1/);
   assert.match(parallelRes, /## Step 1: parallel/);
   assert.match(parallelRes, /### Action 1\.1: inspect/);
   assert.match(parallelRes, /### Action 1\.2: run_command/);
@@ -3370,4 +3403,81 @@ test('ops run_command attaches its receipt to the active session', async () => {
     assert.equal(receipts[0].command, 'node -e "process.exit(0)"');
     assert.equal(receipts[0].exitCode, 0);
   } finally { service.close(); fs.rmSync(projectRoot, { recursive: true, force: true }); }
+});
+
+
+test('pipeline preserves public ask inputs and separates partial evidence from fatal outcomes and worker status', async () => {
+  const dir = makeTempProject();
+  const seen = [];
+  const ctx = { projectRoot: dir, profile: {}, orchestrator: { dispatch: async (tool, input) => {
+    seen.push({ tool, input });
+    if (input.request === 'fatal') return { status: 'failed', errorCode: 'FIXTURE_UNAVAILABLE', missing: ['Provider unavailable'] };
+    if (input.request === 'partial') return { status: 'partial', missing: ['Named source gap'] };
+    if (tool === 'agent') return { status: 'completed', jobStatus: 'cancelled', messages: [] };
+    return { status: 'completed', records: [], summary: 'Verified fixture' };
+  } } };
+  try {
+    const preserved = { overview: false, blockId: 'block-math', chainId: 'chain-math', request: 'partial',
+      known: { notes: 'bounded prior findings' }, resultId: 'result-fixture', inspect: [{ path: 'src/math.mjs', ranges: [[1, 3]] }] };
+    for (const shape of [{ steps: [{ tool: 'ask', args: preserved }, { tool: 'agent', args: { action: 'messages', id: 'job-fixture' } }] },
+      { parallel: [{ tool: 'ask', args: preserved }, { tool: 'agent', args: { action: 'messages', id: 'job-fixture' } }] },
+      { steps: [{ chain: [{ tool: 'ask', args: preserved }, { tool: 'agent', args: { action: 'messages', id: 'job-fixture' } }] }] }]) {
+      const start = seen.length;
+      const output = await pipelinePipeline(ctx, shape);
+      assert.match(output, /pipeline=PARTIAL/);
+      assert.doesNotMatch(output, /pipeline=HALTED|resume=/);
+      assert.equal(seen[start].tool, 'ask');
+      for (const [key, value] of Object.entries(preserved)) assert.deepEqual(seen[start].input[key], value);
+      assert.equal(seen.length - start, 2);
+      assert.match(output, /"jobStatus": "cancelled"/);
+    }
+    const fatal = await pipelinePipeline(ctx, { steps: [{ ask: 'fatal' }, { ask: 'never run' }] });
+    assert.match(fatal, /pipeline=HALTED/);
+    assert.match(fatal, /FIXTURE_UNAVAILABLE/);
+    assert.equal(seen.at(-1).input.request, 'fatal');
+    const service = fakeService();
+    const code = service.code.bind(service);
+    service.code = async (args) => {
+      if (args.path === 'missing.mjs') throw new Error('File not found: missing.mjs');
+      return code(args);
+    };
+    const orchestrator = new Orchestrator({ service, projectRoot: dir, projectId: 'fixture' });
+    const emptyInspect = await orchestrator.dispatch('inspect', {});
+    assert.match(emptyInspect, /^# ContextOS inspect\n\nstatus=failed error=INSPECT_TARGET_REQUIRED/);
+    const source = await orchestrator.dispatch('pipeline', {
+      steps: [{ tool: 'inspect', args: {} }, { tool: 'ask', args: { overview: true } }],
+    });
+    assert.match(source, /pipeline=HALTED/);
+    assert.match(source, /INSPECT_TARGET_REQUIRED/);
+    assert.doesNotMatch(source, /summary=Project/);
+    const missingSource = await orchestrator.dispatch('pipeline', {
+      steps: [{ tool: 'inspect', args: { path: 'missing.mjs' } }, { tool: 'ask', args: { overview: true } }],
+    });
+    assert.match(missingSource, /pipeline=PARTIAL/);
+    assert.match(missingSource, /INSPECT_SOURCE_UNAVAILABLE/);
+    assert.doesNotMatch(missingSource, /pipeline=HALTED/);
+    assert.match(missingSource, /status=completed/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('documented parallel mode starts the existing parallel group before awaiting its children', async () => {
+  const dir = makeTempProject();
+  const started = [];
+  let release;
+  const bothStarted = new Promise((resolve) => { release = resolve; });
+  const ctx = { projectRoot: dir, profile: {}, orchestrator: { dispatch: async (tool, input) => {
+    started.push(input.blockId);
+    if (started.length === 2) release();
+    await bothStarted;
+    return { status: 'completed', records: [], summary: input.blockId };
+  } } };
+  try {
+    const output = await pipelinePipeline(ctx, { mode: 'parallel', steps: [
+      { tool: 'ask', args: { blockId: 'block-first' } }, { tool: 'ask', args: { blockId: 'block-second' } },
+    ] });
+    assert.deepEqual(started, ['block-first', 'block-second']);
+    assert.match(output, /pipeline=OK/);
+    assert.match(output, /block-first/);
+    assert.match(output, /block-second/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

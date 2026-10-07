@@ -1,6 +1,6 @@
 /**
  * Link domain entity.
- * Represents a typed, directed relationship between Blocks or Chains.
+ * Represents a typed, directed relationship between Blocks. Chains group Blocks; they are not endpoints.
  */
 
 export const LINK_KINDS = [
@@ -13,9 +13,23 @@ export const LINK_KINDS = [
   'produces',
   'consumes',
   'feedback',
+  // Authored relations already used by historical project graphs.
+  'bundles',
+  'verified_by',
+  'validates',
+  'extends',
+  'verifies',
 ];
 
 export const LINK_PROVENANCES = ['authored', 'inferred'];
+
+/** Default identity includes the relation; explicit historical ids remain valid. */
+export function linkIdentity(from, to, kind = 'depends_on') {
+  if (!from || typeof from !== 'string') throw new Error('Link requires `from` endpoint');
+  if (!to || typeof to !== 'string') throw new Error('Link requires `to` endpoint');
+  if (!LINK_KINDS.includes(kind)) throw new Error(`Invalid link kind: ${kind}. Must be one of ${LINK_KINDS.join(', ')}`);
+  return `${encodeURIComponent(from)}-[${kind}]->${encodeURIComponent(to)}`;
+}
 
 export class Link {
   constructor({
@@ -31,7 +45,8 @@ export class Link {
     createdAt = new Date().toISOString(),
     updatedAt = new Date().toISOString(),
   }) {
-    if (!id || typeof id !== 'string') throw new Error('Link requires a valid string id');
+    if (id === undefined || id === null || id === '') id = linkIdentity(from, to, kind);
+    if (typeof id !== 'string') throw new Error('Link requires a valid string id');
     if (!projectId || typeof projectId !== 'string') throw new Error('Link requires projectId');
     if (!from || typeof from !== 'string') throw new Error('Link requires `from` endpoint');
     if (!to || typeof to !== 'string') throw new Error('Link requires `to` endpoint');

@@ -193,13 +193,13 @@ export function normalizeAgentReport(input, { jobId = null, status = 'completed'
   const blockers = normalizeStringArray(rawBlockers);
 
   // Status resolution:
-  // 1. Runtime status=failed always overrides a claimed success.
-  // 2. Nonempty blockers or blocked=true means blocked unless runtime failed.
+  // 1. Runtime failure/cancellation overrides any claimed payload outcome.
+  // 2. Nonempty blockers or blocked=true means blocked unless runtime is terminal.
   // 3. Explicit failed status in payload means failed.
   // 4. Default to payload status if valid, else runtime status ('completed').
   let finalStatus;
-  if (status === 'failed') {
-    finalStatus = 'failed';
+  if (status === 'failed' || status === 'cancelled') {
+    finalStatus = status;
   } else if (blockers.length > 0 || isBlocked) {
     finalStatus = 'blocked';
   } else if (payload.status === 'failed') {

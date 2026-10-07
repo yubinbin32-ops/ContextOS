@@ -1,6 +1,6 @@
 {
   "name": "contextos",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "description": "The context exoskeleton for AI development: optimize the entire development lifecycle to reduce token usage and context occupancy.",
   "license": "MIT",
   "type": "module",
@@ -42,7 +42,6 @@
   "files": [
     "plugins/contextos/server/contextos-mcp.mjs",
     "plugins/contextos/skills/contextos/SKILL.md",
-    "plugins/contextos/skills/contextos/references/",
     "packages/code-intel/grammars/",
     "plugins/contextos/skills/contextos-ops/",
     "setup.md",

@@ -1164,3 +1164,20 @@ test('a non-object selection cannot be recorded as completed and emits only type
   assert.equal(finalEvent.status, 'partial');
   assert.equal(finalEvent.failureCategory, 'arguments_not_object');
 });
+
+
+test('repeated source investigation yields verified partial evidence that can be recovered without a model', async () => {
+  const root = temporaryProject();
+  try {
+    let count = 0;
+    const result = await requestEvidence({ request: 'Find and verify login' }, { projectRoot: root, transport: async () => {
+      count += 1;
+      return { calls: [{ id: 'read-' + count, name: 'read', args: { requests: [{ path: 'src/login.mjs', ranges: [[1, 1]] }] } }] };
+    } });
+    assert.equal(result.status, 'partial');
+    assert.equal(result.errorCode, 'EVIDENCE_NO_PROGRESS');
+    assert.equal(result.records[0].text, 'export function login() { return "session"; }\n');
+    assert.equal(result.checkpoint.references[0].path, 'src/login.mjs');
+    assert.ok(count <= 4, 'unchanged repeated tool outcomes converge before spending the full invocation budget');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});

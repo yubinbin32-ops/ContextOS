@@ -44,15 +44,34 @@ test('Micro preload honors child evidence caps when reading the Pipeline artifac
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-micro-preload-child-cap-'));
   try {
     const raw = `# ContextOS inspect\n\n${'large source line\n'.repeat(400)}`;
-    const result = await runMicroPreload(createContext(root, async () => raw), {
+    let calls = 0;
+    const ctx = createContext(root, async () => { calls += 1; return raw; });
+    const result = await runMicroPreload(ctx, {
       steps: [{ inspect: { path: 'src/large.mjs', maxChars: 300 } }],
       maxChars: 1000,
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.status, 'OK');
+    assert.equal(result.status, 'PARTIAL', 'the pipeline display exceeds its budget while bounded preload remains usable');
     assert.equal(result.truncated, false);
     assert.ok(result.summary.length <= 1000);
+    assert.match(result.summary, /Micro preload truncated/);
+    assert.equal(result.fullChars, raw.trim().length);
+    const artifact = JSON.parse(readArtifact(root, result.artifactId, { maxChars: 40000, lineNumbers: false }).text);
+    assert.equal(artifact.status, 'PARTIAL');
+    assert.equal(artifact.steps[0].ok, true);
+    assert.equal(artifact.steps[0].output, raw);
+    assert.equal(artifact.steps[0].requestedMaxChars, 300);
+    assert.equal(artifact.resume, undefined, 'display truncation is not a worker continuation');
+    const complete = await runMicroPreload(ctx, {
+      steps: [{ inspect: { path: 'src/large.mjs', maxChars: 12000 } }], maxChars: 12000,
+    });
+    assert.equal(complete.status, 'OK', 'sufficient display and evidence budgets preserve success');
+    assert.equal(complete.fullChars, complete.chars, 'complete evidence includes its section labels');
+    assert.ok(complete.fullChars >= raw.trim().length);
+    assert.match(complete.summary, /large source line\nlarge source line/);
+    assert.doesNotMatch(complete.summary, /Micro preload truncated/);
+    assert.equal(calls, 2, 'each bounded/full preload runs its source step once');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -61,8 +80,10 @@ test('Micro preload honors child evidence caps when reading the Pipeline artifac
 test('Micro preload auto-bounds multi-step evidence without a dirty retry round', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'contextos-micro-preload-auto-bound-'));
   try {
-    const raw = `# ContextOS inspect\n\n${'large architecture line\n'.repeat(400)}`;
-    const result = await runMicroPreload(createContext(root, async () => raw), {
+    const raw = `# ContextOS inspect\n\n${'large architecture line\n'.repeat(180)}`;
+    let calls = 0;
+    const ctx = createContext(root, async () => { calls += 1; return raw; });
+    const result = await runMicroPreload(ctx, {
       steps: [
         { inspect: { path: 'src/a.mjs' } },
         { inspect: { path: 'src/b.mjs' } },
@@ -72,12 +93,24 @@ test('Micro preload auto-bounds multi-step evidence without a dirty retry round'
     });
 
     assert.equal(result.ok, true);
-    assert.equal(result.status, 'OK');
+    assert.equal(result.status, 'PARTIAL', 'bounded pipeline display reports its omitted evidence');
     assert.equal(result.truncated, false);
     assert.equal(result.projectedSteps, 3);
     assert.ok(result.summary.length <= 1200);
     assert.match(result.summary, /Micro preload truncated/);
+    assert.equal(result.fullChars, raw.trim().length * 3);
     assert.ok(result.fullChars > result.chars);
+    const artifact = JSON.parse(readArtifact(root, result.artifactId, { maxChars: 40000, lineNumbers: false }).text);
+    assert.equal(artifact.status, 'PARTIAL');
+    assert.ok(artifact.steps.every((step) => step.ok && step.output === raw));
+    assert.equal(artifact.resume, undefined);
+    const complete = await runMicroPreload(ctx, {
+      steps: ['a', 'b', 'c'].map((name) => ({ inspect: { path: `src/${name}.mjs` } })), maxChars: 16000,
+    });
+    assert.equal(complete.status, 'OK');
+    assert.equal(complete.projectedSteps, 0);
+    assert.doesNotMatch(complete.summary, /Micro preload truncated/);
+    assert.equal(calls, 6, 'all three steps run once per bounded/full preload, without retry');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

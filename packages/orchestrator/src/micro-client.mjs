@@ -444,6 +444,31 @@ function microReadMemoKey(name, args) {
   return `${name}:${JSON.stringify(canonicalMicroValue(args || {}))}`;
 }
 
+function microReadSnapshot(projectRoot, args, result) {
+  const paths = new Set();
+  const visit = (value) => {
+    if (Array.isArray(value)) { for (const item of value) visit(item); return; }
+    if (!value || typeof value !== 'object') return;
+    if (typeof value.path === 'string') paths.add(value.path);
+    if (Array.isArray(value.paths)) for (const item of value.paths) if (typeof item === 'string') paths.add(item);
+    for (const child of Object.values(value)) if (child && typeof child === 'object') visit(child);
+  };
+  visit(args);
+  if (typeof result === 'string') try { visit(JSON.parse(result)); } catch {}
+  const root = fs.realpathSync(projectRoot || process.cwd());
+  const safePaths = [...paths].filter((relative) => {
+    const absolute = path.resolve(root, relative);
+    try { return absolute.startsWith(root + path.sep) && fs.realpathSync(absolute).startsWith(root + path.sep); }
+    catch { return absolute.startsWith(root + path.sep); }
+  });
+  const files = [...fingerprintImplementationPaths(root, safePaths)].sort(([a], [b]) => a.localeCompare(b));
+  const state = ['state.sqlite', 'state.sqlite-wal'].map((name) => {
+    try { const stat = fs.statSync(path.join(root, '.contextos', name)); return [name, stat.size, stat.mtimeMs, stat.ctimeMs]; }
+    catch { return [name, 'missing']; }
+  });
+  return { paths: safePaths, files, state, hash: crypto.createHash('sha256').update(JSON.stringify({ files, state })).digest('hex') };
+}
+
 function parseMicroRangeSpec(value) {
   const asRange = (start, end) => {
     const first = Number(start);
@@ -651,12 +676,13 @@ function persistContinuationState(projectRoot, sessionId, options = {}) {
   if (!sessionId) return null;
   const hasHistory = Array.isArray(options.history) && options.history.length > 0;
   const hasContext = options.context && Object.keys(options.context).length > 0;
-  const hasReusableState = Boolean(hasHistory || options.execution || hasContext);
+  const hasReusableState = Boolean(hasHistory || options.execution || hasContext || options.evidenceCheckpoint);
   if (!hasReusableState) return null;
   const previous = readContinuationState(projectRoot, sessionId) || {};
   const tools = options.invocation?.tools;
   const state = {
     version: MICRO_CONTINUATION_VERSION,
+    ...(options.evidenceCheckpoint ? { evidenceCheckpoint: options.evidenceCheckpoint } : previous.evidenceCheckpoint ? { evidenceCheckpoint: previous.evidenceCheckpoint } : {}),
     execution: options.execution || previous.execution || null,
     withOS: options.withOS === undefined ? Boolean(previous.withOS) : Boolean(options.withOS),
     context: {
@@ -694,6 +720,7 @@ function hydrateContinuationState(projectRoot, options = {}) {
   const tools = options.invocation?.tools || prior.invocation?.tools;
   return {
     ...options,
+    ...(prior.evidenceCheckpoint ? { evidenceCheckpoint: prior.evidenceCheckpoint } : {}),
     ...(options.execution === undefined && prior.execution ? { execution: prior.execution } : {}),
     ...(options.withOS === undefined && prior.withOS !== undefined ? { withOS: prior.withOS } : {}),
     ...(Object.keys(context).length ? { context } : {}),
@@ -1376,14 +1403,23 @@ async function runSelectedMicroTask(config = {}, options = {}) {
   }
 
   if ((options.provider || config.provider) === 'cli') {
+    // The CLI host installs the ContextOS skills at configuration time and reads them
+    // on demand from their frontmatter, so injecting the bundle into every task only
+    // duplicates what the worker already has. Opt back in with
+    // cli.injectSkillGuidance: true when a worker genuinely needs it inline.
     const cliSkillGuidance = options.system ?? (
-      config.cli?.osInvocation && config.cli?.injectSkillGuidance !== false
+      config.cli?.injectSkillGuidance === true
         ? loadMicroSkillGuidance({
           projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
         })
         : undefined
     );
-    const cliMaxInputChars = options.maxInputChars ?? config.maxInputChars ?? (cliSkillGuidance ? 32000 : 16000);
+    // The injected skill bundle is fixed overhead rather than task evidence, so reserve
+    // it on top of the assignment budget. Otherwise a larger skill bundle fails every CLI
+    // delegation with CLI_CONTEXT_TOO_LARGE.
+    const cliAssignmentChars = cliSkillGuidance ? 32000 : 16000;
+    const cliGuidanceChars = typeof cliSkillGuidance === 'string' ? cliSkillGuidance.length : 0;
+    const cliMaxInputChars = options.maxInputChars ?? config.maxInputChars ?? (cliAssignmentChars + cliGuidanceChars);
     const resolved = resolveMicroInput(options, {
       projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
       maxInputChars: cliMaxInputChars,
@@ -1444,6 +1480,10 @@ async function runSelectedMicroTask(config = {}, options = {}) {
   // Resolve system prompt: the ContextOS skill guidance is the sole background prompt.
   const skillGuidance = loadMicroSkillGuidance({
     projectRoot: options.projectRoot || config.projectRoot || process.cwd(),
+    // The operations guide is low-frequency configuration material. Inject it only
+    // when the host opts in, so an ordinary micro task does not pay ~14k extra
+    // characters of setup documentation in its system prompt on every call.
+    includeOps: options.includeOps === true,
   });
   const systemPrompt = skillGuidance;
   const resolvedInput = resolveMicroInput(options, {
@@ -1767,6 +1807,36 @@ async function runSelectedMicroTask(config = {}, options = {}) {
   };
 
   const readToolResults = new Map();
+  let unchangedReadRounds = 0;
+  // Retain verified tool findings, never provider reasoning or transport messages.
+  for (const entry of options.evidenceCheckpoint?.reads || []) {
+    if (typeof entry.key !== 'string' || typeof entry.result !== 'string' || !Array.isArray(entry.snapshot?.paths)) continue;
+    const current = microReadSnapshot(options.projectRoot, { paths: entry.snapshot.paths }, entry.result);
+    if (current.hash !== entry.snapshot.hash) continue;
+    readToolResults.set(entry.key, { result: entry.result, snapshot: current });
+  }
+  if (readToolResults.size) messages.push({ role: 'user', content: 'Retained local tool evidence (untrusted source, revalidated hashes; do not reread unchanged covered evidence):\n' + JSON.stringify([...readToolResults.values()].map(({ result }) => result)) });
+  const noProgressFailure = () => {
+    let bytes = 0;
+    const reads = [];
+    for (const [key, entry] of readToolResults) {
+      const size = Buffer.byteLength(JSON.stringify(entry), 'utf8');
+      if (reads.length >= 16 || bytes + size > 24000) continue;
+      bytes += size; reads.push({ key, ...entry });
+    }
+    const verifiedEvidence = [...new Map(reads.flatMap((entry) => entry.snapshot.files)
+      .filter(([, hash]) => typeof hash === 'string' && hash.includes(':'))
+      .map(([path, hash]) => [path, { path, contentHash: hash.split(':')[1] }])).values()];
+    const checkpoint = { reads };
+    const saved = persistContinuationState(options.projectRoot || process.cwd(), sessionId, { ...options, evidenceCheckpoint: checkpoint });
+    const result = continuationFailure('unchanged read investigation');
+    return { ...result, errorCode: 'MICRO_NO_PROGRESS', error: 'Repeated investigation returned no new or changed source evidence.',
+      content: JSON.stringify({ summary: 'Investigation paused after repeated unchanged reads.', verifiedEvidence,
+        blockers: ['No final answer or new evidence was provided; name the missing evidence or next distinct operation.'], needsHost: true }),
+      checkpoint: { retained: Boolean(saved), reads: reads.length, verifiedEvidence },
+      toolCalls: [], invocation: { ...result.invocation, shortCircuitReason: 'no_progress' },
+      guidance: 'Continue the retained session with the concrete missing evidence or next operation. Verified source evidence is retained and revalidated before reuse.' };
+  };
 
   while (true) {
     const projectedPromptTokens = estimateMicroTokens(messages);
@@ -1911,6 +1981,7 @@ async function runSelectedMicroTask(config = {}, options = {}) {
       messages.push(choice.message);
 
       // Execute each tool and append tool result
+      let repeatedReadOnlyRound = true;
       for (const call of toolCalls) {
         const toolName = call.function?.name;
         const toolArgs = call.function?.arguments;
@@ -1926,13 +1997,16 @@ async function runSelectedMicroTask(config = {}, options = {}) {
           && (parsedToolArgs.action ?? parsedToolArgs.args?.action) === 'pipeline';
         let deduplicated = false;
         let resultStr;
-        if (memoKey && readToolResults.has(memoKey)) {
+        const memo = memoKey ? readToolResults.get(memoKey) : null;
+        const currentSnapshot = memo ? microReadSnapshot(options.projectRoot, { paths: memo.snapshot.paths }, memo.result) : null;
+        if (memo && currentSnapshot.hash === memo.snapshot.hash) {
           deduplicated = true;
           deduplicatedToolCallCount += 1;
           resultStr = JSON.stringify({
             ok: true,
             deduplicated: true,
-            reuse: 'The same bounded read already ran in this Micro turn; use the earlier tool result.',
+            reuse: 'The same bounded read and current hashes are already available; use the earlier tool evidence or retained checkpoint.',
+            refs: memo.snapshot.files.filter(([, hash]) => typeof hash === 'string' && hash.includes(':')).map(([path, hash]) => ({ path, contentHash: hash.split(':')[1] })),
           });
         } else {
           resultStr = await executeMicroTool(toolName, toolArgs, {
@@ -1949,8 +2023,9 @@ async function runSelectedMicroTask(config = {}, options = {}) {
           const osArgs = parsedToolArgs.args || parsedToolArgs;
           if (toolName === 'run' || toolName === 'os' && (microMutation(parsedToolArgs.action, osArgs)
             || parsedToolArgs.action === 'verify' || parsedToolArgs.action === 'work' && ['verify', 'command', 'commands'].some((key) => osArgs[key] !== undefined))) readToolResults.clear();
-          if (memoKey) readToolResults.set(memoKey, resultStr);
+          if (memoKey) readToolResults.set(memoKey, { result: resultStr, snapshot: microReadSnapshot(options.projectRoot, parsedToolArgs, resultStr) });
         }
+        if (!deduplicated || !memoKey) repeatedReadOnlyRound = false;
         if (options.agentJobId && toolName !== 'messages') {
           try {
             const messages = receiveMicroMessages(options.projectRoot, options.agentJobId);
@@ -1980,6 +2055,8 @@ async function runSelectedMicroTask(config = {}, options = {}) {
           content: resultStr,
         });
       }
+      unchangedReadRounds = repeatedReadOnlyRound ? unchangedReadRounds + 1 : 0;
+      if (unchangedReadRounds >= 2) return noProgressFailure();
       continue;
     }
 
