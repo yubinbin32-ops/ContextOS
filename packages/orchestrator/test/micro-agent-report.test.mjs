@@ -305,6 +305,18 @@ describe('normalizeAgentReport', () => {
       assert.equal(report.waitingForHost, false);
     });
 
+    it('filters placeholder non-blocker strings like 无。 or none without setting status=blocked', () => {
+      const report = normalizeAgentReport({
+        status: 'completed',
+        summary: 'All checks passed',
+        blockers: ['无。', 'none', 'N/A', '暂无'],
+      }, { status: 'completed' });
+      assert.equal(report.status, 'completed');
+      assert.deepEqual(report.blockers, []);
+      assert.equal(report.needsHost, false);
+      assert.equal(report.needsHostReason, 'none');
+    });
+
     it('blocked=true sets status to blocked even if blockers array is empty', () => {
       const input = {
         status: 'completed',

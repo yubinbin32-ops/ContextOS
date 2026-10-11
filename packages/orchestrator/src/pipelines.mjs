@@ -33,7 +33,7 @@ const MAX_FOCUS_SLICE_SYMBOLS = 4;
 const SEARCH_CLIP = 360;
 const PIPELINE_RECEIPT_OUTPUT_CLIP = 2600;
 const MICRO_TRIAGE_MIN_CHARS = 2000;
-const MCP_CONTINUATION_MS = 290_000;
+const MCP_CONTINUATION_MS = 170_000;
 const PROCESS_VERIFY_MODES = new Set(['serve', 'list', 'status', 'logs', 'stop', 'clear', 'query']);
 
 function normalizeParallelConcurrency(value) {
@@ -2144,13 +2144,13 @@ export async function changePipeline(ctx, input = {}) {
   const changes = [
     ...creates.map((spec) => ({
       kind: 'create',
-      path: spec?.path,
+      path: spec?.path ?? spec?.filePath ?? spec?.file ?? spec?.targetFile,
       content: spec?.content ?? '',
       overwrite: Boolean(spec?.overwrite),
     })),
     ...edits.map((spec) => ({
       kind: 'edit',
-      path: spec?.path,
+      path: spec?.path ?? spec?.filePath ?? spec?.file ?? spec?.targetFile,
       target: stripInspectMetadata(spec?.target ?? spec?.targetContent ?? spec?.oldText),
       replacement: spec?.replacement ?? spec?.replacementContent ?? spec?.newText ?? (spec?.fullFile ? spec?.content : ''),
       startLine: spec?.startLine,
@@ -2161,7 +2161,7 @@ export async function changePipeline(ctx, input = {}) {
     })),
     ...deletes.map((spec) => ({
       kind: 'delete',
-      path: spec?.path,
+      path: spec?.path ?? spec?.filePath ?? spec?.file ?? spec?.targetFile,
     })),
   ];
 
@@ -2557,11 +2557,11 @@ export async function inspectPipeline(ctx, input = {}) {
     const specs = input.inspect
       .map((entry) => (typeof entry === 'string' ? { path: entry } : entry))
       .filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry));
-    const arrayPaths = uniquePaths(specs.map((entry) => entry.path));
+    const arrayPaths = uniquePaths(specs.map((entry) => entry.path ?? entry.filePath ?? entry.file));
     const arrayRanges = specs
-      .filter((entry) => entry.path && entry.ranges !== undefined && entry.ranges !== null
+      .filter((entry) => (entry.path ?? entry.filePath ?? entry.file) && entry.ranges !== undefined && entry.ranges !== null
         && !(Array.isArray(entry.ranges) && entry.ranges.length === 0))
-      .map((entry) => ({ path: entry.path, ranges: entry.ranges }));
+      .map((entry) => ({ path: entry.path ?? entry.filePath ?? entry.file, ranges: entry.ranges }));
     const singleSymbol = specs.length === 1 ? specs[0].symbol : undefined;
     input = {
       ...input,
@@ -3526,16 +3526,81 @@ function pipelineStepJobId(result) {
   return null;
 }
 
+function pipelineStepResultId(result) {
+  if (!result || typeof result !== 'object') return null;
+  const outputs = [];
+  if (result.output !== undefined) outputs.push(result.output);
+  for (const item of Array.isArray(result.items) ? result.items : []) {
+    if (item && item.output !== undefined) outputs.push(item.output);
+  }
+  for (const output of outputs) {
+    if (output && typeof output === 'object') {
+      const candidates = [output.resultId, output.data?.resultId, output.result?.resultId];
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+      }
+    }
+    const text = typeof output === 'string' ? output : JSON.stringify(output ?? '');
+    const match = text.match(/(?:resultId|result)["'\s:=]{1,6}(result-[A-Za-z0-9._-]+)/)
+      || text.match(/\b(result-[A-Za-z0-9._-]+)\b/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function pipelineStepReceiptId(result) {
+  if (!result || typeof result !== 'object') return null;
+  const outputs = [];
+  if (result.output !== undefined) outputs.push(result.output);
+  for (const item of Array.isArray(result.items) ? result.items : []) {
+    if (item && item.output !== undefined) outputs.push(item.output);
+  }
+  for (const output of outputs) {
+    if (output && typeof output === 'object') {
+      const candidates = [
+        output.receiptId,
+        output.receipt?.id,
+        output.data?.receiptId,
+        output.data?.receipt?.id,
+        output.result?.receiptId,
+      ];
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+      }
+    }
+    const text = typeof output === 'string' ? output : JSON.stringify(output ?? '');
+    const match = text.match(/(?:receiptId|receipt)["'\s:=`]{1,6}(receipt-[A-Za-z0-9._-]+)/)
+      || text.match(/\b(receipt-[A-Za-z0-9._-]+)\b/)
+      || text.match(/\breceipt=([A-Za-z0-9._-]+)/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
 function resolvePipelineStepReferences(value, results) {
   if (typeof value === 'string') {
     const match = value.trim().match(PIPELINE_STEP_REFERENCE);
     if (!match) return value;
     const stepNumber = Number(match[1] || match[4]);
     const field = String(match[2] || match[3] || '').toLowerCase();
-    if (!Number.isFinite(stepNumber) || stepNumber < 1 || !['id', 'job', 'jobid'].includes(field)) {
-      throw new Error(`PIPELINE_STEP_REFERENCE_UNSUPPORTED: '${value.trim()}' resolves only an earlier step job id.`);
+    if (!Number.isFinite(stepNumber) || stepNumber < 1 || !['id', 'job', 'jobid', 'result', 'resultid', 'receipt', 'receiptid'].includes(field)) {
+      throw new Error(`PIPELINE_STEP_REFERENCE_UNSUPPORTED: '${value.trim()}' resolves only an earlier step jobId, resultId, or receiptId.`);
     }
     const entry = (Array.isArray(results) ? results : []).find((result) => result && result.step === stepNumber);
+    if (['result', 'resultid'].includes(field)) {
+      const resultId = pipelineStepResultId(entry);
+      if (!resultId) {
+        throw new Error(`PIPELINE_STEP_REFERENCE_UNRESOLVED: step ${stepNumber} produced no resultId yet; reference only earlier completed steps.`);
+      }
+      return resultId;
+    }
+    if (['receipt', 'receiptid'].includes(field)) {
+      const receiptId = pipelineStepReceiptId(entry);
+      if (!receiptId) {
+        throw new Error(`PIPELINE_STEP_REFERENCE_UNRESOLVED: step ${stepNumber} produced no receiptId yet; reference only earlier completed steps.`);
+      }
+      return receiptId;
+    }
     const jobId = pipelineStepJobId(entry);
     if (!jobId) {
       throw new Error(`PIPELINE_STEP_REFERENCE_UNRESOLVED: step ${stepNumber} produced no job id yet; reference only earlier completed steps.`);
@@ -3667,7 +3732,21 @@ function normalizeAction(action, projectRoot) {
     } else if ('explore' in action) {
       tool = 'explore';
       args = typeof action.explore === 'string' ? { intent: action.explore } : { ...action.explore };
+    } else if ('micro' in action) {
+      tool = 'micro';
+      args = typeof action.micro === 'string' ? { prompt: action.micro } : { ...action.micro };
+    } else if ('agent' in action) {
+      tool = 'agent';
+      args = typeof action.agent === 'string' ? { task: action.agent } : { ...action.agent };
     }
+  }
+
+  if (tool === 'micro') {
+    const microArgs = args && typeof args === 'object' && !Array.isArray(args) ? { ...args } : {};
+    const microAction = microArgs.action || 'run';
+    delete microArgs.action;
+    tool = 'ops';
+    args = { capability: 'micro', action: microAction, args: microArgs };
   }
 
   if (tool === 'command' || tool === 'run' || tool === 'run_command') {
@@ -4206,11 +4285,11 @@ export async function pipelinePipeline(ctx, input = {}) {
   const boundedWait = (tool, actionInput) => {
     if (!actionInput || typeof actionInput !== 'object' || Array.isArray(actionInput)) return actionInput;
     const waitable = tool === 'integrate'
-      || (tool === 'agent' && (actionInput.action === 'wait' || actionInput.action === 'messages'));
+      || (tool === 'agent' && (actionInput.action === 'wait' || actionInput.action === 'messages' || ((!actionInput.action || actionInput.action === 'run') && actionInput.background !== true)));
     if (!waitable) return actionInput;
     const requested = Number.isFinite(Number(actionInput.waitMs))
       ? Math.max(0, Math.floor(Number(actionInput.waitMs)))
-      : (tool === 'integrate' ? 280_000 : 0);
+      : (tool === 'integrate' ? 160_000 : ((tool === 'agent' && (!actionInput.action || actionInput.action === 'run')) ? 170_000 : 0));
     if (!requested) return actionInput;
     const remaining = Math.max(0, maxDurationMs - (Date.now() - batchStartedAt));
     const bounded = Math.max(1, Math.min(requested, remaining));
@@ -4903,11 +4982,11 @@ export async function integratePipeline(ctx, input = {}) {
   }
   // Keep the whole merge inside the host MCP call window: waiting for the job
   // must leave headroom for the diff, verification and the response itself.
-  const hostWindowMs = Math.min(290_000, Math.max(5_000, Number(input.maxDurationMs) || 290_000));
+  const hostWindowMs = Math.min(170_000, Math.max(5_000, Number(input.maxDurationMs) || 170_000));
   const deadline = Date.now() + hostWindowMs;
   if (job.status !== 'completed') {
     const waitBudget = Math.max(0, deadline - Date.now() - 10_000);
-    const waitMs = Math.min(280_000, Math.max(0, Number(input.waitMs) || 280_000), waitBudget);
+    const waitMs = Math.min(160_000, Math.max(0, Number(input.waitMs) || 160_000), waitBudget);
     const startedWait = Date.now();
     while (job && job.status !== 'completed' && !['failed', 'cancelled'].includes(job.status)
       && Date.now() - startedWait < waitMs) {

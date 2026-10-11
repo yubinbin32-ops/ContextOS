@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { requestContextOS, renderRequestResult, recordEvidenceDelivery } from '../src/request-service.mjs';
+import { requestContextOS, renderRequestResult, recordEvidenceDelivery, hydrateVerifiedEvidenceRefs } from '../src/request-service.mjs';
+import { executeAgent } from '../src/agent-service.mjs';
 import { requestEvidence } from '../src/micro-broker.mjs';
 import { appendRoleUsage } from '../src/role-usage-ledger.mjs';
 
@@ -638,6 +639,57 @@ test('renderer cites reusable results compactly and makes clipped references rec
   assert.match(clipped, /missing\[1\]/, 'the durable result ID allows explicit recovery when even the reference details cannot fit');
   assert.ok(!clipped.includes('hash='));
 });
+
+test('handle-only delivery omits source bodies from main output and hydrates verified evidence into executeAgent while rejecting SHA-256 drift', async () => {
+  const root = workspace();
+  try {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    const source = 'export function secretLogic() {\n  return "VERIFIED_SLICE_BODY";\n}\n';
+    fs.writeFileSync(path.join(root, 'src', 'logic.mjs'), source);
+
+    const handleResult = await requestContextOS('ask', {
+      inspect: [{ path: 'src/logic.mjs', ranges: [{ start: 1, end: 3 }] }],
+      delivery: 'handle-only',
+    }, { projectRoot: root, profile: {}, broker: requestEvidence });
+
+    assert.equal(handleResult.status, 'completed');
+    assert.equal(handleResult.delivery, 'handle-only');
+    assert.equal(handleResult.records.length, 1);
+
+    const rendered = renderRequestResult(handleResult, { maxChars: 4000 });
+    assert.match(rendered, /delivery=handle-only/);
+    assert.match(rendered, /handle path=src\/logic\.mjs ranges=\[\{"start":1,"end":3\}\] hash=[a-f0-9]{16}/);
+    assert.ok(!rendered.includes('VERIFIED_SLICE_BODY'), 'handle-only render must not include raw source body');
+
+    let agentPrompt = '';
+    const agentRes = await executeAgent({
+      task: 'Inspect preloaded logic',
+      context: { evidenceRefs: [handleResult.resultId] },
+    }, {
+      projectRoot: root,
+      adapter: { command: 'echo', model: 'mock-cli' },
+      name: 'custom',
+      runner: async (_target, spec) => {
+        agentPrompt = spec.task || spec.prompt || '';
+        return { ok: true, content: 'Agent completed with hydrated slice' };
+      },
+    });
+    assert.equal(agentRes.status, 'completed');
+    assert.match(agentPrompt, /## Verified Preloaded Evidence/);
+    assert.match(agentPrompt, /VERIFIED_SLICE_BODY/);
+
+    // Now mutate the file on disk and verify SHA-256 drift rejection
+    fs.writeFileSync(path.join(root, 'src', 'logic.mjs'), 'export function secretLogic() {\n  return "MUTATED_BODY";\n}\n');
+    const driftedHydration = hydrateVerifiedEvidenceRefs(root, [handleResult.resultId]);
+    assert.equal(driftedHydration.stale.length, 1);
+    assert.match(driftedHydration.text, /Path src\/logic\.mjs changed since result-[A-Za-z0-9._-]+; inspect fresh slice/);
+    assert.ok(!driftedHydration.text.includes('VERIFIED_SLICE_BODY'));
+    assert.ok(!driftedHydration.text.includes('MUTATED_BODY'));
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 
 test('renderer acknowledges only complete source blocks that survive final metadata checks', () => {
   const records = [

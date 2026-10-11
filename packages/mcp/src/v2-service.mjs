@@ -288,11 +288,7 @@ export class ContextOSV2Service {
     }
 
     const structure = LanguageRegistry.parseStructure(relativePath, content);
-    const bare = ref.symbol.includes('#') ? ref.symbol.split('#').pop().trim() : ref.symbol;
-    const match = structure.symbols.find((s) => s.name === bare)
-      || structure.symbols.find((s) => s.shortName === bare)
-      || structure.symbols.find((s) => s.name.endsWith(`.${bare}`))
-      || structure.symbols.find((s) => s.containerName && `${s.containerName}.${s.shortName || s.name}`.endsWith(`.${bare}`));
+    const match = this._findAnchorSymbol(structure, ref.symbol, ref);
     if (!match) {
       throw new Error(`Symbol '${ref.symbol}' not found in '${relativePath}'. Drop 'symbol' to bind the whole file.`);
     }
@@ -302,7 +298,7 @@ export class ContextOSV2Service {
     return {
       ...ref,
       path: relativePath,
-      symbol: match.name,
+      symbol: String(ref.symbol).includes('#') ? ref.symbol : match.name,
       anchorKind: 'symbol',
       startLine: match.startLine,
       endLine: match.endLine,
@@ -1200,7 +1196,9 @@ export class ContextOSV2Service {
                 if (ref.symbol && ref.anchorKind !== 'file') {
                   source.structure ||= LanguageRegistry.parseStructure(target, source.content);
                   const symbol = this._findAnchorSymbol(source.structure, ref.symbol, ref);
-                  return symbol ? [{ ...ref, matchKind: 'exact-symbol', anchorStatus: symbol.hash === ref.hash ? 'fresh' : 'stale' }] : [];
+                  return symbol
+                    ? [{ ...ref, startLine: symbol.startLine, endLine: symbol.endLine, matchKind: 'exact-symbol', anchorStatus: symbol.hash === ref.hash ? 'fresh' : 'stale' }]
+                    : [{ ...ref, matchKind: 'exact-symbol', anchorStatus: 'stale' }];
                 }
                 return [{ ...ref, matchKind: 'exact-file', anchorStatus: calculateHash(source.content) === ref.hash ? 'fresh' : 'stale' }];
               } catch { return []; }
@@ -1436,6 +1434,41 @@ export class ContextOSV2Service {
                 endLine: sym.endLine || lines.length,
                 hash: sym.hash || fileHash,
                 role: 'implementation',
+              });
+            }
+            if (refreshPaths && symbolFilters.size === 0 && structure) {
+              const existingSymbolRefs = (existing.artifactRefs || []).filter(
+                (ref) => ref.path === cleanRelPath && ref.symbol && ref.anchorKind !== 'file' && ref.anchorKind !== 'tree'
+              );
+              for (const existingRef of existingSymbolRefs) {
+                const matched = this._findAnchorSymbol(structure, existingRef.symbol, existingRef);
+                if (!matched) continue;
+                const startLine = matched.startLine || 1;
+                const endLine = matched.endLine || lines.length;
+                const sameSpanIdx = autoArtifactRefs.findIndex(
+                  (ref) => ref.path === cleanRelPath && ref.startLine === startLine && ref.endLine === endLine
+                );
+                if (sameSpanIdx >= 0) {
+                  if (String(existingRef.symbol).includes('#')) {
+                    autoArtifactRefs[sameSpanIdx].symbol = existingRef.symbol;
+                  }
+                  continue;
+                }
+                if (!autoArtifactRefs.some((ref) => ref.path === cleanRelPath && ref.symbol === existingRef.symbol)) {
+                  autoArtifactRefs.push({
+                    path: cleanRelPath,
+                    anchorKind: 'symbol',
+                    symbol: existingRef.symbol,
+                    startLine,
+                    endLine,
+                    hash: matched.hash || fileHash,
+                    role: existingRef.role || 'implementation',
+                  });
+                }
+              }
+              autoArtifactRefs.sort((left, right) => {
+                if (left.path !== right.path) return 0;
+                return (left.startLine || 1) - (right.startLine || 1);
               });
             }
           } else {

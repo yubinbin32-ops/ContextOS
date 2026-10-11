@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { V2Database } from '../../storage/src/database.mjs';
+import { LanguageRegistry } from '../../code-intel/src/language-registry.mjs';
 import { SessionStore } from './session-store.mjs';
 
 // First contact is bounded local navigation, never semantic discovery or graph bootstrap.
@@ -15,6 +16,26 @@ const STALE_MS = 6 * 60 * 60 * 1000;
 const digest = (value) => crypto.createHash('sha256').update(value).digest('hex');
 const short = (value, max = 160) => String(value || '').slice(0, max);
 const inside = (root, target) => target === root || target.startsWith(root + path.sep);
+
+function findAnchorSymbol(structure, symbol, locator = {}) {
+  const symbols = Array.isArray(structure?.symbols) ? structure.symbols : [];
+  const bare = String(symbol || '').includes('#') ? String(symbol).split('#').pop().trim() : String(symbol || '').trim();
+  if (!bare) return null;
+  const predicates = [
+    (entry) => entry.name === bare,
+    (entry) => entry.shortName === bare,
+    (entry) => entry.name.endsWith('.' + bare),
+    (entry) => entry.containerName && (entry.containerName + '.' + (entry.shortName || entry.name)).endsWith('.' + bare),
+  ];
+  for (const matches of predicates.map((predicate) => symbols.filter(predicate))) {
+    if (!matches.length) continue;
+    return matches.find((entry) => locator.hash && entry.hash === locator.hash)
+      || matches.find((entry) => entry.startLine === locator.startLine && entry.endLine === locator.endLine)
+      || matches.find((entry) => entry.startLine === locator.startLine)
+      || matches[0];
+  }
+  return null;
+}
 
 function safePath(root, relative) {
   if (typeof relative !== 'string' || path.isAbsolute(relative)) return null;
@@ -192,6 +213,7 @@ export function projectOverview(projectRoot) {
   const blocks = (state.blocks || []).filter((b) => b.id && !b.id.startsWith('mod-') && b.kind !== 'module');
   const chains = Array.isArray(state.chains) ? state.chains : [];
   const members = new Set(chains.flatMap((c) => c.memberIds || []));
+  const structureCache = new Map();
   const navigation = blocks.slice(0, MAX_BLOCKS).map((b) => {
     const anchors = [];
     for (const ref of b.artifactRefs || []) {
@@ -204,18 +226,35 @@ export function projectOverview(projectRoot) {
       // it provably drifted, and unverified when the read was truncated or the
       // anchor is a symbol/tree slice this entry cannot re-parse.
       const anchorKind = ref.anchorKind || (ref.symbol ? 'symbol' : 'file');
-      const source = exists ? read(root, ref.path) : null;
+      const source = exists ? read(root, ref.path, 256 * 1024) : null;
       let anchorStatus = exists ? 'unverified' : 'missing';
+      let line = ref.startLine || 1;
       if (exists && source && !source.truncated && ref.hash) {
         if (anchorKind === 'file') {
           anchorStatus = digest(source.text).slice(0, 16) === ref.hash ? 'fresh' : 'stale';
-        } else if (anchorKind === 'symbol' && ref.startLine && ref.endLine) {
-          const slice = source.text.split(/\r?\n/).slice(ref.startLine - 1, ref.endLine).join('\n');
-          if (digest(slice).slice(0, 16) === ref.hash) anchorStatus = 'fresh';
+        } else if (anchorKind === 'symbol') {
+          if (ref.startLine && ref.endLine) {
+            const slice = source.text.split(/\r?\n/).slice(ref.startLine - 1, ref.endLine).join('\n');
+            if (digest(slice).slice(0, 16) === ref.hash) anchorStatus = 'fresh';
+          }
+          if (anchorStatus !== 'fresh' && ref.symbol) {
+            try {
+              if (!structureCache.has(ref.path)) {
+                structureCache.set(ref.path, LanguageRegistry.parseStructure(ref.path, source.text));
+              }
+              const sym = findAnchorSymbol(structureCache.get(ref.path), ref.symbol, ref);
+              if (sym) {
+                line = sym.startLine || line;
+                anchorStatus = sym.hash === ref.hash ? 'fresh' : 'stale';
+              } else {
+                anchorStatus = 'stale';
+              }
+            } catch {}
+          }
         }
       }
       anchors.push({ path: short(ref.path, 160), ...(ref.symbol ? { symbol: short(ref.symbol, 100) } : {}),
-        line: ref.startLine || 1, available: exists, anchorStatus });
+        line, available: exists, anchorStatus });
       if (!exists) gaps.push('Stale anchor: ' + b.id + ' -> ' + ref.path);
       else if (anchorStatus === 'stale') gaps.push('Stale anchor: ' + b.id + ' -> ' + ref.path + ' (hash drifted; refresh with block bind_auto)');
       if (anchors.length === 2) break;
@@ -337,7 +376,29 @@ export async function graphEvidence(root, args = {}, signal) {
   const matched = explicit || blocks.length > 0;
   const requests = [];
   const seen = new Set();
-  for (const block of blocks) for (const anchor of block.artifactRefs || []) {
+  const priorityMatches = Array.isArray(args.priorityMatches) ? args.priorityMatches : [];
+  const anchorPriority = (anchor) => {
+    if (!priorityMatches.length) return 2;
+    const relative = anchor.anchorKind === 'tree' ? anchor.manifest : anchor.path;
+    for (const match of priorityMatches) {
+      if (match.kind === 'symbol' && match.path === anchor.path && match.symbol === anchor.symbol) return 0;
+      if ((match.kind === 'path' || match.kind === 'basename') && (match.path === anchor.path || match.path === relative)) return 0;
+    }
+    for (const match of priorityMatches) {
+      if (match.kind === 'symbol' && match.path === anchor.path) return 1;
+    }
+    return 2;
+  };
+  const orderedAnchors = [];
+  for (const block of blocks) {
+    for (const anchor of block.artifactRefs || []) {
+      orderedAnchors.push({ anchor, priority: anchorPriority(anchor), order: orderedAnchors.length });
+    }
+  }
+  if (priorityMatches.length) {
+    orderedAnchors.sort((left, right) => left.priority - right.priority || left.order - right.order);
+  }
+  for (const { anchor, priority } of orderedAnchors) {
     if (requests.length >= 16) { const reason = 'Graph anchor evidence capped at 16 reads; navigate a narrower Block or exact inspect.'; if (!missing.some((item) => item.reason === reason)) missing.push({ reason }); break; }
     const relative = anchor.anchorKind === 'tree' ? anchor.manifest : anchor.path;
     if (!relative) { missing.push({ path: anchor.path, reason: 'Tree anchor requires an explicit manifest; use owners/inspect for named member files.' }); continue; }
@@ -345,7 +406,9 @@ export async function graphEvidence(root, args = {}, signal) {
     if (!target) { missing.push({ path: relative, reason: 'Graph anchor escapes workspace.' }); continue; }
     try {
       const stat = fs.statSync(target);
-      if (!stat.isFile() || stat.size > 128 * 1024) throw new Error('Anchor is not a bounded source file; use exact inspect.');
+      const isSymbolAnchor = Boolean(anchor.symbol && anchor.anchorKind !== 'file' && anchor.anchorKind !== 'tree');
+      const maxAnchorBytes = (isSymbolAnchor || priority === 0) ? 512 * 1024 : 128 * 1024;
+      if (!stat.isFile() || stat.size > maxAnchorBytes) throw new Error('Anchor is not a bounded source file; use exact inspect.');
       const bytes = fs.readFileSync(target);
       const contentHash = digest(bytes);
       const text = bytes.toString('utf8');
@@ -354,6 +417,10 @@ export async function graphEvidence(root, args = {}, signal) {
       const lines = text.split(/\r?\n/u);
       let first = anchor.anchorKind === 'tree' ? 1 : anchor.startLine || 1;
       let last = anchor.anchorKind === 'tree' ? Math.min(lines.length, 64) : anchor.endLine || Math.min(lines.length, first + 63);
+      if (anchor.anchorKind === 'file' && priority === 0 && stat.size > 128 * 1024) {
+        first = 1;
+        last = Math.min(lines.length, 64);
+      }
       if (anchor.symbol && anchor.anchorKind !== 'file' && anchor.anchorKind !== 'tree') {
         // Bindings store the AST symbol/slice hash, not the whole-file hash.
         // Resolve current lines from the same parser so unchanged symbols may move.
@@ -433,8 +500,9 @@ export async function goalOnboarding(projectRoot, goal, signal) {
     let refsVisited = 0;
     let complete = blocks.length <= 2000 && chains.length <= 2000;
     const matchRef = (ref) => {
-      if (!ref.hash || !Number.isSafeInteger(ref.startLine) || !Number.isSafeInteger(ref.endLine)
-        || ref.startLine < 1 || ref.endLine < ref.startLine || !safePath(root, ref.path)) return null;
+      const hasRange = ref.startLine != null || ref.endLine != null;
+      if (!ref.hash || (hasRange && (!Number.isSafeInteger(ref.startLine) || !Number.isSafeInteger(ref.endLine)
+        || ref.startLine < 1 || ref.endLine < ref.startLine)) || !safePath(root, ref.path)) return null;
       const portable = String(ref.path).replaceAll('\\', '/');
       const relative = path.posix.normalize(portable).replace(/^\.\//, '');
       const targetGoal = goal.trim().replaceAll('\\', '/');
@@ -450,12 +518,19 @@ export async function goalOnboarding(projectRoot, goal, signal) {
     };
     for (const block of blocks.slice(0, 2000)) {
       const matches = [];
-      if (fold(block.id) === query) matches.push({ kind: 'id', value: block.id });
-      if (fold(block.title) === query) matches.push({ kind: 'title', value: block.title });
+      const seenMatches = new Set();
+      const pushMatch = (entry) => {
+        const key = `${entry.kind}:${entry.value || ''}:${entry.path || ''}:${entry.symbol || ''}`;
+        if (seenMatches.has(key)) return;
+        seenMatches.add(key);
+        matches.push(entry);
+      };
+      if (fold(block.id) === query) pushMatch({ kind: 'id', value: block.id });
+      if (fold(block.title) === query) pushMatch({ kind: 'title', value: block.title });
       for (const ref of block.artifactRefs || []) {
         if (++refsVisited > 10000) { complete = false; break; }
         const kind = matchRef(ref);
-        if (kind) matches.push({ kind, path: ref.path, ...(kind === 'symbol' ? { symbol: ref.symbol } : {}) });
+        if (kind) pushMatch({ kind, path: ref.path, ...(kind === 'symbol' ? { symbol: ref.symbol } : {}) });
       }
       if (matches.length) candidates.push({ kind: 'block', id: block.id, title: block.title, matches: matches.slice(0, 8) });
     }
@@ -470,7 +545,10 @@ export async function goalOnboarding(projectRoot, goal, signal) {
     else if (candidates.length === 1) {
       selected = candidates[0];
       graphRuns += 1;
-      graph = await graphEvidence(root, { [selected.kind === 'block' ? 'blockId' : 'chainId']: selected.id }, signal);
+      graph = await graphEvidence(root, {
+        [selected.kind === 'block' ? 'blockId' : 'chainId']: selected.id,
+        priorityMatches: selected.matches,
+      }, signal);
       const blockIds = new Set(graph.blockIds || []);
       relatedChains = chains.filter((chain) => selected.kind === 'chain' && chain.id === selected.id
         || (chain.memberIds || []).some((id) => blockIds.has(id))).slice(0, 16).map((chain) => ({
@@ -503,8 +581,13 @@ export async function goalOnboarding(projectRoot, goal, signal) {
         };
       }
       const targetBlocks = blocks.filter((block) => blockIds.has(block.id));
-      const paths = [...new Set(targetBlocks.flatMap((block) => (block.artifactRefs || [])
+      const priorityPaths = new Set((selected.matches || []).map((match) => match.path).filter(Boolean));
+      const rawPaths = [...new Set(targetBlocks.flatMap((block) => (block.artifactRefs || [])
         .map((ref) => ref.anchorKind === 'tree' ? ref.manifest : ref.path).filter((value) => value && safePath(root, value))))];
+      const paths = [
+        ...rawPaths.filter((item) => priorityPaths.has(item)),
+        ...rawPaths.filter((item) => !priorityPaths.has(item)),
+      ];
       if (paths.length > 16) missing.push({ reason: 'Owner evidence capped at 16 actual anchor paths; navigate a narrower target.' });
       if (paths.length) {
         // Reuse the actual owners capability through a read-only facade. Its
@@ -519,6 +602,11 @@ export async function goalOnboarding(projectRoot, goal, signal) {
           if (item.owners.some((owner) => owner.refs.some((ref) => ref.anchorStatus === 'stale'))) {
             missing.push({ path: item.path, reason: 'Owner includes stale source anchors; refresh actual bindings.' });
           }
+          item.owners = item.owners.map((owner) => ({
+            ...owner,
+            refs: Array.isArray(owner.refs) ? owner.refs.slice(0, 2) : [],
+            ...(Array.isArray(owner.refs) && owner.refs.length > 2 ? { refCount: owner.refs.length, refsTruncated: true } : {}),
+          }));
         }
       }
     } else if (candidates.length > 1) missing.push({ reason: 'Goal matches multiple actual graph entities; select a candidate ID in a separate request.' });

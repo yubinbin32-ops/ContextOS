@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -357,3 +358,182 @@ test('inspectPipeline reads file slices and changePipeline supports slots and ap
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('SessionStore decouples read receipts from blackboard disk writes, projects bounded memoryHandles + tracking, and evicts touched evidence handles', async () => {
+  const dir = makeTempProject();
+  try {
+    const store = new SessionStore({ projectRoot: dir });
+    store.ensureSession('test deterministic memory handles');
+    const blackboardPath = store.blackboardPath;
+    assert.ok(fs.existsSync(blackboardPath), 'ensureSession creates blackboard.md');
+
+    const statBeforeReceipts = fs.statSync(blackboardPath);
+    const contentBeforeReceipts = fs.readFileSync(blackboardPath, 'utf8');
+    await new Promise((resolve) => setTimeout(resolve, 15));
+
+    store.recordReadReceipt({ path: 'src/math.mjs', hash: 'h1', range: { startLine: 1, endLine: 3 } });
+    store.recordSearchReceipt({ query: 'add', path: '.', glob: '', output: 'src/math.mjs:1' });
+    store.recordSemanticReceipt({ key: 'outline:src/math.mjs', output: 'func add', paths: ['src/math.mjs'] });
+    store.recordExploreReceipt({ key: 'explore:math', output: 'explored', paths: ['src/math.mjs'] });
+
+    const statAfterReceipts = fs.statSync(blackboardPath);
+    assert.equal(statAfterReceipts.mtimeMs, statBeforeReceipts.mtimeMs, 'receipt mutations must not rewrite blackboard.md');
+    assert.equal(fs.readFileSync(blackboardPath, 'utf8'), contentBeforeReceipts);
+
+    for (let i = 1; i <= 7; i += 1) {
+      store.recordMemoryHandle({
+        resultId: `result-ev-${i}`,
+        paths: [i % 2 === 0 ? 'src/math.mjs' : `src/other-${i}.mjs`],
+        contentHashes: [`hash-${i}`],
+      });
+    }
+    for (let i = 1; i <= 5; i += 1) {
+      store.recordMemoryHandle({
+        kind: 'micro',
+        sessionId: `micro-sess-${i}`,
+      });
+    }
+
+    const summary = store.summary();
+    assert.ok(Array.isArray(summary.memoryHandles), 'summary() must project memoryHandles array');
+    const evidenceHandles = summary.memoryHandles.filter((h) => h.resultId);
+    const subagentHandles = summary.memoryHandles.filter((h) => h.sessionId);
+    assert.equal(evidenceHandles.length, 5, 'evidence handles bounded to 5 FIFO');
+    assert.equal(evidenceHandles[0].resultId, 'result-ev-3');
+    assert.equal(evidenceHandles.at(-1).resultId, 'result-ev-7');
+    assert.equal(subagentHandles.length, 3, 'subagent handles bounded to 3 FIFO');
+    assert.equal(subagentHandles[0].sessionId, 'micro-sess-3');
+    assert.equal(subagentHandles.at(-1).sessionId, 'micro-sess-5');
+    assert.ok('tracking' in summary, 'summary() must project tracking');
+
+    const blackboardAfterHandles = fs.readFileSync(blackboardPath, 'utf8');
+    assert.match(blackboardAfterHandles, /- Memory Handles:/);
+    assert.match(blackboardAfterHandles, /result-ev-7/);
+    assert.doesNotMatch(blackboardAfterHandles, /result-ev-1/);
+    assert.match(blackboardAfterHandles, /micro-sess-5/);
+    assert.doesNotMatch(blackboardAfterHandles, /micro-sess-1/);
+
+    store.touch(['src/math.mjs'], 'edit');
+    const summaryAfterTouch = store.summary();
+    for (const ev of summaryAfterTouch.memoryHandles.filter((h) => h.resultId)) {
+      assert.ok(!ev.paths.includes('src/math.mjs'), 'touched path must be deterministically evicted from evidence handles');
+    }
+    const blackboardAfterTouch = fs.readFileSync(blackboardPath, 'utf8');
+    assert.doesNotMatch(blackboardAfterTouch, /result-ev-6/);
+    assert.match(blackboardAfterTouch, /result-ev-7/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('pipeline resolves $stepN.resultId and $stepN.receiptId, hydrates handle-only evidence into micro at turn 0, and rejects drifted SHA-256 slices', async () => {
+  const dir = makeTempProject();
+  const service = fakeService({ exitCode: 0 });
+  service.projectRoot = dir;
+  const capturedPrompts = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const parsed = JSON.parse(body);
+        const text = (parsed.messages || []).map((m) => m.content).join('\n');
+        capturedPrompts.push(text);
+      } catch (_) {}
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: 'Analyzed preloaded slice at turn 0' } }],
+        usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+  const savedMicroEnv = process.env.CONTEXTOS_API_MICRO_PROFILE;
+  delete process.env.CONTEXTOS_API_MICRO_PROFILE;
+  try {
+    fs.mkdirSync(path.join(dir, '.contextos'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, '.contextos', 'profile.json'),
+      JSON.stringify({ micro: { url: 'http://127.0.0.1:' + server.address().port, model: 'local-fixture', key: 'fixture' } })
+    );
+    const orch = new Orchestrator({ projectRoot: dir, service });
+
+    const pipelineOut = await orch.dispatch('pipeline', {
+      steps: [
+        { tool: 'ask', args: { inspect: [{ path: 'src/math.mjs', ranges: [{ start: 1, end: 3 }] }], delivery: 'handle-only' } },
+        { tool: 'verify', args: { command: 'npm test' } },
+        {
+          tool: 'micro',
+          args: {
+            action: 'run',
+            withOS: false,
+            prompt: 'Review math.mjs',
+            context: {
+              evidenceRefs: ['$step1.resultId'],
+              verifyReceiptId: '$step2.receiptId',
+            },
+          },
+        },
+        {
+          tool: 'ship',
+          args: {
+            receiptIds: ['$step2.receiptId'],
+          },
+        },
+      ],
+    });
+
+    assert.match(pipelineOut, /delivery=handle-only/);
+    assert.doesNotMatch(pipelineOut, /return a \+ b;/, 'handle-only step must not inline raw source in pipeline output');
+    assert.match(pipelineOut, /Reused passing receipt\(s\): receipt-1/, '$step2.receiptId must resolve to receipt-1 in ship step');
+    assert.equal(capturedPrompts.length, 1, 'micro provider should be called once at turn 0');
+    assert.match(capturedPrompts[0], /## Verified Preloaded Evidence/, 'micro prompt must receive ## Verified Preloaded Evidence at turn 0');
+    assert.match(capturedPrompts[0], /export function add\(a, b\)/, 'hydrated evidence must include verified slice text');
+
+    // Mutate src/math.mjs on disk so its SHA-256 drifts from the stored result
+    fs.writeFileSync(path.join(dir, 'src', 'math.mjs'), 'export function add(a, b) {\n  return a + b + 1;\n}\n');
+    const step1ResultId = fs.readdirSync(path.join(dir, '.contextos', 'request-results'))[0].replace(/\.json$/, '');
+    await orch.dispatch('ops', {
+      capability: 'micro',
+      action: 'run',
+      args: {
+        withOS: false,
+        prompt: 'Re-check math.mjs after drift',
+        context: { evidenceRefs: [step1ResultId] },
+      },
+    });
+    assert.equal(capturedPrompts.length, 2, 'micro provider called with drifted ref');
+    assert.match(
+      capturedPrompts[1],
+      /Path src\/math\.mjs changed since result-[A-Za-z0-9._-]+; inspect fresh slice/,
+      'drifted file must be rejected with explicit stale notice'
+    );
+    assert.ok(
+      !capturedPrompts[1].includes('return a + b;'),
+      'drifted file must never inject stale source text'
+    );
+
+    const unsupportedRef = await orch.dispatch('pipeline', {
+      steps: [
+        { tool: 'verify', args: { command: 'npm test' } },
+        { tool: 'inspect', args: { path: '$step1.unknownField' } },
+      ],
+    });
+    assert.match(unsupportedRef, /PIPELINE_STEP_REFERENCE_UNSUPPORTED/);
+
+    const unresolvedRef = await orch.dispatch('pipeline', {
+      steps: [
+        { tool: 'inspect', args: { path: 'src/math.mjs', startLine: 1, endLine: 2 } },
+        { tool: 'micro', args: { action: 'run', withOS: false, prompt: 'use missing resultId', context: { evidenceRefs: ['$step1.resultId'] } } },
+      ],
+    });
+    assert.match(unresolvedRef, /PIPELINE_STEP_REFERENCE_UNRESOLVED/);
+  } finally {
+    if (savedMicroEnv !== undefined) process.env.CONTEXTOS_API_MICRO_PROFILE = savedMicroEnv;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+

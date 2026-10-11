@@ -10,7 +10,7 @@ import { globalProfilePath, loadProfile, saveProfile } from './profile.mjs';
 import { changePipeline, explorePipeline, extractFailureEvidence, inspectPipeline, integratePipeline, pipelinePipeline, shipPipeline, verifyPipeline, workPipeline } from './pipelines.mjs';
 import { executeCommand } from './command-service.mjs';
 import { executeAgent } from './agent-service.mjs';
-import { requestContextOS, recordVisibleEvidenceDelivery } from './request-service.mjs';
+import { requestContextOS, recordVisibleEvidenceDelivery, hydrateVerifiedEvidenceRefs } from './request-service.mjs';
 import { MICRO_PRESETS, runMicroTask, runMicroTasksParallel } from './micro-client.mjs';
 import { microPreloadReceipt, runTaskMicroPreload } from './micro-preload.mjs';
 import { buildMicroHistory, closeMicroSession, completeMicroTurn, createMicroSession, deleteMicroSession, failMicroTurn, listMicroSessions, microSessionSnapshot, readMicroSession, startMicroTurn } from './micro-session.mjs';
@@ -454,6 +454,25 @@ function microPreloadSpec(args = {}) {
   return null;
 }
 
+function hydrateMicroTaskArgs(projectRoot, taskArgs = {}) {
+  if (!taskArgs || typeof taskArgs !== 'object') return taskArgs;
+  const evidenceRefs = taskArgs.context?.evidenceRefs ?? taskArgs.evidenceRefs;
+  if (!Array.isArray(evidenceRefs) || !evidenceRefs.length) return taskArgs;
+  const hydrated = hydrateVerifiedEvidenceRefs(projectRoot, evidenceRefs);
+  if (!hydrated.text) return taskArgs;
+  const next = { ...taskArgs };
+  if (typeof next.firstTask === 'string' && next.firstTask.trim()) {
+    next.firstTask = `${next.firstTask}\n\n${hydrated.text}`;
+  } else if (typeof next.task === 'string' && next.task.trim()) {
+    next.task = `${next.task}\n\n${hydrated.text}`;
+  } else if (typeof next.prompt === 'string' && next.prompt.trim()) {
+    next.prompt = `${next.prompt}\n\n${hydrated.text}`;
+  } else {
+    next.prompt = hydrated.text;
+  }
+  return next;
+}
+
 function microPreloadFailure(preload, requestedDelivery = null) {
   return {
     ok: false,
@@ -578,6 +597,9 @@ function retainContinuableMicroSession(ctx, args, result, projected, { withOS = 
       },
       receiptId: projected?.receiptId || null,
     });
+    try {
+      ctx.store?.recordMemoryHandle?.({ kind: 'micro', sessionId: completed.id });
+    } catch (_) {}
     return {
       status: 'partial',
       session: completed,
@@ -650,6 +672,11 @@ async function runMicroSessionTurn(ctx, args, session) {
           receiptId: projected.receiptId,
         })
       : failMicroTurn(ctx.projectRoot, startedSession.id);
+    if (result.ok || result.partial) {
+      try {
+        ctx.store?.recordMemoryHandle?.({ kind: 'micro', sessionId: nextSession.id });
+      } catch (_) {}
+    }
     return { ...projected, session: nextSession };
   } catch (error) {
     failMicroTurn(ctx.projectRoot, startedSession.id);
@@ -708,7 +735,7 @@ function startBackgroundMicroRun(ctx, { args, microConfig, preload, action, effe
       });
       const retained = retainContinuableMicroSession(ctx, args, result, projected, { withOS: effectiveWithOS });
       if (projected.status === 'partial') {
-        const content = projected.guidance || projected.content || 'Micro background job reached the 290s continuation window.';
+        const content = projected.guidance || projected.content || 'Micro background job reached the 170s continuation window.';
         enqueueMicroDelivery(ctx.projectRoot, {
           deliveryId: jobId,
           receiptId: projected.receiptId || jobId,
@@ -1257,6 +1284,9 @@ export class Orchestrator {
           case 'ops':
             result = await this._ops(ctx, input);
             break;
+          case 'micro':
+            result = await this._ops(ctx, { capability: 'micro', action: input.action || 'run', args: input });
+            break;
           case 'pipeline':
             result = await pipelinePipeline(ctx, input);
             break;
@@ -1651,6 +1681,7 @@ export class Orchestrator {
             }
             return render(diagnostic);
           }
+          const summary = store.summary(session);
           return render({
             id: session.id,
             status: session.status,
@@ -1662,6 +1693,8 @@ export class Orchestrator {
               status: receipt.status,
             })),
             notes: (session.notes || []).slice(-3).map((entry) => entry.text),
+            memoryHandles: summary.memoryHandles || [],
+            tracking: summary.tracking || null,
           });
         }
         if (action === 'status' || args.full !== true) return render(store.summary());
@@ -1995,6 +2028,9 @@ export class Orchestrator {
         }
         const microWithOS = shouldEnableMicroOS(args);
         const caps = microWithOS ? ctx.caps : null;
+        if (args.context?.evidenceRefs || args.evidenceRefs) {
+          Object.assign(args, hydrateMicroTaskArgs(this.projectRoot, args));
+        }
 
         if (args.sessionAction) {
           const requestedSessionAction = String(args.sessionAction).toLowerCase();
@@ -2041,6 +2077,9 @@ export class Orchestrator {
               withOS: microWithOS,
               preload,
             });
+            try {
+              store.recordMemoryHandle({ kind: 'micro', sessionId: session.id });
+            } catch (_) {}
             if (args.runFirst === true) {
               const firstTurn = await runMicroSessionTurn(ctx, args, session);
               return render({
@@ -2087,12 +2126,15 @@ export class Orchestrator {
           // Read evidence after obtaining the provider's workspace reservation.
           // Otherwise queued writers can receive source from before an earlier edit.
           const tasks = await mapWithConcurrency(taskInputs, batchConcurrency, async (task, index) => {
-            const preloadSpec = microPreloadSpec(task);
+            const hydratedTask = (task.context?.evidenceRefs || task.evidenceRefs)
+              ? hydrateMicroTaskArgs(this.projectRoot, task)
+              : task;
+            const preloadSpec = microPreloadSpec(hydratedTask);
             return {
-              ...task,
-              id: task.id || `task-${index + 1}`,
-              withOS: shouldEnableMicroOS({ ...args, ...task }),
-              preparePreload: preloadSpec ? () => runTaskMicroPreload(ctx, preloadSpec, { ...args, ...task }) : undefined,
+              ...hydratedTask,
+              id: hydratedTask.id || `task-${index + 1}`,
+              withOS: shouldEnableMicroOS({ ...args, ...hydratedTask }),
+              preparePreload: preloadSpec ? () => runTaskMicroPreload(ctx, preloadSpec, { ...args, ...hydratedTask }) : undefined,
             };
           });
           const batchNeedsCaps = tasks.some((task) => Boolean(task.withOS));

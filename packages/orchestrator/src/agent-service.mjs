@@ -7,6 +7,8 @@ import { runMicroTask } from './micro-client.mjs';
 import { hasAgentReportContent, normalizeAgentReport } from './micro-agent-report.mjs';
 import { createMicroJob, updateMicroJob, readMicroJob, listMicroJobs, enqueueMicroDelivery, reportMicroJob, requestMicroJobCancellation, microJobCancellationRequested, clearMicroJobCancellation, isProcessAlive } from './micro-delivery.mjs';
 import { sendMicroMessage, receiveMicroMessages, waitForMicroMessages } from './micro-mailbox.mjs';
+import { SessionStore } from './session-store.mjs';
+import { hydrateVerifiedEvidenceRefs } from './request-service.mjs';
 
 const active = new Map();
 const key = (root, id) => `${root}\0${id}`;
@@ -310,9 +312,9 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
     // One bounded wait replaces repeated get/messages polling loops: it returns
     // the terminal report as soon as the job finishes, or the running snapshot
     // when the wait window closes.
-    // Stay below the host's 300s MCP call ceiling so a long job returns a
+    // Stay below the host's 180s MCP call ceiling so a long job returns a
     // resumable running snapshot instead of a hard tool-call timeout.
-    const waitMs = Math.min(290_000, Math.max(0, Number(args.waitMs) || 0));
+    const waitMs = Math.min(170_000, Math.max(0, Number(args.waitMs) || 0));
     const startedWait = Date.now();
     // A partial job is a durable outcome, not live work; waiting on it would
     // burn a full host window before reporting the retained state.
@@ -346,8 +348,8 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
       snapshot.window = 'expired';
       snapshot.doNotRedispatch = true;
       snapshot.resume = { kind: 'agent', action: 'wait', jobId };
-      snapshot.continueWith = { action: 'wait', jobId, waitMs: 290_000 };
-      snapshot.guidance = `Wait window closed while job ${jobId} is still ${job.status}; do not dispatch the same task again. Retry agent({action:"wait", jobId:"${jobId}", waitMs:290000}), or let the next integrate({jobId:"${jobId}"}) call collect it.`;
+      snapshot.continueWith = { action: 'wait', jobId, waitMs: 170_000 };
+      snapshot.guidance = `Wait window closed while job ${jobId} is still ${job.status}; do not dispatch the same task again. Retry agent({action:"wait", jobId:"${jobId}", waitMs:170000}), or let the next integrate({jobId:"${jobId}"}) call collect it.`;
     }
     return snapshot;
   }
@@ -365,7 +367,7 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
     const worker = process.env.CONTEXTOS_WORKER_MODE === '1';
     if (worker && jobId !== process.env.CONTEXTOS_MICRO_REPORT_JOB) throw new Error('Message/report id must match the assigned CLI task.');
     const root = worker ? process.env.CONTEXTOS_MICRO_REPORT_ROOT : projectRoot;
-    const waitMs = Math.min(290_000, Math.max(0, Number(args.waitMs) || 0));
+    const waitMs = Math.min(170_000, Math.max(0, Number(args.waitMs) || 0));
     return action === 'messages'
       ? {
           status: 'completed',
@@ -495,8 +497,27 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
     let usageCallbackAttempted = false;
     try {
       try {
+        const evidenceRefs = args.context?.evidenceRefs ?? args.evidenceRefs;
+        const hydratedEvidence = Array.isArray(evidenceRefs) && evidenceRefs.length
+          ? hydrateVerifiedEvidenceRefs(projectRoot, evidenceRefs)
+          : null;
+        const rawTask = typeof args.task === 'string' ? args.task.trim() : '';
+        const rawPrompt = typeof args.prompt === 'string' ? args.prompt.trim() : '';
+        const baseTask = rawTask && rawPrompt && rawTask !== rawPrompt
+          ? `${rawTask}\n\n${rawPrompt}`
+          : (rawTask || rawPrompt);
+        const hydratedTask = hydratedEvidence?.text
+          ? `${baseTask}\n\n${hydratedEvidence.text}`
+          : baseTask;
+        const runnerArgs = hydratedTask !== (args.task || args.prompt || '')
+          ? {
+              ...args,
+              task: hydratedTask,
+              prompt: hydratedTask,
+            }
+          : args;
         result = await runner({ provider: 'cli', cli: adapter, model: adapter.model, thinking: adapter.thinking }, {
-          ...args, delivery: deliveryMode, provider: 'cli', projectRoot, agentJobId: id, reportJobId: id, withOS: true,
+          ...runnerArgs, delivery: deliveryMode, provider: 'cli', projectRoot, agentJobId: id, reportJobId: id, withOS: true,
           evidenceBroker: true, apiMicro: roles?.micro,
           reportFormat: 'structured', signal: controller.signal, onProgress,
         });
@@ -563,18 +584,25 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
 
       // Persist the CLI outcome and its usage evidence before the independent
       // central metering callback; a ledger failure must not rewrite task status.
+      const resolvedCliSessionId = result?.cliSessionId || (status === 'cancelled' ? args.cliSessionId || previousJob?.cliSessionId : null) || null;
       let job = updateMicroJob(projectRoot, id, {
         status,
         progress: { ...latestProgress, stage: status, lastActivityAt: new Date().toISOString() },
         report,
         error: errorMessage,
-        cliSessionId: result?.cliSessionId || (status === 'cancelled' ? args.cliSessionId || previousJob?.cliSessionId : null) || null,
+        cliSessionId: resolvedCliSessionId,
         deniedActions: result?.deniedActions || null,
         delivery: deliveryMode,
         providerUsageComplete: result?.providerUsageComplete ?? null,
         usageReceipt,
         cliUsage,
       });
+      if (resolvedCliSessionId) {
+        try {
+          const store = new SessionStore({ projectRoot });
+          store.recordMemoryHandle({ kind: 'cli', sessionId: resolvedCliSessionId });
+        } catch {}
+      }
       const shouldQueue = status !== 'cancelled' && (!completed || deliveryMode === 'defer'
         || (deliveryMode === 'auto' && report.needsHost === true));
       let deliveryAccounting = { status: 'not-requested' };
@@ -620,7 +648,7 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
       }
       return response;
     } catch (error) {
-      if (args.background !== true) throw error;
+      if (args.background !== true && !detachedToBackground) throw error;
       // A background invocation has no awaiting caller, so convert unexpected
       // post-launch errors into a durable failed receipt where storage permits.
       try {
@@ -688,39 +716,74 @@ export async function executeAgent(args, { projectRoot, adapter, name, roles, ru
       clearMicroJobCancellation(projectRoot, id);
     }
   };
-  if (args.background === true) {
-    void run().catch((error) => {
-      const message = error?.message || String(error);
-      try {
-        const existing = readMicroJob(projectRoot, id);
-        if (!existing) return;
-        const isStillRunning = existing.status === 'running';
-        const cancelled = Boolean(existing.cancelRequestedAt) || controller.signal.aborted;
-        const terminalStatus = cancelled ? 'cancelled' : 'failed';
-        const report = existing.report || normalizeAgentReport({
-          answer: cancelled ? 'CLI task was cancelled.' : `Background CLI task failed before its result could be saved: ${message}`,
-          needsHost: !cancelled,
-        }, { jobId: id, status: terminalStatus });
-        let job = updateMicroJob(projectRoot, id, {
-          ...(isStillRunning ? { status: terminalStatus, report, error: cancelled ? 'CLI task was cancelled.' : message } : {}),
-          executionAccounting: { status: 'gap', reason: 'Background task processing terminated unexpectedly after launch.' },
-        }) || existing;
-        let deliveryAccounting = job.deliveryAccounting || { status: 'not-requested' };
-        if (!cancelled && (isStillRunning || job.status === 'failed')) {
-          try {
-            const queued = enqueueMicroDelivery(projectRoot, { deliveryId: id, receiptId: id, content: JSON.stringify(report), hostSessionId: null });
-            deliveryAccounting = { status: queued.duplicate ? 'already-queued' : 'queued', deliveryId: id };
-          } catch {
-            deliveryAccounting = { status: 'gap', reason: 'The background task failure was saved, but its error report could not be queued.' };
-          }
+  let detachedToBackground = false;
+  const onBackgroundError = (error) => {
+    const message = error?.message || String(error);
+    try {
+      const existing = readMicroJob(projectRoot, id);
+      if (!existing) return;
+      const isStillRunning = existing.status === 'running';
+      const cancelled = Boolean(existing.cancelRequestedAt) || controller.signal.aborted;
+      const terminalStatus = cancelled ? 'cancelled' : 'failed';
+      const report = existing.report || normalizeAgentReport({
+        answer: cancelled ? 'CLI task was cancelled.' : `Background CLI task failed before its result could be saved: ${message}`,
+        needsHost: !cancelled,
+      }, { jobId: id, status: terminalStatus });
+      let job = updateMicroJob(projectRoot, id, {
+        ...(isStillRunning ? { status: terminalStatus, report, error: cancelled ? 'CLI task was cancelled.' : message } : {}),
+        executionAccounting: { status: 'gap', reason: 'Background task processing terminated unexpectedly after launch.' },
+      }) || existing;
+      let deliveryAccounting = job.deliveryAccounting || { status: 'not-requested' };
+      if (!cancelled && (isStillRunning || job.status === 'failed')) {
+        try {
+          const queued = enqueueMicroDelivery(projectRoot, { deliveryId: id, receiptId: id, content: JSON.stringify(report), hostSessionId: null });
+          deliveryAccounting = { status: queued.duplicate ? 'already-queued' : 'queued', deliveryId: id };
+        } catch {
+          deliveryAccounting = { status: 'gap', reason: 'The background task failure was saved, but its error report could not be queued.' };
         }
-        updateMicroJob(projectRoot, id, { deliveryAccounting });
-      } catch {
-        // The initial job record is the durable fallback. A storage error here
-        // must not become an unhandled rejection in the MCP server.
       }
-    });
+      updateMicroJob(projectRoot, id, { deliveryAccounting });
+    } catch {
+      // The initial job record is the durable fallback. A storage error here
+      // must not become an unhandled rejection in the MCP server.
+    }
+  };
+  if (args.background === true) {
+    void run().catch(onBackgroundError);
     return { id, status: 'running' };
   }
-  return run();
+  if (workerResume) {
+    return run();
+  }
+  const syncWaitMs = Math.min(170_000, Math.max(1, Number(args.waitMs) || 170_000));
+  const runPromise = run();
+  let syncTimer = null;
+  const raced = await Promise.race([
+    runPromise.then((res) => ({ done: true, res })),
+    new Promise((resolve) => {
+      syncTimer = setTimeout(() => resolve({ done: false }), syncWaitMs);
+      syncTimer.unref?.();
+    }),
+  ]).finally(() => {
+    if (syncTimer) clearTimeout(syncTimer);
+  });
+  if (raced.done) {
+    return raced.res;
+  }
+  detachedToBackground = true;
+  void runPromise.catch(onBackgroundError);
+  const job = readMicroJob(projectRoot, id);
+  return {
+    ...(job ? compactJob(job) : { id, status: 'running' }),
+    status: 'partial',
+    partial: true,
+    jobStatus: job?.status || 'running',
+    waitedMs: syncWaitMs,
+    terminal: false,
+    window: 'expired',
+    doNotRedispatch: true,
+    resume: { kind: 'agent', action: 'wait', jobId: id },
+    continueWith: { action: 'wait', jobId: id, waitMs: 170_000 },
+    guidance: `Wait window closed while job ${id} is still ${job?.status || 'running'}; do not dispatch the same task again. Retry agent({action:"wait", jobId:"${id}", waitMs:170000}), or let the next integrate({jobId:"${id}"}) call collect it.`,
+  };
 }

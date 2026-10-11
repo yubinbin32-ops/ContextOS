@@ -9,6 +9,7 @@ import { createEvidenceTransport } from './api-transports.mjs';
 import { acquireApiTaskBudget } from './api-task-budget.mjs';
 import { requestEvidence } from './micro-broker.mjs';
 import { deliverEvidence, mergeLineRanges, normalizeEvidencePath, workspaceIdentity } from './evidence-core.mjs';
+import { SessionStore } from './session-store.mjs';
 
 const resultsDir = (root) => path.join(root, '.contextos', 'request-results');
 const MAX_KNOWN_NOTE_CHARS = 2_000;
@@ -29,6 +30,16 @@ function storeResult(root, result, id = `result-${crypto.randomUUID()}`) {
   // assumed to have reached the caller until the renderer records its blocks.
   const data = { ...result, resultId: id, sourceDelivery: [] };
   fs.writeFileSync(resultPath(root, id), JSON.stringify(data), { mode: 0o600 });
+  if (Array.isArray(result?.records) && result.records.length > 0) {
+    try {
+      const store = new SessionStore({ projectRoot: root });
+      store.recordMemoryHandle({
+        resultId: id,
+        paths: [...new Set(result.records.map((r) => r?.path).filter(Boolean))],
+        contentHashes: [...new Set(result.records.map((r) => r?.contentHash).filter(Boolean))],
+      });
+    } catch (_) {}
+  }
   return data;
 }
 
@@ -638,6 +649,16 @@ export async function recordEvidenceDelivery(projectRoot, resultId, renderedReco
     fs.renameSync(temporaryFile, file);
     temporaryFile = undefined;
     fs.chmodSync(file, 0o600);
+    if (verifiedRenderedRecords.length > 0) {
+      try {
+        const store = new SessionStore({ projectRoot: root });
+        store.recordMemoryHandle({
+          resultId,
+          paths: [...new Set(verifiedRenderedRecords.map((r) => r?.path).filter(Boolean))],
+          contentHashes: [...new Set(verifiedRenderedRecords.map((r) => r?.contentHash).filter(Boolean))],
+        });
+      } catch (_) {}
+    }
     return {
       recorded: true,
       count: additions.length,
@@ -958,14 +979,116 @@ function missingKnownSelection(result, knownContext) {
   return output.filter((item) => !existing.has(JSON.stringify(item)));
 }
 
-function publicResult(result) {
+function publicResult(result, deliveryMode = undefined) {
   // Provider conversation state, raw traces and reasoning stay internal.
   const { state, calls, toolResults, reasoning, ...data } = result;
   if (data.micro) {
     const { state: ignoredState, calls: ignoredCalls, content: ignoredContent, reasoning: ignoredReasoning, ...micro } = data.micro;
     data.micro = micro;
   }
+  if (deliveryMode === 'handle-only') {
+    data.delivery = 'handle-only';
+    data.handles = (Array.isArray(data.records) ? data.records : []).map((record) => ({
+      path: record.path,
+      ranges: record.ranges || [],
+      contentHash: record.contentHash,
+      bytes: record.bytes ?? Buffer.byteLength(record.text || '', 'utf8'),
+      chars: record.chars ?? Array.from(record.text || '').length,
+    }));
+  }
   return data;
+}
+
+export function hydrateVerifiedEvidenceRefs(projectRoot, evidenceRefs = []) {
+  const refs = Array.isArray(evidenceRefs) ? evidenceRefs : (evidenceRefs ? [evidenceRefs] : []);
+  if (!refs.length) return { ok: true, text: '', verified: [], stale: [], missing: [] };
+  const root = fs.realpathSync(projectRoot);
+  const identity = workspaceIdentity(root);
+  const verifiedBlocks = [];
+  const verifiedMeta = [];
+  const staleNotices = [];
+  const missingNotices = [];
+  const seenKeys = new Set();
+
+  for (const rawRef of refs) {
+    const resultId = typeof rawRef === 'string'
+      ? rawRef.trim()
+      : (typeof rawRef?.resultId === 'string' ? rawRef.resultId.trim() : '');
+    if (!resultId) continue;
+    const requestedPaths = Array.isArray(rawRef?.paths) && rawRef.paths.length
+      ? new Set(rawRef.paths.map((p) => {
+          try { return normalizeEvidencePath(p); } catch { return String(p || '').trim(); }
+        }).filter(Boolean))
+      : null;
+    let stored;
+    try {
+      stored = loadStoredResult(root, resultId, identity);
+    } catch (error) {
+      missingNotices.push(`Result ${resultId} unavailable: ${error.message}`);
+      continue;
+    }
+    const records = Array.isArray(stored.records) ? stored.records : [];
+    for (const record of records) {
+      if (!record || typeof record.path !== 'string') continue;
+      let normalizedPath;
+      try {
+        normalizedPath = normalizeEvidencePath(record.path);
+      } catch {
+        continue;
+      }
+      if (requestedPaths && !requestedPaths.has(normalizedPath)) continue;
+      const dedupeKey = `${normalizedPath}:${JSON.stringify(record.ranges || [])}:${record.contentHash || ''}`;
+      if (seenKeys.has(dedupeKey)) continue;
+      seenKeys.add(dedupeKey);
+
+      const fullPath = path.resolve(identity.workspace, ...normalizedPath.split('/'));
+      let currentHash = null;
+      try {
+        const real = fs.realpathSync(fullPath);
+        if (real === identity.workspace || real.startsWith(`${identity.workspace}${path.sep}`)) {
+          const stat = fs.statSync(real);
+          if (stat.isFile()) {
+            currentHash = crypto.createHash('sha256').update(fs.readFileSync(real)).digest('hex');
+          }
+        }
+      } catch {}
+
+      if (!currentHash || currentHash !== record.contentHash) {
+        staleNotices.push(`Path ${normalizedPath} changed since ${resultId}; inspect fresh slice`);
+        continue;
+      }
+
+      verifiedBlocks.push(
+        `### ${normalizedPath} ${JSON.stringify(record.ranges || [])} (hash=${record.contentHash})\n\`\`\`\n${String(record.text || '').replace(/\n$/, '')}\n\`\`\``
+      );
+      verifiedMeta.push({
+        resultId,
+        path: normalizedPath,
+        ranges: record.ranges || [],
+        contentHash: record.contentHash,
+      });
+    }
+  }
+
+  const sections = [];
+  if (verifiedBlocks.length || staleNotices.length || missingNotices.length) {
+    sections.push('## Verified Preloaded Evidence');
+    if (verifiedBlocks.length) sections.push(verifiedBlocks.join('\n\n'));
+    if (staleNotices.length) {
+      sections.push(staleNotices.map((n) => `- [STALE] ${n}`).join('\n'));
+    }
+    if (missingNotices.length) {
+      sections.push(missingNotices.map((n) => `- [MISSING] ${n}`).join('\n'));
+    }
+  }
+
+  return {
+    ok: staleNotices.length === 0 && missingNotices.length === 0,
+    text: sections.join('\n\n'),
+    verified: verifiedMeta,
+    stale: staleNotices,
+    missing: missingNotices,
+  };
 }
 
 export async function requestContextOS(action, args = {}, {
@@ -976,17 +1099,21 @@ export async function requestContextOS(action, args = {}, {
   if (args.maxChars !== undefined && (!Number.isSafeInteger(args.maxChars) || args.maxChars < 256)) {
     throw new RangeError('maxChars must be an integer of at least 256 Unicode characters.');
   }
+  if (action === 'ask' && args.delivery !== undefined && !['inline', 'handle-only'].includes(args.delivery)) {
+    return artifactFailure(undefined, 'INVALID_EVIDENCE_DELIVERY', "delivery must be 'inline' or 'handle-only'.");
+  }
   if (action === 'ask' && own(args, 'onboard')) {
-    if (!args.onboard || typeof args.onboard !== 'object' || Array.isArray(args.onboard)
-      || Object.keys(args.onboard).some((key) => key !== 'goal')
-      || typeof args.onboard.goal !== 'string' || !args.onboard.goal.trim() || Array.from(args.onboard.goal).length > 160
+    const onboardSpec = typeof args.onboard === 'string' ? { goal: args.onboard } : args.onboard;
+    if (!onboardSpec || typeof onboardSpec !== 'object' || Array.isArray(onboardSpec)
+      || Object.keys(onboardSpec).some((key) => key !== 'goal')
+      || typeof onboardSpec.goal !== 'string' || !onboardSpec.goal.trim() || Array.from(onboardSpec.goal).length > 160
       || ['overview', 'resultId', 'inspect', 'known', 'request', 'recovery', 'blockId', 'chainId'].some((key) => own(args, key))) {
       return artifactFailure(undefined, 'INVALID_GOAL_ONBOARDING', 'onboard requires only a nonempty goal of at most 160 characters and must be a separate ask mode.');
     }
-    const result = await goalOnboarding(root, args.onboard.goal.trim(), signal);
+    const result = await goalOnboarding(root, onboardSpec.goal.trim(), signal);
     const identity = workspaceIdentity(root);
     return storeResult(root, publicResult({ ...result, workspace: identity.workspace, workspaceId: identity.workspaceId,
-      records: result.records.map(publicArtifactRecord) }));
+      records: result.records.map(publicArtifactRecord) }, args.delivery));
   }
   if (action === 'ask' && args.overview === true) {
     if (['resultId', 'inspect', 'known', 'request', 'recovery', 'blockId', 'chainId'].some((key) => own(args, key))) {
@@ -1116,13 +1243,57 @@ export async function requestContextOS(action, args = {}, {
     return response;
   } : null;
   if (action === 'ask') {
+    if (!own(args, 'inspect') && Array.isArray(args.code)) {
+      args = { ...args, inspect: args.code };
+    }
+    if (own(args, 'log') && args.log && typeof args.log === 'object' && !own(args, 'request') && !own(args, 'inspect') && !args.resultId) {
+      const logSpec = args.log;
+      const receiptId = String(logSpec.receiptId || logSpec.id || logSpec.commandId || '').trim();
+      if (!receiptId || !/^[a-zA-Z0-9._-]+$/.test(receiptId)) {
+        return withAuditParent('ask', artifactFailure(undefined, 'INVALID_LOG_RECEIPT', 'log requires a valid receiptId/id.'));
+      }
+      const logPath = path.join(root, '.contextos', 'logs', `${receiptId}.log`);
+      if (fs.existsSync(logPath)) {
+        const text = fs.readFileSync(logPath, 'utf8');
+        const allLines = text.split(/\r?\n/);
+        const rawRange = logSpec.lines ?? logSpec.ranges;
+        let start = 1;
+        let end = Math.min(allLines.length, 200);
+        if (Array.isArray(rawRange) && rawRange.length === 2 && typeof rawRange[0] === 'number' && typeof rawRange[1] === 'number') {
+          start = Math.max(1, Math.floor(rawRange[0]));
+          end = Math.min(allLines.length, Math.max(start, Math.floor(rawRange[1])));
+        } else if (Array.isArray(rawRange) && Array.isArray(rawRange[0]) && rawRange[0].length === 2) {
+          start = Math.max(1, Math.floor(rawRange[0][0]));
+          end = Math.min(allLines.length, Math.max(start, Math.floor(rawRange[0][1])));
+        }
+        const sliceText = allLines.slice(start - 1, end).join('\n');
+        const identity = workspaceIdentity(root);
+        const resultId = `result-${crypto.randomUUID()}`;
+        return storeResult(root, publicResult({
+          status: 'completed',
+          workspace: identity.workspace,
+          workspaceId: identity.workspaceId,
+          answer: sliceText,
+          records: [{
+            id: `log:${receiptId}:${start}-${end}`,
+            path: `.contextos/logs/${receiptId}.log`,
+            ranges: [{ start, end }],
+            text: sliceText,
+            bytes: Buffer.byteLength(sliceText, 'utf8'),
+            chars: Array.from(sliceText).length,
+          }],
+          missing: [],
+        }, args.delivery), resultId);
+      }
+    }
     const namedGraph = own(args, 'blockId') || own(args, 'chainId');
     if (namedGraph && ['resultId', 'inspect', 'recovery', 'known'].some((key) => own(args, key))) return withAuditParent('ask', artifactFailure(undefined, 'INVALID_GRAPH_NAVIGATION', 'blockId/chainId must be a separate graph navigation or semantic request.'));
     if (args.resultId) {
       if (own(args, 'known')) return withAuditParent('ask', artifactFailure(args.resultId, 'INVALID_EVIDENCE_RECOVERY', 'resultId recovery cannot be combined with known; use known references on a new semantic request.'));
       if (own(args, 'inspect') && own(args, 'recovery')) return withAuditParent('ask', artifactFailure(args.resultId, 'INVALID_EVIDENCE_RECOVERY', 'Specify either inspect or recovery, not both.'));
       const recovery = own(args, 'recovery') ? args.recovery : (own(args, 'inspect') ? { inspect: args.inspect } : undefined);
-      return withAuditParent('ask', await readResult(root, args.resultId, recovery));
+      const recovered = await readResult(root, args.resultId, recovery);
+      return withAuditParent('ask', publicResult(recovered, args.delivery));
     }
     if (own(args, 'recovery')) return withAuditParent('ask', artifactFailure(undefined, 'INVALID_EVIDENCE_RECOVERY', 'recovery requires a stored resultId.'));
     if (own(args, 'known') && own(args, 'inspect')) return withAuditParent('ask', artifactFailure(undefined, 'INVALID_KNOWN_CONTEXT', 'known is for semantic requests; exact inspect already reads its requested source ranges directly.'));
@@ -1155,7 +1326,7 @@ export async function requestContextOS(action, args = {}, {
     }));
     const resultId = `result-${crypto.randomUUID()}`;
     await writeParentAudit('ask', { resultId });
-    return storeResult(root, publicResult(withAuditDiagnostics(persistedResult)), resultId);
+    return storeResult(root, publicResult(withAuditDiagnostics(persistedResult), args.delivery), resultId);
   }
   if (action === 'command') {
     const result = await command(args, { projectRoot: root, transport: tracked, signal });
@@ -1189,6 +1360,12 @@ function sourceEvidenceBlock(record) {
   return '\n\n' + record.path + ' ' + JSON.stringify(record.ranges || []) + ' hash=' + (record.contentHash || 'unknown') + '\n' + (record.text || '');
 }
 
+function sourceHandleBlock(record) {
+  const bytes = record.bytes ?? Buffer.byteLength(record.text || '', 'utf8');
+  const chars = record.chars ?? Array.from(record.text || '').length;
+  return `\nhandle path=${record.path || 'unknown'} ranges=${JSON.stringify(record.ranges || [])} hash=${record.contentHash || 'unknown'} bytes=${bytes} chars=${chars}`;
+}
+
 export function publicAgentProgress(progress) {
   if (!progress || typeof progress !== 'object') return null;
   const stage = typeof progress.stage === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(progress.stage) ? progress.stage : 'unknown';
@@ -1208,8 +1385,9 @@ function chainArchitectureText(card) {
   ].join('');
 }
 
-export function renderRequestResult(result, { maxChars = result.navigation?.mode === 'onboard' ? 32000 : 12000, onReportDelivered, onMessagesDelivered, onSourceDelivered, onSourceMetrics } = {}) {
+export function renderRequestResult(result, { maxChars = result.navigation?.mode === 'onboard' ? 32000 : 12000, delivery = result.delivery, onReportDelivered, onMessagesDelivered, onSourceDelivered, onSourceMetrics } = {}) {
   if (!Number.isSafeInteger(maxChars) || maxChars < 256) throw new RangeError('maxChars must be an integer of at least 256 Unicode characters.');
+  const handleOnly = delivery === 'handle-only';
   const limit = maxChars;
   const chars = (value) => Array.from(value).length;
   const status = result.status || (result.ok === false ? 'failed' : 'completed');
@@ -1230,7 +1408,7 @@ export function renderRequestResult(result, { maxChars = result.navigation?.mode
   const missingFromResult = (Array.isArray(result.missing) ? result.missing : []).map(formatGap);
   const sourceBlocks = records.map((record) => ({
     record,
-    block: sourceEvidenceBlock(record),
+    block: handleOnly ? sourceHandleBlock(record) : sourceEvidenceBlock(record),
   }));
   const reusedBlocks = reused.map((reference) => ({
     reference,
@@ -1265,12 +1443,15 @@ export function renderRequestResult(result, { maxChars = result.navigation?.mode
   // cannot crowd the architecture card out of the reply.
   const onboardNavigation = result.navigation?.mode === 'onboard'
     ? [
-        '\nselection=' + JSON.stringify(result.navigation.selection) + '\nrelatedChains=' + JSON.stringify(result.navigation.relatedChains),
-        ...(result.navigation.chainArchitecture ? [chainArchitectureText(result.navigation.chainArchitecture)] : []),
-        ...(result.owners ? ['\nowners=' + JSON.stringify(result.owners)] : []),
+        { label: 'onboarding navigation', block: '\nselection=' + JSON.stringify(result.navigation.selection) + '\nrelatedChains=' + JSON.stringify(result.navigation.relatedChains), reserve: true },
+        ...(result.navigation.chainArchitecture ? [{ label: 'chain architecture', block: chainArchitectureText(result.navigation.chainArchitecture), reserve: true }] : []),
+        ...(result.owners ? [{ label: 'owners', block: '\nowners=' + JSON.stringify(result.owners), reserve: true }] : []),
       ]
     : [];
-  const navigationReserve = onboardNavigation.length ? chars(onboardNavigation.join('')) + 64 : 0;
+  const rawNavigationReserve = onboardNavigation
+    .filter((entry) => entry.reserve)
+    .reduce((sum, entry) => sum + chars(entry.block), 0);
+  const navigationReserve = rawNavigationReserve ? Math.min(Math.floor(limit * 0.45), rawNavigationReserve + 64) : 0;
   const coreLimit = limit - statusGrowthReserve - omissionNoticeReserve - navigationReserve;
   const selectedSources = new Set();
   const selectedReused = new Set();
@@ -1285,7 +1466,7 @@ export function renderRequestResult(result, { maxChars = result.navigation?.mode
       ...missingFromResult,
     ];
     const shownStatus = status === 'failed' ? 'failed' : gaps.length ? 'partial' : status;
-    const statusLine = `status=${shownStatus}${shownStatus !== status ? ` resultStatus=${status}` : ''}${result.resultId ? ` result=${result.resultId}` : ''}${result.id ? ` id=${result.id}` : ''}`;
+    const statusLine = `status=${shownStatus}${shownStatus !== status ? ` resultStatus=${status}` : ''}${result.resultId ? ` result=${result.resultId}` : ''}${result.id ? ` id=${result.id}` : ''}${handleOnly ? ' delivery=handle-only' : ''}`;
     const header = [
       statusLine,
       result.errorCode ? `error=${result.errorCode}` : null,
@@ -1326,8 +1507,11 @@ export function renderRequestResult(result, { maxChars = result.navigation?.mode
   for (const { record } of sourceBlocks) {
     selectedSources.add(record);
     const candidate = composeCore();
-    if (chars(candidate) <= coreLimit) deliveredSources.push(record);
-    else selectedSources.delete(record);
+    if (chars(candidate) <= coreLimit) {
+      if (!handleOnly) deliveredSources.push(record);
+    } else {
+      selectedSources.delete(record);
+    }
   }
   for (const { reference } of reusedBlocks) {
     selectedReused.add(reference);
@@ -1365,9 +1549,9 @@ export function renderRequestResult(result, { maxChars = result.navigation?.mode
     if (summary.length < result.summary.length) omittedDetails.push('overview display limited');
   } else if (result.summary) appendOptional('summary', `\nsummary=${result.summary}`);
   if (result.navigation?.mode === 'onboard') {
-    appendOptional('onboarding navigation', onboardNavigation[0]);
-    if (onboardNavigation[1]) appendOptional('chain architecture', onboardNavigation[1]);
-    if (onboardNavigation[2]) appendOptional('owners', onboardNavigation[2]);
+    for (const entry of onboardNavigation) {
+      appendOptional(entry.label, entry.block);
+    }
   }
   if (result.analysis) appendOptional('analysis', `\nMicro interpretation: ${result.analysis}`);
   const progress = publicAgentProgress(result.progress);
@@ -1420,7 +1604,7 @@ export function renderRequestResult(result, { maxChars = result.navigation?.mode
   // Keep the leading `status=... result=...` shape stable and append the cause, so host
   // parsing and prefix assertions keep working; a request-level partial gets a reason too.
   const gapReason = renderedStatus === 'partial' && gapReasons.length ? ` partialReason=${gapReasons.join('+')}` : '';
-  const renderedStatusLine = `status=${renderedStatus}${renderedStatus !== status ? ` resultStatus=${status}` : ''}${result.resultId ? ` result=${result.resultId}` : ''}${result.id ? ` id=${result.id}` : ''}${gapReason}`;
+  const renderedStatusLine = `status=${renderedStatus}${renderedStatus !== status ? ` resultStatus=${status}` : ''}${result.resultId ? ` result=${result.resultId}` : ''}${result.id ? ` id=${result.id}` : ''}${handleOnly ? ' delivery=handle-only' : ''}${gapReason}`;
   output = output.replace(/^status=[^\n]*/, renderedStatusLine);
   if (chars(output) > limit) throw new Error('Evidence renderer exceeded its character budget.');
 

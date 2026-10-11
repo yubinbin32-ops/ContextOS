@@ -179,10 +179,16 @@ function makeRecord(workspaceId, snapshot, ranges, text) {
 }
 
 function getRequestedRanges(request) {
-  if (request.ranges === undefined || request.ranges === null || (Array.isArray(request.ranges) && request.ranges.length === 0)) {
+  const rawRanges = request.ranges ?? request.lines ?? (request.startLine !== undefined || request.endLine !== undefined
+    ? [[request.startLine ?? 1, request.endLine ?? (Number(request.startLine || 1) + 100)]]
+    : undefined);
+  if (rawRanges === undefined || rawRanges === null || (Array.isArray(rawRanges) && rawRanges.length === 0)) {
     return { full: true, ranges: [] };
   }
-  const values = Array.isArray(request.ranges) ? request.ranges : [request.ranges];
+  if (Array.isArray(rawRanges) && rawRanges.length === 2 && typeof rawRanges[0] === 'number' && typeof rawRanges[1] === 'number') {
+    return { full: false, ranges: [parseRange(rawRanges)] };
+  }
+  const values = Array.isArray(rawRanges) ? rawRanges : [rawRanges];
   return { full: false, ranges: values.map(parseRange) };
 }
 
@@ -196,9 +202,10 @@ export async function collectEvidence({ projectRoot, requests = [], signal } = {
 
   for (const request of requests) {
     assertNotAborted(signal);
+    const rawPath = request?.path ?? request?.filePath ?? request?.file;
     let relativePath;
     try {
-      relativePath = normalizeEvidencePath(request?.path);
+      relativePath = normalizeEvidencePath(rawPath);
       const parsed = getRequestedRanges(request);
       const expectedHash = request.expectedContentHash ?? request.contentHash ?? null;
       const key = `${relativePath}\0${expectedHash || ''}`;
@@ -207,7 +214,7 @@ export async function collectEvidence({ projectRoot, requests = [], signal } = {
       group.ranges.push(...parsed.ranges);
       groups.set(key, group);
     } catch (error) {
-      missing.push(toMissing(typeof request?.path === 'string' ? request.path : undefined, error.message,
+      missing.push(toMissing(typeof rawPath === 'string' ? rawPath : undefined, error.message,
         request?.range ?? null));
     }
   }

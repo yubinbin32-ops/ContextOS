@@ -156,7 +156,13 @@ export async function executeCommand(args, { projectRoot, transport, runner = ru
   const root = fs.realpathSync(projectRoot);
   if (args.action === 'get') return getCommandResult(root, args.id, args);
   if (args.action === 'cancel') return cancelCommand(root, args.id);
-  if (typeof args.command !== 'string' || !args.command.trim()) throw new Error('A command is required.');
+  const rawCommand = typeof args.command === 'string'
+    ? args.command
+    : (typeof args.cmd === 'string'
+      ? args.cmd
+      : (Array.isArray(args.commands) ? args.commands.filter((c) => typeof c === 'string' && c.trim()).join(' && ') : args.commands));
+  if (typeof rawCommand !== 'string' || !rawCommand.trim()) throw new Error('A command is required.');
+  args = { ...args, command: rawCommand };
   const cwd = fs.realpathSync(path.resolve(root, args.cwd || '.'));
   if (cwd !== root && !cwd.startsWith(`${root}${path.sep}`)) throw new Error('Command cwd is outside its workspace.');
   const id = args.id || `command-${crypto.randomUUID()}`;

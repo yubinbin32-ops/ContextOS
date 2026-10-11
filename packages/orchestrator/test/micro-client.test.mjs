@@ -1261,7 +1261,7 @@ test('runMicroTask handles HTTP error responses and timeouts', async () => {
     assert.equal(timeoutRes.partial, true);
     assert.equal(timeoutRes.errorCode, 'MICRO_CONTINUATION_REQUIRED');
     assert.equal(timeoutRes.resume.kind, 'micro');
-    assert.match(timeoutRes.guidance, /refresh the 290s window/);
+    assert.match(timeoutRes.guidance, /refresh the 170s window/);
   } finally {
     await mock.close();
   }

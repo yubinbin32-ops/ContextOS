@@ -335,6 +335,21 @@ export class CodeTools {
               occurrences = 1;
             }
           }
+          if (occurrences === 0) {
+            const expStart = Math.max(0, chunkStart - 15);
+            const expEnd = Math.min(lines.length, chunkEnd + 15);
+            const expChunk = lines.slice(expStart, expEnd).join('\n');
+            const expOcc = expChunk.split(targetContent).length - 1;
+            if (expOcc === 1) {
+              const replacedExp = expChunk.replace(targetContent, () => replacementContent);
+              newContent = [
+                ...lines.slice(0, expStart),
+                replacedExp,
+                ...lines.slice(expEnd),
+              ].join('\n');
+              occurrences = 1;
+            }
+          }
         } else {
           if (occurrences > 1) {
             throw new Error(

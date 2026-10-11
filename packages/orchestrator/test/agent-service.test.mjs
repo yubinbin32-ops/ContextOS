@@ -657,7 +657,7 @@ test('agent wait returns a resumable partial snapshot when the window closes', a
     assert.equal(waited.window, 'expired');
     assert.equal(waited.doNotRedispatch, true);
     assert.deepEqual(waited.resume, { kind: 'agent', action: 'wait', jobId: start.id });
-    assert.deepEqual(waited.continueWith, { action: 'wait', jobId: start.id, waitMs: 290000 });
+    assert.deepEqual(waited.continueWith, { action: 'wait', jobId: start.id, waitMs: 170000 });
     assert.match(waited.guidance, /do not dispatch the same task again/);
     const resumed = await executeAgent({ action: 'wait', resume: waited.resume, waitMs: 1 }, opts);
     assert.equal(resumed.jobStatus, 'running');

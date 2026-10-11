@@ -813,3 +813,111 @@ test('chain onboarding keeps the architecture card when member sources saturate 
     assert.match(text, /owners=/);
   } finally { service.close(); remove(root); }
 });
+
+test('goal onboarding prioritizes matched symbols and paths ahead of the 16-read cap on large Blocks', async () => {
+  const root = fixture();
+  const service = new ContextOSV2Service({ projectRoot: root });
+  const options = { projectRoot: root, profile: {}, transport: () => assert.fail('goal onboarding must stay local') };
+  try {
+    fs.writeFileSync(path.join(root, '.contextos', 'project.json'), JSON.stringify({ id: service.projectId, name: 'fixture-project' }));
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    const now = new Date().toISOString();
+    const artifactRefs = [];
+    for (let index = 0; index < 20; index += 1) {
+      const relative = `src/mod-${String(index).padStart(2, '0')}.mjs`;
+      const symbolName = index === 18 ? 'targetDeepSymbol' : `helperSymbol${index}`;
+      const body = `export function ${symbolName}() {\n  return ${index};\n}\n`;
+      fs.writeFileSync(path.join(root, relative), body);
+      const parsed = LanguageRegistry.parseStructure(relative, body);
+      const sym = parsed.symbols.find((entry) => entry.name === symbolName);
+      artifactRefs.push({
+        path: relative,
+        anchorKind: 'symbol',
+        symbol: symbolName,
+        startLine: sym.startLine,
+        endLine: sym.endLine,
+        hash: sym.hash,
+      });
+    }
+    service.db.saveBlock({
+      id: 'block-large-suite',
+      projectId: service.projectId,
+      title: 'Large module suite',
+      kind: 'service',
+      summary: 'Contains more than 16 artifact refs including targetDeepSymbol',
+      artifactRefs,
+      history: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const onboard = await requestContextOS('ask', { onboard: { goal: 'targetDeepSymbol' } }, options);
+    assert.equal(onboard.status, 'partial');
+    assert.equal(onboard.records.length, 16);
+    assert.equal(onboard.records[0].path, 'src/mod-18.mjs');
+    assert.match(onboard.records[0].text, /export function targetDeepSymbol/);
+    const ownerPaths = onboard.owners.items.map((item) => item.path);
+    assert.equal(ownerPaths[0], 'src/mod-18.mjs');
+  } finally {
+    service.close();
+    remove(root);
+  }
+});
+
+test('AST symbol re-anchoring keeps overview and block owners fresh after line insertions and bind_auto refreshPaths', async () => {
+  const root = fixture();
+  const service = new ContextOSV2Service({ projectRoot: root });
+  try {
+    fs.writeFileSync(path.join(root, '.contextos', 'project.json'), JSON.stringify({ id: service.projectId, name: 'fixture-project' }));
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    const relative = 'src/anchored.mjs';
+    const initialSource = 'export function computeAnchorValue(x) {\n  return x + 42;\n}\n';
+    fs.writeFileSync(path.join(root, relative), initialSource);
+
+    await service.block({
+      action: 'bind_auto',
+      id: 'block-anchored',
+      paths: [relative],
+      symbols: ['computeAnchorValue'],
+      blockData: { title: 'Anchored computation', kind: 'Function', summary: 'Computes anchored value' },
+      format: 'json',
+    });
+
+    const shiftedSource = '// Header comment line 1\n// Header comment line 2\nexport const prelude = true;\n' + initialSource;
+    fs.writeFileSync(path.join(root, relative), shiftedSource);
+
+    const overview = await ask(root);
+    const blockEntry = overview.overview.navigation.find((entry) => entry.id === 'block-anchored');
+    assert.ok(blockEntry, 'block-anchored should appear in overview navigation');
+    assert.equal(blockEntry.anchors[0].anchorStatus, 'fresh');
+    assert.equal(blockEntry.anchors[0].line, 4);
+
+    const ownersPayload = await service.block({ action: 'owners', paths: [relative], format: 'json' });
+    assert.equal(ownersPayload.items.length, 1);
+    assert.equal(ownersPayload.items[0].owners[0].id, 'block-anchored');
+    assert.equal(ownersPayload.items[0].owners[0].refs[0].anchorStatus, 'fresh');
+    assert.equal(ownersPayload.items[0].owners[0].refs[0].startLine, 4);
+    assert.equal(ownersPayload.items[0].owners[0].refs[0].endLine, 6);
+
+    const updatedBodySource = shiftedSource.replace('return x + 42;', 'return x + 99;');
+    fs.writeFileSync(path.join(root, relative), updatedBodySource);
+    await service.block({
+      action: 'bind_auto',
+      id: 'block-anchored',
+      paths: [relative],
+      refreshPaths: true,
+      format: 'json',
+    });
+    const refreshedBlock = service.db.getBlock('block-anchored');
+    const symRef = refreshedBlock.artifactRefs.find((ref) => ref.anchorKind === 'symbol' && ref.symbol === 'computeAnchorValue');
+    assert.ok(symRef, 'symbol artifactRef must be preserved on refreshPaths');
+    assert.equal(symRef.startLine, 4);
+    assert.equal(symRef.endLine, 6);
+    const ownersAfterBodyPayload = await service.block({ action: 'owners', paths: [relative], format: 'json' });
+    assert.equal(ownersAfterBodyPayload.items[0].owners[0].refs[0].anchorStatus, 'fresh');
+  } finally {
+    service.close();
+    remove(root);
+  }
+});
+

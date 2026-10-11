@@ -22,7 +22,8 @@ export function parseMicroRouting(content, structured = null) {
   // A structured worker report carries its own summary/changes fields. Only
   // the broker envelope shape (needsHost + answer) rewrites the content to the
   // answer; otherwise keep the report intact for the agent-report normalizer.
-  if (Object.hasOwn(record, 'summary') && !Object.hasOwn(record, 'answer')) {
+  const hasStructuredFields = ['summary', 'changes', 'checks', 'blockers', 'question'].some((key) => Object.hasOwn(record, key));
+  if (hasStructuredFields && (!Object.hasOwn(record, 'answer') || !String(record.answer ?? '').trim())) {
     return { needsHost: record.needsHost, hostReason: typeof record.hostReason === 'string' ? record.hostReason.slice(0, 400) : null, content };
   }
   const answer = typeof record.answer === 'string' ? record.answer

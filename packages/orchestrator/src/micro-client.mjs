@@ -14,7 +14,7 @@ import { selectMicroProvider, microCostEstimate } from './micro-provider.mjs';
 import { runCliMicro } from './micro-cli.mjs';
 import { microPreloadPrompt, microPreloadReceipt } from './micro-preload.mjs';
 
-const HOST_CONTINUATION_MS = 290_000;
+const HOST_CONTINUATION_MS = 170_000;
 const MICRO_SKILL_FILES = Object.freeze([
   ['ContextOS skill guidance', 'contextos/SKILL.md'],
   ['ContextOS operations skill guidance', 'contextos-ops/SKILL.md'],
@@ -1699,7 +1699,7 @@ async function runSelectedMicroTask(config = {}, options = {}) {
 
   const continuationFailure = (reason) => {
     const partialContent = String(finalChoice?.message?.content || lastReasoning || '').trim();
-    const guidance = `Continue with micro({sessionAction:"send", sessionId:"${sessionId}", task:"Continue the previous task from its partial state."}) to refresh the 290s window.`;
+    const guidance = `Continue with micro({sessionAction:"send", sessionId:"${sessionId}", task:"Continue the previous task from its partial state."}) to refresh the 170s window.`;
     return {
       ok: false,
       status: 'partial',

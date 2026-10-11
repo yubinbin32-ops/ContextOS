@@ -13,6 +13,8 @@ const MAX_EXPLORE_RECEIPTS = 50;
 const MAX_SEMANTIC_RECEIPTS = 80;
 const MAX_FULL_EXPANSION_PATHS = 12;
 const MAX_DIRECTED_EXPANSION_PATHS = 12;
+const MAX_EVIDENCE_MEMORY_HANDLES = 5;
+const MAX_SUBAGENT_MEMORY_HANDLES = 3;
 const DEFAULT_HISTORY_LIMIT = 3;
 const MAX_HISTORY_LIMIT = 10;
 const HISTORY_INTENT_CHARS = 120;
@@ -49,6 +51,84 @@ function clipHistoryText(value, maxChars) {
   return `${text.slice(0, Math.max(0, maxChars - 1))}…`;
 }
 
+function normalizeSessionPath(filePath) {
+  return String(filePath || '').trim().replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
+function sameWorkspaceRoot(left, right) {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  try {
+    return fs.realpathSync(left) === fs.realpathSync(right);
+  } catch (_) {
+    return path.resolve(left) === path.resolve(right);
+  }
+}
+
+function readProjectIdFromDisk(dotDir) {
+  if (!dotDir) return null;
+  try {
+    const marker = JSON.parse(fs.readFileSync(path.join(dotDir, 'project.json'), 'utf8'));
+    return typeof marker?.id === 'string' && marker.id.trim() ? marker.id.trim() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function normalizeMemoryHandle(handle) {
+  if (!handle || typeof handle !== 'object' || Array.isArray(handle)) return null;
+  const at = typeof handle.at === 'string' && handle.at ? handle.at : new Date().toISOString();
+  if (typeof handle.resultId === 'string' && handle.resultId.trim()) {
+    const paths = [...new Set((Array.isArray(handle.paths) ? handle.paths : [])
+      .map(normalizeSessionPath)
+      .filter(Boolean))];
+    const contentHashes = Array.isArray(handle.contentHashes)
+      ? [...new Set(handle.contentHashes.map((h) => String(h || '').trim()).filter(Boolean))]
+      : (handle.contentHashes && typeof handle.contentHashes === 'object'
+          ? { ...handle.contentHashes }
+          : []);
+    return {
+      resultId: handle.resultId.trim(),
+      paths,
+      contentHashes,
+      at,
+    };
+  }
+  if ((handle.kind === 'cli' || handle.kind === 'micro') && typeof handle.sessionId === 'string' && handle.sessionId.trim()) {
+    return {
+      kind: handle.kind,
+      sessionId: handle.sessionId.trim(),
+      at,
+    };
+  }
+  return null;
+}
+
+function normalizeMemoryHandles(handles) {
+  if (!Array.isArray(handles)) return [];
+  const normalized = handles.map(normalizeMemoryHandle).filter(Boolean);
+  const evidence = [];
+  const subagent = [];
+  for (const item of normalized) {
+    if (item.resultId) {
+      const idx = evidence.findIndex((entry) => entry.resultId === item.resultId);
+      if (idx !== -1) evidence.splice(idx, 1);
+      evidence.push(item);
+    } else if (item.kind && item.sessionId) {
+      const idx = subagent.findIndex((entry) => entry.kind === item.kind && entry.sessionId === item.sessionId);
+      if (idx !== -1) subagent.splice(idx, 1);
+      subagent.push(item);
+    }
+  }
+  const keptEvidence = new Set(evidence.slice(-MAX_EVIDENCE_MEMORY_HANDLES));
+  const keptSubagent = new Set(subagent.slice(-MAX_SUBAGENT_MEMORY_HANDLES));
+  const result = [];
+  for (const item of normalized) {
+    if (keptEvidence.has(item) || keptSubagent.has(item)) result.push(item);
+  }
+  return result;
+}
+
 function compactHistoryEntry(entry) {
   const touchedFiles = Array.isArray(entry?.touchedFiles) ? entry.touchedFiles : [];
   const receipts = Array.isArray(entry?.receipts) ? entry.receipts : [];
@@ -69,11 +149,15 @@ function compactHistoryEntry(entry) {
   };
 }
 
-function compactSessionState(session) {
+function compactSessionState(session, { dotDir = null, projectId = null } = {}) {
   if (!session) return { status: 'no-open-session' };
   const touchedFiles = Array.isArray(session.touchedFiles) ? session.touchedFiles : [];
   const receipts = Array.isArray(session.receipts) ? session.receipts : [];
   const notes = Array.isArray(session.notes) ? session.notes : [];
+  const memoryHandles = normalizeMemoryHandles(session.memoryHandles);
+  const effectiveDotDir = dotDir || (session.workspaceRoot ? path.join(session.workspaceRoot, '.contextos') : null);
+  const effectiveProjectId = projectId || session.projectId || readProjectIdFromDisk(effectiveDotDir) || 'contextos';
+  const tracking = effectiveDotDir ? activeTrackingContext(effectiveDotDir, effectiveProjectId) : null;
   return {
     id: session.id || null,
     projectId: session.projectId || null,
@@ -90,6 +174,8 @@ function compactSessionState(session) {
     })),
     noteCount: notes.length,
     notes: notes.slice(-2).map((entry) => clipHistoryText(entry?.text, HISTORY_SUMMARY_CHARS)),
+    memoryHandles,
+    tracking: tracking || null,
     updatedAt: session.updatedAt || null,
     closedAt: session.closedAt || null,
   };
@@ -186,6 +272,7 @@ function emptySession(projectId, intent, workspaceRoot) {
       lastPathOnlyFullDeniedAt: null,
     },
     notes: [],
+    memoryHandles: [],
     slots: {},
     startedAt: now,
     updatedAt: now,
@@ -273,7 +360,20 @@ function readTrackingContext(dotDir, projectId) {
   } catch { return null; } finally { try { db?.close(); } catch {} }
 }
 function activeTrackingContext(dotDir, projectId) {
-  const key = dotDir + '::' + projectId;
+  if (!dotDir) return null;
+  let dbStamp = 'missing';
+  try {
+    const dbStat = fs.statSync(path.join(dotDir, 'state.sqlite'));
+    let walStamp = '';
+    try {
+      const walStat = fs.statSync(path.join(dotDir, 'state.sqlite-wal'));
+      walStamp = `:${walStat.size}:${walStat.mtimeMs}`;
+    } catch {}
+    dbStamp = `${dbStat.size}:${dbStat.mtimeMs}${walStamp}`;
+  } catch {
+    return null;
+  }
+  const key = `${dotDir}::${projectId}::${dbStamp}`;
   const cached = trackingCache.get(key);
   if (cached && Date.now() - cached.at < 5000) return cached.value;
   let value = null;
@@ -284,38 +384,59 @@ function activeTrackingContext(dotDir, projectId) {
 }
 
 export class SessionStore {
-  constructor({ projectRoot, projectId = 'contextos' }) {
+  constructor({ projectRoot, projectId = null }) {
     this.projectRoot = projectRoot;
-    this.projectId = projectId;
     this.workspaceRoot = path.resolve(projectRoot);
     this.dotDir = path.join(projectRoot, '.contextos');
+    this.projectId = projectId || readProjectIdFromDisk(this.dotDir) || 'contextos';
     this.sessionPath = path.join(this.dotDir, 'session.json');
     this.blackboardPath = path.join(this.dotDir, 'blackboard.md');
     this.historyPath = path.join(this.dotDir, 'logs', 'sessions', 'history.jsonl');
   }
 
   renderBlackboard(session = this.current) {
-    if (!session) {
+    const state = compactSessionState(session, {
+      dotDir: this.dotDir,
+      projectId: session?.projectId || this.projectId,
+    });
+    if (!session || state.status === 'no-open-session') {
       return '# ContextOS Blackboard\n- Status: idle (no open session)\n';
     }
     const lines = [
       '# ContextOS Blackboard',
-      `- Session: \`${session.id}\` (${session.status})`,
+      `- Session: \`${state.id}\` (${state.status})`,
       `- Intent: ${session.intent || '(none)'}`,
     ];
-    if (session.touchedFiles.length) {
+    if (session.touchedFiles?.length) {
       const paths = session.touchedFiles.slice(-5).map((f) => `\`${f.path}\``).join(', ');
       lines.push(`- Working Files: ${paths}${session.touchedFiles.length > 5 ? ` (+${session.touchedFiles.length - 5})` : ''}`);
     }
-    if (session.receipts.length) {
+    if (session.receipts?.length) {
       const last = session.receipts[session.receipts.length - 1];
       lines.push(`- Last Verify: \`${last.command}\` -> exit ${last.exitCode} (${last.status || 'done'})`);
     }
-    if (session.notes.length) {
+    if (session.notes?.length) {
       const lastNote = session.notes[session.notes.length - 1];
       lines.push(`- Note: ${lastNote.text.slice(0, 100)}`);
     }
-    const tracking = activeTrackingContext(this.dotDir, this.projectId);
+    if (state.memoryHandles?.length) {
+      const handlesText = state.memoryHandles.map((handle) => {
+        if (handle.resultId) {
+          const paths = Array.isArray(handle.paths) && handle.paths.length
+            ? ` [${handle.paths.slice(0, 3).join(', ')}${handle.paths.length > 3 ? `, +${handle.paths.length - 3}` : ''}]`
+            : '';
+          return `\`${handle.resultId}\`${paths}`;
+        }
+        if (handle.kind && handle.sessionId) {
+          return `\`${handle.kind}:${handle.sessionId}\``;
+        }
+        return null;
+      }).filter(Boolean);
+      if (handlesText.length) {
+        lines.push(`- Memory Handles: ${handlesText.join(', ')}`);
+      }
+    }
+    const tracking = state.tracking;
     if (tracking?.plan) {
       lines.push(`- Active Plan: \`${tracking.plan.id}\` ${String(tracking.plan.title || '').slice(0, 120)} (${tracking.plan.status})`);
       lines.push(tracking.rules.length
@@ -344,18 +465,22 @@ export class SessionStore {
       // Session state is durable within one workspace, not portable conversation
       // history. A copied checkout/worktree must not inherit an open session's
       // intent, touched files, receipts, or slots from another root.
-      if (session?.workspaceRoot !== this.workspaceRoot) return null;
+      if (!sameWorkspaceRoot(session?.workspaceRoot, this.workspaceRoot)) return null;
+      if (!Array.isArray(session.memoryHandles)) session.memoryHandles = [];
       return session;
     } catch (_) {
       return null;
     }
   }
 
-  save(session) {
+  save(session, { syncBlackboard = true } = {}) {
     session.updatedAt = new Date().toISOString();
+    if (!Array.isArray(session.memoryHandles)) session.memoryHandles = [];
     fs.mkdirSync(this.dotDir, { recursive: true });
     fs.writeFileSync(this.sessionPath, JSON.stringify(session, null, 2) + '\n', 'utf8');
-    this.saveBlackboard(session);
+    if (syncBlackboard) {
+      this.saveBlackboard(session);
+    }
     return session;
   }
 
@@ -365,10 +490,13 @@ export class SessionStore {
   }
 
   summary(session = this.current) {
-    return compactSessionState(session);
+    return compactSessionState(session, {
+      dotDir: this.dotDir,
+      projectId: session?.projectId || this.projectId,
+    });
   }
 
-  ensureSession(intent = '') {
+  ensureSession(intent = '', { syncBlackboard = true } = {}) {
     const existing = this.current;
     if (existing) {
       if (existing.projectId === 'contextos' && this.projectId && this.projectId !== 'contextos') {
@@ -378,14 +506,22 @@ export class SessionStore {
         existing.intents.push({ text: intent, at: new Date().toISOString() });
         existing.intent = intent;
       }
-      return this.save(existing);
+      return this.save(existing, { syncBlackboard });
     }
-    return this.save(emptySession(this.projectId, intent, this.workspaceRoot));
+    return this.save(emptySession(this.projectId, intent, this.workspaceRoot), { syncBlackboard });
+  }
+
+  recordMemoryHandle(handle = {}) {
+    const normalized = normalizeMemoryHandle(handle);
+    if (!normalized) return this.current;
+    const session = this.ensureSession('', { syncBlackboard: false });
+    session.memoryHandles = normalizeMemoryHandles([...(session.memoryHandles || []), normalized]);
+    return this.save(session, { syncBlackboard: true });
   }
 
   touch(entries = [], source = 'edit') {
     if (!entries.length) return this.current;
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     const now = new Date().toISOString();
     const index = new Map(session.touchedFiles.map((entry) => [entry.path, entry]));
     for (const raw of entries) {
@@ -422,13 +558,21 @@ export class SessionStore {
     if (session.touchedFiles.length > MAX_TOUCHED) {
       session.touchedFiles = session.touchedFiles.slice(-MAX_TOUCHED);
     }
-    if (Array.isArray(session.readReceipts) && session.readReceipts.length) {
-      const changed = new Set(entries.map((entry) => (typeof entry === 'string' ? entry : entry?.path)).filter(Boolean));
-      if (changed.size) {
-        session.readReceipts = session.readReceipts.filter((entry) => !changed.has(entry.path));
+    const changed = new Set(entries
+      .map((entry) => normalizeSessionPath(typeof entry === 'string' ? entry : entry?.path))
+      .filter(Boolean));
+    if (changed.size) {
+      if (Array.isArray(session.readReceipts) && session.readReceipts.length) {
+        session.readReceipts = session.readReceipts.filter((entry) => !changed.has(normalizeSessionPath(entry.path)));
+      }
+      if (Array.isArray(session.memoryHandles) && session.memoryHandles.length) {
+        session.memoryHandles = session.memoryHandles.filter((entry) => {
+          if (!entry || !Array.isArray(entry.paths)) return true;
+          return !entry.paths.some((p) => changed.has(normalizeSessionPath(p)));
+        });
       }
     }
-    return this.save(session);
+    return this.save(session, { syncBlackboard: true });
   }
 
   findReadReceipt({ path: filePath, hash, range = null, symbol = null } = {}) {
@@ -469,7 +613,7 @@ export class SessionStore {
     size = null,
   } = {}) {
     if (!filePath || !hash) return this.current;
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     const rangeKey = normalizeReadRange(range);
     session.readReceipts = (session.readReceipts || []).filter((entry) => !(
       entry.path === filePath
@@ -490,7 +634,7 @@ export class SessionStore {
     if (session.readReceipts.length > MAX_READ_RECEIPTS) {
       session.readReceipts = session.readReceipts.slice(-MAX_READ_RECEIPTS);
     }
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   readPolicy() {
@@ -511,7 +655,7 @@ export class SessionStore {
   }
 
   markDecisionPackage({ tool = null, status = null, decisionComplete = false, artifactId = null, receiptId = null } = {}) {
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     const current = session.readPolicy || {};
     session.readPolicy = {
       ...current,
@@ -524,11 +668,11 @@ export class SessionStore {
       decisionPackageArtifactId: artifactId || current.decisionPackageArtifactId || null,
       decisionPackageReceiptId: receiptId || current.decisionPackageReceiptId || null,
     };
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   resetReadPolicy() {
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     session.readPolicy = {
       decisionPackageSeen: false,
       decisionPackageTool: null,
@@ -542,11 +686,11 @@ export class SessionStore {
       pathOnlyFullDenied: 0,
       lastPathOnlyFullDeniedAt: null,
     };
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   recordFullExpansion({ path: filePath = null } = {}) {
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     const current = session.readPolicy || {};
     const paths = Array.isArray(current.fullExpansionPaths) ? current.fullExpansionPaths : [];
     session.readPolicy = {
@@ -556,11 +700,11 @@ export class SessionStore {
         ? [...paths, String(filePath)].slice(-MAX_FULL_EXPANSION_PATHS)
         : paths,
     };
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   recordDirectedExpansion({ path: filePath = null } = {}) {
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     const current = session.readPolicy || {};
     const paths = Array.isArray(current.directedExpansionPaths) ? current.directedExpansionPaths : [];
     session.readPolicy = {
@@ -570,11 +714,11 @@ export class SessionStore {
         ? [...paths, String(filePath)].slice(-MAX_DIRECTED_EXPANSION_PATHS)
         : paths,
     };
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   recordPathOnlyFullDenied({ path: filePath = null, reason = null } = {}) {
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     const current = session.readPolicy || {};
     session.readPolicy = {
       ...current,
@@ -583,7 +727,7 @@ export class SessionStore {
       lastPathOnlyFullDeniedPath: filePath ? String(filePath) : current.lastPathOnlyFullDeniedPath || null,
       lastPathOnlyFullDeniedReason: reason || current.lastPathOnlyFullDeniedReason || null,
     };
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   invalidateReadReceipts(paths = null) {
@@ -595,7 +739,7 @@ export class SessionStore {
     const next = session.readReceipts.filter((entry) => !targets || targets.has(entry.path));
     if (next.length === session.readReceipts.length) return session;
     session.readReceipts = next;
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   findSearchReceipt({ key, revision = null } = {}) {
@@ -610,7 +754,7 @@ export class SessionStore {
 
   recordSearchReceipt({ key, revision = null, receiptId = null, artifactId = null } = {}) {
     if (!key) return this.current;
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     session.searchReceipts = (session.searchReceipts || []).filter((entry) => entry.key !== key);
     session.searchReceipts.push({
       key: String(key).slice(0, 800),
@@ -622,14 +766,14 @@ export class SessionStore {
     if (session.searchReceipts.length > MAX_SEARCH_RECEIPTS) {
       session.searchReceipts = session.searchReceipts.slice(-MAX_SEARCH_RECEIPTS);
     }
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   invalidateSearchReceipts() {
     const session = this.current;
     if (!session || !Array.isArray(session.searchReceipts) || !session.searchReceipts.length) return session;
     session.searchReceipts = [];
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   findSemanticReceipt({ key } = {}) {
@@ -644,7 +788,7 @@ export class SessionStore {
 
   recordSemanticReceipt({ key, capability, action, hash = null, fullChars = 0, artifactId = null } = {}) {
     if (!key) return this.current;
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     session.semanticReceipts = (session.semanticReceipts || []).filter((entry) => entry.key !== key);
     session.semanticReceipts.push({
       key: String(key).slice(0, 240),
@@ -658,14 +802,14 @@ export class SessionStore {
     if (session.semanticReceipts.length > MAX_SEMANTIC_RECEIPTS) {
       session.semanticReceipts = session.semanticReceipts.slice(-MAX_SEMANTIC_RECEIPTS);
     }
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   invalidateSemanticReceipts() {
     const session = this.current;
     if (!session || !Array.isArray(session.semanticReceipts) || !session.semanticReceipts.length) return session;
     session.semanticReceipts = [];
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   findExploreReceipt({ key, revision = null } = {}) {
@@ -680,7 +824,7 @@ export class SessionStore {
 
   recordExploreReceipt({ key, revision = null, receiptId = null, artifactId = null } = {}) {
     if (!key) return this.current;
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     session.exploreReceipts = (session.exploreReceipts || []).filter((entry) => entry.key !== key);
     session.exploreReceipts.push({
       key: String(key).slice(0, 800),
@@ -692,7 +836,7 @@ export class SessionStore {
     if (session.exploreReceipts.length > MAX_EXPLORE_RECEIPTS) {
       session.exploreReceipts = session.exploreReceipts.slice(-MAX_EXPLORE_RECEIPTS);
     }
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   attachReceipt(receipt) {
@@ -797,9 +941,9 @@ export class SessionStore {
   }
 
   setSlots(slots = {}) {
-    const session = this.ensureSession();
+    const session = this.ensureSession('', { syncBlackboard: false });
     session.slots = { ...(session.slots || {}), ...slots };
-    return this.save(session);
+    return this.save(session, { syncBlackboard: false });
   }
 
   getSlot(slotKey) {

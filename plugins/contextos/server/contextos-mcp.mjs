@@ -7279,7 +7279,8 @@ function parseMicroRouting(content, structured = null) {
     }
   }
   if (!record2 || typeof record2.needsHost !== "boolean") return null;
-  if (Object.hasOwn(record2, "summary") && !Object.hasOwn(record2, "answer")) {
+  const hasStructuredFields = ["summary", "changes", "checks", "blockers", "question"].some((key3) => Object.hasOwn(record2, key3));
+  if (hasStructuredFields && (!Object.hasOwn(record2, "answer") || !String(record2.answer ?? "").trim())) {
     return { needsHost: record2.needsHost, hostReason: typeof record2.hostReason === "string" ? record2.hostReason.slice(0, 400) : null, content };
   }
   const answer = typeof record2.answer === "string" ? record2.answer : record2.answer != null ? JSON.stringify(record2.answer) : "";
@@ -7527,7 +7528,7 @@ function taskContext(options, input, workspace) {
     options.execution === "implement" ? options.inPlaceWorkspace ? "Edit only allowedPaths directly in the project working tree. The host reviews the diff, can revert it from the recorded snapshot, and runs the acceptance checks." : "Edit only allowedPaths in this isolated workspace. The host will independently review the diff and acceptance checks." : "Analysis task: do not edit project files.",
     `ContextOS is this worker's primary development surface; native tools are the fallback for a quick single command or read that needs no OS evidence, architecture or delegation. Code modifications must go through contextos({action:"change",...}) so the canvas stays current. Run required checks with contextos({action:"command",args:{command,id}}), read exact source with ask, and recover prior output with the same command id. If a native tool is denied, continue through ContextOS when the task allows it; report a blocker only when the required path itself fails. Do not scan generated bundles, node_modules, .git, build output, or unrelated files. Fetch only the missing dependency needed for this assignment. Await a started test instead of running it again.`,
     options.evidenceBroker ? 'Use contextos({action:"ask",args:{inspect:[{path:"known-file",ranges:[[first,last]]}]},projectRoot:workspace}) for exact source. For missing semantic evidence use ask args={request:"specific question",purpose:"why it is needed"}; API Micro is a lean OS-capable assistant. Use command args={command:"check",id:"unique-check-id"}; get the same command id to recover output without rerunning. args is always an object. Request only evidence not present in the resolved input/preload body. Native reads are allowed when already available.' : 'Call contract: contextos({action:"work",args:{inspect:[{path:"known-file",ranges:[[first,last]]}]},projectRoot:workspace}). args is always an object; action is never put in args as a string. If only a read pipeline is assigned, execute it once and continue from that evidence; request just the named missing or changed dependency.',
-    microDeliveryPrompt(options.delivery),
+    options.reportFormat === "structured" ? "" : microDeliveryPrompt(options.delivery),
     options.agentJobId ? `You are child job ${options.agentJobId}. OS responses include new host messages. For a question or blocker, use ${options.evidenceBroker ? "agent" : "micro"} args={action:"report",jobId:"${options.agentJobId}",content:"concise structured JSON: summary,changes,checks,blockers,question"} and then wait for the reply with args={action:"messages",jobId:"${options.agentJobId}",waitMs:600000}. Do not poll in a tight loop. Reserve the mailbox for a question or blocker; do not send a routine completion report through it. Finish with the complete structured report in your final response; set needsHost=true only for a question, blocker, failure, cancellation, or explicit host decision, otherwise set needsHost=false; omit reasoning and execution history.` : "",
     options.reportJobId && !options.agentJobId ? `To report a material finding or blocker before finishing, call ContextOS with action=micro, args={action:'report',jobId:'${options.reportJobId}',content:'concise finding'}, projectRoot=the assigned workspace. Routine progress needs no report.` : "",
     options.system || "",
@@ -7976,6 +7977,73 @@ function clipHistoryText(value, maxChars) {
   if (text.length <= maxChars) return text;
   return `${text.slice(0, Math.max(0, maxChars - 1))}\u2026`;
 }
+function normalizeSessionPath(filePath) {
+  return String(filePath || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
+}
+function sameWorkspaceRoot(left, right) {
+  if (!left || !right) return false;
+  if (left === right) return true;
+  try {
+    return fs3.realpathSync(left) === fs3.realpathSync(right);
+  } catch (_) {
+    return path2.resolve(left) === path2.resolve(right);
+  }
+}
+function readProjectIdFromDisk(dotDir) {
+  if (!dotDir) return null;
+  try {
+    const marker = JSON.parse(fs3.readFileSync(path2.join(dotDir, "project.json"), "utf8"));
+    return typeof marker?.id === "string" && marker.id.trim() ? marker.id.trim() : null;
+  } catch (_) {
+    return null;
+  }
+}
+function normalizeMemoryHandle(handle2) {
+  if (!handle2 || typeof handle2 !== "object" || Array.isArray(handle2)) return null;
+  const at = typeof handle2.at === "string" && handle2.at ? handle2.at : (/* @__PURE__ */ new Date()).toISOString();
+  if (typeof handle2.resultId === "string" && handle2.resultId.trim()) {
+    const paths = [...new Set((Array.isArray(handle2.paths) ? handle2.paths : []).map(normalizeSessionPath).filter(Boolean))];
+    const contentHashes = Array.isArray(handle2.contentHashes) ? [...new Set(handle2.contentHashes.map((h) => String(h || "").trim()).filter(Boolean))] : handle2.contentHashes && typeof handle2.contentHashes === "object" ? { ...handle2.contentHashes } : [];
+    return {
+      resultId: handle2.resultId.trim(),
+      paths,
+      contentHashes,
+      at
+    };
+  }
+  if ((handle2.kind === "cli" || handle2.kind === "micro") && typeof handle2.sessionId === "string" && handle2.sessionId.trim()) {
+    return {
+      kind: handle2.kind,
+      sessionId: handle2.sessionId.trim(),
+      at
+    };
+  }
+  return null;
+}
+function normalizeMemoryHandles(handles) {
+  if (!Array.isArray(handles)) return [];
+  const normalized = handles.map(normalizeMemoryHandle).filter(Boolean);
+  const evidence = [];
+  const subagent = [];
+  for (const item of normalized) {
+    if (item.resultId) {
+      const idx = evidence.findIndex((entry) => entry.resultId === item.resultId);
+      if (idx !== -1) evidence.splice(idx, 1);
+      evidence.push(item);
+    } else if (item.kind && item.sessionId) {
+      const idx = subagent.findIndex((entry) => entry.kind === item.kind && entry.sessionId === item.sessionId);
+      if (idx !== -1) subagent.splice(idx, 1);
+      subagent.push(item);
+    }
+  }
+  const keptEvidence = new Set(evidence.slice(-MAX_EVIDENCE_MEMORY_HANDLES));
+  const keptSubagent = new Set(subagent.slice(-MAX_SUBAGENT_MEMORY_HANDLES));
+  const result = [];
+  for (const item of normalized) {
+    if (keptEvidence.has(item) || keptSubagent.has(item)) result.push(item);
+  }
+  return result;
+}
 function compactHistoryEntry(entry) {
   const touchedFiles = Array.isArray(entry?.touchedFiles) ? entry.touchedFiles : [];
   const receipts = Array.isArray(entry?.receipts) ? entry.receipts : [];
@@ -7995,11 +8063,15 @@ function compactHistoryEntry(entry) {
     closedAt: entry?.closedAt || null
   };
 }
-function compactSessionState(session) {
+function compactSessionState(session, { dotDir = null, projectId = null } = {}) {
   if (!session) return { status: "no-open-session" };
   const touchedFiles = Array.isArray(session.touchedFiles) ? session.touchedFiles : [];
   const receipts = Array.isArray(session.receipts) ? session.receipts : [];
   const notes = Array.isArray(session.notes) ? session.notes : [];
+  const memoryHandles = normalizeMemoryHandles(session.memoryHandles);
+  const effectiveDotDir = dotDir || (session.workspaceRoot ? path2.join(session.workspaceRoot, ".contextos") : null);
+  const effectiveProjectId = projectId || session.projectId || readProjectIdFromDisk(effectiveDotDir) || "contextos";
+  const tracking = effectiveDotDir ? activeTrackingContext(effectiveDotDir, effectiveProjectId) : null;
   return {
     id: session.id || null,
     projectId: session.projectId || null,
@@ -8016,6 +8088,8 @@ function compactSessionState(session) {
     })),
     noteCount: notes.length,
     notes: notes.slice(-2).map((entry) => clipHistoryText(entry?.text, HISTORY_SUMMARY_CHARS)),
+    memoryHandles,
+    tracking: tracking || null,
     updatedAt: session.updatedAt || null,
     closedAt: session.closedAt || null
   };
@@ -8107,6 +8181,7 @@ function emptySession(projectId, intent, workspaceRoot) {
       lastPathOnlyFullDeniedAt: null
     },
     notes: [],
+    memoryHandles: [],
     slots: {},
     startedAt: now,
     updatedAt: now,
@@ -8180,7 +8255,21 @@ function readTrackingContext(dotDir, projectId) {
   }
 }
 function activeTrackingContext(dotDir, projectId) {
-  const key3 = dotDir + "::" + projectId;
+  if (!dotDir) return null;
+  let dbStamp = "missing";
+  try {
+    const dbStat = fs3.statSync(path2.join(dotDir, "state.sqlite"));
+    let walStamp = "";
+    try {
+      const walStat = fs3.statSync(path2.join(dotDir, "state.sqlite-wal"));
+      walStamp = `:${walStat.size}:${walStat.mtimeMs}`;
+    } catch {
+    }
+    dbStamp = `${dbStat.size}:${dbStat.mtimeMs}${walStamp}`;
+  } catch {
+    return null;
+  }
+  const key3 = `${dotDir}::${projectId}::${dbStamp}`;
   const cached2 = trackingCache.get(key3);
   if (cached2 && Date.now() - cached2.at < 5e3) return cached2.value;
   let value = null;
@@ -8193,7 +8282,7 @@ function activeTrackingContext(dotDir, projectId) {
   while (trackingCache.size > 16) trackingCache.delete(trackingCache.keys().next().value);
   return value;
 }
-var MAX_TOUCHED, MAX_RECEIPTS, MAX_NOTES, MAX_READ_RECEIPTS, MAX_SEARCH_RECEIPTS, MAX_EXPLORE_RECEIPTS, MAX_SEMANTIC_RECEIPTS, MAX_FULL_EXPANSION_PATHS, MAX_DIRECTED_EXPANSION_PATHS, DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, HISTORY_INTENT_CHARS, HISTORY_SUMMARY_CHARS, HISTORY_PATH_CHARS, HISTORY_RECEIPT_COMMAND_CHARS, FALLBACK_FINGERPRINT_MAX_FILES, FALLBACK_FINGERPRINT_CONTENT_BYTES, FALLBACK_FINGERPRINT_FILE_BYTES, FALLBACK_IGNORED_DIRECTORIES, trackingCache, SessionStore;
+var MAX_TOUCHED, MAX_RECEIPTS, MAX_NOTES, MAX_READ_RECEIPTS, MAX_SEARCH_RECEIPTS, MAX_EXPLORE_RECEIPTS, MAX_SEMANTIC_RECEIPTS, MAX_FULL_EXPANSION_PATHS, MAX_DIRECTED_EXPANSION_PATHS, MAX_EVIDENCE_MEMORY_HANDLES, MAX_SUBAGENT_MEMORY_HANDLES, DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT, HISTORY_INTENT_CHARS, HISTORY_SUMMARY_CHARS, HISTORY_PATH_CHARS, HISTORY_RECEIPT_COMMAND_CHARS, FALLBACK_FINGERPRINT_MAX_FILES, FALLBACK_FINGERPRINT_CONTENT_BYTES, FALLBACK_FINGERPRINT_FILE_BYTES, FALLBACK_IGNORED_DIRECTORIES, trackingCache, SessionStore;
 var init_session_store = __esm({
   "packages/orchestrator/src/session-store.mjs"() {
     MAX_TOUCHED = 200;
@@ -8205,6 +8294,8 @@ var init_session_store = __esm({
     MAX_SEMANTIC_RECEIPTS = 80;
     MAX_FULL_EXPANSION_PATHS = 12;
     MAX_DIRECTED_EXPANSION_PATHS = 12;
+    MAX_EVIDENCE_MEMORY_HANDLES = 5;
+    MAX_SUBAGENT_MEMORY_HANDLES = 3;
     DEFAULT_HISTORY_LIMIT = 3;
     MAX_HISTORY_LIMIT = 10;
     HISTORY_INTENT_CHARS = 120;
@@ -8228,37 +8319,56 @@ var init_session_store = __esm({
     ]);
     trackingCache = /* @__PURE__ */ new Map();
     SessionStore = class {
-      constructor({ projectRoot, projectId = "contextos" }) {
+      constructor({ projectRoot, projectId = null }) {
         this.projectRoot = projectRoot;
-        this.projectId = projectId;
         this.workspaceRoot = path2.resolve(projectRoot);
         this.dotDir = path2.join(projectRoot, ".contextos");
+        this.projectId = projectId || readProjectIdFromDisk(this.dotDir) || "contextos";
         this.sessionPath = path2.join(this.dotDir, "session.json");
         this.blackboardPath = path2.join(this.dotDir, "blackboard.md");
         this.historyPath = path2.join(this.dotDir, "logs", "sessions", "history.jsonl");
       }
       renderBlackboard(session = this.current) {
-        if (!session) {
+        const state = compactSessionState(session, {
+          dotDir: this.dotDir,
+          projectId: session?.projectId || this.projectId
+        });
+        if (!session || state.status === "no-open-session") {
           return "# ContextOS Blackboard\n- Status: idle (no open session)\n";
         }
         const lines = [
           "# ContextOS Blackboard",
-          `- Session: \`${session.id}\` (${session.status})`,
+          `- Session: \`${state.id}\` (${state.status})`,
           `- Intent: ${session.intent || "(none)"}`
         ];
-        if (session.touchedFiles.length) {
+        if (session.touchedFiles?.length) {
           const paths = session.touchedFiles.slice(-5).map((f) => `\`${f.path}\``).join(", ");
           lines.push(`- Working Files: ${paths}${session.touchedFiles.length > 5 ? ` (+${session.touchedFiles.length - 5})` : ""}`);
         }
-        if (session.receipts.length) {
+        if (session.receipts?.length) {
           const last = session.receipts[session.receipts.length - 1];
           lines.push(`- Last Verify: \`${last.command}\` -> exit ${last.exitCode} (${last.status || "done"})`);
         }
-        if (session.notes.length) {
+        if (session.notes?.length) {
           const lastNote = session.notes[session.notes.length - 1];
           lines.push(`- Note: ${lastNote.text.slice(0, 100)}`);
         }
-        const tracking = activeTrackingContext(this.dotDir, this.projectId);
+        if (state.memoryHandles?.length) {
+          const handlesText = state.memoryHandles.map((handle2) => {
+            if (handle2.resultId) {
+              const paths = Array.isArray(handle2.paths) && handle2.paths.length ? ` [${handle2.paths.slice(0, 3).join(", ")}${handle2.paths.length > 3 ? `, +${handle2.paths.length - 3}` : ""}]` : "";
+              return `\`${handle2.resultId}\`${paths}`;
+            }
+            if (handle2.kind && handle2.sessionId) {
+              return `\`${handle2.kind}:${handle2.sessionId}\``;
+            }
+            return null;
+          }).filter(Boolean);
+          if (handlesText.length) {
+            lines.push(`- Memory Handles: ${handlesText.join(", ")}`);
+          }
+        }
+        const tracking = state.tracking;
         if (tracking?.plan) {
           lines.push(`- Active Plan: \`${tracking.plan.id}\` ${String(tracking.plan.title || "").slice(0, 120)} (${tracking.plan.status})`);
           lines.push(tracking.rules.length ? `- Plan Rules: ${tracking.rules.map((rule) => `\`${rule}\``).join(", ")}` : "- Plan Rules: (none bound) - bind project rules before implementing or the work will drift from them.");
@@ -8281,17 +8391,21 @@ var init_session_store = __esm({
         if (!fs3.existsSync(this.sessionPath)) return null;
         try {
           const session = JSON.parse(fs3.readFileSync(this.sessionPath, "utf8"));
-          if (session?.workspaceRoot !== this.workspaceRoot) return null;
+          if (!sameWorkspaceRoot(session?.workspaceRoot, this.workspaceRoot)) return null;
+          if (!Array.isArray(session.memoryHandles)) session.memoryHandles = [];
           return session;
         } catch (_) {
           return null;
         }
       }
-      save(session) {
+      save(session, { syncBlackboard = true } = {}) {
         session.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        if (!Array.isArray(session.memoryHandles)) session.memoryHandles = [];
         fs3.mkdirSync(this.dotDir, { recursive: true });
         fs3.writeFileSync(this.sessionPath, JSON.stringify(session, null, 2) + "\n", "utf8");
-        this.saveBlackboard(session);
+        if (syncBlackboard) {
+          this.saveBlackboard(session);
+        }
         return session;
       }
       get current() {
@@ -8299,9 +8413,12 @@ var init_session_store = __esm({
         return session && session.status === "open" ? session : null;
       }
       summary(session = this.current) {
-        return compactSessionState(session);
+        return compactSessionState(session, {
+          dotDir: this.dotDir,
+          projectId: session?.projectId || this.projectId
+        });
       }
-      ensureSession(intent = "") {
+      ensureSession(intent = "", { syncBlackboard = true } = {}) {
         const existing = this.current;
         if (existing) {
           if (existing.projectId === "contextos" && this.projectId && this.projectId !== "contextos") {
@@ -8311,13 +8428,20 @@ var init_session_store = __esm({
             existing.intents.push({ text: intent, at: (/* @__PURE__ */ new Date()).toISOString() });
             existing.intent = intent;
           }
-          return this.save(existing);
+          return this.save(existing, { syncBlackboard });
         }
-        return this.save(emptySession(this.projectId, intent, this.workspaceRoot));
+        return this.save(emptySession(this.projectId, intent, this.workspaceRoot), { syncBlackboard });
+      }
+      recordMemoryHandle(handle2 = {}) {
+        const normalized = normalizeMemoryHandle(handle2);
+        if (!normalized) return this.current;
+        const session = this.ensureSession("", { syncBlackboard: false });
+        session.memoryHandles = normalizeMemoryHandles([...session.memoryHandles || [], normalized]);
+        return this.save(session, { syncBlackboard: true });
       }
       touch(entries = [], source = "edit") {
         if (!entries.length) return this.current;
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         const now = (/* @__PURE__ */ new Date()).toISOString();
         const index = new Map(session.touchedFiles.map((entry) => [entry.path, entry]));
         for (const raw of entries) {
@@ -8354,13 +8478,19 @@ var init_session_store = __esm({
         if (session.touchedFiles.length > MAX_TOUCHED) {
           session.touchedFiles = session.touchedFiles.slice(-MAX_TOUCHED);
         }
-        if (Array.isArray(session.readReceipts) && session.readReceipts.length) {
-          const changed = new Set(entries.map((entry) => typeof entry === "string" ? entry : entry?.path).filter(Boolean));
-          if (changed.size) {
-            session.readReceipts = session.readReceipts.filter((entry) => !changed.has(entry.path));
+        const changed = new Set(entries.map((entry) => normalizeSessionPath(typeof entry === "string" ? entry : entry?.path)).filter(Boolean));
+        if (changed.size) {
+          if (Array.isArray(session.readReceipts) && session.readReceipts.length) {
+            session.readReceipts = session.readReceipts.filter((entry) => !changed.has(normalizeSessionPath(entry.path)));
+          }
+          if (Array.isArray(session.memoryHandles) && session.memoryHandles.length) {
+            session.memoryHandles = session.memoryHandles.filter((entry) => {
+              if (!entry || !Array.isArray(entry.paths)) return true;
+              return !entry.paths.some((p) => changed.has(normalizeSessionPath(p)));
+            });
           }
         }
-        return this.save(session);
+        return this.save(session, { syncBlackboard: true });
       }
       findReadReceipt({ path: filePath, hash, range = null, symbol = null } = {}) {
         const session = this.current;
@@ -8391,7 +8521,7 @@ var init_session_store = __esm({
         size = null
       } = {}) {
         if (!filePath || !hash) return this.current;
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         const rangeKey = normalizeReadRange(range);
         session.readReceipts = (session.readReceipts || []).filter((entry) => !(entry.path === filePath && entry.range === rangeKey && (entry.symbol || null) === (symbol || null)));
         session.readReceipts.push({
@@ -8408,7 +8538,7 @@ var init_session_store = __esm({
         if (session.readReceipts.length > MAX_READ_RECEIPTS) {
           session.readReceipts = session.readReceipts.slice(-MAX_READ_RECEIPTS);
         }
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       readPolicy() {
         const session = this.current;
@@ -8427,7 +8557,7 @@ var init_session_store = __esm({
         };
       }
       markDecisionPackage({ tool = null, status = null, decisionComplete = false, artifactId = null, receiptId = null } = {}) {
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         const current = session.readPolicy || {};
         session.readPolicy = {
           ...current,
@@ -8440,10 +8570,10 @@ var init_session_store = __esm({
           decisionPackageArtifactId: artifactId || current.decisionPackageArtifactId || null,
           decisionPackageReceiptId: receiptId || current.decisionPackageReceiptId || null
         };
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       resetReadPolicy() {
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         session.readPolicy = {
           decisionPackageSeen: false,
           decisionPackageTool: null,
@@ -8457,10 +8587,10 @@ var init_session_store = __esm({
           pathOnlyFullDenied: 0,
           lastPathOnlyFullDeniedAt: null
         };
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       recordFullExpansion({ path: filePath = null } = {}) {
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         const current = session.readPolicy || {};
         const paths = Array.isArray(current.fullExpansionPaths) ? current.fullExpansionPaths : [];
         session.readPolicy = {
@@ -8468,10 +8598,10 @@ var init_session_store = __esm({
           fullExpansions: (Number(current.fullExpansions) || 0) + 1,
           fullExpansionPaths: filePath ? [...paths, String(filePath)].slice(-MAX_FULL_EXPANSION_PATHS) : paths
         };
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       recordDirectedExpansion({ path: filePath = null } = {}) {
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         const current = session.readPolicy || {};
         const paths = Array.isArray(current.directedExpansionPaths) ? current.directedExpansionPaths : [];
         session.readPolicy = {
@@ -8479,10 +8609,10 @@ var init_session_store = __esm({
           directedExpansions: (Number(current.directedExpansions) || 0) + 1,
           directedExpansionPaths: filePath ? [...paths, String(filePath)].slice(-MAX_DIRECTED_EXPANSION_PATHS) : paths
         };
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       recordPathOnlyFullDenied({ path: filePath = null, reason = null } = {}) {
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         const current = session.readPolicy || {};
         session.readPolicy = {
           ...current,
@@ -8491,7 +8621,7 @@ var init_session_store = __esm({
           lastPathOnlyFullDeniedPath: filePath ? String(filePath) : current.lastPathOnlyFullDeniedPath || null,
           lastPathOnlyFullDeniedReason: reason || current.lastPathOnlyFullDeniedReason || null
         };
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       invalidateReadReceipts(paths = null) {
         const session = this.current;
@@ -8500,7 +8630,7 @@ var init_session_store = __esm({
         const next = session.readReceipts.filter((entry) => !targets || targets.has(entry.path));
         if (next.length === session.readReceipts.length) return session;
         session.readReceipts = next;
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       findSearchReceipt({ key: key3, revision = null } = {}) {
         const session = this.current;
@@ -8513,7 +8643,7 @@ var init_session_store = __esm({
       }
       recordSearchReceipt({ key: key3, revision = null, receiptId = null, artifactId = null } = {}) {
         if (!key3) return this.current;
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         session.searchReceipts = (session.searchReceipts || []).filter((entry) => entry.key !== key3);
         session.searchReceipts.push({
           key: String(key3).slice(0, 800),
@@ -8525,13 +8655,13 @@ var init_session_store = __esm({
         if (session.searchReceipts.length > MAX_SEARCH_RECEIPTS) {
           session.searchReceipts = session.searchReceipts.slice(-MAX_SEARCH_RECEIPTS);
         }
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       invalidateSearchReceipts() {
         const session = this.current;
         if (!session || !Array.isArray(session.searchReceipts) || !session.searchReceipts.length) return session;
         session.searchReceipts = [];
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       findSemanticReceipt({ key: key3 } = {}) {
         const session = this.current;
@@ -8544,7 +8674,7 @@ var init_session_store = __esm({
       }
       recordSemanticReceipt({ key: key3, capability, action, hash = null, fullChars = 0, artifactId = null } = {}) {
         if (!key3) return this.current;
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         session.semanticReceipts = (session.semanticReceipts || []).filter((entry) => entry.key !== key3);
         session.semanticReceipts.push({
           key: String(key3).slice(0, 240),
@@ -8558,13 +8688,13 @@ var init_session_store = __esm({
         if (session.semanticReceipts.length > MAX_SEMANTIC_RECEIPTS) {
           session.semanticReceipts = session.semanticReceipts.slice(-MAX_SEMANTIC_RECEIPTS);
         }
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       invalidateSemanticReceipts() {
         const session = this.current;
         if (!session || !Array.isArray(session.semanticReceipts) || !session.semanticReceipts.length) return session;
         session.semanticReceipts = [];
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       findExploreReceipt({ key: key3, revision = null } = {}) {
         const session = this.current;
@@ -8577,7 +8707,7 @@ var init_session_store = __esm({
       }
       recordExploreReceipt({ key: key3, revision = null, receiptId = null, artifactId = null } = {}) {
         if (!key3) return this.current;
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         session.exploreReceipts = (session.exploreReceipts || []).filter((entry) => entry.key !== key3);
         session.exploreReceipts.push({
           key: String(key3).slice(0, 800),
@@ -8589,7 +8719,7 @@ var init_session_store = __esm({
         if (session.exploreReceipts.length > MAX_EXPLORE_RECEIPTS) {
           session.exploreReceipts = session.exploreReceipts.slice(-MAX_EXPLORE_RECEIPTS);
         }
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       attachReceipt(receipt) {
         if (!receipt) return this.current;
@@ -8686,9 +8816,9 @@ var init_session_store = __esm({
         return this.save(session);
       }
       setSlots(slots = {}) {
-        const session = this.ensureSession();
+        const session = this.ensureSession("", { syncBlackboard: false });
         session.slots = { ...session.slots || {}, ...slots };
-        return this.save(session);
+        return this.save(session, { syncBlackboard: false });
       }
       getSlot(slotKey) {
         const session = this.current;
@@ -9169,7 +9299,7 @@ function normalizeAgentReport(input, { jobId = null, status = "completed", maxCh
   const { payload, explicitNeedsHost } = unwrapPayload(input);
   const resolvedJobId = String(jobId ?? payload.jobId ?? "").slice(0, 160) || null;
   maxChars = Math.max(80, Number.isFinite(Number(maxChars)) ? Math.floor(Number(maxChars)) : 2400);
-  const rawSummary = typeof payload.summary === "string" ? payload.summary : typeof payload.answer === "string" ? payload.answer : "";
+  const rawSummary = [payload.summary, payload.answer, payload.result, payload.message].find((val) => typeof val === "string" && val.trim().length > 0) ?? (typeof payload.summary === "string" ? payload.summary : typeof payload.answer === "string" ? payload.answer : "");
   const rawChanges = payload.changes ?? payload.filesChanged ?? payload.changedFiles;
   const rawChecks = payload.checks ?? payload.tests ?? payload.verification ?? payload.verifications;
   const rawBlockers = payload.blockers ?? payload.blocker;
@@ -9180,7 +9310,8 @@ function normalizeAgentReport(input, { jobId = null, status = "completed", maxCh
   const isBlocked = Boolean(payload.blocked) || payload.status === "blocked";
   const changes = normalizeStringArray(rawChanges);
   const checks = normalizeStringArray(rawChecks);
-  const blockers = normalizeStringArray(rawBlockers);
+  const NON_BLOCKER_RE = /^(?:无|无。|没有|没有。|暂无|暂无。|none|none\.|n\/a|nil|null|false|no blockers?\.?)$/i;
+  const blockers = normalizeStringArray(rawBlockers).filter((item) => !NON_BLOCKER_RE.test(item.trim()));
   let finalStatus;
   if (status === "failed" || status === "cancelled") {
     finalStatus = status;
@@ -34166,6 +34297,21 @@ var init_code_tools = __esm({
                   occurrences = 1;
                 }
               }
+              if (occurrences === 0) {
+                const expStart = Math.max(0, chunkStart - 15);
+                const expEnd = Math.min(lines.length, chunkEnd + 15);
+                const expChunk = lines.slice(expStart, expEnd).join("\n");
+                const expOcc = expChunk.split(targetContent).length - 1;
+                if (expOcc === 1) {
+                  const replacedExp = expChunk.replace(targetContent, () => replacementContent);
+                  newContent = [
+                    ...lines.slice(0, expStart),
+                    replacedExp,
+                    ...lines.slice(expEnd)
+                  ].join("\n");
+                  occurrences = 1;
+                }
+              }
             } else {
               if (occurrences > 1) {
                 throw new Error(
@@ -34463,7 +34609,7 @@ function planChangeset(projectRoot, changes = []) {
   const results = [];
   for (let index = 0; index < changes.length; index += 1) {
     const change = { ...changes[index] || {} };
-    const resolved = resolveWorkspacePath(projectRoot, change.path, "changeset path");
+    const resolved = resolveWorkspacePath(projectRoot, change.path ?? change.filePath ?? change.file ?? change.targetFile, "changeset path");
     let state = states.get(resolved.fullPath);
     if (change.kind === "edit" && change.fullFile === true && typeof change.replacement === "string" && !state && !fs14.existsSync(resolved.fullPath) && !["target", "startLine", "endLine", "expectedHash", "hash"].some((key3) => change[key3] !== void 0)) {
       change.kind = "create";
@@ -37568,8 +37714,7 @@ var init_v2_service = __esm({
           };
         }
         const structure = LanguageRegistry.parseStructure(relativePath, content);
-        const bare = ref.symbol.includes("#") ? ref.symbol.split("#").pop().trim() : ref.symbol;
-        const match = structure.symbols.find((s) => s.name === bare) || structure.symbols.find((s) => s.shortName === bare) || structure.symbols.find((s) => s.name.endsWith(`.${bare}`)) || structure.symbols.find((s) => s.containerName && `${s.containerName}.${s.shortName || s.name}`.endsWith(`.${bare}`));
+        const match = this._findAnchorSymbol(structure, ref.symbol, ref);
         if (!match) {
           throw new Error(`Symbol '${ref.symbol}' not found in '${relativePath}'. Drop 'symbol' to bind the whole file.`);
         }
@@ -37579,7 +37724,7 @@ var init_v2_service = __esm({
         return {
           ...ref,
           path: relativePath,
-          symbol: match.name,
+          symbol: String(ref.symbol).includes("#") ? ref.symbol : match.name,
           anchorKind: "symbol",
           startLine: match.startLine,
           endLine: match.endLine,
@@ -38388,7 +38533,7 @@ ${bindRes}`;
                     if (ref.symbol && ref.anchorKind !== "file") {
                       source.structure ||= LanguageRegistry.parseStructure(target, source.content);
                       const symbol = this._findAnchorSymbol(source.structure, ref.symbol, ref);
-                      return symbol ? [{ ...ref, matchKind: "exact-symbol", anchorStatus: symbol.hash === ref.hash ? "fresh" : "stale" }] : [];
+                      return symbol ? [{ ...ref, startLine: symbol.startLine, endLine: symbol.endLine, matchKind: "exact-symbol", anchorStatus: symbol.hash === ref.hash ? "fresh" : "stale" }] : [{ ...ref, matchKind: "exact-symbol", anchorStatus: "stale" }];
                     }
                     return [{ ...ref, matchKind: "exact-file", anchorStatus: calculateHash2(source.content) === ref.hash ? "fresh" : "stale" }];
                   } catch {
@@ -38598,6 +38743,41 @@ ${bindRes}`;
                     endLine: sym.endLine || lines.length,
                     hash: sym.hash || fileHash,
                     role: "implementation"
+                  });
+                }
+                if (refreshPaths && symbolFilters.size === 0 && structure) {
+                  const existingSymbolRefs = (existing.artifactRefs || []).filter(
+                    (ref) => ref.path === cleanRelPath && ref.symbol && ref.anchorKind !== "file" && ref.anchorKind !== "tree"
+                  );
+                  for (const existingRef of existingSymbolRefs) {
+                    const matched = this._findAnchorSymbol(structure, existingRef.symbol, existingRef);
+                    if (!matched) continue;
+                    const startLine = matched.startLine || 1;
+                    const endLine = matched.endLine || lines.length;
+                    const sameSpanIdx = autoArtifactRefs.findIndex(
+                      (ref) => ref.path === cleanRelPath && ref.startLine === startLine && ref.endLine === endLine
+                    );
+                    if (sameSpanIdx >= 0) {
+                      if (String(existingRef.symbol).includes("#")) {
+                        autoArtifactRefs[sameSpanIdx].symbol = existingRef.symbol;
+                      }
+                      continue;
+                    }
+                    if (!autoArtifactRefs.some((ref) => ref.path === cleanRelPath && ref.symbol === existingRef.symbol)) {
+                      autoArtifactRefs.push({
+                        path: cleanRelPath,
+                        anchorKind: "symbol",
+                        symbol: existingRef.symbol,
+                        startLine,
+                        endLine,
+                        hash: matched.hash || fileHash,
+                        role: existingRef.role || "implementation"
+                      });
+                    }
+                  }
+                  autoArtifactRefs.sort((left, right) => {
+                    if (left.path !== right.path) return 0;
+                    return (left.startLine || 1) - (right.startLine || 1);
                   });
                 }
               } else {
@@ -40927,10 +41107,14 @@ function makeRecord(workspaceId, snapshot2, ranges, text) {
   };
 }
 function getRequestedRanges(request) {
-  if (request.ranges === void 0 || request.ranges === null || Array.isArray(request.ranges) && request.ranges.length === 0) {
+  const rawRanges = request.ranges ?? request.lines ?? (request.startLine !== void 0 || request.endLine !== void 0 ? [[request.startLine ?? 1, request.endLine ?? Number(request.startLine || 1) + 100]] : void 0);
+  if (rawRanges === void 0 || rawRanges === null || Array.isArray(rawRanges) && rawRanges.length === 0) {
     return { full: true, ranges: [] };
   }
-  const values = Array.isArray(request.ranges) ? request.ranges : [request.ranges];
+  if (Array.isArray(rawRanges) && rawRanges.length === 2 && typeof rawRanges[0] === "number" && typeof rawRanges[1] === "number") {
+    return { full: false, ranges: [parseRange(rawRanges)] };
+  }
+  const values = Array.isArray(rawRanges) ? rawRanges : [rawRanges];
   return { full: false, ranges: values.map(parseRange) };
 }
 async function collectEvidence({ projectRoot, requests = [], signal } = {}) {
@@ -40941,9 +41125,10 @@ async function collectEvidence({ projectRoot, requests = [], signal } = {}) {
   const groups = /* @__PURE__ */ new Map();
   for (const request of requests) {
     assertNotAborted(signal);
+    const rawPath = request?.path ?? request?.filePath ?? request?.file;
     let relativePath;
     try {
-      relativePath = normalizeEvidencePath(request?.path);
+      relativePath = normalizeEvidencePath(rawPath);
       const parsed = getRequestedRanges(request);
       const expectedHash = request.expectedContentHash ?? request.contentHash ?? null;
       const key3 = `${relativePath}\0${expectedHash || ""}`;
@@ -40953,7 +41138,7 @@ async function collectEvidence({ projectRoot, requests = [], signal } = {}) {
       groups.set(key3, group);
     } catch (error2) {
       missing.push(toMissing(
-        typeof request?.path === "string" ? request.path : void 0,
+        typeof rawPath === "string" ? rawPath : void 0,
         error2.message,
         request?.range ?? null
       ));
@@ -41420,6 +41605,22 @@ import fs28 from "node:fs";
 import path29 from "node:path";
 import crypto16 from "node:crypto";
 import { DatabaseSync as DatabaseSync3 } from "node:sqlite";
+function findAnchorSymbol(structure, symbol, locator = {}) {
+  const symbols = Array.isArray(structure?.symbols) ? structure.symbols : [];
+  const bare = String(symbol || "").includes("#") ? String(symbol).split("#").pop().trim() : String(symbol || "").trim();
+  if (!bare) return null;
+  const predicates = [
+    (entry) => entry.name === bare,
+    (entry) => entry.shortName === bare,
+    (entry) => entry.name.endsWith("." + bare),
+    (entry) => entry.containerName && (entry.containerName + "." + (entry.shortName || entry.name)).endsWith("." + bare)
+  ];
+  for (const matches of predicates.map((predicate) => symbols.filter(predicate))) {
+    if (!matches.length) continue;
+    return matches.find((entry) => locator.hash && entry.hash === locator.hash) || matches.find((entry) => entry.startLine === locator.startLine && entry.endLine === locator.endLine) || matches.find((entry) => entry.startLine === locator.startLine) || matches[0];
+  }
+  return null;
+}
 function safePath(root, relative) {
   if (typeof relative !== "string" || path29.isAbsolute(relative)) return null;
   const target = path29.resolve(root, relative);
@@ -41630,6 +41831,7 @@ function projectOverview(projectRoot) {
   const blocks = (state.blocks || []).filter((b) => b.id && !b.id.startsWith("mod-") && b.kind !== "module");
   const chains = Array.isArray(state.chains) ? state.chains : [];
   const members2 = new Set(chains.flatMap((c) => c.memberIds || []));
+  const structureCache = /* @__PURE__ */ new Map();
   const navigation = blocks.slice(0, MAX_BLOCKS).map((b) => {
     const anchors = [];
     for (const ref of b.artifactRefs || []) {
@@ -41641,20 +41843,38 @@ function projectOverview(projectRoot) {
       } catch {
       }
       const anchorKind = ref.anchorKind || (ref.symbol ? "symbol" : "file");
-      const source = exists ? read2(root, ref.path) : null;
+      const source = exists ? read2(root, ref.path, 256 * 1024) : null;
       let anchorStatus = exists ? "unverified" : "missing";
+      let line = ref.startLine || 1;
       if (exists && source && !source.truncated && ref.hash) {
         if (anchorKind === "file") {
           anchorStatus = digest(source.text).slice(0, 16) === ref.hash ? "fresh" : "stale";
-        } else if (anchorKind === "symbol" && ref.startLine && ref.endLine) {
-          const slice = source.text.split(/\r?\n/).slice(ref.startLine - 1, ref.endLine).join("\n");
-          if (digest(slice).slice(0, 16) === ref.hash) anchorStatus = "fresh";
+        } else if (anchorKind === "symbol") {
+          if (ref.startLine && ref.endLine) {
+            const slice = source.text.split(/\r?\n/).slice(ref.startLine - 1, ref.endLine).join("\n");
+            if (digest(slice).slice(0, 16) === ref.hash) anchorStatus = "fresh";
+          }
+          if (anchorStatus !== "fresh" && ref.symbol) {
+            try {
+              if (!structureCache.has(ref.path)) {
+                structureCache.set(ref.path, LanguageRegistry.parseStructure(ref.path, source.text));
+              }
+              const sym = findAnchorSymbol(structureCache.get(ref.path), ref.symbol, ref);
+              if (sym) {
+                line = sym.startLine || line;
+                anchorStatus = sym.hash === ref.hash ? "fresh" : "stale";
+              } else {
+                anchorStatus = "stale";
+              }
+            } catch {
+            }
+          }
         }
       }
       anchors.push({
         path: short(ref.path, 160),
         ...ref.symbol ? { symbol: short(ref.symbol, 100) } : {},
-        line: ref.startLine || 1,
+        line,
         available: exists,
         anchorStatus
       });
@@ -41791,7 +42011,29 @@ async function graphEvidence(root, args2 = {}, signal) {
   const matched = explicit || blocks.length > 0;
   const requests = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const block of blocks) for (const anchor2 of block.artifactRefs || []) {
+  const priorityMatches = Array.isArray(args2.priorityMatches) ? args2.priorityMatches : [];
+  const anchorPriority = (anchor2) => {
+    if (!priorityMatches.length) return 2;
+    const relative = anchor2.anchorKind === "tree" ? anchor2.manifest : anchor2.path;
+    for (const match of priorityMatches) {
+      if (match.kind === "symbol" && match.path === anchor2.path && match.symbol === anchor2.symbol) return 0;
+      if ((match.kind === "path" || match.kind === "basename") && (match.path === anchor2.path || match.path === relative)) return 0;
+    }
+    for (const match of priorityMatches) {
+      if (match.kind === "symbol" && match.path === anchor2.path) return 1;
+    }
+    return 2;
+  };
+  const orderedAnchors = [];
+  for (const block of blocks) {
+    for (const anchor2 of block.artifactRefs || []) {
+      orderedAnchors.push({ anchor: anchor2, priority: anchorPriority(anchor2), order: orderedAnchors.length });
+    }
+  }
+  if (priorityMatches.length) {
+    orderedAnchors.sort((left, right) => left.priority - right.priority || left.order - right.order);
+  }
+  for (const { anchor: anchor2, priority } of orderedAnchors) {
     if (requests.length >= 16) {
       const reason = "Graph anchor evidence capped at 16 reads; navigate a narrower Block or exact inspect.";
       if (!missing.some((item) => item.reason === reason)) missing.push({ reason });
@@ -41809,13 +42051,19 @@ async function graphEvidence(root, args2 = {}, signal) {
     }
     try {
       const stat = fs28.statSync(target);
-      if (!stat.isFile() || stat.size > 128 * 1024) throw new Error("Anchor is not a bounded source file; use exact inspect.");
+      const isSymbolAnchor = Boolean(anchor2.symbol && anchor2.anchorKind !== "file" && anchor2.anchorKind !== "tree");
+      const maxAnchorBytes = isSymbolAnchor || priority === 0 ? 512 * 1024 : 128 * 1024;
+      if (!stat.isFile() || stat.size > maxAnchorBytes) throw new Error("Anchor is not a bounded source file; use exact inspect.");
       const bytes = fs28.readFileSync(target);
       const contentHash = digest(bytes);
       const text = bytes.toString("utf8");
       const lines = text.split(/\r?\n/u);
       let first = anchor2.anchorKind === "tree" ? 1 : anchor2.startLine || 1;
       let last = anchor2.anchorKind === "tree" ? Math.min(lines.length, 64) : anchor2.endLine || Math.min(lines.length, first + 63);
+      if (anchor2.anchorKind === "file" && priority === 0 && stat.size > 128 * 1024) {
+        first = 1;
+        last = Math.min(lines.length, 64);
+      }
       if (anchor2.symbol && anchor2.anchorKind !== "file" && anchor2.anchorKind !== "tree") {
         const { LanguageRegistry: LanguageRegistry2 } = await init_language_registry().then(() => language_registry_exports);
         const structure = LanguageRegistry2.parseStructure(relative, text);
@@ -41896,7 +42144,8 @@ async function goalOnboarding(projectRoot, goal, signal) {
     let refsVisited = 0;
     let complete = blocks.length <= 2e3 && chains.length <= 2e3;
     const matchRef = (ref) => {
-      if (!ref.hash || !Number.isSafeInteger(ref.startLine) || !Number.isSafeInteger(ref.endLine) || ref.startLine < 1 || ref.endLine < ref.startLine || !safePath(root, ref.path)) return null;
+      const hasRange = ref.startLine != null || ref.endLine != null;
+      if (!ref.hash || hasRange && (!Number.isSafeInteger(ref.startLine) || !Number.isSafeInteger(ref.endLine) || ref.startLine < 1 || ref.endLine < ref.startLine) || !safePath(root, ref.path)) return null;
       const portable = String(ref.path).replaceAll("\\", "/");
       const relative = path29.posix.normalize(portable).replace(/^\.\//, "");
       const targetGoal = goal.trim().replaceAll("\\", "/");
@@ -41912,15 +42161,22 @@ async function goalOnboarding(projectRoot, goal, signal) {
     };
     for (const block of blocks.slice(0, 2e3)) {
       const matches = [];
-      if (fold(block.id) === query) matches.push({ kind: "id", value: block.id });
-      if (fold(block.title) === query) matches.push({ kind: "title", value: block.title });
+      const seenMatches = /* @__PURE__ */ new Set();
+      const pushMatch = (entry) => {
+        const key3 = `${entry.kind}:${entry.value || ""}:${entry.path || ""}:${entry.symbol || ""}`;
+        if (seenMatches.has(key3)) return;
+        seenMatches.add(key3);
+        matches.push(entry);
+      };
+      if (fold(block.id) === query) pushMatch({ kind: "id", value: block.id });
+      if (fold(block.title) === query) pushMatch({ kind: "title", value: block.title });
       for (const ref of block.artifactRefs || []) {
         if (++refsVisited > 1e4) {
           complete = false;
           break;
         }
         const kind = matchRef(ref);
-        if (kind) matches.push({ kind, path: ref.path, ...kind === "symbol" ? { symbol: ref.symbol } : {} });
+        if (kind) pushMatch({ kind, path: ref.path, ...kind === "symbol" ? { symbol: ref.symbol } : {} });
       }
       if (matches.length) candidates.push({ kind: "block", id: block.id, title: block.title, matches: matches.slice(0, 8) });
     }
@@ -41934,7 +42190,10 @@ async function goalOnboarding(projectRoot, goal, signal) {
     else if (candidates.length === 1) {
       selected = candidates[0];
       graphRuns += 1;
-      graph = await graphEvidence(root, { [selected.kind === "block" ? "blockId" : "chainId"]: selected.id }, signal);
+      graph = await graphEvidence(root, {
+        [selected.kind === "block" ? "blockId" : "chainId"]: selected.id,
+        priorityMatches: selected.matches
+      }, signal);
       const blockIds = new Set(graph.blockIds || []);
       relatedChains = chains.filter((chain) => selected.kind === "chain" && chain.id === selected.id || (chain.memberIds || []).some((id) => blockIds.has(id))).slice(0, 16).map((chain) => ({
         id: chain.id,
@@ -41964,7 +42223,12 @@ async function goalOnboarding(projectRoot, goal, signal) {
         };
       }
       const targetBlocks = blocks.filter((block) => blockIds.has(block.id));
-      const paths = [...new Set(targetBlocks.flatMap((block) => (block.artifactRefs || []).map((ref) => ref.anchorKind === "tree" ? ref.manifest : ref.path).filter((value) => value && safePath(root, value))))];
+      const priorityPaths = new Set((selected.matches || []).map((match) => match.path).filter(Boolean));
+      const rawPaths = [...new Set(targetBlocks.flatMap((block) => (block.artifactRefs || []).map((ref) => ref.anchorKind === "tree" ? ref.manifest : ref.path).filter((value) => value && safePath(root, value))))];
+      const paths = [
+        ...rawPaths.filter((item) => priorityPaths.has(item)),
+        ...rawPaths.filter((item) => !priorityPaths.has(item))
+      ];
       if (paths.length > 16) missing.push({ reason: "Owner evidence capped at 16 actual anchor paths; navigate a narrower target." });
       if (paths.length) {
         const { ContextOSV2Service: ContextOSV2Service2 } = await init_v2_service().then(() => v2_service_exports);
@@ -41977,6 +42241,11 @@ async function goalOnboarding(projectRoot, goal, signal) {
           if (item.owners.some((owner) => owner.refs.some((ref) => ref.anchorStatus === "stale"))) {
             missing.push({ path: item.path, reason: "Owner includes stale source anchors; refresh actual bindings." });
           }
+          item.owners = item.owners.map((owner) => ({
+            ...owner,
+            refs: Array.isArray(owner.refs) ? owner.refs.slice(0, 2) : [],
+            ...Array.isArray(owner.refs) && owner.refs.length > 2 ? { refCount: owner.refs.length, refsTruncated: true } : {}
+          }));
         }
       }
     } else if (candidates.length > 1) missing.push({ reason: "Goal matches multiple actual graph entities; select a candidate ID in a separate request." });
@@ -42029,8 +42298,9 @@ async function goalOnboarding(projectRoot, goal, signal) {
 }
 var cache, MAX_BYTES, SESSION_MAX_BYTES, MAX_PACKAGES, MAX_BLOCKS, STALE_MS, digest, short, inside;
 var init_project_overview = __esm({
-  "packages/orchestrator/src/project-overview.mjs"() {
+  async "packages/orchestrator/src/project-overview.mjs"() {
     init_database();
+    await init_language_registry();
     init_session_store();
     cache = /* @__PURE__ */ new Map();
     MAX_BYTES = 64 * 1024;
@@ -42200,7 +42470,9 @@ async function executeCommand(args2, { projectRoot, transport, runner = runComma
   const root = fs29.realpathSync(projectRoot);
   if (args2.action === "get") return getCommandResult(root, args2.id, args2);
   if (args2.action === "cancel") return cancelCommand(root, args2.id);
-  if (typeof args2.command !== "string" || !args2.command.trim()) throw new Error("A command is required.");
+  const rawCommand = typeof args2.command === "string" ? args2.command : typeof args2.cmd === "string" ? args2.cmd : Array.isArray(args2.commands) ? args2.commands.filter((c) => typeof c === "string" && c.trim()).join(" && ") : args2.commands;
+  if (typeof rawCommand !== "string" || !rawCommand.trim()) throw new Error("A command is required.");
+  args2 = { ...args2, command: rawCommand };
   const cwd = fs29.realpathSync(path30.resolve(root, args2.cwd || "."));
   if (cwd !== root && !cwd.startsWith(`${root}${path30.sep}`)) throw new Error("Command cwd is outside its workspace.");
   const id = args2.id || `command-${crypto17.randomUUID()}`;
@@ -45313,6 +45585,17 @@ function storeResult(root, result, id = `result-${crypto18.randomUUID()}`) {
   fs32.mkdirSync(resultsDir(root), { recursive: true });
   const data = { ...result, resultId: id, sourceDelivery: [] };
   fs32.writeFileSync(resultPath(root, id), JSON.stringify(data), { mode: 384 });
+  if (Array.isArray(result?.records) && result.records.length > 0) {
+    try {
+      const store = new SessionStore({ projectRoot: root });
+      store.recordMemoryHandle({
+        resultId: id,
+        paths: [...new Set(result.records.map((r) => r?.path).filter(Boolean))],
+        contentHashes: [...new Set(result.records.map((r) => r?.contentHash).filter(Boolean))]
+      });
+    } catch (_) {
+    }
+  }
   return data;
 }
 function validateSourceDelivery(value, resultId) {
@@ -45950,6 +46233,17 @@ async function recordEvidenceDelivery(projectRoot, resultId, renderedRecords) {
     fs32.renameSync(temporaryFile, file2);
     temporaryFile = void 0;
     fs32.chmodSync(file2, 384);
+    if (verifiedRenderedRecords.length > 0) {
+      try {
+        const store = new SessionStore({ projectRoot: root });
+        store.recordMemoryHandle({
+          resultId,
+          paths: [...new Set(verifiedRenderedRecords.map((r) => r?.path).filter(Boolean))],
+          contentHashes: [...new Set(verifiedRenderedRecords.map((r) => r?.contentHash).filter(Boolean))]
+        });
+      } catch (_) {
+      }
+    }
     return {
       recorded: true,
       count: additions.length,
@@ -46289,13 +46583,112 @@ function missingKnownSelection(result, knownContext) {
   const existing = new Set((result.missing || []).map((item) => JSON.stringify(item)));
   return output.filter((item) => !existing.has(JSON.stringify(item)));
 }
-function publicResult(result) {
+function publicResult(result, deliveryMode = void 0) {
   const { state, calls, toolResults, reasoning, ...data } = result;
   if (data.micro) {
     const { state: ignoredState, calls: ignoredCalls, content: ignoredContent, reasoning: ignoredReasoning, ...micro } = data.micro;
     data.micro = micro;
   }
+  if (deliveryMode === "handle-only") {
+    data.delivery = "handle-only";
+    data.handles = (Array.isArray(data.records) ? data.records : []).map((record2) => ({
+      path: record2.path,
+      ranges: record2.ranges || [],
+      contentHash: record2.contentHash,
+      bytes: record2.bytes ?? Buffer.byteLength(record2.text || "", "utf8"),
+      chars: record2.chars ?? Array.from(record2.text || "").length
+    }));
+  }
   return data;
+}
+function hydrateVerifiedEvidenceRefs(projectRoot, evidenceRefs = []) {
+  const refs = Array.isArray(evidenceRefs) ? evidenceRefs : evidenceRefs ? [evidenceRefs] : [];
+  if (!refs.length) return { ok: true, text: "", verified: [], stale: [], missing: [] };
+  const root = fs32.realpathSync(projectRoot);
+  const identity = workspaceIdentity(root);
+  const verifiedBlocks = [];
+  const verifiedMeta = [];
+  const staleNotices = [];
+  const missingNotices = [];
+  const seenKeys = /* @__PURE__ */ new Set();
+  for (const rawRef of refs) {
+    const resultId = typeof rawRef === "string" ? rawRef.trim() : typeof rawRef?.resultId === "string" ? rawRef.resultId.trim() : "";
+    if (!resultId) continue;
+    const requestedPaths = Array.isArray(rawRef?.paths) && rawRef.paths.length ? new Set(rawRef.paths.map((p) => {
+      try {
+        return normalizeEvidencePath(p);
+      } catch {
+        return String(p || "").trim();
+      }
+    }).filter(Boolean)) : null;
+    let stored;
+    try {
+      stored = loadStoredResult(root, resultId, identity);
+    } catch (error2) {
+      missingNotices.push(`Result ${resultId} unavailable: ${error2.message}`);
+      continue;
+    }
+    const records = Array.isArray(stored.records) ? stored.records : [];
+    for (const record2 of records) {
+      if (!record2 || typeof record2.path !== "string") continue;
+      let normalizedPath;
+      try {
+        normalizedPath = normalizeEvidencePath(record2.path);
+      } catch {
+        continue;
+      }
+      if (requestedPaths && !requestedPaths.has(normalizedPath)) continue;
+      const dedupeKey = `${normalizedPath}:${JSON.stringify(record2.ranges || [])}:${record2.contentHash || ""}`;
+      if (seenKeys.has(dedupeKey)) continue;
+      seenKeys.add(dedupeKey);
+      const fullPath = path33.resolve(identity.workspace, ...normalizedPath.split("/"));
+      let currentHash = null;
+      try {
+        const real = fs32.realpathSync(fullPath);
+        if (real === identity.workspace || real.startsWith(`${identity.workspace}${path33.sep}`)) {
+          const stat = fs32.statSync(real);
+          if (stat.isFile()) {
+            currentHash = crypto18.createHash("sha256").update(fs32.readFileSync(real)).digest("hex");
+          }
+        }
+      } catch {
+      }
+      if (!currentHash || currentHash !== record2.contentHash) {
+        staleNotices.push(`Path ${normalizedPath} changed since ${resultId}; inspect fresh slice`);
+        continue;
+      }
+      verifiedBlocks.push(
+        `### ${normalizedPath} ${JSON.stringify(record2.ranges || [])} (hash=${record2.contentHash})
+\`\`\`
+${String(record2.text || "").replace(/\n$/, "")}
+\`\`\``
+      );
+      verifiedMeta.push({
+        resultId,
+        path: normalizedPath,
+        ranges: record2.ranges || [],
+        contentHash: record2.contentHash
+      });
+    }
+  }
+  const sections = [];
+  if (verifiedBlocks.length || staleNotices.length || missingNotices.length) {
+    sections.push("## Verified Preloaded Evidence");
+    if (verifiedBlocks.length) sections.push(verifiedBlocks.join("\n\n"));
+    if (staleNotices.length) {
+      sections.push(staleNotices.map((n) => `- [STALE] ${n}`).join("\n"));
+    }
+    if (missingNotices.length) {
+      sections.push(missingNotices.map((n) => `- [MISSING] ${n}`).join("\n"));
+    }
+  }
+  return {
+    ok: staleNotices.length === 0 && missingNotices.length === 0,
+    text: sections.join("\n\n"),
+    verified: verifiedMeta,
+    stale: staleNotices,
+    missing: missingNotices
+  };
 }
 async function requestContextOS(action, args2 = {}, {
   projectRoot,
@@ -46311,18 +46704,22 @@ async function requestContextOS(action, args2 = {}, {
   if (args2.maxChars !== void 0 && (!Number.isSafeInteger(args2.maxChars) || args2.maxChars < 256)) {
     throw new RangeError("maxChars must be an integer of at least 256 Unicode characters.");
   }
+  if (action === "ask" && args2.delivery !== void 0 && !["inline", "handle-only"].includes(args2.delivery)) {
+    return artifactFailure(void 0, "INVALID_EVIDENCE_DELIVERY", "delivery must be 'inline' or 'handle-only'.");
+  }
   if (action === "ask" && own3(args2, "onboard")) {
-    if (!args2.onboard || typeof args2.onboard !== "object" || Array.isArray(args2.onboard) || Object.keys(args2.onboard).some((key3) => key3 !== "goal") || typeof args2.onboard.goal !== "string" || !args2.onboard.goal.trim() || Array.from(args2.onboard.goal).length > 160 || ["overview", "resultId", "inspect", "known", "request", "recovery", "blockId", "chainId"].some((key3) => own3(args2, key3))) {
+    const onboardSpec = typeof args2.onboard === "string" ? { goal: args2.onboard } : args2.onboard;
+    if (!onboardSpec || typeof onboardSpec !== "object" || Array.isArray(onboardSpec) || Object.keys(onboardSpec).some((key3) => key3 !== "goal") || typeof onboardSpec.goal !== "string" || !onboardSpec.goal.trim() || Array.from(onboardSpec.goal).length > 160 || ["overview", "resultId", "inspect", "known", "request", "recovery", "blockId", "chainId"].some((key3) => own3(args2, key3))) {
       return artifactFailure(void 0, "INVALID_GOAL_ONBOARDING", "onboard requires only a nonempty goal of at most 160 characters and must be a separate ask mode.");
     }
-    const result = await goalOnboarding(root, args2.onboard.goal.trim(), signal);
+    const result = await goalOnboarding(root, onboardSpec.goal.trim(), signal);
     const identity = workspaceIdentity(root);
     return storeResult(root, publicResult({
       ...result,
       workspace: identity.workspace,
       workspaceId: identity.workspaceId,
       records: result.records.map(publicArtifactRecord)
-    }));
+    }, args2.delivery));
   }
   if (action === "ask" && args2.overview === true) {
     if (["resultId", "inspect", "known", "request", "recovery", "blockId", "chainId"].some((key3) => own3(args2, key3))) {
@@ -46480,13 +46877,57 @@ async function requestContextOS(action, args2 = {}, {
     return response;
   } : null;
   if (action === "ask") {
+    if (!own3(args2, "inspect") && Array.isArray(args2.code)) {
+      args2 = { ...args2, inspect: args2.code };
+    }
+    if (own3(args2, "log") && args2.log && typeof args2.log === "object" && !own3(args2, "request") && !own3(args2, "inspect") && !args2.resultId) {
+      const logSpec = args2.log;
+      const receiptId = String(logSpec.receiptId || logSpec.id || logSpec.commandId || "").trim();
+      if (!receiptId || !/^[a-zA-Z0-9._-]+$/.test(receiptId)) {
+        return withAuditParent("ask", artifactFailure(void 0, "INVALID_LOG_RECEIPT", "log requires a valid receiptId/id."));
+      }
+      const logPath = path33.join(root, ".contextos", "logs", `${receiptId}.log`);
+      if (fs32.existsSync(logPath)) {
+        const text = fs32.readFileSync(logPath, "utf8");
+        const allLines = text.split(/\r?\n/);
+        const rawRange = logSpec.lines ?? logSpec.ranges;
+        let start2 = 1;
+        let end = Math.min(allLines.length, 200);
+        if (Array.isArray(rawRange) && rawRange.length === 2 && typeof rawRange[0] === "number" && typeof rawRange[1] === "number") {
+          start2 = Math.max(1, Math.floor(rawRange[0]));
+          end = Math.min(allLines.length, Math.max(start2, Math.floor(rawRange[1])));
+        } else if (Array.isArray(rawRange) && Array.isArray(rawRange[0]) && rawRange[0].length === 2) {
+          start2 = Math.max(1, Math.floor(rawRange[0][0]));
+          end = Math.min(allLines.length, Math.max(start2, Math.floor(rawRange[0][1])));
+        }
+        const sliceText = allLines.slice(start2 - 1, end).join("\n");
+        const identity = workspaceIdentity(root);
+        const resultId2 = `result-${crypto18.randomUUID()}`;
+        return storeResult(root, publicResult({
+          status: "completed",
+          workspace: identity.workspace,
+          workspaceId: identity.workspaceId,
+          answer: sliceText,
+          records: [{
+            id: `log:${receiptId}:${start2}-${end}`,
+            path: `.contextos/logs/${receiptId}.log`,
+            ranges: [{ start: start2, end }],
+            text: sliceText,
+            bytes: Buffer.byteLength(sliceText, "utf8"),
+            chars: Array.from(sliceText).length
+          }],
+          missing: []
+        }, args2.delivery), resultId2);
+      }
+    }
     const namedGraph = own3(args2, "blockId") || own3(args2, "chainId");
     if (namedGraph && ["resultId", "inspect", "recovery", "known"].some((key3) => own3(args2, key3))) return withAuditParent("ask", artifactFailure(void 0, "INVALID_GRAPH_NAVIGATION", "blockId/chainId must be a separate graph navigation or semantic request."));
     if (args2.resultId) {
       if (own3(args2, "known")) return withAuditParent("ask", artifactFailure(args2.resultId, "INVALID_EVIDENCE_RECOVERY", "resultId recovery cannot be combined with known; use known references on a new semantic request."));
       if (own3(args2, "inspect") && own3(args2, "recovery")) return withAuditParent("ask", artifactFailure(args2.resultId, "INVALID_EVIDENCE_RECOVERY", "Specify either inspect or recovery, not both."));
       const recovery = own3(args2, "recovery") ? args2.recovery : own3(args2, "inspect") ? { inspect: args2.inspect } : void 0;
-      return withAuditParent("ask", await readResult(root, args2.resultId, recovery));
+      const recovered = await readResult(root, args2.resultId, recovery);
+      return withAuditParent("ask", publicResult(recovered, args2.delivery));
     }
     if (own3(args2, "recovery")) return withAuditParent("ask", artifactFailure(void 0, "INVALID_EVIDENCE_RECOVERY", "recovery requires a stored resultId."));
     if (own3(args2, "known") && own3(args2, "inspect")) return withAuditParent("ask", artifactFailure(void 0, "INVALID_KNOWN_CONTEXT", "known is for semantic requests; exact inspect already reads its requested source ranges directly."));
@@ -46530,7 +46971,7 @@ async function requestContextOS(action, args2 = {}, {
     }));
     const resultId = `result-${crypto18.randomUUID()}`;
     await writeParentAudit("ask", { resultId });
-    return storeResult(root, publicResult(withAuditDiagnostics(persistedResult)), resultId);
+    return storeResult(root, publicResult(withAuditDiagnostics(persistedResult), args2.delivery), resultId);
   }
   if (action === "command") {
     const result = await command(args2, { projectRoot: root, transport: tracked, signal });
@@ -46561,6 +47002,12 @@ async function recordVisibleEvidenceDelivery(projectRoot, deliveries, deliveredT
 function sourceEvidenceBlock(record2) {
   return "\n\n" + record2.path + " " + JSON.stringify(record2.ranges || []) + " hash=" + (record2.contentHash || "unknown") + "\n" + (record2.text || "");
 }
+function sourceHandleBlock(record2) {
+  const bytes = record2.bytes ?? Buffer.byteLength(record2.text || "", "utf8");
+  const chars = record2.chars ?? Array.from(record2.text || "").length;
+  return `
+handle path=${record2.path || "unknown"} ranges=${JSON.stringify(record2.ranges || [])} hash=${record2.contentHash || "unknown"} bytes=${bytes} chars=${chars}`;
+}
 function publicAgentProgress(progress) {
   if (!progress || typeof progress !== "object") return null;
   const stage = typeof progress.stage === "string" && /^[a-z][a-z0-9-]{0,63}$/.test(progress.stage) ? progress.stage : "unknown";
@@ -46588,8 +47035,9 @@ member=${member.id} "${member.title}" kind=${member.kind}${member.responsibility
 flow=${link.from} -> ${link.to}${link.kind ? ` (${link.kind})` : ""}`)
   ].join("");
 }
-function renderRequestResult(result, { maxChars = result.navigation?.mode === "onboard" ? 32e3 : 12e3, onReportDelivered, onMessagesDelivered, onSourceDelivered, onSourceMetrics } = {}) {
+function renderRequestResult(result, { maxChars = result.navigation?.mode === "onboard" ? 32e3 : 12e3, delivery = result.delivery, onReportDelivered, onMessagesDelivered, onSourceDelivered, onSourceMetrics } = {}) {
   if (!Number.isSafeInteger(maxChars) || maxChars < 256) throw new RangeError("maxChars must be an integer of at least 256 Unicode characters.");
+  const handleOnly = delivery === "handle-only";
   const limit2 = maxChars;
   const chars = (value) => Array.from(value).length;
   const status = result.status || (result.ok === false ? "failed" : "completed");
@@ -46607,7 +47055,7 @@ function renderRequestResult(result, { maxChars = result.navigation?.mode === "o
   const missingFromResult = (Array.isArray(result.missing) ? result.missing : []).map(formatGap);
   const sourceBlocks = records.map((record2) => ({
     record: record2,
-    block: sourceEvidenceBlock(record2)
+    block: handleOnly ? sourceHandleBlock(record2) : sourceEvidenceBlock(record2)
   }));
   const reusedBlocks = reused.map((reference) => ({
     reference,
@@ -46633,11 +47081,12 @@ reused result=${reference.resultId || "unknown"} ${reference.path || "unknown"} 
   const omissionNoticeReserve = potentialOmissions.length ? chars(`
 omitted details[${potentialOmissions.length}]; larger maxChars`) : 0;
   const onboardNavigation = result.navigation?.mode === "onboard" ? [
-    "\nselection=" + JSON.stringify(result.navigation.selection) + "\nrelatedChains=" + JSON.stringify(result.navigation.relatedChains),
-    ...result.navigation.chainArchitecture ? [chainArchitectureText(result.navigation.chainArchitecture)] : [],
-    ...result.owners ? ["\nowners=" + JSON.stringify(result.owners)] : []
+    { label: "onboarding navigation", block: "\nselection=" + JSON.stringify(result.navigation.selection) + "\nrelatedChains=" + JSON.stringify(result.navigation.relatedChains), reserve: true },
+    ...result.navigation.chainArchitecture ? [{ label: "chain architecture", block: chainArchitectureText(result.navigation.chainArchitecture), reserve: true }] : [],
+    ...result.owners ? [{ label: "owners", block: "\nowners=" + JSON.stringify(result.owners), reserve: true }] : []
   ] : [];
-  const navigationReserve = onboardNavigation.length ? chars(onboardNavigation.join("")) + 64 : 0;
+  const rawNavigationReserve = onboardNavigation.filter((entry) => entry.reserve).reduce((sum, entry) => sum + chars(entry.block), 0);
+  const navigationReserve = rawNavigationReserve ? Math.min(Math.floor(limit2 * 0.45), rawNavigationReserve + 64) : 0;
   const coreLimit = limit2 - statusGrowthReserve - omissionNoticeReserve - navigationReserve;
   const selectedSources = /* @__PURE__ */ new Set();
   const selectedReused = /* @__PURE__ */ new Set();
@@ -46651,7 +47100,7 @@ omitted details[${potentialOmissions.length}]; larger maxChars`) : 0;
       ...missingFromResult
     ];
     const shownStatus = status === "failed" ? "failed" : gaps.length ? "partial" : status;
-    const statusLine = `status=${shownStatus}${shownStatus !== status ? ` resultStatus=${status}` : ""}${result.resultId ? ` result=${result.resultId}` : ""}${result.id ? ` id=${result.id}` : ""}`;
+    const statusLine = `status=${shownStatus}${shownStatus !== status ? ` resultStatus=${status}` : ""}${result.resultId ? ` result=${result.resultId}` : ""}${result.id ? ` id=${result.id}` : ""}${handleOnly ? " delivery=handle-only" : ""}`;
     const header = [
       statusLine,
       result.errorCode ? `error=${result.errorCode}` : null,
@@ -46689,8 +47138,11 @@ omitted details[${potentialOmissions.length}]; larger maxChars`) : 0;
   for (const { record: record2 } of sourceBlocks) {
     selectedSources.add(record2);
     const candidate = composeCore();
-    if (chars(candidate) <= coreLimit) deliveredSources.push(record2);
-    else selectedSources.delete(record2);
+    if (chars(candidate) <= coreLimit) {
+      if (!handleOnly) deliveredSources.push(record2);
+    } else {
+      selectedSources.delete(record2);
+    }
   }
   for (const { reference } of reusedBlocks) {
     selectedReused.add(reference);
@@ -46727,9 +47179,9 @@ L${item.line}: ${item.text}`;
   } else if (result.summary) appendOptional("summary", `
 summary=${result.summary}`);
   if (result.navigation?.mode === "onboard") {
-    appendOptional("onboarding navigation", onboardNavigation[0]);
-    if (onboardNavigation[1]) appendOptional("chain architecture", onboardNavigation[1]);
-    if (onboardNavigation[2]) appendOptional("owners", onboardNavigation[2]);
+    for (const entry of onboardNavigation) {
+      appendOptional(entry.label, entry.block);
+    }
   }
   if (result.analysis) appendOptional("analysis", `
 Micro interpretation: ${result.analysis}`);
@@ -46779,7 +47231,7 @@ omitted details[${omittedDetails.length}]; larger maxChars`
   if (omittedDetails.length > 0) gapReasons.push("display-budget");
   if (sourceBlocks.some((item) => !selectedSources.has(item.record)) || reusedBlocks.some((item) => !selectedReused.has(item.reference))) gapReasons.push("source-budget");
   const gapReason = renderedStatus === "partial" && gapReasons.length ? ` partialReason=${gapReasons.join("+")}` : "";
-  const renderedStatusLine = `status=${renderedStatus}${renderedStatus !== status ? ` resultStatus=${status}` : ""}${result.resultId ? ` result=${result.resultId}` : ""}${result.id ? ` id=${result.id}` : ""}${gapReason}`;
+  const renderedStatusLine = `status=${renderedStatus}${renderedStatus !== status ? ` resultStatus=${status}` : ""}${result.resultId ? ` result=${result.resultId}` : ""}${result.id ? ` id=${result.id}` : ""}${handleOnly ? " delivery=handle-only" : ""}${gapReason}`;
   output = output.replace(/^status=[^\n]*/, renderedStatusLine);
   if (chars(output) > limit2) throw new Error("Evidence renderer exceeded its character budget.");
   for (const record2 of deliveredSources) {
@@ -46802,15 +47254,16 @@ omitted details[${omittedDetails.length}]; larger maxChars`
 }
 var resultsDir, MAX_KNOWN_NOTE_CHARS, MAX_KNOWN_REFERENCES, MAX_ARTIFACT_CHAIN_DEPTH, MAX_ARTIFACT_CHAIN_COUNT, MAX_EXPANDED_ARTIFACT_RECORDS, HASH_PATTERN, own3, resultPath;
 var init_request_service = __esm({
-  "packages/orchestrator/src/request-service.mjs"() {
+  async "packages/orchestrator/src/request-service.mjs"() {
     init_profile();
-    init_project_overview();
+    await init_project_overview();
     init_command_service();
     init_micro_role_config();
     init_api_transports();
     init_api_task_budget();
     init_micro_broker();
     init_evidence_core();
+    init_session_store();
     resultsDir = (root) => path33.join(root, ".contextos", "request-results");
     MAX_KNOWN_NOTE_CHARS = 2e3;
     MAX_KNOWN_REFERENCES = 32;
@@ -48563,13 +49016,13 @@ ${text2}`;
   const changes = [
     ...creates.map((spec) => ({
       kind: "create",
-      path: spec?.path,
+      path: spec?.path ?? spec?.filePath ?? spec?.file ?? spec?.targetFile,
       content: spec?.content ?? "",
       overwrite: Boolean(spec?.overwrite)
     })),
     ...edits.map((spec) => ({
       kind: "edit",
-      path: spec?.path,
+      path: spec?.path ?? spec?.filePath ?? spec?.file ?? spec?.targetFile,
       target: stripInspectMetadata(spec?.target ?? spec?.targetContent ?? spec?.oldText),
       replacement: spec?.replacement ?? spec?.replacementContent ?? spec?.newText ?? (spec?.fullFile ? spec?.content : ""),
       startLine: spec?.startLine,
@@ -48580,7 +49033,7 @@ ${text2}`;
     })),
     ...deletes.map((spec) => ({
       kind: "delete",
-      path: spec?.path
+      path: spec?.path ?? spec?.filePath ?? spec?.file ?? spec?.targetFile
     }))
   ];
   const liveMutationPaths = uniquePaths(
@@ -48935,8 +49388,8 @@ async function inspectPipeline(ctx, input = {}) {
   }
   if (Array.isArray(input.inspect)) {
     const specs = input.inspect.map((entry) => typeof entry === "string" ? { path: entry } : entry).filter((entry) => entry && typeof entry === "object" && !Array.isArray(entry));
-    const arrayPaths = uniquePaths(specs.map((entry) => entry.path));
-    const arrayRanges = specs.filter((entry) => entry.path && entry.ranges !== void 0 && entry.ranges !== null && !(Array.isArray(entry.ranges) && entry.ranges.length === 0)).map((entry) => ({ path: entry.path, ranges: entry.ranges }));
+    const arrayPaths = uniquePaths(specs.map((entry) => entry.path ?? entry.filePath ?? entry.file));
+    const arrayRanges = specs.filter((entry) => (entry.path ?? entry.filePath ?? entry.file) && entry.ranges !== void 0 && entry.ranges !== null && !(Array.isArray(entry.ranges) && entry.ranges.length === 0)).map((entry) => ({ path: entry.path ?? entry.filePath ?? entry.file, ranges: entry.ranges }));
     const singleSymbol = specs.length === 1 ? specs[0].symbol : void 0;
     input = {
       ...input,
@@ -49712,16 +50165,76 @@ function pipelineStepJobId(result) {
   }
   return null;
 }
+function pipelineStepResultId(result) {
+  if (!result || typeof result !== "object") return null;
+  const outputs = [];
+  if (result.output !== void 0) outputs.push(result.output);
+  for (const item of Array.isArray(result.items) ? result.items : []) {
+    if (item && item.output !== void 0) outputs.push(item.output);
+  }
+  for (const output of outputs) {
+    if (output && typeof output === "object") {
+      const candidates = [output.resultId, output.data?.resultId, output.result?.resultId];
+      for (const candidate of candidates) {
+        if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+      }
+    }
+    const text = typeof output === "string" ? output : JSON.stringify(output ?? "");
+    const match = text.match(/(?:resultId|result)["'\s:=]{1,6}(result-[A-Za-z0-9._-]+)/) || text.match(/\b(result-[A-Za-z0-9._-]+)\b/);
+    if (match) return match[1];
+  }
+  return null;
+}
+function pipelineStepReceiptId(result) {
+  if (!result || typeof result !== "object") return null;
+  const outputs = [];
+  if (result.output !== void 0) outputs.push(result.output);
+  for (const item of Array.isArray(result.items) ? result.items : []) {
+    if (item && item.output !== void 0) outputs.push(item.output);
+  }
+  for (const output of outputs) {
+    if (output && typeof output === "object") {
+      const candidates = [
+        output.receiptId,
+        output.receipt?.id,
+        output.data?.receiptId,
+        output.data?.receipt?.id,
+        output.result?.receiptId
+      ];
+      for (const candidate of candidates) {
+        if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+      }
+    }
+    const text = typeof output === "string" ? output : JSON.stringify(output ?? "");
+    const match = text.match(/(?:receiptId|receipt)["'\s:=`]{1,6}(receipt-[A-Za-z0-9._-]+)/) || text.match(/\b(receipt-[A-Za-z0-9._-]+)\b/) || text.match(/\breceipt=([A-Za-z0-9._-]+)/);
+    if (match) return match[1];
+  }
+  return null;
+}
 function resolvePipelineStepReferences(value, results) {
   if (typeof value === "string") {
     const match = value.trim().match(PIPELINE_STEP_REFERENCE);
     if (!match) return value;
     const stepNumber = Number(match[1] || match[4]);
     const field = String(match[2] || match[3] || "").toLowerCase();
-    if (!Number.isFinite(stepNumber) || stepNumber < 1 || !["id", "job", "jobid"].includes(field)) {
-      throw new Error(`PIPELINE_STEP_REFERENCE_UNSUPPORTED: '${value.trim()}' resolves only an earlier step job id.`);
+    if (!Number.isFinite(stepNumber) || stepNumber < 1 || !["id", "job", "jobid", "result", "resultid", "receipt", "receiptid"].includes(field)) {
+      throw new Error(`PIPELINE_STEP_REFERENCE_UNSUPPORTED: '${value.trim()}' resolves only an earlier step jobId, resultId, or receiptId.`);
     }
     const entry = (Array.isArray(results) ? results : []).find((result) => result && result.step === stepNumber);
+    if (["result", "resultid"].includes(field)) {
+      const resultId = pipelineStepResultId(entry);
+      if (!resultId) {
+        throw new Error(`PIPELINE_STEP_REFERENCE_UNRESOLVED: step ${stepNumber} produced no resultId yet; reference only earlier completed steps.`);
+      }
+      return resultId;
+    }
+    if (["receipt", "receiptid"].includes(field)) {
+      const receiptId = pipelineStepReceiptId(entry);
+      if (!receiptId) {
+        throw new Error(`PIPELINE_STEP_REFERENCE_UNRESOLVED: step ${stepNumber} produced no receiptId yet; reference only earlier completed steps.`);
+      }
+      return receiptId;
+    }
     const jobId = pipelineStepJobId(entry);
     if (!jobId) {
       throw new Error(`PIPELINE_STEP_REFERENCE_UNRESOLVED: step ${stepNumber} produced no job id yet; reference only earlier completed steps.`);
@@ -49839,7 +50352,20 @@ function normalizeAction(action, projectRoot) {
     } else if ("explore" in action) {
       tool = "explore";
       args2 = typeof action.explore === "string" ? { intent: action.explore } : { ...action.explore };
+    } else if ("micro" in action) {
+      tool = "micro";
+      args2 = typeof action.micro === "string" ? { prompt: action.micro } : { ...action.micro };
+    } else if ("agent" in action) {
+      tool = "agent";
+      args2 = typeof action.agent === "string" ? { task: action.agent } : { ...action.agent };
     }
+  }
+  if (tool === "micro") {
+    const microArgs = args2 && typeof args2 === "object" && !Array.isArray(args2) ? { ...args2 } : {};
+    const microAction = microArgs.action || "run";
+    delete microArgs.action;
+    tool = "ops";
+    args2 = { capability: "micro", action: microAction, args: microArgs };
   }
   if (tool === "command" || tool === "run" || tool === "run_command") {
     const commandArgs = args2 && typeof args2 === "object" && !Array.isArray(args2) ? args2 : {};
@@ -50282,9 +50808,9 @@ async function pipelinePipeline(ctx, input = {}) {
   }
   const boundedWait = (tool, actionInput) => {
     if (!actionInput || typeof actionInput !== "object" || Array.isArray(actionInput)) return actionInput;
-    const waitable = tool === "integrate" || tool === "agent" && (actionInput.action === "wait" || actionInput.action === "messages");
+    const waitable = tool === "integrate" || tool === "agent" && (actionInput.action === "wait" || actionInput.action === "messages" || (!actionInput.action || actionInput.action === "run") && actionInput.background !== true);
     if (!waitable) return actionInput;
-    const requested = Number.isFinite(Number(actionInput.waitMs)) ? Math.max(0, Math.floor(Number(actionInput.waitMs))) : tool === "integrate" ? 28e4 : 0;
+    const requested = Number.isFinite(Number(actionInput.waitMs)) ? Math.max(0, Math.floor(Number(actionInput.waitMs))) : tool === "integrate" ? 16e4 : tool === "agent" && (!actionInput.action || actionInput.action === "run") ? 17e4 : 0;
     if (!requested) return actionInput;
     const remaining = Math.max(0, maxDurationMs - (Date.now() - batchStartedAt));
     const bounded = Math.max(1, Math.min(requested, remaining));
@@ -50920,11 +51446,11 @@ async function integratePipeline(ctx, input = {}) {
       '- Next: dispatch it with execution:"implement", context.allowedPaths and context.acceptance; add workspace only for an isolated copy.'
     ].join("\n");
   }
-  const hostWindowMs = Math.min(29e4, Math.max(5e3, Number(input.maxDurationMs) || 29e4));
+  const hostWindowMs = Math.min(17e4, Math.max(5e3, Number(input.maxDurationMs) || 17e4));
   const deadline = Date.now() + hostWindowMs;
   if (job.status !== "completed") {
     const waitBudget = Math.max(0, deadline - Date.now() - 1e4);
-    const waitMs = Math.min(28e4, Math.max(0, Number(input.waitMs) || 28e4), waitBudget);
+    const waitMs = Math.min(16e4, Math.max(0, Number(input.waitMs) || 16e4), waitBudget);
     const startedWait = Date.now();
     while (job && job.status !== "completed" && !["failed", "cancelled"].includes(job.status) && Date.now() - startedWait < waitMs) {
       await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, waitMs - (Date.now() - startedWait)))));
@@ -51109,7 +51635,7 @@ var init_pipelines = __esm({
     init_sanitizer();
     init_micro_delivery();
     await init_code_tools();
-    init_request_service();
+    await init_request_service();
     OUTLINE_CLIP = 1200;
     INSPECT_INLINE_MAX_CHARS = 2500;
     INSPECT_BATCH_INLINE_MAX_CHARS = 32e3;
@@ -51128,7 +51654,7 @@ var init_pipelines = __esm({
     SEARCH_CLIP = 360;
     PIPELINE_RECEIPT_OUTPUT_CLIP = 2600;
     MICRO_TRIAGE_MIN_CHARS = 2e3;
-    MCP_CONTINUATION_MS = 29e4;
+    MCP_CONTINUATION_MS = 17e4;
     PROCESS_VERIFY_MODES = /* @__PURE__ */ new Set(["serve", "list", "status", "logs", "stop", "clear", "query"]);
     INDEX_IMPORT_EXTENSIONS = [".mjs", ".js", ".cjs", ".ts", ".tsx", ".jsx", ".json"];
     READ_METADATA_LINE = /^\/\/ .+ \[L\d+-L\d+\] \(hash: [0-9a-f]+\)$/;
@@ -52922,7 +53448,7 @@ ${resolvedInput.input}
   };
   const continuationFailure = (reason) => {
     const partialContent = String(finalChoice?.message?.content || lastReasoning || "").trim();
-    const guidance = `Continue with micro({sessionAction:"send", sessionId:"${sessionId}", task:"Continue the previous task from its partial state."}) to refresh the 290s window.`;
+    const guidance = `Continue with micro({sessionAction:"send", sessionId:"${sessionId}", task:"Continue the previous task from its partial state."}) to refresh the 170s window.`;
     return {
       ok: false,
       status: "partial",
@@ -53532,7 +54058,7 @@ var init_micro_client = __esm({
     init_micro_provider();
     init_micro_cli();
     await init_micro_preload();
-    HOST_CONTINUATION_MS = 29e4;
+    HOST_CONTINUATION_MS = 17e4;
     MICRO_SKILL_FILES = Object.freeze([
       ["ContextOS skill guidance", "contextos/SKILL.md"],
       ["ContextOS operations skill guidance", "contextos-ops/SKILL.md"]
@@ -54017,16 +54543,16 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
   if (action === "get") return compactJob(readMicroJob(projectRoot, jobId));
   if (action === "list") return { status: "completed", jobs: listMicroJobs(projectRoot, args2).map(compactJob) };
   if (action === "cancel") {
-    const job = readMicroJob(projectRoot, jobId);
-    if (!job) return { status: "missing", cancellationRequested: false, id: jobId ?? null };
-    if (TERMINAL_JOB_STATUSES2.has(job.status)) {
-      return { ...compactJob(job), cancellationRequested: false, alreadyTerminal: true };
+    const job2 = readMicroJob(projectRoot, jobId);
+    if (!job2) return { status: "missing", cancellationRequested: false, id: jobId ?? null };
+    if (TERMINAL_JOB_STATUSES2.has(job2.status)) {
+      return { ...compactJob(job2), cancellationRequested: false, alreadyTerminal: true };
     }
     const controller2 = active2.get(key2(projectRoot, jobId));
     controller2?.abort();
     const requested = requestMicroJobCancellation(projectRoot, jobId);
     let signalled = false;
-    const leasePid = job.leasePid;
+    const leasePid = job2.leasePid;
     if (process.platform !== "win32" && Number.isInteger(leasePid) && leasePid > 0 && leasePid !== process.pid && processAlive(leasePid)) {
       try {
         killProcess(leasePid, "SIGTERM");
@@ -54034,7 +54560,7 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
       } catch {
       }
     }
-    const updated = requested.job || job;
+    const updated = requested.job || job2;
     return {
       ...compactJob(updated),
       cancellationRequested: Boolean(controller2) || requested.requested || signalled,
@@ -54042,11 +54568,11 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
     };
   }
   if (action === "wait") {
-    const waitMs = Math.min(29e4, Math.max(0, Number(args2.waitMs) || 0));
+    const waitMs = Math.min(17e4, Math.max(0, Number(args2.waitMs) || 0));
     const startedWait = Date.now();
     const terminalStatuses = /* @__PURE__ */ new Set(["completed", "failed", "cancelled", "partial"]);
-    let job = readMicroJob(projectRoot, jobId);
-    if (!job) {
+    let job2 = readMicroJob(projectRoot, jobId);
+    if (!job2) {
       return {
         id: jobId ?? null,
         status: "missing",
@@ -54056,15 +54582,15 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
         guidance: 'Do not wait or re-dispatch blindly; verify the id with agent({action:"list"}) or start a new job.'
       };
     }
-    while (!terminalStatuses.has(job.status) && Date.now() - startedWait < waitMs && !signal?.aborted) {
+    while (!terminalStatuses.has(job2.status) && Date.now() - startedWait < waitMs && !signal?.aborted) {
       await new Promise((resolve) => setTimeout(resolve, Math.min(250, Math.max(0, waitMs - (Date.now() - startedWait)))));
-      job = readMicroJob(projectRoot, jobId);
+      job2 = readMicroJob(projectRoot, jobId);
     }
     const snapshot2 = {
-      ...compactJob(job),
-      jobStatus: job.status,
+      ...compactJob(job2),
+      jobStatus: job2.status,
       waitedMs: Date.now() - startedWait,
-      terminal: terminalStatuses.has(job.status)
+      terminal: terminalStatuses.has(job2.status)
     };
     if (!snapshot2.terminal) {
       snapshot2.status = "partial";
@@ -54072,8 +54598,8 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
       snapshot2.window = "expired";
       snapshot2.doNotRedispatch = true;
       snapshot2.resume = { kind: "agent", action: "wait", jobId };
-      snapshot2.continueWith = { action: "wait", jobId, waitMs: 29e4 };
-      snapshot2.guidance = `Wait window closed while job ${jobId} is still ${job.status}; do not dispatch the same task again. Retry agent({action:"wait", jobId:"${jobId}", waitMs:290000}), or let the next integrate({jobId:"${jobId}"}) call collect it.`;
+      snapshot2.continueWith = { action: "wait", jobId, waitMs: 17e4 };
+      snapshot2.guidance = `Wait window closed while job ${jobId} is still ${job2.status}; do not dispatch the same task again. Retry agent({action:"wait", jobId:"${jobId}", waitMs:170000}), or let the next integrate({jobId:"${jobId}"}) call collect it.`;
     }
     return snapshot2;
   }
@@ -54091,7 +54617,7 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
     const worker = process.env.CONTEXTOS_WORKER_MODE === "1";
     if (worker && jobId !== process.env.CONTEXTOS_MICRO_REPORT_JOB) throw new Error("Message/report id must match the assigned CLI task.");
     const root = worker ? process.env.CONTEXTOS_MICRO_REPORT_ROOT : projectRoot;
-    const waitMs = Math.min(29e4, Math.max(0, Number(args2.waitMs) || 0));
+    const waitMs = Math.min(17e4, Math.max(0, Number(args2.waitMs) || 0));
     return action === "messages" ? {
       status: "completed",
       jobStatus: readMicroJob(root, jobId)?.status || null,
@@ -54104,8 +54630,8 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
   if (action === "batch") {
     if (!Array.isArray(args2.tasks)) throw new Error("Agent batch requires tasks.");
     const jobs = await Promise.all(args2.tasks.map((task) => executeAgent({ ...args2, ...task, action: "run", tasks: void 0 }, { projectRoot, adapter, name: name2, roles, runner, onUsage })));
-    const hasTerminalFailure = jobs.some((job) => ["failed", "cancelled", "partial"].includes(job.status));
-    return { status: hasTerminalFailure ? "partial" : jobs.some((job) => job.status === "running") ? "running" : "completed", jobs };
+    const hasTerminalFailure = jobs.some((job2) => ["failed", "cancelled", "partial"].includes(job2.status));
+    return { status: hasTerminalFailure ? "partial" : jobs.some((job2) => job2.status === "running") ? "running" : "completed", jobs };
   }
   if (action !== "run") throw new Error(`Unknown CLI task action '${action}'. Available: run, wait, get, list, cancel, send, messages, report, batch.`);
   if (process.env.CONTEXTOS_WORKER_MODE === "1") throw new Error("A CLI task can request evidence with ask, but cannot delegate another CLI task.");
@@ -54214,8 +54740,23 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
     let usageCallbackAttempted = false;
     try {
       try {
-        result = await runner({ provider: "cli", cli: adapter, model: adapter.model, thinking: adapter.thinking }, {
+        const evidenceRefs = args2.context?.evidenceRefs ?? args2.evidenceRefs;
+        const hydratedEvidence = Array.isArray(evidenceRefs) && evidenceRefs.length ? hydrateVerifiedEvidenceRefs(projectRoot, evidenceRefs) : null;
+        const rawTask = typeof args2.task === "string" ? args2.task.trim() : "";
+        const rawPrompt = typeof args2.prompt === "string" ? args2.prompt.trim() : "";
+        const baseTask = rawTask && rawPrompt && rawTask !== rawPrompt ? `${rawTask}
+
+${rawPrompt}` : rawTask || rawPrompt;
+        const hydratedTask = hydratedEvidence?.text ? `${baseTask}
+
+${hydratedEvidence.text}` : baseTask;
+        const runnerArgs = hydratedTask !== (args2.task || args2.prompt || "") ? {
           ...args2,
+          task: hydratedTask,
+          prompt: hydratedTask
+        } : args2;
+        result = await runner({ provider: "cli", cli: adapter, model: adapter.model, thinking: adapter.thinking }, {
+          ...runnerArgs,
           delivery: deliveryMode,
           provider: "cli",
           projectRoot,
@@ -54282,18 +54823,26 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
         report.blockers = [...report.blockers, deniedDetail].slice(0, 50);
         report.needsHost = true;
       }
-      let job = updateMicroJob(projectRoot, id, {
+      const resolvedCliSessionId = result?.cliSessionId || (status === "cancelled" ? args2.cliSessionId || previousJob?.cliSessionId : null) || null;
+      let job2 = updateMicroJob(projectRoot, id, {
         status,
         progress: { ...latestProgress, stage: status, lastActivityAt: (/* @__PURE__ */ new Date()).toISOString() },
         report,
         error: errorMessage,
-        cliSessionId: result?.cliSessionId || (status === "cancelled" ? args2.cliSessionId || previousJob?.cliSessionId : null) || null,
+        cliSessionId: resolvedCliSessionId,
         deniedActions: result?.deniedActions || null,
         delivery: deliveryMode,
         providerUsageComplete: result?.providerUsageComplete ?? null,
         usageReceipt,
         cliUsage
       });
+      if (resolvedCliSessionId) {
+        try {
+          const store = new SessionStore({ projectRoot });
+          store.recordMemoryHandle({ kind: "cli", sessionId: resolvedCliSessionId });
+        } catch {
+        }
+      }
       const shouldQueue = status !== "cancelled" && (!completed || deliveryMode === "defer" || deliveryMode === "auto" && report.needsHost === true);
       let deliveryAccounting = { status: "not-requested" };
       if (shouldQueue) {
@@ -54319,11 +54868,11 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
         }
       }
       try {
-        job = updateMicroJob(projectRoot, id, { usageAccounting, deliveryAccounting }) || { ...job, usageAccounting, deliveryAccounting };
+        job2 = updateMicroJob(projectRoot, id, { usageAccounting, deliveryAccounting }) || { ...job2, usageAccounting, deliveryAccounting };
       } catch {
-        job = { ...job, usageAccounting: usageGap("The task result persisted, but its metering status could not be persisted."), deliveryAccounting };
+        job2 = { ...job2, usageAccounting: usageGap("The task result persisted, but its metering status could not be persisted."), deliveryAccounting };
       }
-      const response = compactJob(job);
+      const response = compactJob(job2);
       const shouldDeferReport = completed && (deliveryMode === "defer" || deliveryMode === "errors-only" || deliveryMode === "auto" && report.needsHost === true);
       if (shouldDeferReport && deliveryAccounting.status !== "gap") {
         response.report = null;
@@ -54331,7 +54880,7 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
       }
       return response;
     } catch (error2) {
-      if (args2.background !== true) throw error2;
+      if (args2.background !== true && !detachedToBackground) throw error2;
       try {
         const existing = readMicroJob(projectRoot, id);
         if (!existing) return;
@@ -54374,14 +54923,14 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
           answer: cancelled ? "CLI task was cancelled." : `Background CLI task failed before its result could be saved: ${errorMessage}`,
           needsHost: !cancelled
         }, { jobId: id, status: terminalStatus });
-        let job = updateMicroJob(projectRoot, id, {
+        let job2 = updateMicroJob(projectRoot, id, {
           ...stillRunning ? { status: terminalStatus, report, error: errorMessage } : {},
           ...!existing.usageReceipt ? { usageReceipt: failedUsageReceipt } : {},
           usageAccounting: failedUsageAccounting,
           executionAccounting: { status: "gap", reason: "Background task processing terminated unexpectedly after launch." }
         }) || existing;
-        let deliveryAccounting = job.deliveryAccounting || { status: "not-requested" };
-        if (!cancelled && (stillRunning || job.status === "failed")) {
+        let deliveryAccounting = job2.deliveryAccounting || { status: "not-requested" };
+        if (!cancelled && (stillRunning || job2.status === "failed")) {
           try {
             const queued = enqueueMicroDelivery(projectRoot, { deliveryId: id, receiptId: id, content: JSON.stringify(report), hostSessionId: null });
             deliveryAccounting = { status: queued.duplicate ? "already-queued" : "queued", deliveryId: id };
@@ -54402,39 +54951,74 @@ async function executeAgent(args2, { projectRoot, adapter, name: name2, roles, r
       clearMicroJobCancellation(projectRoot, id);
     }
   };
-  if (args2.background === true) {
-    void run2().catch((error2) => {
-      const message = error2?.message || String(error2);
-      try {
-        const existing = readMicroJob(projectRoot, id);
-        if (!existing) return;
-        const isStillRunning = existing.status === "running";
-        const cancelled = Boolean(existing.cancelRequestedAt) || controller.signal.aborted;
-        const terminalStatus = cancelled ? "cancelled" : "failed";
-        const report = existing.report || normalizeAgentReport({
-          answer: cancelled ? "CLI task was cancelled." : `Background CLI task failed before its result could be saved: ${message}`,
-          needsHost: !cancelled
-        }, { jobId: id, status: terminalStatus });
-        let job = updateMicroJob(projectRoot, id, {
-          ...isStillRunning ? { status: terminalStatus, report, error: cancelled ? "CLI task was cancelled." : message } : {},
-          executionAccounting: { status: "gap", reason: "Background task processing terminated unexpectedly after launch." }
-        }) || existing;
-        let deliveryAccounting = job.deliveryAccounting || { status: "not-requested" };
-        if (!cancelled && (isStillRunning || job.status === "failed")) {
-          try {
-            const queued = enqueueMicroDelivery(projectRoot, { deliveryId: id, receiptId: id, content: JSON.stringify(report), hostSessionId: null });
-            deliveryAccounting = { status: queued.duplicate ? "already-queued" : "queued", deliveryId: id };
-          } catch {
-            deliveryAccounting = { status: "gap", reason: "The background task failure was saved, but its error report could not be queued." };
-          }
+  let detachedToBackground = false;
+  const onBackgroundError = (error2) => {
+    const message = error2?.message || String(error2);
+    try {
+      const existing = readMicroJob(projectRoot, id);
+      if (!existing) return;
+      const isStillRunning = existing.status === "running";
+      const cancelled = Boolean(existing.cancelRequestedAt) || controller.signal.aborted;
+      const terminalStatus = cancelled ? "cancelled" : "failed";
+      const report = existing.report || normalizeAgentReport({
+        answer: cancelled ? "CLI task was cancelled." : `Background CLI task failed before its result could be saved: ${message}`,
+        needsHost: !cancelled
+      }, { jobId: id, status: terminalStatus });
+      let job2 = updateMicroJob(projectRoot, id, {
+        ...isStillRunning ? { status: terminalStatus, report, error: cancelled ? "CLI task was cancelled." : message } : {},
+        executionAccounting: { status: "gap", reason: "Background task processing terminated unexpectedly after launch." }
+      }) || existing;
+      let deliveryAccounting = job2.deliveryAccounting || { status: "not-requested" };
+      if (!cancelled && (isStillRunning || job2.status === "failed")) {
+        try {
+          const queued = enqueueMicroDelivery(projectRoot, { deliveryId: id, receiptId: id, content: JSON.stringify(report), hostSessionId: null });
+          deliveryAccounting = { status: queued.duplicate ? "already-queued" : "queued", deliveryId: id };
+        } catch {
+          deliveryAccounting = { status: "gap", reason: "The background task failure was saved, but its error report could not be queued." };
         }
-        updateMicroJob(projectRoot, id, { deliveryAccounting });
-      } catch {
       }
-    });
+      updateMicroJob(projectRoot, id, { deliveryAccounting });
+    } catch {
+    }
+  };
+  if (args2.background === true) {
+    void run2().catch(onBackgroundError);
     return { id, status: "running" };
   }
-  return run2();
+  if (workerResume) {
+    return run2();
+  }
+  const syncWaitMs = Math.min(17e4, Math.max(1, Number(args2.waitMs) || 17e4));
+  const runPromise = run2();
+  let syncTimer = null;
+  const raced = await Promise.race([
+    runPromise.then((res) => ({ done: true, res })),
+    new Promise((resolve) => {
+      syncTimer = setTimeout(() => resolve({ done: false }), syncWaitMs);
+      syncTimer.unref?.();
+    })
+  ]).finally(() => {
+    if (syncTimer) clearTimeout(syncTimer);
+  });
+  if (raced.done) {
+    return raced.res;
+  }
+  detachedToBackground = true;
+  void runPromise.catch(onBackgroundError);
+  const job = readMicroJob(projectRoot, id);
+  return {
+    ...job ? compactJob(job) : { id, status: "running" },
+    status: "partial",
+    partial: true,
+    jobStatus: job?.status || "running",
+    waitedMs: syncWaitMs,
+    terminal: false,
+    window: "expired",
+    doNotRedispatch: true,
+    resume: { kind: "agent", action: "wait", jobId: id },
+    continueWith: { action: "wait", jobId: id, waitMs: 17e4 },
+    guidance: `Wait window closed while job ${id} is still ${job?.status || "running"}; do not dispatch the same task again. Retry agent({action:"wait", jobId:"${id}", waitMs:170000}), or let the next integrate({jobId:"${id}"}) call collect it.`
+  };
 }
 var active2, key2, TERMINAL_JOB_STATUSES2, CANCEL_POLL_MS, compactJob, IN_PLACE_SNAPSHOT_MAX_FILES, IN_PLACE_SNAPSHOT_MAX_BYTES;
 var init_agent_service = __esm({
@@ -54443,6 +55027,8 @@ var init_agent_service = __esm({
     init_micro_agent_report();
     init_micro_delivery();
     init_micro_mailbox();
+    init_session_store();
+    await init_request_service();
     active2 = /* @__PURE__ */ new Map();
     key2 = (root, id) => `${root}\0${id}`;
     TERMINAL_JOB_STATUSES2 = /* @__PURE__ */ new Set(["completed", "failed", "cancelled", "partial"]);
@@ -56092,6 +56678,30 @@ function microPreloadSpec(args2 = {}) {
   }
   return null;
 }
+function hydrateMicroTaskArgs(projectRoot, taskArgs = {}) {
+  if (!taskArgs || typeof taskArgs !== "object") return taskArgs;
+  const evidenceRefs = taskArgs.context?.evidenceRefs ?? taskArgs.evidenceRefs;
+  if (!Array.isArray(evidenceRefs) || !evidenceRefs.length) return taskArgs;
+  const hydrated = hydrateVerifiedEvidenceRefs(projectRoot, evidenceRefs);
+  if (!hydrated.text) return taskArgs;
+  const next = { ...taskArgs };
+  if (typeof next.firstTask === "string" && next.firstTask.trim()) {
+    next.firstTask = `${next.firstTask}
+
+${hydrated.text}`;
+  } else if (typeof next.task === "string" && next.task.trim()) {
+    next.task = `${next.task}
+
+${hydrated.text}`;
+  } else if (typeof next.prompt === "string" && next.prompt.trim()) {
+    next.prompt = `${next.prompt}
+
+${hydrated.text}`;
+  } else {
+    next.prompt = hydrated.text;
+  }
+  return next;
+}
 function microPreloadFailure(preload, requestedDelivery = null) {
   return {
     ok: false,
@@ -56224,6 +56834,10 @@ function retainContinuableMicroSession(ctx, args2, result, projected, { withOS =
       },
       receiptId: projected?.receiptId || null
     });
+    try {
+      ctx.store?.recordMemoryHandle?.({ kind: "micro", sessionId: completed.id });
+    } catch (_) {
+    }
     return {
       status: "partial",
       session: completed,
@@ -56290,6 +56904,12 @@ async function runMicroSessionTurn(ctx, args2, session) {
       result: result.ok ? result : { ...result, content: projected.content || result.content || result.guidance || "Partial Micro work retained." },
       receiptId: projected.receiptId
     }) : failMicroTurn(ctx.projectRoot, startedSession.id);
+    if (result.ok || result.partial) {
+      try {
+        ctx.store?.recordMemoryHandle?.({ kind: "micro", sessionId: nextSession.id });
+      } catch (_) {
+      }
+    }
     return { ...projected, session: nextSession };
   } catch (error2) {
     failMicroTurn(ctx.projectRoot, startedSession.id);
@@ -56343,7 +56963,7 @@ function startBackgroundMicroRun(ctx, { args: args2, microConfig, preload, actio
       });
       const retained = retainContinuableMicroSession(ctx, args2, result, projected, { withOS: effectiveWithOS });
       if (projected.status === "partial") {
-        const content = projected.guidance || projected.content || "Micro background job reached the 290s continuation window.";
+        const content = projected.guidance || projected.content || "Micro background job reached the 170s continuation window.";
         enqueueMicroDelivery(ctx.projectRoot, {
           deliveryId: jobId,
           receiptId: projected.receiptId || jobId,
@@ -56656,7 +57276,7 @@ var init_src8 = __esm({
     await init_pipelines();
     init_command_service();
     await init_agent_service();
-    init_request_service();
+    await init_request_service();
     await init_micro_client();
     await init_micro_preload();
     init_micro_session();
@@ -56974,6 +57594,9 @@ var init_src8 = __esm({
               }
               case "ops":
                 result = await this._ops(ctx, input);
+                break;
+              case "micro":
+                result = await this._ops(ctx, { capability: "micro", action: input.action || "run", args: input });
                 break;
               case "pipeline":
                 result = await pipelinePipeline(ctx, input);
@@ -57323,6 +57946,7 @@ var init_src8 = __esm({
                 }
                 return render(diagnostic);
               }
+              const summary = store.summary(session);
               return render({
                 id: session.id,
                 status: session.status,
@@ -57333,7 +57957,9 @@ var init_src8 = __esm({
                   exitCode: receipt.exitCode,
                   status: receipt.status
                 })),
-                notes: (session.notes || []).slice(-3).map((entry) => entry.text)
+                notes: (session.notes || []).slice(-3).map((entry) => entry.text),
+                memoryHandles: summary.memoryHandles || [],
+                tracking: summary.tracking || null
               });
             }
             if (action === "status" || args2.full !== true) return render(store.summary());
@@ -57648,6 +58274,9 @@ var init_src8 = __esm({
             }
             const microWithOS = shouldEnableMicroOS(args2);
             const caps = microWithOS ? ctx.caps : null;
+            if (args2.context?.evidenceRefs || args2.evidenceRefs) {
+              Object.assign(args2, hydrateMicroTaskArgs(this.projectRoot, args2));
+            }
             if (args2.sessionAction) {
               const requestedSessionAction = String(args2.sessionAction).toLowerCase();
               const sessionAction = requestedSessionAction === "continue" || requestedSessionAction === "resume" ? "send" : requestedSessionAction;
@@ -57688,6 +58317,10 @@ var init_src8 = __esm({
                   withOS: microWithOS,
                   preload: preload2
                 });
+                try {
+                  store.recordMemoryHandle({ kind: "micro", sessionId: session.id });
+                } catch (_) {
+                }
                 if (args2.runFirst === true) {
                   const firstTurn = await runMicroSessionTurn(ctx, args2, session);
                   return render({
@@ -57731,12 +58364,13 @@ var init_src8 = __esm({
               const taskInputs = Array.isArray(args2.tasks) ? args2.tasks : [];
               const batchConcurrency = normalizeMicroBatchConcurrency(args2.maxConcurrency);
               const tasks = await mapWithConcurrency2(taskInputs, batchConcurrency, async (task, index) => {
-                const preloadSpec2 = microPreloadSpec(task);
+                const hydratedTask = task.context?.evidenceRefs || task.evidenceRefs ? hydrateMicroTaskArgs(this.projectRoot, task) : task;
+                const preloadSpec2 = microPreloadSpec(hydratedTask);
                 return {
-                  ...task,
-                  id: task.id || `task-${index + 1}`,
-                  withOS: shouldEnableMicroOS({ ...args2, ...task }),
-                  preparePreload: preloadSpec2 ? () => runTaskMicroPreload(ctx, preloadSpec2, { ...args2, ...task }) : void 0
+                  ...hydratedTask,
+                  id: hydratedTask.id || `task-${index + 1}`,
+                  withOS: shouldEnableMicroOS({ ...args2, ...hydratedTask }),
+                  preparePreload: preloadSpec2 ? () => runTaskMicroPreload(ctx, preloadSpec2, { ...args2, ...hydratedTask }) : void 0
                 };
               });
               const batchNeedsCaps = tasks.some((task) => Boolean(task.withOS));
@@ -74796,7 +75430,7 @@ async function runDoctor(input) {
 }
 
 // packages/mcp/src/v3-server.mjs
-init_request_service();
+await init_request_service();
 init_role_usage_ledger();
 await init_agent_service();
 
@@ -75062,7 +75696,7 @@ function createV3Server() {
           return { content: [{ type: "text", text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] };
         }
         if (["ask", "command", "agent"].includes(input.action)) {
-          for (const field of ["overview", "onboard", "request", "known", "purpose", "blockId", "chainId", "inspect", "command", "cwd", "focus", "background", "id", "resultId", "maxChars", "timeoutMs", "task", "workspace", "context", "adapter"]) {
+          for (const field of ["overview", "onboard", "request", "known", "purpose", "blockId", "chainId", "inspect", "delivery", "command", "cwd", "focus", "background", "id", "resultId", "maxChars", "timeoutMs", "task", "workspace", "context", "adapter"]) {
             if (input[field] !== void 0) args2[field] = input[field];
           }
           const root = requireProjectRoot(input.projectRoot);
@@ -75123,6 +75757,7 @@ function createV3Server() {
               ...data.jobStatus ? { jobStatus: data.jobStatus } : {},
               ...data.errorCode ? { errorCode: data.errorCode } : {},
               ...data.resultId ? { resultId: data.resultId } : {},
+              ...data.delivery === "handle-only" ? { delivery: "handle-only", handles: data.handles || [] } : {},
               ...sourceDelivery ? { sourceDelivery: sourceDelivery.recorded ? "recorded" : "unrecorded" } : {},
               ...accounting ? { accounting } : {},
               ...data.id || data.jobId ? { id: data.id || data.jobId } : {},

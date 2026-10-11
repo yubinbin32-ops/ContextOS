@@ -205,7 +205,7 @@ export function createV3Server() {
         return { content: [{ type: 'text', text: typeof data === 'string' ? data : JSON.stringify(data, null, 2) }] };
       }
       if (['ask', 'command', 'agent'].includes(input.action)) {
-        for (const field of ['overview', 'onboard', 'request', 'known', 'purpose', 'blockId', 'chainId', 'inspect', 'command', 'cwd', 'focus', 'background', 'id', 'resultId', 'maxChars', 'timeoutMs', 'task', 'workspace', 'context', 'adapter']) {
+        for (const field of ['overview', 'onboard', 'request', 'known', 'purpose', 'blockId', 'chainId', 'inspect', 'delivery', 'command', 'cwd', 'focus', 'background', 'id', 'resultId', 'maxChars', 'timeoutMs', 'task', 'workspace', 'context', 'adapter']) {
           if (input[field] !== undefined) args[field] = input[field];
         }
         const root = requireProjectRoot(input.projectRoot);
@@ -272,6 +272,7 @@ export function createV3Server() {
             ...(data.jobStatus ? { jobStatus: data.jobStatus } : {}),
             ...(data.errorCode ? { errorCode: data.errorCode } : {}),
             ...(data.resultId ? { resultId: data.resultId } : {}),
+            ...(data.delivery === 'handle-only' ? { delivery: 'handle-only', handles: data.handles || [] } : {}),
             ...(sourceDelivery ? { sourceDelivery: sourceDelivery.recorded ? 'recorded' : 'unrecorded' } : {}),
             ...(accounting ? { accounting } : {}),
             ...(data.id || data.jobId ? { id: data.id || data.jobId } : {}),

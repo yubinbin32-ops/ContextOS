@@ -177,7 +177,8 @@ export function normalizeAgentReport(input, { jobId = null, status = 'completed'
   maxChars = Math.max(80, Number.isFinite(Number(maxChars)) ? Math.floor(Number(maxChars)) : 2400);
 
   // Extract raw fields with aliases
-  const rawSummary = typeof payload.summary === 'string' ? payload.summary : (typeof payload.answer === 'string' ? payload.answer : '');
+  const rawSummary = [payload.summary, payload.answer, payload.result, payload.message].find((val) => typeof val === 'string' && val.trim().length > 0)
+    ?? (typeof payload.summary === 'string' ? payload.summary : (typeof payload.answer === 'string' ? payload.answer : ''));
   const rawChanges = payload.changes ?? payload.filesChanged ?? payload.changedFiles;
   const rawChecks = payload.checks ?? payload.tests ?? payload.verification ?? payload.verifications;
   const rawBlockers = payload.blockers ?? payload.blocker;
@@ -190,7 +191,8 @@ export function normalizeAgentReport(input, { jobId = null, status = 'completed'
   // Normalize string arrays
   const changes = normalizeStringArray(rawChanges);
   const checks = normalizeStringArray(rawChecks);
-  const blockers = normalizeStringArray(rawBlockers);
+  const NON_BLOCKER_RE = /^(?:无|无。|没有|没有。|暂无|暂无。|none|none\.|n\/a|nil|null|false|no blockers?\.?)$/i;
+  const blockers = normalizeStringArray(rawBlockers).filter((item) => !NON_BLOCKER_RE.test(item.trim()));
 
   // Status resolution:
   // 1. Runtime failure/cancellation overrides any claimed payload outcome.

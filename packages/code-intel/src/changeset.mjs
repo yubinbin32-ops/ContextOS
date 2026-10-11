@@ -40,7 +40,7 @@ function planChangeset(projectRoot, changes = []) {
 
   for (let index = 0; index < changes.length; index += 1) {
     const change = { ...(changes[index] || {}) };
-    const resolved = resolveWorkspacePath(projectRoot, change.path, 'changeset path');
+    const resolved = resolveWorkspacePath(projectRoot, change.path ?? change.filePath ?? change.file ?? change.targetFile, 'changeset path');
     let state = states.get(resolved.fullPath);
 
     // A complete new file has an unambiguous intent even when a caller puts
