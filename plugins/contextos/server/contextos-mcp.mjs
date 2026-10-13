@@ -75254,7 +75254,7 @@ import path45 from "node:path";
 // package.json
 var package_default = {
   name: "contextos",
-  version: "3.0.3",
+  version: "3.0.4",
   description: "The context exoskeleton for AI development: optimize the entire development lifecycle to reduce token usage and context occupancy.",
   license: "MIT",
   type: "module",

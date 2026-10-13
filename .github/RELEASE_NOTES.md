@@ -1,3 +1,13 @@
+# ContextOS 3.0.4
+
+This release introduces bounded 170s host continuation windows, resilient CLI subagent structured reporting, command and evidence alias ergonomics, and tolerant code edits.
+
+### Key Highlights
+- **170s MCP Continuation Window**: Bounded continuation ceiling lowered from 290s to 170s across API Micro, CLI Agent (including synchronous `run` auto-transition to background), Pipelines, and Integrate, preventing 180s MCP tool-call timeouts in hosts like Antigravity.
+- **CLI Subagent Report Normalization**: Strips placeholder non-blockers (`无。`, `none`, `N/A`) from reports to prevent false-positive `blocked` status, and preserves structured reports when CLI workers return empty `answer` strings.
+- **Contract Ergonomics & Aliases**: Supports `cmd` and `commands` in command execution, `path`/`filePath`/`file` across evidence and changeset operations, `lines: [start, end]` shorthand, string `onboard: "goal"`, and deterministic local log retrieval (`ask({ log })`).
+- **Tolerant Code Edits**: Added 15-line search tolerance in `CodeTools.edit` to cleanly absorb minor line drift when unique matches exist.
+
 # ContextOS 3.0.2
 
 This release brings an adaptive desktop layout, dynamic multi-platform synchronization without hardcoded mappings, dual skill deployment for all editors and CLI agents, and environment-agnostic conversational ops protocols.
